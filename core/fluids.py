@@ -300,7 +300,7 @@ def test_fluidsub():
               'vcl': 'Volume'},
          'Note': ''}}
     w.read_well_table(well_table, 0)
-    w.create_mask({'vcl': ['<', 0.4], 'phie': ['>', 0.1]}, name='sand')
+    w.calc_mask({'vcl': ['<', 0.4], 'phie': ['>', 0.1]}, name='sand')
     mask = w.log_blocks['LogBlock'].masks['sand'].data
     vp = w.log_blocks['LogBlock'].logs['vp_dry'].data[mask]
     vs = w.log_blocks['LogBlock'].logs['vs_dry'].data[mask]

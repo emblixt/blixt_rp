@@ -18,7 +18,7 @@ import utils.masks as msks
 
 def log_header_to_template(log_header):
     """
-    Returns a template dictionary from the infromation in the log header.
+    Returns a template dictionary from the information in the log header.
     :param log_header:
         core.log_curve.Header
     :return:
@@ -26,11 +26,11 @@ def log_header_to_template(log_header):
         Dictionary contain template information used by crossplot.py
     """
     tdict = {
-        'id': log_header.name,
-        'description': log_header.desc,
-        'full_name': log_header.log_type,
+        'id': log_header.name if log_header.name is not None else '',
+        'description': log_header.desc if log_header.desc is not None else '',
+        'full_name': log_header.log_type if log_header.log_type is not None else log_header.name,
         'type': 'float',
-        'unit': log_header.unit
+        'unit': log_header.unit if log_header.unit is not None else ''
     }
     return tdict
 

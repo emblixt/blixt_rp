@@ -31,13 +31,13 @@ class MasksTestCase(unittest.TestCase):
     #my_logs = well_table[las_file]['logs']
     my_logs = None
 
-    def test_create_mask(self):
+    def test_calc_mask(self):
         lmt = 0.1
         w, phie = create_test_data('phie')
         masked_length = len(phie[phie < lmt])
 
         # Create the same mask using the create mask function
-        w.create_mask({'phie': ['<', lmt]}, name=def_msk_name)
+        w.calc_mask({'phie': ['<', lmt]}, name=def_msk_name)
         msk = w.log_blocks[def_lb_name].masks[def_msk_name].data
         # Test length
         with self.subTest():
@@ -56,7 +56,7 @@ class MasksTestCase(unittest.TestCase):
         masked_length = len(phie[(phie > lmt1) & (phie < lmt2)])
 
         # create first mask
-        w.create_mask({'phie': ['>', lmt1]}, name=def_msk_name)
+        w.calc_mask({'phie': ['>', lmt1]}, name=def_msk_name)
         msk = w.log_blocks[def_lb_name].masks[def_msk_name].data
         # Test value
         with self.subTest():
@@ -64,7 +64,7 @@ class MasksTestCase(unittest.TestCase):
             self.assertGreater(np.nanmin(phie[msk]), lmt1)
 
         # append second mask
-        w.create_mask({'phie': ['<', lmt2]}, name=def_msk_name, append=True)
+        w.calc_mask({'phie': ['<', lmt2]}, name=def_msk_name, append=True)
         msk = w.log_blocks[def_lb_name].masks[def_msk_name].data
         # Test value
         with self.subTest():

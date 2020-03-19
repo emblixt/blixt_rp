@@ -178,8 +178,9 @@ def plot(
         if isinstance(template_dict, dict):
             key_list = list(template_dict.keys())
 
+            label = ''
             if 'full_name' in key_list:
-                label = template_dict['full_name']
+                label += template_dict['full_name']
             if 'unit' in key_list:
                 label += ' [{}]'.format(template_dict['unit'])
             if 'min' in key_list:

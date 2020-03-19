@@ -120,6 +120,120 @@ def v_p(k, mu, rho):
 def v_s(mu, rho):
     return np.sqrt(mu / rho)
 
+def k_and_rho_o(oil_gravity, gas_gravity, g_o_ratio, p, t):
+    """
+    Calculates the bulk modulus and density of oil using Batzle & Wang 1992.
+
+    :param oil_gravity:
+        Param
+        API gravity, measures how heavy or light a petroleum liquid is compared to water:
+        API > 10, it is lighter and floats on water;
+        API < 10, it is heavier and sinks.
+    :param gas_gravity:
+        Param
+        Gas gravity is the molar mass of the gas divided by the molar mass of air
+        It ranges from 0.55 for dry sweet gas to approximately 1.5 for wet, sour gas.
+        Default value is 0.65
+    :param g_o_ratio:
+        Param
+        The gas/oil ratio (GOR) is the ratio of the volume of gas that comes out of solution,
+        to the volume of oil at standard conditions.
+    :param p:
+        Param
+        Hydrostatic pore pressure [MPa]
+    :param t:
+        Param
+        Temperature [deg C]
+    :return:
+     Oil bulk modulus [GPa], Oil density [g/cm3]
+    """
+    oil_gravity = test_value(oil_gravity, '')
+    gas_gravity = test_value(gas_gravity, '')
+    g_o_ratio = test_value(g_o_ratio, '')
+    p = test_value(p, 'MPa')
+    t = test_value(t, 'C')
+
+    ov = oil_gravity.value
+    gv = gas_gravity.value
+    gorv = g_o_ratio.value
+    pv = p.value
+    tv = t.value
+
+    rho0 = 141.5/(ov + 131.5)
+
+    if gorv < 0.01:  # Dead oil
+        rop = rho0 + (0.00277 * pv - 1.71e-7 * pv**3) * (rho0 - 1.15)**2 + 3.49e-4 * pv
+        rho_o = rop / (0.972 + 3.81e-4 * (tv + 17.78)**1.175)
+    else:
+        B0 = 0.972 + 0.00038 * (2.4 * gorv * np.sqrt(gv / rho0) + tv + 17.8)**1.175
+        roog = (rho0 + 0.0012 * gv * gorv) / B0
+        rho_o = roog + (0.00277*pv - 1.71e-7*pv**3) * (roog - 1.15)**2 + 3.49e-4*pv
+        rho0 = rho0/(B0*(1.0 + 0.001*gorv))
+
+    v_p_o = 2096*np.sqrt(rho0/(2.6-rho0))-3.7*tv+4.64*pv+0.0115*(4.12*np.sqrt(1.08/rho0-1)-1)*tv*pv
+    v_p_o = v_p_o/1000
+    k_o = v_p_o*v_p_o*rho_o
+
+    return Param(name='k_o',
+                 value=k_o,
+                 unit='GPa',
+                 desc='Oil bulk modulus'), \
+           Param(name='rho_o',
+                 value=rho_o,
+                 unit='g/cm3',
+                 desc='Oil density')
+
+
+
+def k_and_rho_g(gas_gravity, p, t):
+    """
+    Calculates the bulk modulus and density of gas using Batzle & Wang 1992.
+
+    :param gas_gravity:
+        Param
+        Gas gravity is the molar mass of the gas divided by the molar mass of air
+        It ranges from 0.55 for dry sweet gas to approximately 1.5 for wet, sour gas.
+        Default value is 0.65
+    :param p:
+        Param
+        Hydrostatic pore pressure [MPa]
+    :param t:
+        Param
+        Temperature [deg C]
+    :return:
+     Gas bulk modulus [GPa], Gas density [g/cm3]
+    """
+    gas_gravity = test_value(gas_gravity, '')
+    p = test_value(p, 'MPa')
+    t = test_value(t, 'C')
+
+    gv = gas_gravity.value
+    pv = p.value
+    tv = t.value
+
+    r0 = 8.31441  # Ideal gas constant
+
+    # Gas density
+    Pr = pv/(4.892 - 0.4048*gv)
+    Tr = (tv + 273.15)/(94.72 + 170.75*gv)
+    E = 0.109*(3.85 - Tr)**2 * np.exp(-1.0*(0.45+(8.*(0.56 - 1./Tr)**2))*(Pr**1.2/Tr))
+    Z = (0.03+0.00527*(3.5-Tr)**3)*Pr + (0.642*Tr-0.007*Tr**4-0.52) + E
+    rho_g = 28.8*gv*pv/(Z*r0*(tv+273.15))
+
+    # Gas bulk modulus
+    gamma = 0.85 + 5.6/(Pr+2) + 27.1/(Pr+3.5)**2 - 8.7*np.exp(-0.65*(Pr+1))
+    f = E*1.2*(-(0.45+8.*(0.56-1./Tr)**2)*Pr**0.2/Tr)+(0.03+0.00527*(3.5-Tr)**3)
+    k_g = pv*gamma/(1-Pr/Z*f)/1000.
+
+    return Param(name='k_g',
+                value=k_g,
+                unit='GPa',
+                desc='Gas bulk modulus'), \
+          Param(name='rho_g',
+                value=rho_g,
+                unit='g/cm3',
+                desc='Gas density')
+
 
 def rho_w(p, t):
     """

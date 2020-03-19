@@ -36,6 +36,7 @@ from plotting import crossplot as xp
 from core.minerals import MineralSet
 from core.log_curve import LogCurve
 import rp.rp_core as rp
+from utils.harmonize_logs import harmonize_logs as fixlogs
 
 # global variables
 supported_version = {2.0, 3.0}
@@ -289,6 +290,12 @@ class Well(object):
         except:
             return None
 
+    def get_logs_of_name(self, log_name):
+        log_list = []
+        for lblock in list(self.log_blocks.keys()):
+            log_list = log_list + self.log_blocks[lblock].get_logs_of_name(log_name)
+        return log_list
+
     def get_logs_of_type(self, log_type):
         log_list = []
         for lblock in list(self.log_blocks.keys()):
@@ -414,9 +421,11 @@ class Well(object):
         else:
             return tmp[2]
 
-    def create_mask(self,
+    def calc_mask(self,
                     cutoffs,
                     name=def_msk_name,
+                    tops=None,
+                    use_tops=None,
                     overwrite=True,
                     append=False,
                     log_type_input=False
@@ -431,6 +440,18 @@ class Well(object):
         :param name:
             str
             name of the mask
+        :param tops:
+            dict
+            as returned from utils.io.read_tops() function
+        :param use_tops:
+            list
+            List of top names inside the tops dictionary that will be used to mask the data
+            NOTE: if the 'depth' parameter is already inside the cutoffs dictionary, this option will
+            be ignored
+        :param tops:
+            dict
+            as returned from utils.io.read_tops() function
+
         :param overwrite:
             bool
             if True, any existing mask with given name will be overwritten
@@ -454,6 +475,29 @@ class Well(object):
                 this_cutoffs[self.get_logs_of_type(key)[0].name] = cutoffs[key]
             cutoffs = this_cutoffs
 
+        if isinstance(use_tops, list) and (tops is not None):
+            if self.well not in list(tops.keys()):
+                warn_text = 'Well: {} is not in the list of tops: {}'.format(
+                    self.well,
+                    ', '.join(list(tops.keys()))
+                )
+                logger.warning(warn_text)
+                print('WARNING: {}'.format(warn_text))
+            elif not all([t.upper() in list(tops[self.well].keys()) for t in use_tops]):
+                warn_text = 'The selected tops {} are not among the well tops {}'.format(
+                    ', '.join(use_tops),
+                    '. '.join(list(tops[self.well].keys()))
+                )
+                logger.warning(warn_text)
+                print('WARNING: {}'.format(warn_text))
+            else:
+                # Append the depth mask from the tops file
+                cutoffs['depth'] = ['><',
+                     [
+                         tops[self.well][use_tops[0].upper()],
+                         tops[self.well][use_tops[1].upper()]
+                     ]
+                 ]
 
         msk_str = ''
         for key in list(cutoffs.keys()):
@@ -529,15 +573,21 @@ class Well(object):
 
     def depth_plot(self,
                    log_type='P velocity',
+                   log_name=None,
                    mask=None,
                    tops=None,
                    fig=None,
                    ax=None,
                    **kwargs):
         """
+        Plots selected log type as a function of MD.
 
         :param log_type:
             str
+            Name of the log type we want to plot
+        :param log_name:
+            str
+            overrides the log_type selection, and plots only this log
         :param mask:
             boolean numpy array of same length as xdata
         :param tops:
@@ -558,10 +608,17 @@ class Well(object):
             ax = fig.subplots()
         show_masked = kwargs.pop('show_masked', False)
 
+        if log_name is not None:
+            list_of_logs = self.get_logs_of_name(log_name)
+            ttl = ''
+        else:
+            list_of_logs = self.get_logs_of_type(log_type)
+            ttl = log_type
+
         # loop over all LogBlocks
         cnt = -1
         legends = []
-        for logcurve in self.get_logs_of_type(log_type):
+        for logcurve in list_of_logs:
             cnt += 1
             print(cnt, logcurve.name, xp.cnames[cnt])
             xdata = logcurve.data
@@ -571,7 +628,7 @@ class Well(object):
                 xdata,
                 ydata,
                 cdata=xp.cnames[cnt],
-                title='{}: {}'.format(self.well, log_type),
+                title='{}: {}'.format(self.well, ttl),
                 xtempl=l2tmpl(logcurve.header),
                 ytempl=l2tmpl(self.log_blocks[logcurve.log_block].logs['depth'].header),
                 mask=mask,
@@ -680,7 +737,8 @@ class Well(object):
 
         def add_logs_to_logblock(_well_dict, _block_name, _only_these_logs):
             """
-            Helper function that add logs to the given block name
+            Helper function that add logs to the given block name.
+
             :param _well_dict:
             :param _only_these_logs:
             :return:
@@ -703,13 +761,24 @@ class Well(object):
                         same = False
 
             if exists and not same:
-                # Create a new LogBlock, with a new name, and warn the user
-                new_block_name = add_one(_block_name)
-                logger.warning(
-                    'LogBlock {} existed and was different from imported las file, new LogBlock {} was created'.format(
-                        _block_name, new_block_name
-                    ))
-                _block_name = new_block_name
+                ## Create a new LogBlock, with a new name, and warn the user
+                #new_block_name = add_one(_block_name)
+                #logger.warning(
+                #    'LogBlock {} existed and was different from imported las file, new LogBlock {} was created'.format(
+                #        _block_name, new_block_name
+                #    ))
+                #_block_name = new_block_name
+                logger.info('Start modifying the logs in las file to fit the existing LogBlock')
+                fixlogs(
+                    _well_dict,
+                    self.log_blocks[_block_name].header['strt'].value,
+                    self.log_blocks[_block_name].header['stop'].value,
+                    self.log_blocks[_block_name].header['step'].value,
+                )
+                # Remove the 'depth' log, so we are not using two
+                xx = _well_dict['data'].pop('depth')
+                xx = _well_dict['curve'].pop('depth')
+                same = True
 
             # Create a dictionary of the logs we are reading in
             these_logs = {}
@@ -871,6 +940,9 @@ class LogBlock(object):
 
     def log_names(self):
         return [log_curve.name for log_curve in list(self.logs.values())]
+
+    def get_logs_of_name(self, log_name):
+        return [log_curve for log_curve in list(self.logs.values()) if log_curve.name == log_name]
 
     def get_logs_of_type(self, log_type):
         return [log_curve for log_curve in list(self.logs.values()) if log_curve.log_type == log_type]
@@ -1116,7 +1188,7 @@ def calc_stats(
             ]
 
             # Create the mask
-            well.create_mask(this_cutoffs, name=def_msk_name)
+            well.calc_mask(this_cutoffs, name=def_msk_name)
 
             # Apply mask
             well.apply_mask(def_msk_name)
@@ -1308,7 +1380,7 @@ def test():
     print(logs)
 #    w.read_las(las_file, only_these_logs=well_table[las_file]['logs'])
 #
-#    w.create_mask({'test': ['>', 10], 'phie': ['><', [0.05, 0.15]]}, name=def_msk_name)
+#    w.calc_mask({'test': ['>', 10], 'phie': ['><', [0.05, 0.15]]}, name=def_msk_name)
 #    msk = w.log_blocks[def_lb_name].masks[def_msk_name].data
 #    fig1, fig2 = plt.figure(1), plt.figure(2)
 #    w.depth_plot('P velocity', fig=fig1, mask=msk, show_masked=True)

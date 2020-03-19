@@ -557,9 +557,10 @@ def convert(lines, file_format='las'):
             # parse data to type bool or number
             # BUT it also parsed well names as floats, which we should avoid
             if data is not None:
-                if desc == 'WELL':
-                    # avoid the __parse() function
-                    pass
+                if desc == 'WELL' or mnem == 'WELL' or mnem == 'UWI':
+                    #if section == "well_info" and (mnem == "WELL" or mnem == 'UWI'):
+                    # catch well name, harmonize it, and avoid the parse() function
+                    data = fix_well_name(data)
                 elif data == "NO":
                     data = False
                 elif data == "YES":
