@@ -37,10 +37,10 @@ def test_value(val, unit):
         test = val.value
     except:
         val = Param(name='DEFAULT', value=val, unit=unit, desc='')
-        warn_str = 'Input parameter needs to be a Param instance with units. Default unit {} is now used'.format(
-            unit
-        )
-        logger.warning(warn_str)
+       # warn_str = 'Input parameter needs to be a Param instance with units. Default unit {} is now used'.format(
+       #     unit
+       #)
+       #logger.warning(warn_str)
     return val
 
 
