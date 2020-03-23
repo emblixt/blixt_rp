@@ -47,11 +47,14 @@ def project_wells(filename, working_dir):
     return result
 
 
-def harmonize_wells():
+def harmonize_lognames():
     # TODO
     # write a function that harmonizes the different log names in a set of las files
     # i.e. so that shale volume has the same log name in all wells.
     # This could be done on input without modifying the las files
+
+    # The best way is perhaps to use the table used in the wells.project, and store that in the
+    # wells.py file and use that in the rename_depth() function below
     pass
 
 
@@ -422,6 +425,12 @@ def convert(lines, file_format='las'):
         :return:
             str
         """
+        # TODO
+        # Use this to harmonize all well log names not only depth DEPTH
+        # try
+        # for rname, item in cw.renamewelllogs.items():
+        #     if key.lower() in [x.lower() for x in item]:
+        #         return rname
         return_name = 'depth'
         if key.lower() == 'dept':
             return return_name

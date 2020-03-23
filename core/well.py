@@ -44,6 +44,50 @@ logger = logging.getLogger(__name__)
 def_lb_name = 'LogBlock'  # default LogBlock name
 def_msk_name = 'Mask'  # default mask name
 
+renamewelllogs = {
+    # depth, or MD
+    'depth': ['Depth', 'DEPT', 'MD', 'DEPTH'],
+
+    # Bulk density
+    'den': ['RHOB', 'HRHOB', 'DEN', 'HDEN', 'RHO', 'CPI:RHOB', 'HRHO'],
+
+    # Density correction
+    'denc': ['HDRHO', 'DENC', 'DCOR'],
+
+    # Sonic
+    'ac': ['HDT', 'DT', 'CPI:DT', 'HAC', 'AC'],
+
+    # Shear sonic
+    'acs': ['ACS'],
+
+    # Gamma ray
+    'gr': ['HGR', 'GR', 'CPI:GR'],
+
+    # Caliper
+    'cali': ['HCALI', 'CALI', 'HCAL'],
+
+    # Deep resistivity
+    'rdep': ['HRD', 'RDEP', 'ILD', 'RD'],
+
+    # Medium resistivity
+    'rmed': ['HRM', 'RMED', 'RM'],
+
+    # Shallow resistivity
+    'rsha': ['RS', 'RSHA', 'HRS'],
+
+    # Water saturation
+    'sw': ['CPI:SW', 'SW'],
+
+    # Effective porosity
+    'phie': ['CPI:PHIE', 'PHIE'],
+
+    # Neutron porosity
+    'neu': ['HNPHI', 'NEU', 'CPI:NPHI', 'HPHI'],
+
+    # Shale volume
+    'vcl': ['VCLGR', 'VCL', 'CPI:VWCL', 'CPI:VCL']
+}
+
 
 class Project(object):
     def __init__(self,
@@ -187,6 +231,22 @@ class Project(object):
 
         logger.info('Loaded project settings from: {}'.format(file_name))
 
+    def load_all_wells(self):
+        well_table = uio.project_wells(self.project_table, self.working_dir)
+        all_wells = {}
+        last_wname = ''
+        for i, lasfile in enumerate(well_table):
+            wname = well_table[lasfile]['Given well name']
+            print(i, wname, lasfile)
+            if wname != last_wname:  # New well
+                w = Well()
+                w.read_well_table(well_table, i, block_name=def_lb_name)
+                all_wells[wname] = w
+                last_wname = wname
+            else:  # Existing well
+                all_wells[wname].read_well_table(well_table, i, block_name=def_lb_name)
+
+        return all_wells
 
 class Header(AttribDict):
     """
@@ -472,8 +532,11 @@ class Well(object):
             # copy of the cutoffs that use the first log name under each log type, eg.
             this_cutoffs = {}
             for key in list(cutoffs.keys()):
+                if len(self.get_logs_of_type(key)) < 1:
+                    print('XXXXX')
                 this_cutoffs[self.get_logs_of_type(key)[0].name] = cutoffs[key]
             cutoffs = this_cutoffs
+            #print('FROM CALC_MASK', cutoffs)
 
         if isinstance(use_tops, list) and (tops is not None):
             if self.well not in list(tops.keys()):
@@ -506,6 +569,8 @@ class Well(object):
                 isinstance(cutoffs[key][1], list) else \
                 '{}: {} {}, '.format(
                 key, cutoffs[key][0], cutoffs[key][1])
+        print('XXXX')
+        print(msk_str)
 
         for lblock in list(self.log_blocks.keys()):
             masks = []
@@ -578,6 +643,7 @@ class Well(object):
                    tops=None,
                    fig=None,
                    ax=None,
+                   savefig=None,
                    **kwargs):
         """
         Plots selected log type as a function of MD.
@@ -597,6 +663,9 @@ class Well(object):
             matplotlib.figure.Figure object
         :param ax:
             matplotlib.axes._subplots.AxesSubplot object
+        :param savefig:
+            str
+            full path name of file to save plot to
         :param kwargs:
         :return:
         """
@@ -620,7 +689,7 @@ class Well(object):
         legends = []
         for logcurve in list_of_logs:
             cnt += 1
-            print(cnt, logcurve.name, xp.cnames[cnt])
+            #print(cnt, logcurve.name, xp.cnames[cnt], mask)
             xdata = logcurve.data
             ydata = self.log_blocks[logcurve.log_block].logs['depth'].data
             legends.append(logcurve.name)
@@ -659,6 +728,8 @@ class Well(object):
             markerscale=2,
             loc=1
         )
+        if savefig is not None:
+            fig.savefig(savefig)
 
 
     def read_well_table(self, well_table, index, block_name=None):
@@ -755,9 +826,14 @@ class Well(object):
             # Test if LogBlock already exists
             if _block_name in list(self.log_blocks.keys()):
                 exists = True
+                #print('Length of existing data: {}'.format(len(self.log_blocks[_block_name].logs['depth'].data)))
                 # Test if LogBlock has the same header
                 for key in ['strt', 'stop', 'step']:
                     if _well_dict['well_info'][key]['value'] != self.log_blocks[_block_name].header[key].value:
+                        #print('{} in new versus existing log block {}: {}'.format(
+                        #    key,
+                        #    _well_dict['well_info'][key]['value'],
+                        #    self.log_blocks[_block_name].header[key].value))
                         same = False
 
             if exists and not same:
@@ -768,13 +844,17 @@ class Well(object):
                 #        _block_name, new_block_name
                 #    ))
                 #_block_name = new_block_name
-                logger.info('Start modifying the logs in las file to fit the existing LogBlock')
+                #info_txt = 'Start modifying the logs in las file to fit the existing LogBlock'
+                #print(info_txt)
+                #logger.info(info_txt)
+                #print(' Length before fixing: {}'.format(len(_well_dict['data']['depth'])))
                 fixlogs(
                     _well_dict,
                     self.log_blocks[_block_name].header['strt'].value,
                     self.log_blocks[_block_name].header['stop'].value,
                     self.log_blocks[_block_name].header['step'].value,
                 )
+                #print(' Length after fixing: {}'.format(len(_well_dict['data']['depth'])))
                 # Remove the 'depth' log, so we are not using two
                 xx = _well_dict['data'].pop('depth')
                 xx = _well_dict['curve'].pop('depth')
@@ -800,9 +880,13 @@ class Well(object):
                         # TODO
                         # test and try why the header.name = _key isn't necessary here!
                     else:
-                        logger.warning('No logs in {} are matching selection {}'.format(
-                            _well_dict['well_info']['well']['value'], ', '.join(list(_only_these_logs.keys()))
-                        ))
+                        logger.warning("Log '{}' in {} is missing\n  [{}]".format(
+                                _key,
+                                _well_dict['well_info']['well']['value'],
+                                ', '.join(list(_well_dict['curve'].keys()))
+                                #', '.join(list(_only_these_logs.keys()))
+                                )
+                        )
             elif _only_these_logs is None:
                 # add all logs
                 for _key in list(_well_dict['curve'].keys()):
@@ -935,6 +1019,9 @@ class LogBlock(object):
 
     step = property(get_step)
 
+    def keys(self):
+        return self.__dict__.keys()
+
     def log_types(self):
         return [log_curve.log_type for log_curve in list(self.logs.values())]
 
@@ -1012,6 +1099,12 @@ def _read_las(file):
     """Convert file and Return `self`. """
     file_format = None
     ext = file.rsplit(".", 1)[-1].lower()
+
+    # TODO
+    # In some las files, the WELL name lacks the S or extra letter, which is provided in the WBN name.
+    # Test that they are the same, and if not, use the one with the extra letter
+    # WELL.        16 / 4 - 9                       : Well
+    # WBN.         16 / 4 - 9 S                     : Wellbore
 
     if ext == "las":
         file_format = 'las'

@@ -41,6 +41,10 @@ def test_value(val, unit):
        #     unit
        #)
        #logger.warning(warn_str)
+
+    if (val.unit != unit):
+        raise NotImplementedError('Unit conversion not yet implemented')
+
     return val
 
 
@@ -120,6 +124,39 @@ def v_p(k, mu, rho):
 def v_s(mu, rho):
     return np.sqrt(mu / rho)
 
+
+def han_castagna(v_p, method=None):
+    """
+    Calculates Vs based on the Han (1986) and Castagna et al (1993) regressions.
+
+    :param v_p:
+        Param
+        P velocity [m/s]
+    :param method
+        str
+        'Han' or 'Castagna' or 'mudrock'
+        default is 'Han'
+    :return:
+        Param
+        Estimated shear velocity
+    """
+    v_p = test_value(v_p, 'm/s')
+
+    if method == 'Castagna':
+        v_s = 0.8042*v_p.value - 855.9
+    elif method == 'mudrock':
+        v_s = 0.8621*v_p.value - 1172.4
+    else:
+        v_s = 0.7936*v_p.value - 786.8
+
+    return Param(
+        name='v_s',
+        value=v_s,
+        unit='m/s',
+        desc='Shear velocity'
+    )
+
+
 def k_and_rho_o(oil_gravity, gas_gravity, g_o_ratio, p, t):
     """
     Calculates the bulk modulus and density of oil using Batzle & Wang 1992.
@@ -184,7 +221,6 @@ def k_and_rho_o(oil_gravity, gas_gravity, g_o_ratio, p, t):
                  desc='Oil density')
 
 
-
 def k_and_rho_g(gas_gravity, p, t):
     """
     Calculates the bulk modulus and density of gas using Batzle & Wang 1992.
@@ -237,7 +273,8 @@ def k_and_rho_g(gas_gravity, p, t):
 
 def rho_w(p, t):
     """
-    Calculates the density of water as a function of pressure and temperature according to eq. 27a in Batzle & Wang 1992
+    Calculates the density of water as a function of pressure and temperature according to eq. 27a in Batzle & Wang 1992.
+
     :param p:
         Param
         pressure in MPa
@@ -251,9 +288,6 @@ def rho_w(p, t):
 
     p = test_value(p, 'MPa')
     t = test_value(t, 'C')
-
-    if (p.unit != 'MPa') or (t.unit != 'C'):
-        raise NotImplementedError('Unit conversion not yet implemented')
 
     tv = t.value
     pv = p.value
@@ -532,6 +566,9 @@ def gassmann_vel(v_p_1, v_s_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
         np.array
         Porosity
     """
+    # TODO
+    # Allow a mask to only do the fluid substitution where the mask is True
+
     # Avoid low porosity points
     por[por < 7E-3] = 7E-3
 

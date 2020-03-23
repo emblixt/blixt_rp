@@ -362,8 +362,8 @@ def plot(
         cbar.ax.tick_params(labelsize=t_fonts)
         cbar.ax.set_ylabel(clabel, fontsize=l_fonts)
     else:
+        pass
         #cbar.draw_all()
-        print(clim)
         #cbar.set_clim(vmin=clim[0], vmax=clim[1]) # causes sometimes a problem with the clim and "ylim" of the colorbar being different
     ax.tick_params(axis='both', labelsize=t_fonts)
 
