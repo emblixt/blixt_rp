@@ -208,7 +208,6 @@ class Project(object):
             raise IOError(warn_text)
         self.logging_file = file_name
 
-
         with open(file_name, 'r') as f:
             lines = f.readlines()
 
@@ -233,6 +232,42 @@ class Project(object):
         arrange_logging(False, file_name, logging.INFO)
 
         logger.info('Loaded project settings from: {}'.format(file_name))
+
+    def check_well_names(self):
+        """
+        Loops through the well names in the project table and checks if they are in
+        a consistent format (E.G. "6507_3_1S" and NOT "6507/3-1 S"), and if they corresponds to the well name
+        in the given las files.
+
+        :return:
+        """
+
+        _well_table = uio.project_wells(self.project_table, self.working_dir)
+        for lfile in list(_well_table.keys()):
+            wname = _well_table[lfile]['Given well name']
+            if ('/' in wname) or ('-' in wname) or (' ' in wname):
+                warn_txt = "Special signs, like '/', '-' or ' ', are not allowed in well name: {}".format(wname)
+                print("WARNING: {}".format(warn_txt))
+                logger.warning(warn_txt)
+            for line in uio.get_las_well_info(lfile):
+                if re.search("[.]{1}", line) is None:
+                    continue
+                if re.search("[ ]{1}", line) is None:
+                    continue
+                if re.search("[:]{1}", line) is None:
+                    continue
+                mnem_end = re.search("[.]{1}", line).end()
+                unit_end = mnem_end + re.search("[ ]{1}", line[mnem_end:]).end()
+                colon_end = unit_end + re.search("[:]{1}", line[unit_end:]).start()
+                # divide line
+                mnem = line[:mnem_end - 1].strip()
+                data = line[unit_end:colon_end].strip()
+                if mnem == 'WELL':
+                    if uio.fix_well_name(data) != wname:
+                        warn_txt = 'Well name in las file ({}) does not correspond to well name in project table ({})'.format(
+                            uio.fix_well_name(data), wname)
+                        print("WARNING: {}".format(warn_txt))
+                        logger.warning(warn_txt)
 
     def load_all_wells(self, rename_well_logs=None):
         """
@@ -892,12 +927,16 @@ class Well(object):
                 #info_txt = 'Start modifying the logs in las file to fit the existing LogBlock'
                 #print(info_txt)
                 #logger.info(info_txt)
+                #print(' Length of existing data in well: {}'.format(
+                #    len(self.log_blocks[_block_name])
+                #))
                 #print(' Length before fixing: {}'.format(len(_well_dict['data']['depth'])))
                 fixlogs(
                     _well_dict,
                     self.log_blocks[_block_name].header['strt'].value,
                     self.log_blocks[_block_name].header['stop'].value,
                     self.log_blocks[_block_name].header['step'].value,
+                    len(self.log_blocks[_block_name])
                 )
                 #print(' Length after fixing: {}'.format(len(_well_dict['data']['depth'])))
                 # Remove the 'depth' log, so we are not using two

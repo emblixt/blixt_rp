@@ -14,7 +14,7 @@ from scipy.interpolate import interp1d
 logger = logging.getLogger(__name__)
 
 
-def harmonize_logs(well_dict, start, stop, step):
+def harmonize_logs(well_dict, start, stop, step, orig_len):
     """
     Takes the input well_dict and arranges the logs inside to fit the given start, stop and step values.
 
@@ -31,6 +31,9 @@ def harmonize_logs(well_dict, start, stop, step):
     :param step:
         float
         The desired stop (in MD [m]) of the well
+    :param orig_len:
+        int
+        The desired length of the data array
     :return:
     """
     # Extract the input start, stop and step values
@@ -46,6 +49,10 @@ def harmonize_logs(well_dict, start, stop, step):
 
     # Create a true MD array from the given start, stop, step
     true_md = np.arange(start, stop+step, step)
+    if len(true_md) > orig_len:
+        true_md = np.arange(start, stop, step)
+    if len(true_md) < orig_len:
+        raise Warning('Length of true data ({}) does not match')
 
     info_txt = 'Actual length versus desired length: {} - {}'.format(len(input_md), len(true_md))
     #print(info_txt)
