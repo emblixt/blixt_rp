@@ -9,6 +9,8 @@ import pandas as pd
 import os
 from pathlib import Path
 
+import utils.io as uio
+
 
 def fix_well_name(well_name):
     if isinstance(well_name, str):
@@ -17,9 +19,10 @@ def fix_well_name(well_name):
         return
 
 
-def get_well_table_from_npd(
+def get_table_from_npd(
         test=False,
-        save_to=None
+        save_to=None,
+        stratigraphy=False
 ):
     """
     This function returns "all" Exploration wells from NPD as a panda table.
@@ -32,14 +35,22 @@ def get_well_table_from_npd(
         str
         Fullname of file where the .xlsx file is saved to
         if None, it is not saved
+
+    :param stratigraphy:
+        bool
+        if True it returns NPD well tops
     """
     if test:
         mystr = 'true'
     else:
         mystr = 'false'
-    
-    url = r'https://factpages.npd.no/ReportServer_npdpublic?/FactPages/TableView/wellbore_exploration_all&rs:Command=Render&rc:Toolbar=false&rc:Parameters=f&rs:Format=EXCEL&Top100={}&IpAddress=77.241.96.18&CultureCode=en'.format(mystr)
-    
+
+    #url = r'https://factpages.npd.no/ReportServer_npdpublic?/FactPages/TableView/wellbore_exploration_all&rs:Command=Render&rc:Toolbar=false&rc:Parameters=f&rs:Format=EXCEL&Top100={}&IpAddress=77.241.96.18&CultureCode=en'.format(mystr)
+    url = r'https://factpages.npd.no/ReportServer_npdpublic?/FactPages/TableView/wellbore_exploration_all&rs:Command=Render&rc:Toolbar=false&rc:Parameters=f&rs:Format=EXCEL&Top100={}&IpAddress=not_used&CultureCode=en'.format(mystr)
+
+    if stratigraphy:
+        url = r'https://factpages.npd.no/ReportServer_npdpublic?/FactPages/TableView/strat_litho_wellbore&rs:Command=Render&rc:Toolbar=false&rc:Parameters=f&rs:Format=EXCEL&Top100={}&IpAddress=not_used&CultureCode=en'.format(mystr)
+
     table = pd.read_excel(url)
     
     if save_to is not None:
@@ -47,14 +58,17 @@ def get_well_table_from_npd(
     
     return table
 
-def get_well_table(
+
+def get_table(
         filename,
         new=False, 
-        test=False
+        test=False,
+        stratigraphy=False
 ):
     """
-    Reads an excel file downloaded from npd.no which contains information about wells, 
-    and returns a dictionary of wells, where each item is a dictionary of well information
+    Reads an excel file downloaded from npd.no which contains information about wells, (tops if stratigraphy is True)
+    and returns a dictionary of wells, where each item is a dictionary of well information.
+
     :param filename:
         str
         Name of file to read, if it doesn't exist, you are prompted to download a new from npd
@@ -64,6 +78,9 @@ def get_well_table(
     :param test:
         bool
         if True, only first 300 lines of the wells table is downloaded from npd.no
+    :param stratigraphy:
+        bool
+        if True it returns NPD well tops
     """
     
     if (not os.path.isfile(filename)) or new:
@@ -78,15 +95,21 @@ def get_well_table(
         except:
             print('Not allowed to write to {}'.format(filename))
             return None
-        table = get_well_table_from_npd(test=test, save_to=filename)
+        table = get_table_from_npd(test=test, save_to=filename, stratigraphy=stratigraphy)
+        if test:
+            # the last two rows are rubbish
+            table.drop(table.tail(2).index, inplace=True)
     
     else:
         table = pd.read_excel(filename)
-        
-    output = {}
-    for i, well_name in enumerate(table['Wellbore name']):
-        output[fix_well_name(well_name)] = {
-                key: table[key][i] for key in table.keys() if key not in ['Unnamed: 0', 'Wellbore name']}
+
+    if stratigraphy:
+        output = uio.return_dict_from_tops(table, 'Wellbore name', 'Lithostrat. unit', 'Top depth [m]')
+    else:
+        output = {}
+        for i, well_name in enumerate(table['Wellbore name']):
+            output[fix_well_name(well_name)] = {
+                    key: table[key][i] for key in table.keys() if key not in ['Unnamed: 0', 'Wellbore name']}
     
     return output
 

@@ -138,16 +138,16 @@ def plot_one_interface(sums, name1, name2, color, fig_ig, ax_ig, fig_refl, ax_re
     intercept = rp.intercept(vp1, vp2, rho1, rho2)
     gradient = rp.gradient(vp1, vp2, vs1, vs2, rho1, rho2)
 
-    res = least_squares(
-            mycf.residuals,
-            [1.,1.],
-            args=(intercept, gradient),
-            kwargs={'target_function': straight_line}
-    )
-    print('{} on {}: WS = {:.4f}*I {:.4f} - G'.format(name1, name2, *res.x))
-    print(res.status)
-    print(res.message)
-    print(res.success)
+    #res = least_squares(
+    #        mycf.residuals,
+    #        [1.,1.],
+    #        args=(intercept, gradient),
+    #        kwargs={'target_function': straight_line}
+    #)
+    #print('{} on {}: WS = {:.4f}*I {:.4f} - G'.format(name1, name2, *res.x))
+    #print(res.status)
+    #print(res.message)
+    #print(res.success)
 
     
     myxp.plot(
@@ -159,8 +159,8 @@ def plot_one_interface(sums, name1, name2, color, fig_ig, ax_ig, fig_refl, ax_re
             edge_color=None,
             alpha=0.2
             )
-    x_new = np.linspace(-0.75, 0.75, 50)
-    ax_ig.plot(x_new, straight_line(x_new, *res.x), c=color, label='_nolegend_')
+    #x_new = np.linspace(-0.75, 0.75, 50)
+    #ax_ig.plot(x_new, straight_line(x_new, *res.x), c=color, label='_nolegend_')
 
     # Do AVO classification
     c1 = len(gradient[(intercept>0.) & (gradient>-4*intercept) & (gradient<0.)])

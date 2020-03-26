@@ -42,7 +42,7 @@ RHO_DRY             .g/cm3                            : 8        Rho
 RHO_SG08            .g/cm3                            : 9        Rho
 RHO_SO08            .g/cm3                            : 10       Rho
 PHIE                .fract                            : 11       Por
-VCL                 .fract                            : 12       Volume
+VSH                 .fract                            : 12       Volume
 SW                  .fract                            : 13       Fake water saturation
 #
 # ----------------------------------------------------------------------------

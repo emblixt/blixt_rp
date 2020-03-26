@@ -19,6 +19,7 @@ def calc_stats2(
         tops,
         intervals,
         cutoffs,
+        templates=None,
         rokdoc_output=None,
         working_dir=None,
         suffix=None
@@ -68,6 +69,9 @@ def calc_stats2(
         Dictionary with log types as keys, and list with mask definition as value
         E.G.
             {'Volume': ['<', 0.5], 'Porosity': ['>', 0.1]}
+    :param templates:
+        dict
+        templates dictionary as returned from utils.io.project_templates()
     :param rokdoc_output:
         str
         full path name of file of which should contain the averages (RokDoc format)
@@ -319,6 +323,8 @@ def calc_stats2(
     for i, fax in enumerate(figs_and_axes):
         fax[1].legend(well_names, prop={'size': 10})
         fax[1].grid(True)
+        if templates is not None:
+            fax[1].set_xlim(templates[log_types[i]]['min'], templates[log_types[i]]['max'])
         fax[1].set_title(cutoffs_str)
         fax[1].set_yticklabels(interval_ticks)
         fax[0].tight_layout()

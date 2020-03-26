@@ -208,6 +208,7 @@ class Project(object):
             raise IOError(warn_text)
         self.logging_file = file_name
 
+
         with open(file_name, 'r') as f:
             lines = f.readlines()
 
@@ -229,9 +230,20 @@ class Project(object):
         self.name = name; self.working_dir = working_dir; self. project_table = project_table
         self.tops_file = tops_file; self.tops_type = tops_type
 
+        arrange_logging(False, file_name, logging.INFO)
+
         logger.info('Loaded project settings from: {}'.format(file_name))
 
-    def load_all_wells(self):
+    def load_all_wells(self, rename_well_logs=None):
+        """
+
+        :param rename_well_logs:
+            dict
+            E.G.
+            {'depth': ['DEPT', 'MD']}
+            where the key is the wanted well log name, and the value list is a list of well log names to translate from
+        :return:
+        """
         well_table = uio.project_wells(self.project_table, self.working_dir)
         all_wells = {}
         last_wname = ''
@@ -240,11 +252,11 @@ class Project(object):
             print(i, wname, lasfile)
             if wname != last_wname:  # New well
                 w = Well()
-                w.read_well_table(well_table, i, block_name=def_lb_name)
+                w.read_well_table(well_table, i, block_name=def_lb_name, rename_well_logs=rename_well_logs)
                 all_wells[wname] = w
                 last_wname = wname
             else:  # Existing well
-                all_wells[wname].read_well_table(well_table, i, block_name=def_lb_name)
+                all_wells[wname].read_well_table(well_table, i, block_name=def_lb_name, rename_well_logs=rename_well_logs)
 
         return all_wells
 
@@ -643,6 +655,7 @@ class Well(object):
                    tops=None,
                    fig=None,
                    ax=None,
+                   templates=None,
                    savefig=None,
                    **kwargs):
         """
@@ -663,6 +676,9 @@ class Well(object):
             matplotlib.figure.Figure object
         :param ax:
             matplotlib.axes._subplots.AxesSubplot object
+        :param templates:
+            dict
+            templates dictionary as returned from utils.io.project_templates()
         :param savefig:
             str
             full path name of file to save plot to
@@ -684,11 +700,18 @@ class Well(object):
             list_of_logs = self.get_logs_of_type(log_type)
             ttl = log_type
 
+        # handle x template
+        x_templ = None
+        if (templates is not None) and (log_type in list(templates.keys())):
+            x_templ = templates[log_type]
+
         # loop over all LogBlocks
         cnt = -1
         legends = []
         for logcurve in list_of_logs:
             cnt += 1
+            if x_templ is None:
+                x_templ = l2tmpl(logcurve.header)
             #print(cnt, logcurve.name, xp.cnames[cnt], mask)
             xdata = logcurve.data
             ydata = self.log_blocks[logcurve.log_block].logs['depth'].data
@@ -698,7 +721,7 @@ class Well(object):
                 ydata,
                 cdata=xp.cnames[cnt],
                 title='{}: {}'.format(self.well, ttl),
-                xtempl=l2tmpl(logcurve.header),
+                xtempl=x_templ,
                 ytempl=l2tmpl(self.log_blocks[logcurve.log_block].logs['depth'].header),
                 mask=mask,
                 show_masked=show_masked,
@@ -732,7 +755,7 @@ class Well(object):
             fig.savefig(savefig)
 
 
-    def read_well_table(self, well_table, index, block_name=None):
+    def read_well_table(self, well_table, index, block_name=None, rename_well_logs=None):
         """
         Takes the well_table and reads in the well defined by the index number.
 
@@ -746,6 +769,11 @@ class Well(object):
         :param index:
             int
             index of well in well_table to read
+        :param rename_well_logs:
+            dict
+            E.G.
+            {'depth': ['DEPT', 'MD']}
+            where the key is the wanted well log name, and the value list is a list of well log names to translate from
         :return:
         """
         lfile = list(well_table.keys())[index]
@@ -753,13 +781,18 @@ class Well(object):
             note = well_table[lfile]['Note']
         else:
             note = None
-        self.read_las(lfile, only_these_logs=well_table[lfile]['logs'], block_name=block_name, note=note)
+        self.read_las(lfile,
+                      only_these_logs=well_table[lfile]['logs'],
+                      block_name=block_name,
+                      rename_well_logs=rename_well_logs,
+                      note=note)
 
     def read_las(
             self,
             filename,
             block_name=None,
             only_these_logs=None,
+            rename_well_logs=None,
             note=None
     ):
         """
@@ -776,6 +809,11 @@ class Well(object):
             dict
             dictionary of log names to load from the las file (keys), and corresponding log type as value
             if None, all are loaded
+        :param rename_well_logs:
+            dict
+            E.G.
+            {'depth': ['DEPT', 'MD']}
+            where the key is the wanted well log name, and the value list is a list of well log names to translate from
         :param note:
             str
             String containing notes for the las file being read
@@ -783,6 +821,13 @@ class Well(object):
         """
         if block_name is None:
             block_name = def_lb_name
+
+        # Make sure the only_these_logs is updated with the desired name changes defined in rename_well_logs
+        if isinstance(only_these_logs, dict) and (isinstance(rename_well_logs, dict)):
+            for okey in list(only_these_logs.keys()):
+                for rkey in list(rename_well_logs.keys()):
+                    if okey.lower() in [x.lower() for x in rename_well_logs[rkey]]:
+                        only_these_logs[rkey.lower()] = only_these_logs.pop(okey)
 
         def add_headers(well_info, ignore_keys, _note):
             """
@@ -921,7 +966,7 @@ class Well(object):
         if isinstance(only_these_logs, str):
             only_these_logs = {only_these_logs: None}
 
-        null_val, generated_keys, well_dict = _read_las(filename)
+        null_val, generated_keys, well_dict = _read_las(filename, rename_well_logs=rename_well_logs)
         logger.debug('Reading {}'.format(filename))
         if well_dict['version']['vers']['value'] not in supported_version:
             raise Exception("Version {} not supported!".format(
@@ -940,18 +985,31 @@ class Well(object):
 
         else:  # There is a well loaded already
             if well_dict['well_info']['well']['value'] == self.header.well.value:
-                # Add all well specific headers to well header, except well name
-                add_headers(well_dict['well_info'], ['strt', 'stop', 'step', 'well'], note)
-                # add to existing LogBloc
-                add_logs_to_logblock(well_dict, block_name, only_these_logs)
-
+                add_well = True
             else:
-                message = 'Trying to add well with different name ({}) to existing well object ({})'.format(
+                message = 'Trying to add a well with different name ({}) to existing well object ({})'.format(
                     well_dict['well_info']['well']['value'],
                     self.header.well.value
                 )
                 logger.warning(message)
                 print(message)
+                question = 'Do you want to add well {} to existing well {}? Yes or No'.format(
+                    well_dict['well_info']['well']['value'],
+                    self.header.well.value
+                )
+                ans = input(question)
+                logger.info('{}: {}'.format(question, ans))
+                if 'y' in ans.lower:
+                    add_well = True
+                else:
+                    add_well = False
+
+            # TODO make sure that adding a well with different name actually will work
+            if add_well:
+                # Add all well specific headers to well header, except well name
+                add_headers(well_dict['well_info'], ['strt', 'stop', 'step', 'well'], note)
+                # add to existing LogBloc
+                add_logs_to_logblock(well_dict, block_name, only_these_logs)
 
     def keys(self):
         return self.__dict__.keys()
@@ -1095,16 +1153,10 @@ class LogBlock(object):
 
         self.add_log_curve(log_curve)
 
-def _read_las(file):
+def _read_las(file, rename_well_logs=None):
     """Convert file and Return `self`. """
     file_format = None
     ext = file.rsplit(".", 1)[-1].lower()
-
-    # TODO
-    # In some las files, the WELL name lacks the S or extra letter, which is provided in the WBN name.
-    # Test that they are the same, and if not, use the one with the extra letter
-    # WELL.        16 / 4 - 9                       : Well
-    # WBN.         16 / 4 - 9 S                     : Wellbore
 
     if ext == "las":
         file_format = 'las'
@@ -1117,7 +1169,7 @@ def _read_las(file):
 
     with open(file, "r") as f:
         lines = f.readlines()
-    return convert(lines, file_format=file_format)  # read all lines from data
+    return convert(lines, file_format=file_format, rename_well_logs=rename_well_logs)  # read all lines from data
 
 
 def add_one(instring):
@@ -1128,339 +1180,6 @@ def add_one(instring):
     else:
         instring = instring + ' 1'
     return instring
-
-
-def calc_stats(
-        well_table,
-        tops,
-        intervals,
-        cutoffs,
-        rokdoc_output=None,
-        working_dir=None,
-        suffix=None
-):
-    """
-    Loop of over a set of wells, and a well tops dictionary and calculate the statistics over all wells within
-    specified intervals.
-
-    :param tops:
-        dict
-        E.G.
-        tops_file = 'C:/Users/marten/Google Drive/Blixt Geo AS/Projects/Well log plotter/Tops/strat_litho_wellbore.xlsx'
-        tops = read_npd_tops(tops_file)
-    :param well_table:
-        dict
-        Dictionary of wells, with associated las files and logs to use in the analysis, as returned from  utils.io project_wells function
-
-    :param intervals:
-        list of dicts
-        E.G.
-            [
-                {'name': 'Hekkingen sands',
-                 'tops': ['HEKKINGEN FM', 'BASE HEKKINGEN']},
-                {'name': 'Kolmule sands',
-                 'tops': ['KOLMULE FM', 'BASE KOLMULE'
-            ]
-        The 'name' of the interval is used in the saved RokDoc compatible sums and averages file
-        to name the averages
-    :param logs:
-        dict
-        Dictionary of log names to create statistics on
-        The Vp, Vs, Rho and Phi logs are necessary for output to RokDoc compatible Sums & Average excel file
-        E.G.
-            logs = {'vp': 'vp', 'vs': 'vs', 'rho': 'rhob', 'phi': 'phie', 'vcl': 'vcl'}
-        Must have the same name across all las files. And for proper export to RokDoc Sums and Average files, they have
-        have to have these names
-    :param cutoffs:
-        dict
-        Dictionary with log types as keys, and list with mask definition as value
-        E.G.
-            {'Volume': ['<', 0.5], 'Porosity': ['>', 0.1]}
-    :param rokdoc_output:
-        str
-        full path name of file of which should contain the averages (RokDoc format)
-        This requires that the log files include P- and S velocity, density, porosity and volume (Vsh)
-    :param working_dir:
-        str
-        name of folder where results should be saved
-    :param suffix:
-        str
-        Suffix added to output plots (png) to ease separating output from eachother
-    :return:
-    """
-    if suffix is None:
-        suffix = ''
-    else:
-        suffix = '_' + suffix
-
-    cutoffs_str = ''
-    for key in cutoffs:
-        cutoffs_str += '{}{}{:.2f}, '.format(key, cutoffs[key][0], cutoffs[key][1])
-    cutoffs_str = cutoffs_str.rstrip(', ')
-
-    log_types = list(well_table[list(well_table.keys())[0]]['logs'].values())
-    # make sure repeating log types are removed
-    log_types = list(set(log_types))
-
-    # Test if necessary log types for creating a RokDoc compatible output are present
-    for necessary_type in ['P velocity', 'S velocity', 'Density', 'Porosity', 'Volume']:
-        if necessary_type not in log_types:
-            # set the output to None
-            rokdoc_output = None
-            warn_txt = 'Logs of type {}, are lacking for storing output as a RokDoc Sums and Averages file'.format(necessary_type)
-            logger.warning(warn_txt)
-            print('WARNING: {}'.format(warn_txt))
-
-    # Extract the first log name of each log type, and use those logs in the proceeding analysis
-    logs = []; logname_dict = {}; last_type = ''
-    for log_name, _type in well_table[list(well_table.keys())[0]]['logs'].items():
-        if _type != last_type:
-            logs.append(log_name)
-            logname_dict[_type] = log_name.lower()
-        last_type = _type
-    # remove the 'depth' log if loaded
-    if 'depth' in logs:
-        logs.remove('depth')
-
-#    # open a figure for each log that is being analyzed
-    figs_and_axes = [plt.subplots(figsize=(8, 6)) for xx in range(len(logs))]
-    interval_axis = []
-    interval_ticks = ['', ]
-
-    # Start looping of all intervals
-    for j, interval in enumerate(intervals):
-        print('Interval: {}'.format(interval['name']))
-        interval_axis.append(j)
-        interval_ticks.append(interval['name'])
-
-        # create container for results
-        results = {}
-        results_per_well = {}
-        for key in logs:
-            results[key.lower()] = np.empty(0)
-
-        # Read in all wells and well logs defined in the well_table
-        wells = {}
-        for k, fname in enumerate(list(well_table.keys())):
-            wells[fname] = Well()
-            #wells[fname].read_las(fname, block_name=def_lb_name, only_these_logs=well_table[fname]['logs'])
-            wells[fname].read_well_table(well_table, k)
-        depth_from_top = {}
-
-        # start looping over the well objects
-        for well in wells.values():
-            this_well_name = uio.fix_well_name(well.well)
-            print(' Well: {}'.format(this_well_name))
-            results_per_well[this_well_name] = {}
-            try:
-                logger.info('Well: {}'.format(this_well_name))
-                logger.info(' Top: {}: {:.2f} [m] MD'.format(interval['tops'][0],
-                                                             tops[this_well_name][interval['tops'][0].upper()]))
-                logger.info(' Base: {}: {:.2f} [m] MD'.format(interval['tops'][1],
-                                                              tops[this_well_name][interval['tops'][1].upper()]))
-            except:
-                logger.info(
-                    'Tops {} & {} not present in {}'.format(interval['tops'][0], interval['tops'][1], this_well_name))
-                depth_from_top[this_well_name] = np.empty(0)
-                for key in log_types:
-                    results_per_well[this_well_name][key.lower()] = np.empty(0)
-                continue
-
-            # As the cutoffs are based on log types, and not the individual log names, we need to create a
-            # local copy of the cutoffs that use the first log name under each log type, eg.
-            this_cutoffs = {}
-            for key in list(cutoffs.keys()):
-                this_cutoffs[well.get_logs_of_type(key)[0].name] = cutoffs[key]
-
-            # Append the depth mask from the tops file
-            this_cutoffs['depth'] = ['><',
-                [
-                 tops[this_well_name][interval['tops'][0].upper()],
-                 tops[this_well_name][interval['tops'][1].upper()]
-                ]
-            ]
-
-            # Create the mask
-            well.calc_mask(this_cutoffs, name=def_msk_name)
-
-            # Apply mask
-            well.apply_mask(def_msk_name)
-
-            this_depth = well.log_blocks[def_lb_name].logs['depth'].data
-
-            if len(this_depth) > 0:
-                print('   Interval {}, in well {}, has the depth range: {:.1f} - {:.1f}'.format(
-                    interval['name'],
-                    this_well_name,
-                    np.nanmin(this_depth),
-                    np.nanmax(this_depth)
-                ))
-            else:
-                print('   Interval {}, is lacking in well {}'.format(
-                    interval['name'],
-                    this_well_name))
-
-            # calculate the depth from the top for each well
-            depth_from_top[this_well_name] = this_depth - tops[this_well_name][interval['tops'][0].upper()]
-
-            for key in logs:
-                this_data = well.log_blocks[def_lb_name].logs[key].data
-                results[key] = np.append(results[key], this_data)
-                results_per_well[this_well_name][key] = this_data
-
-        # create plot of logs vs depth and fill the interval plots
-        ncols = len(logs)
-        fig, axs = plt.subplots(
-            nrows=1,
-            ncols=ncols,
-            sharey=True,
-            figsize=(ncols * 6, 8))
-        for i, key in enumerate(logs):
-            key = key.lower()
-            well_names = []
-            for k, well in enumerate(wells.values()):
-                this_well_name = uio.fix_well_name(well.well)
-                well_names.append(this_well_name)
-                axs[i].plot(
-                    results_per_well[this_well_name][key],
-                    depth_from_top[this_well_name],
-                    c=xp.cnames[k])
-
-                mn = np.nanmean(results_per_well[this_well_name][key])
-                std = np.nanstd(results_per_well[this_well_name][key])
-                figs_and_axes[i][1].errorbar(
-                    mn, j, xerr=std, fmt='none', capsize=10,
-                    capthick=1, elinewidth=1, ecolor=xp.cnames[k])
-                figs_and_axes[i][1].scatter(
-                    mn, j,
-                    marker=xp.msymbols[k],
-                    c=xp.cnames[k],
-                    s=90)
-
-            axs[i].set_xlabel(key)
-            axs[i].set_ylim(axs[i].get_ylim()[1], axs[i].get_ylim()[0])
-
-            mn = np.nanmean(results[key])
-            std = np.nanstd(results[key])
-            figs_and_axes[i][1].errorbar(
-                mn, j, xerr=std, fmt='none', capsize=20,
-                capthick=3, elinewidth=3, ecolor='pink')
-            figs_and_axes[i][1].scatter(mn, j, marker='*', s=360, c='pink')
-            figs_and_axes[i][1].set_xlabel(key)
-
-        axs[0].set_ylabel('Depth from {} [m]'.format(interval['tops'][0]))
-        axs[-1].legend(well_names, prop={'size': 10})
-        fig.suptitle('{}, {}'.format(interval['name'], cutoffs_str))
-        fig.tight_layout()
-        if working_dir is not None:
-            fig.savefig(os.path.join(working_dir, '{}_logs_depth{}.png'.format(interval['name'], suffix)))
-
-        # create histogram plot
-        fig, axs = plt.subplots(nrows=ncols, ncols=1, figsize=(9, 8 * ncols))
-        for i, key in enumerate(logs):
-            key = key.lower()
-            n, bins, patches = axs[i].hist(
-                [results_per_well[wid][key] for wid in well_names],
-                10,
-                histtype='bar',
-                stacked=True,
-                label=well_names,
-                color=[xp.cnames[k] for k in range(len(wells))]
-            )
-            axs[i].set_ylabel('N');
-            axs[i].set_xlabel(key);
-            ylim = axs[i].get_ylim()
-            mn = np.nanmean(results[key]);
-            std = np.nanstd(results[key])
-            axs[i].plot([mn, mn], ylim, c='black', lw=2)
-            axs[i].plot([mn + std, mn + std], ylim, 'b--')
-            axs[i].plot([mn - std, mn - std], ylim, 'b--')
-        axs[-1].legend(prop={'size': 10})
-        axs[0].set_title('{}, {}'.format(interval['name'], cutoffs_str))
-        fig.tight_layout()
-        if working_dir is not None:
-            fig.savefig(os.path.join(working_dir, '{}_logs_hist{}.png'.format(interval['name'], suffix)))
-
-        # Write result to RokDoc compatible excel Sums And Average xls file:
-        if rokdoc_output is not None:
-            uio.write_sums_and_averages(rokdoc_output,
-                                    [
-                                        interval['name'],
-                                        'NONE',
-                                        'MD',
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        np.nanmean(results[logname_dict['P velocity']]),
-                                        np.nanmean(results[logname_dict['S velocity']]),
-                                        np.nanmean(results[logname_dict['Density']]),
-                                        np.nanmedian(results[logname_dict['P velocity']]),
-                                        np.nanmedian(results[logname_dict['S velocity']]),
-                                        np.nanmedian(results[logname_dict['Density']]),
-                                        np.nanmean(results[logname_dict['P velocity']]),
-                                        # this should be a mode value, but uncertain what it means
-                                        np.nanmean(results[logname_dict['S velocity']]),
-                                        # this should be a mode value, but uncertain what it means
-                                        np.nanmean(results[logname_dict['Density']]),
-                                        # this should be a mode value, but uncertain what it means
-                                        'NONE',
-                                        np.nanmean(results[logname_dict['Porosity']]),
-                                        np.nanstd(results[logname_dict['Porosity']]),
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        np.nanstd(results[logname_dict['P velocity']]),
-                                        np.nanstd(results[logname_dict['S velocity']]),
-                                        np.nanstd(results[logname_dict['Density']]),
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        nan_corrcoef(results[logname_dict['P velocity']], results[logname_dict['S velocity']])[0, 1],
-                                        nan_corrcoef(results[logname_dict['P velocity']], results[logname_dict['Density']])[0, 1],
-                                        nan_corrcoef(results[logname_dict['S velocity']], results[logname_dict['Density']])[0, 1],
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        np.nanmean(results[logname_dict['Volume']]),
-                                        np.nanstd(results[logname_dict['Volume']]),
-                                        'None',
-                                        0.0,
-                                        cutoffs_str,
-                                        datetime.now()
-                                    ]
-                                    )
-    # arrange the interval plots
-    well_names.append('All')
-    for i, fax in enumerate(figs_and_axes):
-        fax[1].legend(well_names, prop={'size': 10})
-        fax[1].grid(True)
-        fax[1].set_title(cutoffs_str)
-        fax[1].set_yticklabels(interval_ticks)
-        fax[0].tight_layout()
-        if working_dir is not None:
-            fax[0].savefig(os.path.join(
-                working_dir,
-                '{}_{}_intervals{}.png'.format(logs[i],
-                                               cutoffs_str.replace('>', '_gt_').replace('<', '_lt_').replace('=',
-                                                                                                             '_eq_'),
-                                               suffix)))
-            plt.close('all')
 
 
 def test():

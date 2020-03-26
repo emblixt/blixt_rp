@@ -47,15 +47,16 @@ def project_wells(filename, working_dir):
     return result
 
 
-def harmonize_lognames():
-    # TODO
-    # write a function that harmonizes the different log names in a set of las files
-    # i.e. so that shale volume has the same log name in all wells.
-    # This could be done on input without modifying the las files
+def project_templates(filename):
+    table = pd.read_excel(filename, header=1, sheet_name='Templates')
+    result = {}
+    for i, ans in enumerate(table['Log type']):
+        result[ans] = {}
+        for key in ['bounds', 'center', 'colormap', 'description', 'max', 'min', 'scale', 'type', 'unit']:
+            result[ans][key] = None if isnan(table[key][i]) else table[key][i]
+        result[ans]['full_name'] = ans
 
-    # The best way is perhaps to use the table used in the wells.project, and store that in the
-    # wells.py file and use that in the rename_depth() function below
-    pass
+    return result
 
 
 def collect_project_wells(well_table, target_dir):
@@ -153,30 +154,47 @@ def write_sums_and_averages(filename, line_of_data):
     wb.close()
 
 
-def read_tops(filename, top=True, zstick='md', frmt=None):
+def read_tops(filename, top=True, zstick='md', frmt=None, only_these_wells=None):
+    """
+
+    :param filename:
+    :param top:
+    :param zstick:
+    :param frmt:
+    :param only_these_wells:
+        list
+        list of well names to look for, so that the reading in can be speeded up
+        Populate this list by extracting a well_table, and use the well listed there
+        > well_table = utils.io.project_wells(project_table_file)
+        > only_these_wells = list(set([x['Given well name'] for x in well_table.values()]))
+        NOTE! The naming convention of the wells in the project table file must be the same as the one
+        used in tops
+    :return:
+    """
     if frmt == 'petrel':
-        return read_petrel_tops(filename, top=top, zstick=zstick)
+        return read_petrel_tops(filename, top=top, zstick=zstick, only_these_wells=only_these_wells)
     elif frmt == 'npd':
-        return read_npd_tops(filename, top=top, zstick=zstick)
+        return read_npd_tops(filename, top=top, zstick=zstick, only_these_wells=only_these_wells)
     elif frmt == 'rokdoc':
-        return read_rokdoc_tops(filename, top=top, zstick=zstick)
+        return read_rokdoc_tops(filename, top=top, zstick=zstick, only_these_wells=only_these_wells)
     else:
         raise IOError('No tops for format {}'.format(frmt))
 
 
-def read_rokdoc_tops(filename, header=4, top=True, zstick='md'):
+def read_rokdoc_tops(filename, header=4, top=True, zstick='md', only_these_wells=None):
     """
     :param top:
         bool
         if True, the top of each marker/top is returned
         if False, not implemented
-
     :param zstick:
         str
         adapted after RokDoc.
         Can be:
             'md', 'tvdkb','twt', 'tvdss',
-
+    :param only_these_wells:
+        list
+        list of well names to look for, so that the reading in can be speeded up
     """
     if not top:
         raise NotImplementedError('Only top of markers / tops are available')
@@ -194,10 +212,21 @@ def read_rokdoc_tops(filename, header=4, top=True, zstick='md'):
         NotImplementedError('ZSTICK = {} is not implemented'.format(zstick))
 
     tops = pd.read_excel(filename, header=header)
-    return return_dict_from_tops(tops, 'Well Name', 'Horizon', key_name)
+    return return_dict_from_tops(tops, 'Well Name', 'Horizon', key_name, only_these_wells=only_these_wells)
 
 
-def read_npd_tops(filename, header=None, top=True, zstick='md'):
+def read_npd_tops(filename, header=None, top=True, zstick='md', only_these_wells=None):
+    """
+
+    :param filename:
+    :param header:
+    :param top:
+    :param zstick:
+    :param only_these_wells:
+        list
+        list of well names to look for, so that the reading in can be speeded up
+    :return:
+    """
     if zstick != 'md':
         NotImplementedError('ZSTICK = {} is not implemented'.format(zstick))
     if top:
@@ -206,10 +235,10 @@ def read_npd_tops(filename, header=None, top=True, zstick='md'):
         key_name = 'Bottom depth [m]'
 
     tops = pd.read_excel(filename)
-    return return_dict_from_tops(tops, 'Wellbore name', 'Lithostrat. unit', key_name)
+    return return_dict_from_tops(tops, 'Wellbore name', 'Lithostrat. unit', key_name, only_these_wells=only_these_wells)
 
 
-def read_petrel_tops(filename, header=None, top=True, zstick='md'):
+def read_petrel_tops(filename, header=None, top=True, zstick='md', only_these_wells=None):
     if zstick != 'md':
         NotImplementedError('ZSTICK = {} is not implemented'.format(zstick))
     if not top:
@@ -219,7 +248,7 @@ def read_petrel_tops(filename, header=None, top=True, zstick='md'):
         key_name = 'MD'
 
     tops = pd.read_excel(filename)
-    return return_dict_from_tops(tops, 'Well identifier', 'Surface', key_name)
+    return return_dict_from_tops(tops, 'Well identifier', 'Surface', key_name, only_these_wells=only_these_wells)
 
 
 def test_file_path(file_path, working_dir):
@@ -251,8 +280,11 @@ def unique_names(table, column_name, well_names=True):
         return [x for x in list(set(table[column_name])) if isinstance(x, str)]
 
 
-def return_dict_from_tops(tops, well_key, top_key, key_name):
-    unique_wells = unique_names(tops, well_key)
+def return_dict_from_tops(tops, well_key, top_key, key_name, only_these_wells=None):
+    if only_these_wells:
+        unique_wells = only_these_wells
+    else:
+        unique_wells = unique_names(tops, well_key)
     answer = {}
 
     for well_name in unique_wells:
@@ -400,13 +432,90 @@ def write_las(filename, wh, lh, data, overwrite=False):
     with open(filename, 'w+') as f:
         f.write(out)
 
+def get_las_header(filename):
+    """
+    Iterates over the las files header lines.
 
-def convert(lines, file_format='las'):
+    :param filename:
+    :return:
+    """
+    for row in open(filename, 'r'):
+        if '~W' in row:
+            break
+        else:
+            yield row
+
+
+def get_las_well_info(filename):
+    """
+    Iterates over the las file well info lines.
+
+    :param filename:
+    :return:
+    """
+    well_info_section = False
+    curve_info_section = False
+    header = True
+    for row in open(filename, 'r'):
+        # test wich section you are in
+        if '~W' in row:
+            well_info_section = True
+        if '~C' in row:
+            curve_info_section = True
+
+        if curve_info_section:
+            break
+        if well_info_section:
+            header = False
+            yield row
+        if header:
+            continue
+
+
+def get_las_curve_info(filename):
+    """
+    Iterates over the las file curve info lines.
+
+    :param filename:
+    :return:
+    """
+    curve_info_section = False
+    data_section = False
+    header = True
+    for row in open(filename, 'r'):
+        # test wich section you are in
+        if '~C' in row:
+            curve_info_section = True
+        if '~A' in row:
+            data_section = True
+
+        if data_section:
+            break
+        if curve_info_section:
+            header = False
+            yield row
+        if header:
+            continue
+
+
+def convert(lines, file_format='las', rename_well_logs=None):
     """
     class handling wells, with logs, and well related information
     The reading .las files is more or less copied from converter.py
         https://pypi.org/project/las-converter/
+
+    :param rename_well_logs:
+        dict
+        E.G.
+        {'depth': ['DEPT', 'MD']}
+        where the key is the wanted well log name, and the value list is a list of well log names to translate from
+
     """
+    if rename_well_logs is None:
+        rename_well_logs = {'depth': ['Depth', 'DEPT', 'MD', 'DEPTH']}
+    elif isinstance(rename_well_logs, dict) and ('depth' not in list(rename_well_logs.keys())):
+        rename_well_logs['depth'] = ['Depth', 'DEPT', 'MD', 'DEPTH']
+
     def parse(x):
         try:
             x = int(x)
@@ -417,25 +526,20 @@ def convert(lines, file_format='las'):
                 pass
         return x
 
-    def rename_depth(key):
+    def rename_log_name(_key):
         """
         Helper function that translates different "depth" names to a common "depth" name.
-        :param key:
+        :param _key:
             str
         :return:
             str
         """
-        # TODO
-        # Use this to harmonize all well log names not only depth DEPTH
-        # try
-        # for rname, item in cw.renamewelllogs.items():
-        #     if key.lower() in [x.lower() for x in item]:
-        #         return rname
-        return_name = 'depth'
-        if key.lower() == 'dept':
-            return return_name
+        for rname, value in rename_well_logs.items():
+            if _key.lower() in [x.lower() for x in value]:
+                logger.info('Renaming log from {} to {}'.format(_key, rname))
+                return rname.lower()
         else:
-            return key
+            return _key
 
     def get_current_section(line):
         if '~V' in line : return 'version'
@@ -492,7 +596,7 @@ def convert(lines, file_format='las'):
             if section == "data":
                 generated_keys = [e.lower() for e in well_dict["curve"].keys()]
                 for key in generated_keys:
-                    key = rename_depth(key)
+                    key = rename_log_name(key)
                     # inital all key to empty list
                     well_dict = add_section(well_dict, section, key, [])
 
@@ -545,7 +649,7 @@ def convert(lines, file_format='las'):
 
             # divide line
             mnem = line[:mnem_end - 1].strip()
-            mnem = rename_depth(mnem)
+            mnem = rename_log_name(mnem)
             unit = line[mnem_end:unit_end].strip()
             data = line[unit_end:colon_end].strip()
             desc = line[colon_end + 1:].strip()
