@@ -344,7 +344,8 @@ def write_las(filename, wh, lh, data, overwrite=False):
     )
 
     out += '# {}\n'.format(wh['creation_info'].value)
-    out += '# NOTE: {}\n'.format(wh['note'].value)
+    if 'note' in list(wh.keys()):
+        out += '# NOTE: {}\n'.format(wh['note'].value)
     out += '# Written to las on: {}\n'.format(datetime.now().isoformat())
     out += '# Modified on: {}\n'.format(wh['modification_date'].value)
     for key, value in data.items():
