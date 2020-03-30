@@ -579,8 +579,8 @@ class Well(object):
             # copy of the cutoffs that use the first log name under each log type, eg.
             this_cutoffs = {}
             for key in list(cutoffs.keys()):
-                if len(self.get_logs_of_type(key)) < 1:
-                    print('XXXXX')
+                #if len(self.get_logs_of_type(key)) < 1:
+                #    print('XXXXX')
                 this_cutoffs[self.get_logs_of_type(key)[0].name] = cutoffs[key]
             cutoffs = this_cutoffs
             #print('FROM CALC_MASK', cutoffs)
@@ -616,7 +616,6 @@ class Well(object):
                 isinstance(cutoffs[key][1], list) else \
                 '{}: {} {}, '.format(
                 key, cutoffs[key][0], cutoffs[key][1])
-        print('XXXX')
         print(msk_str)
 
         for lblock in list(self.log_blocks.keys()):
