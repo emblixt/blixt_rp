@@ -59,6 +59,16 @@ def project_templates(filename):
     return result
 
 
+def project_well_settings(filename):
+    table = pd.read_excel(filename, header=1, sheet_name='Wells settings')
+    result = {}
+    for i, ans in enumerate(table['Given well name']):
+        result[ans] = {}
+        for key in ['Color', 'Symbol', 'Content', 'KB', 'UWI', 'UTM', 'X', 'Y', 'Water depth', 'Note']:
+            result[ans][key.lower()] = None if isnan(table[key][i]) else table[key][i]
+    return result
+
+
 def collect_project_wells(well_table, target_dir):
     """
     Copies all las files in the well table (the output from project_wells()) to the folder target_dir.
