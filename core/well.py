@@ -620,8 +620,14 @@ class Well(object):
 
         for lblock in list(self.log_blocks.keys()):
             masks = []
-            for lname in list(self.log_blocks[lblock].logs.keys()):
-                if lname not in list(cutoffs.keys()):
+            #for lname in list(self.log_blocks[lblock].logs.keys()):
+            #    if lname not in list(cutoffs.keys()):
+            #        continue
+            for lname in list(cutoffs.keys()):
+                if lname not in list(self.log_blocks[lblock].logs.keys()):
+                    warn_text = 'Log {} to calculate mask from is not present in well {}'.format(lname, self.well)
+                    print('WARNING: {}'.format(warn_text))
+                    logger.warning(warn_text)
                     continue
                 else:
                     # calculate mask
