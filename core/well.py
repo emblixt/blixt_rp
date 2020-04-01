@@ -41,7 +41,7 @@ from utils.harmonize_logs import harmonize_logs as fixlogs
 # global variables
 supported_version = {2.0, 3.0}
 logger = logging.getLogger(__name__)
-def_lb_name = 'LogBlock'  # default LogBlock name
+def_lb_name = 'Logs'  # default Block name
 def_msk_name = 'Mask'  # default mask name
 
 renamewelllogs = {
@@ -367,7 +367,7 @@ class Header(AttribDict):
 
 class Well(object):
     """
-    class handling wells, with LogBlock objects that in its turn contain LogCurve objects.
+    class handling wells, with Block objects that in its turn contain LogCurve objects.
     Other well related information is stored at suitable object level.
     The reading .las files is more or less copied from converter.py
         https://pypi.org/project/las-converter/
@@ -375,12 +375,12 @@ class Well(object):
 
     def __init__(self,
                  header=None,
-                 log_blocks=None):
+                 block=None):
         if header is None:
             header = {}
         self.header = Header(header)
-        if log_blocks is None:
-            self.log_blocks = {}
+        if block is None:
+            self.block = {}
 
     @property
     def meta(self):
@@ -399,36 +399,36 @@ class Well(object):
 
     def get_logs_of_name(self, log_name):
         log_list = []
-        for lblock in list(self.log_blocks.keys()):
-            log_list = log_list + self.log_blocks[lblock].get_logs_of_name(log_name)
+        for lblock in list(self.block.keys()):
+            log_list = log_list + self.block[lblock].get_logs_of_name(log_name)
         return log_list
 
     def get_logs_of_type(self, log_type):
         log_list = []
-        for lblock in list(self.log_blocks.keys()):
-            log_list = log_list + self.log_blocks[lblock].get_logs_of_type(log_type)
+        for lblock in list(self.block.keys()):
+            log_list = log_list + self.block[lblock].get_logs_of_type(log_type)
         return log_list
 
     def log_names(self):
         ln_list = []
-        for lblock in list(self.log_blocks.keys()):
-            ln_list = ln_list + self.log_blocks[lblock].log_names()
+        for lblock in list(self.block.keys()):
+            ln_list = ln_list + self.block[lblock].log_names()
         # remove any duplicates
         ln_list = list(set(ln_list))
         return ln_list
 
     def log_types(self):
         lt_list = []
-        for lblock in list(self.log_blocks.keys()):
-            lt_list = lt_list + self.log_blocks[lblock].log_types()
+        for lblock in list(self.block.keys()):
+            lt_list = lt_list + self.block[lblock].log_types()
         # remove any duplicates
         lt_list = list(set(lt_list))
         return lt_list
 
-    def calc_vrh_bounds(self, fluid_minerals, param='k', method='Voigt', log_block=None):
+    def calc_vrh_bounds(self, fluid_minerals, param='k', method='Voigt', block=None):
         """
         Calculates the Voigt-Reuss-Hill bounds of parameter param, for the  fluid or mineral mixture defined in
-        fluid_minerals, for the given LogBlock.
+        fluid_minerals, for the given Block.
 
         :param fluid_minerals:
             core.minerals.MineralSet
@@ -447,16 +447,16 @@ class Well(object):
             'Voigt' for the upper bound or Voigt average
             'Reuss' for the lower bound or Reuss average
             'Voigt-Reuss-Hill'  for the average of the two above
-        :param log_block:
+        :param block:
             str
-            Name of the LogBlock for which the bounds are calculated
+            Name of the Block for which the bounds are calculated
 
         :return
             np.ndarray
             Bounds of parameter 'param'
         """
-        if log_block is None:
-            log_block = def_lb_name
+        if block is None:
+            block = def_lb_name
 
         fluid = False
         if not (isinstance(fluid_minerals, MineralSet) or isinstance(fluid_minerals, dict)):
@@ -498,14 +498,14 @@ class Well(object):
                 this_fraction = tmp_frac
             else:
                 _name = tmp_frac.lower()
-                if _name not in list(self.log_blocks[log_block].logs.keys()):
-                    warn_txt = 'The volume fraction {} is lacking in LogBlock {} of well {}'.format(
-                        _name, log_block, self.well
+                if _name not in list(self.block[block].logs.keys()):
+                    warn_txt = 'The volume fraction {} is lacking in Block {} of well {}'.format(
+                        _name, block, self.well
                     )
                     print(warn_txt)
                     logger.warning(warn_txt)
                     continue
-                this_fraction = self.log_blocks[log_block].logs[_name].data
+                this_fraction = self.block[block].logs[_name].data
             this_component = obj[this_fm].__getattribute__(param).value
             fractions.append(this_fraction)
             components.append(this_component)
@@ -538,7 +538,7 @@ class Well(object):
                     log_type_input=False
     ):
         """
-        Based on the different cutoffs in the 'cutoffs' dictionary, each LogBlock in well is masked accordingly.
+        Based on the different cutoffs in the 'cutoffs' dictionary, each Block in well is masked accordingly.
 
         :param cutoffs:
             dict
@@ -618,13 +618,13 @@ class Well(object):
                 key, cutoffs[key][0], cutoffs[key][1])
         print(msk_str)
 
-        for lblock in list(self.log_blocks.keys()):
+        for lblock in list(self.block.keys()):
             masks = []
-            #for lname in list(self.log_blocks[lblock].logs.keys()):
+            #for lname in list(self.block[lblock].logs.keys()):
             #    if lname not in list(cutoffs.keys()):
             #        continue
             for lname in list(cutoffs.keys()):
-                if lname not in list(self.log_blocks[lblock].logs.keys()):
+                if lname not in list(self.block[lblock].logs.keys()):
                     warn_text = 'Log {} to calculate mask from is not present in well {}'.format(lname, self.well)
                     print('WARNING: {}'.format(warn_text))
                     logger.warning(warn_text)
@@ -632,26 +632,26 @@ class Well(object):
                 else:
                     # calculate mask
                     masks.append(msks.create_mask(
-                        self.log_blocks[lblock].logs[lname].data, cutoffs[lname][0], cutoffs[lname][1]
+                        self.block[lblock].logs[lname].data, cutoffs[lname][0], cutoffs[lname][1]
                     ))
             if len(masks) > 0:
-                # combine all masks for this LogBlock
+                # combine all masks for this Block
                 block_mask = msks.combine_masks(masks)
-                if self.log_blocks[lblock].masks is None:
-                    self.log_blocks[lblock].masks = {}
-                if (name in list(self.log_blocks[lblock].masks.keys())) and (not overwrite) and (not append):
+                if self.block[lblock].masks is None:
+                    self.block[lblock].masks = {}
+                if (name in list(self.block[lblock].masks.keys())) and (not overwrite) and (not append):
                     # create a new name for the mask
                     name = add_one(name)
-                elif (name in list(self.log_blocks[lblock].masks.keys())) and append:
+                elif (name in list(self.block[lblock].masks.keys())) and append:
                     # read in old mask
-                    old_mask = self.log_blocks[lblock].masks[name].data
-                    old_desc = self.log_blocks[lblock].masks[name].header.desc
+                    old_mask = self.block[lblock].masks[name].data
+                    old_desc = self.block[lblock].masks[name].header.desc
                     # modify the new
                     block_mask = msks.combine_masks([old_mask, block_mask])
                     msk_str = '{} AND {}'.format(msk_str, old_desc)
 
-                # Create an object, similar to the logs object of a LogBlock, that contain the masks
-                self.log_blocks[lblock].masks[name] = LogCurve(
+                # Create an object, similar to the logs object of a Block, that contain the masks
+                self.block[lblock].masks[name] = LogCurve(
                     name=name,
                     well=self.well,
                     data=block_mask,
@@ -669,8 +669,8 @@ class Well(object):
     def apply_mask(self,
             name=None):
         """
-        Applies the named mask to the logs under each LogBlock where the named mask exists, adds the masking description
-        to the LogCurve header and deletes the named masks object under each LogBlock.
+        Applies the named mask to the logs under each Block where the named mask exists, adds the masking description
+        to the LogCurve header and deletes the named masks object under each Block.
 
         :param name:
             str
@@ -679,14 +679,14 @@ class Well(object):
         :return:
         """
         if name is not None:
-            for lblock in list(self.log_blocks.keys()):
-                if name in list(self.log_blocks[lblock].masks.keys()):
-                    msk = self.log_blocks[lblock].masks[name].data
-                    desc = self.log_blocks[lblock].masks[name].header.desc
-                    for lname in list(self.log_blocks[lblock].logs.keys()):
-                        self.log_blocks[lblock].logs[lname].data = self.log_blocks[lblock].logs[lname].data[msk]
-                        self.log_blocks[lblock].logs[lname].header.modification_history = 'Mask: {}'.format(desc)
-                    del(self.log_blocks[lblock].masks[name])
+            for lblock in list(self.block.keys()):
+                if name in list(self.block[lblock].masks.keys()):
+                    msk = self.block[lblock].masks[name].data
+                    desc = self.block[lblock].masks[name].header.desc
+                    for lname in list(self.block[lblock].logs.keys()):
+                        self.block[lblock].logs[lname].data = self.block[lblock].logs[lname].data[msk]
+                        self.block[lblock].logs[lname].header.modification_history = 'Mask: {}'.format(desc)
+                    del(self.block[lblock].masks[name])
 
     def depth_plot(self,
                    log_type='P velocity',
@@ -745,7 +745,7 @@ class Well(object):
         if (templates is not None) and (log_type in list(templates.keys())):
             x_templ = templates[log_type]
 
-        # loop over all LogBlocks
+        # loop over all Blocks
         cnt = -1
         legends = []
         for logcurve in list_of_logs:
@@ -754,7 +754,7 @@ class Well(object):
                 x_templ = l2tmpl(logcurve.header)
             #print(cnt, logcurve.name, xp.cnames[cnt], mask)
             xdata = logcurve.data
-            ydata = self.log_blocks[logcurve.log_block].logs['depth'].data
+            ydata = self.block[logcurve.block].logs['depth'].data
             legends.append(logcurve.name)
             xp.plot(
                 xdata,
@@ -762,7 +762,7 @@ class Well(object):
                 cdata=xp.cnames[cnt],
                 title='{}: {}'.format(self.well, ttl),
                 xtempl=x_templ,
-                ytempl=l2tmpl(self.log_blocks[logcurve.log_block].logs['depth'].header),
+                ytempl=l2tmpl(self.block[logcurve.block].logs['depth'].header),
                 mask=mask,
                 show_masked=show_masked,
                 fig=fig,
@@ -837,14 +837,14 @@ class Well(object):
     ):
         """
         Reads in a las file (filename) and adds the selected logs (listed in only_these_logs) to the
-        LogBlock specified by block_name.
+        Block specified by block_name.
 
         :param filename:
             str
             name of las file
         :param block_name:
             str
-            Name of LogBlock where the logs should be added to
+            Name of Block where the logs should be added to
         :param only_these_logs:
             dict
             dictionary of log names to load from the las file (keys), and corresponding log type as value
@@ -891,7 +891,7 @@ class Well(object):
                 self.header.__setitem__('note', _note)
 
 
-        def add_logs_to_logblock(_well_dict, _block_name, _only_these_logs):
+        def add_logs_to_block(_well_dict, _block_name, _only_these_logs):
             """
             Helper function that add logs to the given block name.
 
@@ -900,7 +900,7 @@ class Well(object):
             :return:
             """
             # TODO
-            # add las filename to LogBlock header
+            # add las filename to Block header
 
             # Make sure depth is always read in
             if isinstance(_only_these_logs, dict) and ('depth' not in list(_only_these_logs.keys())):
@@ -908,40 +908,40 @@ class Well(object):
 
             exists = False
             same = True
-            # Test if LogBlock already exists
-            if _block_name in list(self.log_blocks.keys()):
+            # Test if Block already exists
+            if _block_name in list(self.block.keys()):
                 exists = True
-                #print('Length of existing data: {}'.format(len(self.log_blocks[_block_name].logs['depth'].data)))
-                # Test if LogBlock has the same header
+                #print('Length of existing data: {}'.format(len(self.block[_block_name].logs['depth'].data)))
+                # Test if Block has the same header
                 for key in ['strt', 'stop', 'step']:
-                    if _well_dict['well_info'][key]['value'] != self.log_blocks[_block_name].header[key].value:
+                    if _well_dict['well_info'][key]['value'] != self.block[_block_name].header[key].value:
                         #print('{} in new versus existing log block {}: {}'.format(
                         #    key,
                         #    _well_dict['well_info'][key]['value'],
-                        #    self.log_blocks[_block_name].header[key].value))
+                        #    self.block[_block_name].header[key].value))
                         same = False
 
             if exists and not same:
-                ## Create a new LogBlock, with a new name, and warn the user
+                ## Create a new Block, with a new name, and warn the user
                 #new_block_name = add_one(_block_name)
                 #logger.warning(
-                #    'LogBlock {} existed and was different from imported las file, new LogBlock {} was created'.format(
+                #    'Block {} existed and was different from imported las file, new Block {} was created'.format(
                 #        _block_name, new_block_name
                 #    ))
                 #_block_name = new_block_name
-                #info_txt = 'Start modifying the logs in las file to fit the existing LogBlock'
+                #info_txt = 'Start modifying the logs in las file to fit the existing Block'
                 #print(info_txt)
                 #logger.info(info_txt)
                 #print(' Length of existing data in well: {}'.format(
-                #    len(self.log_blocks[_block_name])
+                #    len(self.block[_block_name])
                 #))
                 #print(' Length before fixing: {}'.format(len(_well_dict['data']['depth'])))
                 fixlogs(
                     _well_dict,
-                    self.log_blocks[_block_name].header['strt'].value,
-                    self.log_blocks[_block_name].header['stop'].value,
-                    self.log_blocks[_block_name].header['step'].value,
-                    len(self.log_blocks[_block_name])
+                    self.block[_block_name].header['strt'].value,
+                    self.block[_block_name].header['stop'].value,
+                    self.block[_block_name].header['step'].value,
+                    len(self.block[_block_name])
                 )
                 #print(' Length after fixing: {}'.format(len(_well_dict['data']['depth'])))
                 # Remove the 'depth' log, so we are not using two
@@ -960,7 +960,7 @@ class Well(object):
                         logger.debug('Adding log {}'.format(_key))
                         these_logs[_key] = LogCurve(
                             name=_key,
-                            log_block=_block_name,
+                            block=_block_name,
                             well=_well_dict['well_info']['well']['value'],
                             data=np.array(_well_dict['data'][_key]),
                             header=this_header
@@ -982,7 +982,7 @@ class Well(object):
                     logger.debug('Adding log {}'.format(_key))
                     these_logs[_key] = LogCurve(
                         name=_key,
-                        log_block=_block_name,
+                        block=_block_name,
                         well=_well_dict['well_info']['well']['value'],
                         data=np.array(_well_dict['data'][_key]),
                         header=_well_dict['curve'][_key]
@@ -992,11 +992,11 @@ class Well(object):
             else:
                 logger.warning('No logs added to {}'.format(_well_dict['well_info']['well']['value']))
 
-            # Test if LogBlock already exists
+            # Test if Block already exists
             if exists and same:
-                self.log_blocks[_block_name].logs.update(these_logs)
+                self.block[_block_name].logs.update(these_logs)
             else:
-                self.log_blocks[_block_name] = LogBlock(
+                self.block[_block_name] = Block(
                     name=_block_name,
                     well=_well_dict['well_info']['well']['value'],
                     logs=these_logs,
@@ -1004,7 +1004,7 @@ class Well(object):
                         key: _well_dict['well_info'][key] for key in ['strt', 'stop', 'step']
                     }
                 )
-                self.log_blocks[_block_name].header.name = _block_name
+                self.block[_block_name].header.name = _block_name
 
         # Make sure only_these_logs is a dictionary
         if isinstance(only_these_logs, str):
@@ -1024,8 +1024,8 @@ class Well(object):
                 'value': well_dict['well_info']['well']['value'],
                 'unit': '',
                 'desc': 'Well name'}
-            # Add logs to a LogBlock
-            add_logs_to_logblock(well_dict, block_name, only_these_logs)
+            # Add logs to a Block
+            add_logs_to_block(well_dict, block_name, only_these_logs)
 
         else:  # There is a well loaded already
             if well_dict['well_info']['well']['value'] == self.header.well.value:
@@ -1053,16 +1053,16 @@ class Well(object):
                 # Add all well specific headers to well header, except well name
                 add_headers(well_dict['well_info'], ['strt', 'stop', 'step', 'well'], note)
                 # add to existing LogBloc
-                add_logs_to_logblock(well_dict, block_name, only_these_logs)
+                add_logs_to_block(well_dict, block_name, only_these_logs)
 
     def keys(self):
         return self.__dict__.keys()
 
 
-class LogBlock(object):
+class Block(object):
     """
-    A log block is a collection of logs which share the same depth information, i.e 
-    start, stop, step
+    A  Block is a collection of logs (or other data, perhaps with non-uniform sampling) which share the same
+    depth information, e.g start, stop, step
     """
 
     def __init__(self,
@@ -1093,7 +1093,7 @@ class LogBlock(object):
 
     def __len__(self):
         try:
-            return len(self.logs[self.log_names()[0]].data)  # all logs within a LogBlock should have same length
+            return len(self.logs[self.log_names()[0]].data)  # all logs within a Block should have same length
         except:
             return 0
 
@@ -1138,7 +1138,7 @@ class LogBlock(object):
 
     def add_log_curve(self, log_curve):
         """
-        Adds the provided log_curve to the LogBlock.
+        Adds the provided log_curve to the Block.
         The user has to check that it has the correct depth information
         :param log_curve:
             core.log_curve.LogCurve
@@ -1148,7 +1148,7 @@ class LogBlock(object):
             raise IOError('Only LogCurve objects are valid input')
 
         if len(self) != len(log_curve):
-            raise IOError('LogCurve must have same length as the other curves in this LogBlock')
+            raise IOError('LogCurve must have same length as the other curves in this Block')
 
         if log_curve.name is None:
             raise IOError('LogCurve must have a name')
@@ -1157,13 +1157,13 @@ class LogBlock(object):
             raise IOError('LogCurve must have a log type')
 
         log_curve.well = self.well
-        log_curve.log_block = self.name
+        log_curve.block = self.name
 
         self.logs[log_curve.name.lower()] = log_curve
 
     def add_log(self, data, name, log_type, header=None):
         """
-        Creates a LogCurve object based on input information, and tries to add the log curve to this LogBlock.
+        Creates a LogCurve object based on input information, and tries to add the log curve to this Block.
 
         :param data:
             np.ndarray
@@ -1190,7 +1190,7 @@ class LogBlock(object):
 
         log_curve = LogCurve(
             name=name,
-            log_block=self.name,
+            block=self.name,
             well=self.well,
             data=data,
             header=header)
@@ -1237,17 +1237,17 @@ def test():
 #    w.read_las(las_file, only_these_logs=well_table[las_file]['logs'])
 #
 #    w.calc_mask({'test': ['>', 10], 'phie': ['><', [0.05, 0.15]]}, name=def_msk_name)
-#    msk = w.log_blocks[def_lb_name].masks[def_msk_name].data
+#    msk = w.block[def_lb_name].masks[def_msk_name].data
 #    fig1, fig2 = plt.figure(1), plt.figure(2)
 #    w.depth_plot('P velocity', fig=fig1, mask=msk, show_masked=True)
-#    print('Before mask: {}'.format(len(w.log_blocks[def_lb_name].logs['phie'].data)))
-#    print('Masks: {}'.format(', '.join(list(w.log_blocks[def_lb_name].masks.keys()))))
+#    print('Before mask: {}'.format(len(w.block[def_lb_name].logs['phie'].data)))
+#    print('Masks: {}'.format(', '.join(list(w.block[def_lb_name].masks.keys()))))
 #    w.apply_mask(def_msk_name)
-#    print('After mask: {}'.format(len(w.log_blocks[def_lb_name].logs['phie'].data)))
-#    print('Masks: {}'.format(', '.join(list(w.log_blocks[def_lb_name].masks.keys()))))
+#    print('After mask: {}'.format(len(w.block[def_lb_name].logs['phie'].data)))
+#    print('Masks: {}'.format(', '.join(list(w.block[def_lb_name].masks.keys()))))
 #    w.depth_plot('P velocity', fig=fig2)
 #    plt.show()
-#    print(w.log_blocks[def_lb_name].logs['phie'].header)
+#    print(w.block[def_lb_name].logs['phie'].header)
 
 
 if __name__ == '__main__':

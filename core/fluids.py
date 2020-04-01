@@ -301,18 +301,18 @@ def test_fluidsub():
          'Note': ''}}
     w.read_well_table(well_table, 0)
     w.calc_mask({'vcl': ['<', 0.4], 'phie': ['>', 0.1]}, name='sand')
-    mask = w.log_blocks['LogBlock'].masks['sand'].data
-    vp = w.log_blocks['LogBlock'].logs['vp_dry'].data[mask]
-    vs = w.log_blocks['LogBlock'].logs['vs_dry'].data[mask]
-    rho = w.log_blocks['LogBlock'].logs['rho_dry'].data[mask]
-    por = w.log_blocks['LogBlock'].logs['phie'].data[mask]
+    mask = w.block['Logs'].masks['sand'].data
+    vp = w.block['Logs'].logs['vp_dry'].data[mask]
+    vs = w.block['Logs'].logs['vs_dry'].data[mask]
+    rho = w.block['Logs'].logs['rho_dry'].data[mask]
+    por = w.block['Logs'].logs['phie'].data[mask]
 
     test = 'constants'  #'array'
     # Test with constant Vsh and constant Sw
     v_sh = 0.2
     s_w = 0.2
     if test == 'array':  # test with arrays of v_sh and s_w
-        v_sh = w.log_blocks['LogBlock'].logs['vcl'].data[mask]
+        v_sh = w.block['Logs'].logs['vcl'].data[mask]
         # create a mock-up water saturation
         s_w = 0.2 + v_sh
         s_w[s_w > 1.0] = 1.0
@@ -345,7 +345,7 @@ def test_fluidsub():
     v_p_2, v_s_2, rho_2, k_2 = rp.gassmann_vel(vp, vs, rho, k_f1, rho_f1, k_f2, rho_f2, k0, por)
 
     plt.plot(vp, label='dry')
-    plt.plot(w.log_blocks['LogBlock'].logs['vp_so08'].data[mask], label='RD oil')
+    plt.plot(w.block['Logs'].logs['vp_so08'].data[mask], label='RD oil')
     plt.plot(v_p_2, label='my oil')
     plt.legend()
     plt.show()

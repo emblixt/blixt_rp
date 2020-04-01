@@ -1,10 +1,11 @@
 import unittest
 import utils.io as uio
+import os
 from core.well import Project
 from core.well import Well
 import numpy as np
 
-def_lb_name = 'LogBlock'  # default LogBlock name
+def_lb_name = 'Logs'  # default Block name
 def_msk_name = 'Mask'  # default mask name
 
 # TODO
@@ -20,14 +21,14 @@ def create_test_data(var_name):
         only_these_logs=MasksTestCase.my_logs)
 
     # extract the phie log, and apply a mask on it
-    return w, w.log_blocks[def_lb_name].logs[var_name].data
+    return w, w.block[def_lb_name].logs[var_name].data
 
 
 class MasksTestCase(unittest.TestCase):
     wp = Project(name='MyProject', log_to_stdout=True)
     well_table = uio.project_wells(wp.project_table, wp.working_dir)
     #las_file = list(well_table.keys())[0]
-    las_file = 'test_data/Well A.las'
+    las_file = os.path.join(wp.working_dir, 'test_data', 'Well A.las')
     #my_logs = well_table[las_file]['logs']
     my_logs = None
 
@@ -38,7 +39,7 @@ class MasksTestCase(unittest.TestCase):
 
         # Create the same mask using the create mask function
         w.calc_mask({'phie': ['<', lmt]}, name=def_msk_name)
-        msk = w.log_blocks[def_lb_name].masks[def_msk_name].data
+        msk = w.block[def_lb_name].masks[def_msk_name].data
         # Test length
         with self.subTest():
             print(masked_length, len(phie[msk]))
@@ -57,7 +58,7 @@ class MasksTestCase(unittest.TestCase):
 
         # create first mask
         w.calc_mask({'phie': ['>', lmt1]}, name=def_msk_name)
-        msk = w.log_blocks[def_lb_name].masks[def_msk_name].data
+        msk = w.block[def_lb_name].masks[def_msk_name].data
         # Test value
         with self.subTest():
             print(np.nanmin(phie[msk]), lmt1)
@@ -65,7 +66,7 @@ class MasksTestCase(unittest.TestCase):
 
         # append second mask
         w.calc_mask({'phie': ['<', lmt2]}, name=def_msk_name, append=True)
-        msk = w.log_blocks[def_lb_name].masks[def_msk_name].data
+        msk = w.block[def_lb_name].masks[def_msk_name].data
         # Test value
         with self.subTest():
             print(np.nanmax(phie[msk]), lmt2)
@@ -73,7 +74,7 @@ class MasksTestCase(unittest.TestCase):
         # Test length
         with self.subTest():
             print(masked_length, len(phie[msk]))
-            print(w.log_blocks[def_lb_name].masks[def_msk_name].header.desc)
+            print(w.block[def_lb_name].masks[def_msk_name].header.desc)
             self.assertEqual(masked_length, len(phie[msk]))
 
 

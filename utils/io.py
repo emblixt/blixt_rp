@@ -330,10 +330,10 @@ def write_las(filename, wh, lh, data, overwrite=False):
         well header =  w.header, where w is a core.well.Well object
     :param lh:
         core.well.Header
-        log header = w.log_blocks['LogBlock name'].header, where w is a core.well.Well object
+        log header = w.block['Block name'].header, where w is a core.well.Well object
     :param data:
         dict
-        data = w.log_blocks['LogBlock name'].logs, where w is a core.well.Well object
+        data = w.block['Block name'].logs, where w is a core.well.Well object
     :param overwrite:
         bool
         Set to True to allow overwriting an existing las file
@@ -369,7 +369,7 @@ def write_las(filename, wh, lh, data, overwrite=False):
         '#----------      ------------         -------------------------------\n'
     )
 
-    # add info about start stop etc. from LogBlock header
+    # add info about start stop etc. from Block header
     for key in list(lh.keys()):
         if key in ['name', 'creation_info', 'creation_date', 'modification_date']:
             continue

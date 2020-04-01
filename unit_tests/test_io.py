@@ -9,7 +9,7 @@ from utils.io import convert
 
 import numpy as np
 
-def_lb_name = 'LogBlock'  # default LogBlock name
+def_lb_name = 'Logs'  # default Block name
 def_msk_name = 'Mask'  # default mask name
 
 
@@ -22,7 +22,7 @@ def create_test_data(var_name):
         note='Test note')
 
     # extract the phie log, and apply a mask on it
-    return w, w.log_blocks[def_lb_name].logs[var_name].data
+    return w, w.block[def_lb_name].logs[var_name].data
 
 
 def read_las(lfile):
@@ -48,7 +48,7 @@ class LasTestCase(unittest.TestCase):
 
     def test_headers(self):
         """
-        All header keys in the well header, and LogBlock header should be of the AttribDict type
+        All header keys in the well header, and Block header should be of the AttribDict type
         :return:
         """
         w, data = create_test_data('phie')
@@ -56,9 +56,9 @@ class LasTestCase(unittest.TestCase):
         for key in list(w.header.keys()):
             if not isinstance(w.header[key], AttribDict):
                 success = False
-        for lblock in list(w.log_blocks.keys()):
-            for key in list(w.log_blocks[lblock].header.keys()):
-                if not isinstance(w.log_blocks[lblock].header[key], AttribDict):
+        for lblock in list(w.block.keys()):
+            for key in list(w.block[lblock].header.keys()):
+                if not isinstance(w.block[lblock].header[key], AttribDict):
                     success = False
         self.assertTrue(success)
 

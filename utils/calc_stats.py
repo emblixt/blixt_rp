@@ -10,7 +10,7 @@ from utils.utils import nan_corrcoef
 
 logger = logging.getLogger(__name__)
 def_msk_name = 'Mask'  # default mask name
-def_lb_name = 'LogBlock'  # default LogBlock name
+def_lb_name = 'Logs'  # default Block name
 
 
 def calc_stats2(
@@ -231,16 +231,16 @@ def collect_data_for_this_interval(
         )
 
         # Calculate mask
-        mask = well.log_blocks[def_lb_name].masks[def_msk_name].data
+        mask = well.block[def_lb_name].masks[def_msk_name].data
 
-        this_depth = well.log_blocks[def_lb_name].logs['depth'].data[mask]
+        this_depth = well.block[def_lb_name].logs['depth'].data[mask]
         test_depth(this_depth, interval, this_well_name)
 
         # calculate the depth from the top for each well
         depth_from_top[this_well_name] = this_depth - tops[this_well_name][interval['tops'][0].upper()]
 
         for key in logs:
-            this_data = well.log_blocks[def_lb_name].logs[key].data[mask]
+            this_data = well.block[def_lb_name].logs[key].data[mask]
             results[key] = np.append(results[key], this_data)
             results_per_well[this_well_name][key] = this_data
 
