@@ -81,13 +81,13 @@ class LogCurve(object):
     
     def __init__(self,
                  name=None,
-                 log_block=None,
+                 block=None,
                  well=None,
                  data=np.array([]),
                  header=None):
         _data_sanity_checks(data)
         self.name = name
-        self.log_block = log_block
+        self.block = block
         self.well = well
         if header is None:
             header = {}
