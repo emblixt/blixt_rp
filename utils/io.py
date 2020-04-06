@@ -3,9 +3,11 @@ import os
 import re
 import numpy as np
 from datetime import datetime
+from openpyxl import load_workbook, Workbook
+from copy import deepcopy
 import logging
 
-from utils.utils import isnan
+from utils.utils import isnan, info
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +69,12 @@ def project_well_settings(filename):
         for key in ['Color', 'Symbol', 'Content', 'KB', 'UWI', 'UTM', 'X', 'Y', 'Water depth', 'Note']:
             result[ans][key.lower()] = None if isnan(table[key][i]) else table[key][i]
     return result
+
+
+def project_working_intervals(filename):
+    table = pd.read_excel(filename, header=4, sheet_name='Working intervals')
+    result = {}
+    return return_dict_from_tops(table, 'Given well name', 'Interval name', 'Top depth', include_base='Base depth')
 
 
 def collect_project_wells(well_table, target_dir):
@@ -261,6 +269,108 @@ def read_petrel_tops(filename, header=None, top=True, zstick='md', only_these_we
     return return_dict_from_tops(tops, 'Well identifier', 'Surface', key_name, only_these_wells=only_these_wells)
 
 
+def write_tops(filename, tops, well_names=None, interval_names=None):
+    """
+    Writes the tops to the excel file "filename", in the sheet name 'Working intervals'
+    If "filename" exists, and is open, it raises a warning
+
+    :param filename:
+        str
+        full pathname of excel file to write to.
+        Assumes we're trying to write to the default project_table.xlsx, in the 'Working intervals' sheet.
+
+    :param tops:
+        dict
+        As output from utils.io.read_tops()
+        {'well_A name': {'top1 name': top1_depth, 'top2 name': top2_depth, ...},  'well_B name': {...} }
+
+    :param well_names:
+        list
+        list of str's
+        list of names of the wells we would like to save to to file
+        If None, all wells are saved
+
+    :param interval_names:
+        list
+        list of str's
+        list of names of the intervals (working intervals) we would like to save to to file,
+        if None, all intervals are saved
+
+    :return:
+    """
+    sheet_name = 'Working intervals'
+
+    # test write access
+    taccs = check_if_excelfile_writable(filename)
+    if not taccs:
+        warn_txt = 'Not possible to write to {}'.format(filename)
+        return
+
+    if not os.path.isfile(filename):
+        wb = Workbook()
+    else:
+        wb = load_workbook(filename)
+
+    if sheet_name not in wb.sheetnames:
+        print('Creating new sheet')
+        ws = wb.create_sheet(sheet_name, -1)
+    else:
+        print('Opening existing sheet')
+        ws = wb[sheet_name]
+
+    # modify first line
+    ws['A1'] = info()
+
+    # test if fifth row exists
+    if ws[5][0].value is None:
+        ws['A2'] = 'Depth are in meters MD'
+        for j, val in enumerate(['Use', 'Given well name', 'Interval name', 'Top depth', 'Base depth']):
+            ws.cell(5, j+1).value = val
+
+    # start appending data
+    if well_names is None:
+        well_names = list(tops.keys())
+
+    for wname in well_names:
+        these_tops = list(tops[wname].keys())
+        if interval_names is None:
+            int_names = these_tops
+            # Add a duplicate of the last interval to avoid running out-of-index
+            int_names.append(int_names[-1])
+        else:
+            int_names = deepcopy(interval_names)
+
+        # Add the 'TD' top name to catch it if it exists
+        int_names.append('TD')
+
+        # Find list of common top names
+        ct = [tn for tn in int_names if tn in these_tops]
+        # Find the index in these_tops to the last common top
+        if len(ct) > 0:
+            ind = these_tops.index(ct[-1])
+            if ind + 1 <= len(these_tops):
+                # if this is the last index of these_tops
+                ct.append(ct[-1])
+            else:
+                # Add the next top in these_tops
+                ct.append(these_tops[ind+1])
+        else:
+            ct.append(ct[-1])
+
+        try:
+            while 'TD' in ct:
+                ct.remove('TD')
+        except ValueError as ve:
+            print(ve)
+
+
+        for i in range(len(ct)-1):
+            ws.append(['', wname, ct[i], tops[wname][ct[i]], tops[wname][ct[i+1]]])
+
+
+    wb.save(filename)
+
+
 def test_file_path(file_path, working_dir):
     if os.path.isfile(file_path):
         return file_path
@@ -268,6 +378,36 @@ def test_file_path(file_path, working_dir):
         return os.path.join(working_dir, file_path)
     else:
         return False
+
+
+def check_if_excelfile_writable(fnm):
+    from openpyxl.utils.exceptions import InvalidFileException
+    if os.path.exists(fnm):
+        # path exists
+        if os.path.isfile(fnm): # is it a file or a dir?
+            # also works when file is a link and the target is writable
+            # try to open and save it
+            try:
+                wb = load_workbook(fnm)
+            except InvalidFileException as ie:
+                print(ie)
+                return False
+            try:
+                wb.save(fnm)
+            except PermissionError as pe:
+                print(pe)
+                print('File is open. Please close it and try again')
+                return False
+            return True
+        else:
+            return False # path is a dir, so cannot write as a file
+
+    # target does not exist, check perms on parent dir
+    pdir = os.path.dirname(fnm)
+    if not pdir:
+        pdir = '.'
+    # target is creatable if parent dir is writable
+    return os.access(pdir, os.W_OK)
 
 
 def fix_well_name(well_name):
@@ -290,7 +430,27 @@ def unique_names(table, column_name, well_names=True):
         return [x for x in list(set(table[column_name])) if isinstance(x, str)]
 
 
-def return_dict_from_tops(tops, well_key, top_key, key_name, only_these_wells=None):
+def return_dict_from_tops(tops, well_key, top_key, key_name, only_these_wells=None, include_base=None):
+    """
+
+    :param tops:
+    :param well_key:
+        str
+        Name of the column which contain the well names
+    :param top_key:
+        str
+        Name of the column which contain the tops / interval names
+    :param key_name:
+        str
+        Name of the column which contain the top depth
+    :param only_these_wells:
+    :param include_base:
+        str
+        Name of the column which contain the base depth
+        if this is used each top / interval will contain a list of of top and base depth
+        else it is just the top depth
+    :return:
+    """
     if only_these_wells:
         unique_wells = only_these_wells
     else:
@@ -304,7 +464,10 @@ def return_dict_from_tops(tops, well_key, top_key, key_name, only_these_wells=No
         for i, marker_name in enumerate(list(tops[top_key])):
             if fix_well_name(tops[well_key][i]) != well_name:
                 continue  # not on the right well
-            answer[well_name][marker_name.upper()] = tops[key_name][i]
+            if include_base is not None:
+                answer[well_name][marker_name.upper()] = [tops[key_name][i], tops[include_base][i]]
+            else:
+                answer[well_name][marker_name.upper()] = tops[key_name][i]
 
     return answer
 
@@ -442,6 +605,7 @@ def write_las(filename, wh, lh, data, overwrite=False):
 
     with open(filename, 'w+') as f:
         f.write(out)
+
 
 def get_las_header(filename):
     """

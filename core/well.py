@@ -154,9 +154,9 @@ class Project(object):
                 self.project_table = project_table
 
             if not os.path.isfile(self.project_table):
-                warn_text = 'The provided project table {}, does not exist'.format(self.project_table)
-                logger.warning(warn_text)
-                raise Warning(warn_text)
+                warn_txt = 'The provided project table {}, does not exist'.format(self.project_table)
+                logger.warning(warn_txt)
+                raise Warning(warn_txt)
 
             self.tops_file = tops_file
             self.tops_type = tops_type
@@ -203,9 +203,9 @@ class Project(object):
 
     def load_logfile(self, file_name):
         if not os.path.isfile(file_name):
-            warn_text = 'The provided log file {}, does not exist'.format(file_name)
-            logger.warning(warn_text)
-            raise IOError(warn_text)
+            warn_txt = 'The provided log file {}, does not exist'.format(file_name)
+            logger.warning(warn_txt)
+            raise IOError(warn_txt)
         self.logging_file = file_name
 
         with open(file_name, 'r') as f:
@@ -533,10 +533,12 @@ class Well(object):
                     name=def_msk_name,
                     tops=None,
                     use_tops=None,
+                    wis=None,
+                    wi_name=None,
                     overwrite=True,
                     append=False,
                     log_type_input=False
-    ):
+        ):
         """
         Based on the different cutoffs in the 'cutoffs' dictionary, each Block in well is masked accordingly.
 
@@ -555,10 +557,16 @@ class Well(object):
             List of top names inside the tops dictionary that will be used to mask the data
             NOTE: if the 'depth' parameter is already inside the cutoffs dictionary, this option will
             be ignored
-        :param tops:
+        :param wis:
             dict
-            as returned from utils.io.read_tops() function
+            working intervals, as defined in the "Working intervals" sheet of the project table, and
+            loaded through:
+            wp = Project()
+            wis = utils.io.project_working_intervals(wp.project_table)
 
+        :param wi_name:
+            str
+            name of working interval to mask, other intervals will be set to False in boolean mask
         :param overwrite:
             bool
             if True, any existing mask with given name will be overwritten
@@ -571,63 +579,98 @@ class Well(object):
             if set to True, the keys in the cutoffs dictionary refer to log types, and not log names
         :return:
         """
-        if not isinstance(cutoffs, dict):
-            raise IOError('Cutoffs must be specified as dict, not {}'.format(type(cutoffs)))
-
-        if log_type_input:
-            # When the cutoffs are based on log types, and not the individual log names, we need to create a
-            # copy of the cutoffs that use the first log name under each log type, eg.
+        #
+        # Helper functions
+        #
+        def rename_cutoffs(_cutoffs):
+            # When the cutoffs are based on log types, and not the individual log names, we need to
+            # associate each log type with it FIRST INSTANCE log name
             this_cutoffs = {}
-            for key in list(cutoffs.keys()):
-                #if len(self.get_logs_of_type(key)) < 1:
-                #    print('XXXXX')
-                this_cutoffs[self.get_logs_of_type(key)[0].name] = cutoffs[key]
-            cutoffs = this_cutoffs
-            #print('FROM CALC_MASK', cutoffs)
+            for _key in list(_cutoffs.keys()):
+                if len(self.get_logs_of_type(_key)) < 1:
+                    warn_txt = 'No logs of type {} in well {}'.format(_key, self.well)
+                    print('WARNING: {}'.format(warn_txt))
+                    logger.warning(warn_txt)
+                    continue
+                this_cutoffs[self.get_logs_of_type(_key)[0].name] = _cutoffs[_key]
+            return this_cutoffs
 
-        if isinstance(use_tops, list) and (tops is not None):
-            if self.well not in list(tops.keys()):
-                warn_text = 'Well: {} is not in the list of tops: {}'.format(
+        def apply_wis(_cutoffs):
+            if (wis is None) or (wi_name is None):
+                return _cutoffs
+            if self.well not in list(wis.keys()):
+                warn_txt = 'Well: {} is not in the list of working intervals: {}'.format(
                     self.well,
                     ', '.join(list(tops.keys()))
                 )
-                logger.warning(warn_text)
-                print('WARNING: {}'.format(warn_text))
+                logger.warning(warn_txt)
+                print('WARNING: {}'.format(warn_txt))
+
+        def apply_tops(_cutoffs):
+            if self.well not in list(tops.keys()):
+                warn_txt = 'Well: {} is not in the list of tops: {}'.format(
+                    self.well,
+                    ', '.join(list(tops.keys()))
+                )
+                logger.warning(warn_txt)
+                print('WARNING: {}'.format(warn_txt))
             elif not all([t.upper() in list(tops[self.well].keys()) for t in use_tops]):
-                warn_text = 'The selected tops {} are not among the well tops {}'.format(
+                warn_txt = 'The selected tops {} are not among the well tops {}'.format(
                     ', '.join(use_tops),
                     '. '.join(list(tops[self.well].keys()))
                 )
-                logger.warning(warn_text)
-                print('WARNING: {}'.format(warn_text))
+                logger.warning(warn_txt)
+                print('WARNING: {}'.format(warn_txt))
             else:
                 # Append the depth mask from the tops file
-                cutoffs['depth'] = ['><',
-                     [
-                         tops[self.well][use_tops[0].upper()],
-                         tops[self.well][use_tops[1].upper()]
-                     ]
-                 ]
+                _cutoffs['depth'] = ['><',
+                                    [tops[self.well][use_tops[0].upper()],
+                                     tops[self.well][use_tops[1].upper()]]
+                                    ]
+            return _cutoffs
 
-        msk_str = ''
-        for key in list(cutoffs.keys()):
-            msk_str += '{}: {} [{}]'.format(
-                key, cutoffs[key][0], ', '.join([str(m) for m in cutoffs[key][1]])) if \
-                isinstance(cutoffs[key][1], list) else \
-                '{}: {} {}, '.format(
-                key, cutoffs[key][0], cutoffs[key][1])
-        print(msk_str)
+        def mask_string(_cutoffs):
+            msk_str = ''
+            for key in list(_cutoffs.keys()):
+                msk_str += '{}: {} [{}]'.format(
+                    key, _cutoffs[key][0], ', '.join([str(m) for m in _cutoffs[key][1]])) if \
+                    isinstance(_cutoffs[key][1], list) else \
+                    '{}: {} {}, '.format(
+                    key, _cutoffs[key][0], _cutoffs[key][1])
+            if wi_name is not None:
+                msk_str += ' Working interval: {}'.format(wi_name)
+            return msk_str
+
+        #
+        # Main functionality
+        #
+        if not isinstance(cutoffs, dict):
+            raise IOError('Cutoffs must be specified as dict, not {}'.format(type(cutoffs)))
+
+        # When the cutoffs are based on log types, and not the individual log names,
+        if log_type_input:
+            cutoffs = rename_cutoffs(cutoffs)
+
+        # Test if there are tops / working intervals in the input, and use them to modify the
+        # desired cutoffs
+        if isinstance(use_tops, list) and (tops is not None):
+            cutoffs = apply_tops(cutoffs)
+
+        msk_str = mask_string(cutoffs)
 
         for lblock in list(self.block.keys()):
             masks = []
-            #for lname in list(self.block[lblock].logs.keys()):
-            #    if lname not in list(cutoffs.keys()):
-            #        continue
+            if len(cutoffs) < 1:
+                warn_txt = 'No logs selected to base the mask on'
+                print('WARNING: {}'.format(warn_txt))
+                logger.warning(warn_txt)
+                raise IOError(warn_txt)
+
             for lname in list(cutoffs.keys()):
                 if lname not in list(self.block[lblock].logs.keys()):
-                    warn_text = 'Log {} to calculate mask from is not present in well {}'.format(lname, self.well)
-                    print('WARNING: {}'.format(warn_text))
-                    logger.warning(warn_text)
+                    warn_txt = 'Log {} to calculate mask from is not present in well {}'.format(lname, self.well)
+                    print('WARNING: {}'.format(warn_txt))
+                    logger.warning(warn_txt)
                     continue
                 else:
                     # calculate mask

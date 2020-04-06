@@ -15,10 +15,10 @@ def_msk_name = 'Mask'  # default mask name
 
 def create_test_data(var_name):
     w = Well()
-    w.read_las(
-        MasksTestCase.las_file,
-        block_name=def_lb_name,
-        only_these_logs=MasksTestCase.my_logs)
+    w.read_well_table(
+        MasksTestCase.well_table,
+        0,
+        block_name=def_lb_name)
 
     # extract the phie log, and apply a mask on it
     return w, w.block[def_lb_name].logs[var_name].data
@@ -26,11 +26,41 @@ def create_test_data(var_name):
 
 class MasksTestCase(unittest.TestCase):
     wp = Project(name='MyProject', log_to_stdout=True)
-    well_table = uio.project_wells(wp.project_table, wp.working_dir)
-    #las_file = list(well_table.keys())[0]
-    las_file = os.path.join(wp.working_dir, 'test_data', 'Well A.las')
-    #my_logs = well_table[las_file]['logs']
-    my_logs = None
+    # Instead of creating the well table directly from the project table,
+    # we can assure the well table to contain the  desired well by
+    # writing it explicitly
+    well_table = {os.path.join(wp.working_dir, 'test_data/Well A.las'):
+                      {'Given well name': 'WELL_A',
+                       'logs': {
+                           'vp_dry': 'P velocity',
+                           'vp_sg08': 'P velocity',
+                           'vp_so08': 'P velocity',
+                           'vs_dry': 'S velocity',
+                           'vs_sg08': 'S velocity',
+                           'vs_so08': 'S velocity',
+                           'rho_dry': 'Density',
+                           'rho_sg08': 'Density',
+                           'rho_so08': 'Density',
+                           'phie': 'Porosity',
+                           'vcl': 'Volume'},
+                       'Note': 'Some notes for well A'}}
+
+    #las_file = os.path.join(wp.working_dir, 'test_data', 'Well A.las')
+    #my_logs = None
+    tops = {
+        'WELL_A': {'TOP A': 408.0,
+                   'TOP B': 1560.0,
+                   'TOP C': 1585.0,
+                   'TOP D': 1826.0,
+                   'TOP E': 1878.0,
+                   'TOP F': 1984.0,
+                   'BASE F': 2158.0,
+                   'TOP G': 2158.0,
+                   'TOP H': 2211.0,
+                   'BASE H': 2365.0,
+                   'TOP I': 2365.0,
+                   'TOP J': 2452.0}
+    }
 
     def test_calc_mask(self):
         lmt = 0.1
@@ -48,6 +78,51 @@ class MasksTestCase(unittest.TestCase):
         with self.subTest():
             print(np.nanmax(phie[msk]), lmt)
             self.assertLess(np.nanmax(phie[msk]), lmt)
+        del(w.block[def_lb_name].masks[def_msk_name])
+
+        # Create the same mask using the create mask function with log type
+        print('Testing log type input: Porosity')
+        w.calc_mask({'Porosity': ['<', lmt]}, name=def_msk_name, log_type_input=True)
+        msk = w.block[def_lb_name].masks[def_msk_name].data
+        # Test length
+        with self.subTest():
+            print(masked_length, len(phie[msk]))
+            self.assertEqual(masked_length, len(phie[msk]))
+        # Test value
+        with self.subTest():
+            print(np.nanmax(phie[msk]), lmt)
+            self.assertLess(np.nanmax(phie[msk]), lmt)
+        del(w.block[def_lb_name].masks[def_msk_name])
+
+        # Create mask applying tops
+        print('Test masking with tops input')
+        w.calc_mask({'Porosity': ['<', lmt]},  name=def_msk_name,
+                    tops=MasksTestCase.tops, use_tops=['TOP C', 'BASE F'], log_type_input=True)
+        msk = w.block[def_lb_name].masks[def_msk_name].data
+        # Test value
+        with self.subTest():
+            print(np.nanmax(phie[msk]), lmt)
+            self.assertLess(np.nanmax(phie[msk]), lmt)
+        del(w.block[def_lb_name].masks[def_msk_name])
+
+        # Ask for a mask for a log that does not exists
+        print('Test mask without any valid logs')
+        ioe_error = False
+        try:
+            w.calc_mask({'Saturation': ['<', lmt]}, name=def_msk_name, log_type_input=True)
+        except IOError as ioe:
+            ioe_error = True
+            print(ioe)
+        # Test that IOError was caught
+        with self.subTest():
+            self.assertTrue(ioe_error)
+
+        #w.calc_mask({'sw': ['<', lmt]}, name=def_msk_name, log_type_input=True)
+        #msk = w.block[def_lb_name].masks[def_msk_name].data
+        ## Test length
+        #with self.subTest():
+        #    print(masked_length, len(phie[msk]))
+        #    self.assertEqual(masked_length, len(phie[msk]))
 
 
     def test_append_mask(self):
