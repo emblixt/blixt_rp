@@ -605,6 +605,8 @@ class Well(object):
                 )
                 logger.warning(warn_txt)
                 print('WARNING: {}'.format(warn_txt))
+                return _cutoffs
+            else:
 
         def apply_tops(_cutoffs):
             if self.well not in list(tops.keys()):
