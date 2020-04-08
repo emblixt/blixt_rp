@@ -96,7 +96,8 @@ class Project(object):
                  working_dir=None,
                  project_table=None,
                  tops_file=None,
-                 tops_type='petrel',
+                 tops_type=None,
+                 rename_logs=None,
                  log_to_stdout=False,
                  ):
         """
@@ -121,6 +122,13 @@ class Project(object):
         :param tops_type:
             str
             'petrel', 'npd' or 'rokdoc' depending on which source the tops_file comes from
+        :param rename_logs:
+            dict
+            Dictionary contain information about how well logs are renamed to achieve harmonized log names
+            across the whole project.
+            E.G. in las file for Well_A, the shale volume is called VCL, while in Well_E it is called VSH.
+            To to rename the VSH log to VCL upon import (not in the las files) the rename_logs dict should be set to
+                {'VCL': ['VSH']}
         :param log_to_stdout:
             bool
             If True, the logging information is sent to standard output and not to file
@@ -160,6 +168,7 @@ class Project(object):
 
             self.tops_file = tops_file
             self.tops_type = tops_type
+            self.rename_logs = rename_logs
 
     def __setattr__(self, key, value):
         """
@@ -181,6 +190,8 @@ class Project(object):
             this_str = 'Tops are of type'
         elif key == 'logging_file':
             this_str = 'Logging to'
+        elif key == 'rename_logs':
+            this_str = 'Rename well logs'
         else:
             pass
 
@@ -269,7 +280,7 @@ class Project(object):
                         print("WARNING: {}".format(warn_txt))
                         logger.warning(warn_txt)
 
-    def load_all_wells(self, rename_well_logs=None):
+    def load_all_wells(self):
         """
 
         :param rename_well_logs:
@@ -287,11 +298,11 @@ class Project(object):
             print(i, wname, lasfile)
             if wname != last_wname:  # New well
                 w = Well()
-                w.read_well_table(well_table, i, block_name=def_lb_name, rename_well_logs=rename_well_logs)
+                w.read_well_table(well_table, i, block_name=def_lb_name, rename_well_logs=self.rename_logs)
                 all_wells[wname] = w
                 last_wname = wname
             else:  # Existing well
-                all_wells[wname].read_well_table(well_table, i, block_name=def_lb_name, rename_well_logs=rename_well_logs)
+                all_wells[wname].read_well_table(well_table, i, block_name=def_lb_name, rename_well_logs=self.rename_logs)
 
         return all_wells
 
@@ -607,6 +618,12 @@ class Well(object):
                 print('WARNING: {}'.format(warn_txt))
                 return _cutoffs
             else:
+                # Append the depth mask from the selected working interval
+                _cutoffs['depth'] = ['><',
+                                     [wis[self.well][wi_name.upper()][0],
+                                      wis[self.well][wi_name.upper()][1]]
+                                     ]
+            return _cutoffs
 
         def apply_tops(_cutoffs):
             if self.well not in list(tops.keys()):
@@ -657,6 +674,8 @@ class Well(object):
         # desired cutoffs
         if isinstance(use_tops, list) and (tops is not None):
             cutoffs = apply_tops(cutoffs)
+        elif isinstance(wi_name, str) and (wis is not None):
+            cutoffs = apply_wis(cutoffs)
 
         msk_str = mask_string(cutoffs)
 

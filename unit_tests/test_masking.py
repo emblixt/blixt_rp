@@ -61,13 +61,24 @@ class MasksTestCase(unittest.TestCase):
                    'TOP I': 2365.0,
                    'TOP J': 2452.0}
     }
+    wis = {'WELL_A': {
+        'SAND C': [1585.0, 1826.0],
+        'SHALE C': [1585.0, 1826.0],
+        'SAND D': [1826.0, 1878.0],
+        'SAND E': [1878.0, 1984.0],
+        'SAND F': [1984.0, 2158.0],
+        'SHALE G': [2158.0, 2211.0],
+        'SAND H': [2211.0, 2365.0]
+    }}
 
     def test_calc_mask(self):
         lmt = 0.1
         w, phie = create_test_data('phie')
         masked_length = len(phie[phie < lmt])
 
+        #
         # Create the same mask using the create mask function
+        #
         w.calc_mask({'phie': ['<', lmt]}, name=def_msk_name)
         msk = w.block[def_lb_name].masks[def_msk_name].data
         # Test length
@@ -80,7 +91,9 @@ class MasksTestCase(unittest.TestCase):
             self.assertLess(np.nanmax(phie[msk]), lmt)
         del(w.block[def_lb_name].masks[def_msk_name])
 
+        #
         # Create the same mask using the create mask function with log type
+        #
         print('Testing log type input: Porosity')
         w.calc_mask({'Porosity': ['<', lmt]}, name=def_msk_name, log_type_input=True)
         msk = w.block[def_lb_name].masks[def_msk_name].data
@@ -94,7 +107,9 @@ class MasksTestCase(unittest.TestCase):
             self.assertLess(np.nanmax(phie[msk]), lmt)
         del(w.block[def_lb_name].masks[def_msk_name])
 
+        #
         # Create mask applying tops
+        #
         print('Test masking with tops input')
         w.calc_mask({'Porosity': ['<', lmt]},  name=def_msk_name,
                     tops=MasksTestCase.tops, use_tops=['TOP C', 'BASE F'], log_type_input=True)
@@ -105,7 +120,9 @@ class MasksTestCase(unittest.TestCase):
             self.assertLess(np.nanmax(phie[msk]), lmt)
         del(w.block[def_lb_name].masks[def_msk_name])
 
+        #
         # Ask for a mask for a log that does not exists
+        #
         print('Test mask without any valid logs')
         ioe_error = False
         try:
@@ -116,6 +133,19 @@ class MasksTestCase(unittest.TestCase):
         # Test that IOError was caught
         with self.subTest():
             self.assertTrue(ioe_error)
+
+        #
+        # Create mask applying working intervals
+        #
+        print('Test masking with working intervals input')
+        w.calc_mask({'Porosity': ['<', lmt]},  name=def_msk_name,
+                    wis=MasksTestCase.wis, wi_name='SAND E', log_type_input=True)
+        msk = w.block[def_lb_name].masks[def_msk_name].data
+        # Test value
+        with self.subTest():
+            print(np.nanmax(phie[msk]), lmt)
+            self.assertLess(np.nanmax(phie[msk]), lmt)
+        del(w.block[def_lb_name].masks[def_msk_name])
 
         #w.calc_mask({'sw': ['<', lmt]}, name=def_msk_name, log_type_input=True)
         #msk = w.block[def_lb_name].masks[def_msk_name].data
