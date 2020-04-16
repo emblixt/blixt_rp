@@ -97,7 +97,6 @@ class Project(object):
                  project_table=None,
                  tops_file=None,
                  tops_type=None,
-                 rename_logs=None,
                  log_to_stdout=False,
                  ):
         """
@@ -122,13 +121,6 @@ class Project(object):
         :param tops_type:
             str
             'petrel', 'npd' or 'rokdoc' depending on which source the tops_file comes from
-        :param rename_logs:
-            dict
-            Dictionary contain information about how well logs are renamed to achieve harmonized log names
-            across the whole project.
-            E.G. in las file for Well_A, the shale volume is called VCL, while in Well_E it is called VSH.
-            To to rename the VSH log to VCL upon import (not in the las files) the rename_logs dict should be set to
-                {'VCL': ['VSH']}
         :param log_to_stdout:
             bool
             If True, the logging information is sent to standard output and not to file
@@ -168,7 +160,6 @@ class Project(object):
 
             self.tops_file = tops_file
             self.tops_type = tops_type
-            self.rename_logs = rename_logs
 
     def __setattr__(self, key, value):
         """
@@ -190,8 +181,6 @@ class Project(object):
             this_str = 'Tops are of type'
         elif key == 'logging_file':
             this_str = 'Logging to'
-        elif key == 'rename_logs':
-            this_str = 'Rename well logs'
         else:
             pass
 
@@ -261,14 +250,20 @@ class Project(object):
                 print("WARNING: {}".format(warn_txt))
                 logger.warning(warn_txt)
             for line in uio.get_las_well_info(lfile):
+                # noinspection Annotator
                 if re.search("[.]{1}", line) is None:
                     continue
+                # noinspection Annotator
                 if re.search("[ ]{1}", line) is None:
                     continue
+                # noinspection Annotator
                 if re.search("[:]{1}", line) is None:
                     continue
+                # noinspection Annotator
                 mnem_end = re.search("[.]{1}", line).end()
+                # noinspection Annotator
                 unit_end = mnem_end + re.search("[ ]{1}", line[mnem_end:]).end()
+                # noinspection Annotator
                 colon_end = unit_end + re.search("[:]{1}", line[unit_end:]).start()
                 # divide line
                 mnem = line[:mnem_end - 1].strip()
@@ -280,17 +275,23 @@ class Project(object):
                         print("WARNING: {}".format(warn_txt))
                         logger.warning(warn_txt)
 
-    def load_all_wells(self):
+    def load_all_wells(self, rename_logs=None):
         """
-
-        :param rename_well_logs:
+        :param rename_logs:
             dict
-            E.G.
-            {'depth': ['DEPT', 'MD']}
-            where the key is the wanted well log name, and the value list is a list of well log names to translate from
+            Dictionary contain information about how well logs are renamed to achieve harmonized log names
+            across the whole project.
+            E.G. in las file for Well_A, the shale volume is called VCL, while in Well_E it is called VSH.
+            To to rename the VSH log to VCL upon import (not in the las files) the rename_logs dict should be set to
+                {'VCL': ['VSH']}
+
         :return:
         """
         well_table = uio.project_wells(self.project_table, self.working_dir)
+        if rename_logs is None:
+            # Try reading the renaming out from the well table
+            rename_logs = uio.get_rename_logs_dict(well_table)
+
         all_wells = {}
         last_wname = ''
         for i, lasfile in enumerate(well_table):
@@ -298,11 +299,11 @@ class Project(object):
             print(i, wname, lasfile)
             if wname != last_wname:  # New well
                 w = Well()
-                w.read_well_table(well_table, i, block_name=def_lb_name, rename_well_logs=self.rename_logs)
+                w.read_well_table(well_table, i, block_name=def_lb_name, rename_well_logs=rename_logs)
                 all_wells[wname] = w
                 last_wname = wname
             else:  # Existing well
-                all_wells[wname].read_well_table(well_table, i, block_name=def_lb_name, rename_well_logs=self.rename_logs)
+                all_wells[wname].read_well_table(well_table, i, block_name=def_lb_name, rename_well_logs=rename_logs)
 
         return all_wells
 
@@ -353,6 +354,9 @@ class Header(AttribDict):
         # all other keys
         if isinstance(value, dict):
             super(Header, self).__setitem__(key, AttribDict(value))
+        elif key == 'well':
+            super(Header, self).__setitem__(
+                key, value)
         else:
             super(Header, self).__setitem__(
                 key,
@@ -468,8 +472,9 @@ class Well(object):
         """
         if block is None:
             block = def_lb_name
-
+        obj = None
         fluid = False
+
         if not (isinstance(fluid_minerals, MineralSet) or isinstance(fluid_minerals, dict)):
             warn_txt = 'Input fluid_minerals must be a MineralSet or a subselection of a FluidSet object'
             logger.warning(warn_txt)
@@ -612,7 +617,7 @@ class Well(object):
             if self.well not in list(wis.keys()):
                 warn_txt = 'Well: {} is not in the list of working intervals: {}'.format(
                     self.well,
-                    ', '.join(list(tops.keys()))
+                    ', '.join(list(wis.keys()))
                 )
                 logger.warning(warn_txt)
                 print('WARNING: {}'.format(warn_txt))

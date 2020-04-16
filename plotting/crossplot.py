@@ -314,8 +314,10 @@ def plot(
             ydata[~mask][nodi],
             c='0.4',
             s=npdata,
+            marker=msymbol,
             edgecolors='none',
-            alpha=0.5
+            alpha=0.5,
+            label='_no_legend_'
         )
     # Then plot the remaining points
     im = ax.scatter(

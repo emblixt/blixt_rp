@@ -22,7 +22,7 @@ def project_wells(filename, working_dir):
             for key in list(table.keys()):
                 if (key == 'las file') or (key == 'Use'):
                     continue
-                elif (key == 'Given well name') or (key == 'Note'):
+                elif (key == 'Given well name') or (key == 'Note') or (key == 'Translate log names'):
                     if isinstance(table[key][i], str):
                         if key == 'Given well name':
                             value = fix_well_name(table[key][i])
@@ -49,6 +49,33 @@ def project_wells(filename, working_dir):
     return result
 
 
+def get_rename_logs_dict(well_table):
+    """
+    Interprets the "Translate log names"  keys of the well_table and returns a rename_logs dict.
+
+    :param well_table:
+        dict
+        as returned from project_wells()
+    :return:
+        dict or None
+    """
+    rename_logs = {}
+    for las_file, val in well_table.items():
+        if val['Translate log names'] is None:
+            continue
+        _dict = interpret_rename_string(val['Translate log names'])
+        for key in list(_dict.keys()):
+            if key in list(rename_logs.keys()):
+                if not _dict[key] in rename_logs[key]:  # only insert same rename pair once
+                    rename_logs[key].append(_dict[key])
+            else:
+                rename_logs[key] = [_dict[key]]
+    if len(rename_logs) < 1:
+        return None
+    else:
+        return rename_logs
+
+
 def project_templates(filename):
     table = pd.read_excel(filename, header=1, sheet_name='Templates')
     result = {}
@@ -58,17 +85,26 @@ def project_templates(filename):
             result[ans][key] = None if isnan(table[key][i]) else table[key][i]
         result[ans]['full_name'] = ans
 
-    return result
-
-
-def project_well_settings(filename):
-    table = pd.read_excel(filename, header=1, sheet_name='Wells settings')
-    result = {}
+    # Also add the well settings
+    table = pd.read_excel(filename, header=1, sheet_name='Well settings')
     for i, ans in enumerate(table['Given well name']):
-        result[ans] = {}
+        if not isinstance(ans, str):
+            continue
+        result[ans.upper()] = {}
         for key in ['Color', 'Symbol', 'Content', 'KB', 'UWI', 'UTM', 'X', 'Y', 'Water depth', 'Note']:
-            result[ans][key.lower()] = None if isnan(table[key][i]) else table[key][i]
+            result[ans.upper()][key.lower()] = None if isnan(table[key][i]) else table[key][i]
+
     return result
+
+
+#def project_well_settings(filename):
+#    table = pd.read_excel(filename, header=1, sheet_name='Well settings')
+#    result = {}
+#    for i, ans in enumerate(table['Given well name']):
+#        result[ans] = {}
+#        for key in ['Color', 'Symbol', 'Content', 'KB', 'UWI', 'UTM', 'X', 'Y', 'Water depth', 'Note']:
+#            result[ans][key.lower()] = None if isnan(table[key][i]) else table[key][i]
+#    return result
 
 
 def project_working_intervals(filename):
@@ -878,3 +914,32 @@ def convert(lines, file_format='las', rename_well_logs=None):
             well_dict = add_section(well_dict, section, None, line)
 
     return null_val, generated_keys, well_dict
+
+
+def interpret_rename_string(rename_string):
+    """
+    creates a rename dictionary ({'VCL': 'VSH', 'Vp': 'Vp_dry'}) from input string
+    :param rename_string:
+        str
+        renaming defined by "VSH->VCL, Vp_dry->Vp"
+    :return:
+        dict or None
+    """
+    if len(rename_string) < 3:
+        return None
+
+    return_dict = {}
+    for pair in rename_string.split(','):
+        if '->' not in pair:
+            continue
+        names = pair.split('->')
+        if len(names) > 2:
+            warn_txt = "Translation pairs should be separated by ',': ".format(pair)
+            print('WARNING: {}'.format(warn_txt))
+            logger.warning(warn_txt)
+            continue
+        return_dict[names[1].strip().lower()] = names[0].strip().lower()
+    if len(return_dict) < 1:
+        return None
+    else:
+        return return_dict
