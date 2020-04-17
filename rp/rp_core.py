@@ -437,7 +437,7 @@ def v_p_b(s, p, t, giib=0.):
 
 def vrh_bounds(f, m):
     """
-    Simple Voigt-Reuss-Hill bounds for N-omponents mixture
+    Simple Voigt-Reuss-Hill bounds for N-components mixture
 
     :param f:
         list

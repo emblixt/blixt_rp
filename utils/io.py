@@ -570,7 +570,7 @@ def write_las(filename, wh, lh, data, overwrite=False):
 
     # add info about start stop etc. from Block header
     for key in list(lh.keys()):
-        if key in ['name', 'creation_info', 'creation_date', 'modification_date']:
+        if key in ['name', 'creation_info', 'creation_date', 'modification_date', 'well']:
             continue
         out += '{0: <7}.{1: <9}{2: <21}:{3:}\n'.format(
             key.upper(),

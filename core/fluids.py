@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from decorator import decorator
 import inspect
+from copy import deepcopy
 import logging
 from datetime import datetime
 
@@ -205,79 +206,13 @@ class Fluid(object):
         return object.__getattribute__(self, 'rho')
 
 
-class FluidSet_RETIRE(object):
-
-    def __init__(self,
-                 name=None,
-                 fluids=None,
-                 header=None):
-        """
-        :param fluids:
-            dict
-            Dictionary of Param objects
-        """
-        self.header = Header(header)
-        if fluids is None:
-            fluids = {}
-        self.fluids = fluids
-
-        if name is None:
-            name = 'MyFluids'
-        self.name = name
-
-    def __str__(self):
-        out = ''
-        for key in ['initial', 'final']:
-            out += "{} fluids:\n".format(key)
-            for f in list(self.fluids[key].keys()):
-                out += "  {}\n".format(f)
-                out += "    K: {}, Mu: {}, Rho {}\n".format(self.fluids[key][f].k.value,
-                                                            self.fluids[key][f].mu.value,
-                                                            self.fluids[key][f].rho.value)
-                out += "    Calc. method: {}\n".format(self.fluids[key][f].calculation_method.value)
-                out += "    Volume fraction: {}\n".format(self.fluids[key][f].volume_fraction)
-        return out
-
-    def read_excel(self, filename, sheet_name='Fluids', header=1):
-        fluids = {
-            'initial': {},
-            'final': {}
-        }
-        table = pd.read_excel(filename, sheet_name=sheet_name, header=header)
-        for i, name in enumerate(table['Name']):
-            vf = table['Volume fraction'][i]
-            if isnan(vf):
-                continue  # Avoid fluids where the volume fraction is not set
-            if table['Calculation method'][i] == 'Batzle and Wang':
-                warn_txt = 'Calculation of fluid properties is still not implemented, please use constant values'
-                print('WARNING {}'.format(warn_txt))
-                logger.warning(warn_txt)
-            this_fluid = Fluid(
-                table['Calculation method'][i],
-                float(table['Bulk moduli [GPa]'][i]),
-                float(table['Shear moduli [GPa]'][i]),
-                float(table['Density [g/cm3]'][i]),
-                float(table['T gradient [deg C/m]'][i]),
-                float(table['T ref [C]'][i]),
-                float(table['P gradient [MPa/m]'][i]),
-                float(table['P ref [MPa]'][i]),
-                float(table['Salinity [ppm]'][i]),
-                float(table['GOR'][i]),
-                float(table['Oil API'][i]),
-                float(table['Gas gravity'][i]),
-                table['Gas mixing'][i],
-                float(table['Brie exponent'][i]),
-                name=name.lower(),
-                volume_fraction=float(vf) if (not isinstance(vf, str)) else vf.lower()
-            )
-            fluids[table['Substitution order'][i].lower()][name.lower()] = this_fluid
-        self.fluids = fluids
-        self.header['orig_file'] = filename
-
-
 class FluidMix(object):
     """
     Dictionary containing the initial, and final, fluids for given wells and intervals
+    {substition order:
+        {well name:
+            {working interval:
+                {fluid name: Fluid()}}}}
     """
     def __init__(self,
                  name=None,
@@ -298,16 +233,31 @@ class FluidMix(object):
         self.name = name
 
     def __str__(self):
-        out = ''
+        out = 'Fluid mixture: {}\n'.format(self.name)
         for key in ['initial', 'final']:
             out += "{} fluids:\n".format(key)
-            for f in list(self.fluids[key].keys()):
-                out += "  {}\n".format(f)
-                out += "    K: {}, Mu: {}, Rho {}\n".format(self.fluids[key][f].k.value,
-                                                            self.fluids[key][f].mu.value,
-                                                            self.fluids[key][f].rho.value)
-                out += "    Calc. method: {}\n".format(self.fluids[key][f].calculation_method.value)
-                out += "    Volume fraction: {}\n".format(self.fluids[key][f].volume_fraction)
+            for w in list(self.fluids[key].keys()):
+                out += " - Well {}\n".format(w)
+                for wi in list(self.fluids[key][w].keys()):
+                    out += "  + Working interval {}\n".format(wi)
+                    for f in list(self.fluids[key][w][wi].keys()):
+                        out += "    {}\n".format(f)
+                        out += "      K: {}, Mu: {}, Rho {}\n".format(self.fluids[key][w][wi][f].k.value,
+                                                                    self.fluids[key][w][wi][f].mu.value,
+                                                                    self.fluids[key][w][wi][f].rho.value)
+                        out += "      Calc. method: {}\n".format(self.fluids[key][w][wi][f].calculation_method.value)
+                        out += "      Volume fraction: {}\n".format(self.fluids[key][w][wi][f].volume_fraction)
+        return out
+
+    def print_fluids(self, subst, well_name, wi_name):
+        out = 'Fluid mixture: {}, {}, {}, {}\n'.format(subst, well_name, wi_name, self.name)
+        for m in list(self.fluids[subst][well_name][wi_name].keys()):
+            out += "    {}\n".format(m)
+            out += "      K: {}, Mu: {}, Rho {}\n".format(self.fluids[subst][well_name][wi_name][m].k.value,
+                                                          self.fluids[subst][well_name][wi_name][m].mu.value,
+                                                          self.fluids[subst][well_name][wi_name][m].rho.value)
+            out += "      " \
+                   "Volume fraction: {}\n".format(self.fluids[subst][well_name][wi_name][m].volume_fraction)
         return out
 
 
@@ -356,10 +306,10 @@ class FluidMix(object):
             vf = mix_table['Volume fraction'][i]
             if isnan(vf):
                 continue  # Avoid fluids where the volume fraction is not set
-            this_subst = mix_table['Substitution order'].lower()
-            this_well = mix_table['Well name'].upper()
-            this_wi = mix_table['Interval name'].upper()
-            this_fluid = all_fluids[name.lower()]
+            this_subst = mix_table['Substitution order'][i].lower()
+            this_well = mix_table['Well name'][i].upper()
+            this_wi = mix_table['Interval name'][i].upper()
+            this_fluid = deepcopy(all_fluids[name.lower()])
             this_fluid.volume_fraction = \
                 float(vf) if (not isinstance(vf, str)) else vf.lower()
             # iterate down in this complex dictionary
@@ -371,19 +321,17 @@ class FluidMix(object):
             # 2'nd level
             if this_well in list(fluids_mixes[this_subst].keys()):
                 # 3'rd level
-                if not isinstance(fluids_mixes[this_subst][this_well], dict):
-                    fluids_mixes[this_subst][this_well] = {}
                 if this_wi in list(fluids_mixes[this_subst][this_well].keys()):
                     # 4'th level
-                    if not isinstance(fluids_mixes[this_subst][this_well][this_wi], dict):
-                        fluids_mixes[this_subst][this_well][this_wi] = {}
-                    fluids_mixes[this_subst][this_well][this_wi][this_fluid.name.lower()] \
+                    fluids_mixes[this_subst][this_well][this_wi][name.lower()] \
                         = this_fluid
+                else:
+                    fluids_mixes[this_subst][this_well][this_wi] = {name.lower(): this_fluid}
+            else:
+                fluids_mixes[this_subst][this_well] = {this_wi: {name.lower(): this_fluid}}
 
-
-        #self.fluids = fluids
-        #self.header['orig_file'] = filename
-        return all_fluids
+        self.fluids = fluids_mixes
+        self.header['orig_file'] = filename
 
 
 def test_fluidsub():

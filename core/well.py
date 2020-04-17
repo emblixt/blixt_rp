@@ -33,7 +33,7 @@ from utils.io import convert
 import utils.masks as msks
 from utils.utils import arrange_logging
 from plotting import crossplot as xp
-from core.minerals import MineralSet
+from core.minerals import MineralMix
 from core.log_curve import LogCurve
 import rp.rp_core as rp
 from utils.harmonize_logs import harmonize_logs as fixlogs
@@ -275,7 +275,7 @@ class Project(object):
                         print("WARNING: {}".format(warn_txt))
                         logger.warning(warn_txt)
 
-    def load_all_wells(self, rename_logs=None):
+    def load_all_wells(self, block_name=None, rename_logs=None):
         """
         :param rename_logs:
             dict
@@ -287,6 +287,8 @@ class Project(object):
 
         :return:
         """
+        if block_name is None:
+            block_name = def_lb_name
         well_table = uio.project_wells(self.project_table, self.working_dir)
         if rename_logs is None:
             # Try reading the renaming out from the well table
@@ -299,11 +301,11 @@ class Project(object):
             print(i, wname, lasfile)
             if wname != last_wname:  # New well
                 w = Well()
-                w.read_well_table(well_table, i, block_name=def_lb_name, rename_well_logs=rename_logs)
+                w.read_well_table(well_table, i, block_name=block_name, rename_well_logs=rename_logs)
                 all_wells[wname] = w
                 last_wname = wname
             else:  # Existing well
-                all_wells[wname].read_well_table(well_table, i, block_name=def_lb_name, rename_well_logs=rename_logs)
+                all_wells[wname].read_well_table(well_table, i, block_name=block_name, rename_well_logs=rename_logs)
 
         return all_wells
 
@@ -440,17 +442,17 @@ class Well(object):
         lt_list = list(set(lt_list))
         return lt_list
 
-    def calc_vrh_bounds(self, fluid_minerals, param='k', method='Voigt', block=None):
+    def calc_vrh_bounds(self, fluid_minerals, param='k', method='Voigt', block_name=None):
         """
         Calculates the Voigt-Reuss-Hill bounds of parameter param, for the  fluid or mineral mixture defined in
         fluid_minerals, for the given Block.
 
         :param fluid_minerals:
-            core.minerals.MineralSet
+            core.minerals.MineralMix
             or
-            core.fluid.fluids['xx'] where 'xx' is 'initial' or 'fluid'
+            core.fluid.fluids['xx'] where 'xx' is 'initial' or 'final'
 
-            minerals = core.minerals.MineralSet()
+            minerals = core.minerals.MineralMix()
             minerals.read_excel(working_project.project_table)
         :param param:
             str
@@ -462,25 +464,25 @@ class Well(object):
             'Voigt' for the upper bound or Voigt average
             'Reuss' for the lower bound or Reuss average
             'Voigt-Reuss-Hill'  for the average of the two above
-        :param block:
+        :param block_name:
             str
             Name of the Block for which the bounds are calculated
 
         :return
             np.ndarray
-            Bounds of parameter 'param'
+            Voigt / Reuss / Hill bounds of parameter 'param'
         """
-        if block is None:
-            block = def_lb_name
+        if block_name is None:
+            block_name = def_lb_name
         obj = None
         fluid = False
 
-        if not (isinstance(fluid_minerals, MineralSet) or isinstance(fluid_minerals, dict)):
-            warn_txt = 'Input fluid_minerals must be a MineralSet or a subselection of a FluidSet object'
+        if not (isinstance(fluid_minerals, MineralMix) or isinstance(fluid_minerals, dict)):
+            warn_txt = 'Input fluid_minerals must be a MineralMix or a subselection of a FluidMix object'
             logger.warning(warn_txt)
             raise Warning(warn_txt)
 
-        if isinstance(fluid_minerals, MineralSet):
+        if isinstance(fluid_minerals, MineralMix):
             obj = fluid_minerals.minerals
 
         #if isinstance(fluid_minerals, FluidSet):
@@ -489,60 +491,90 @@ class Well(object):
             fluid = True
             obj = fluid_minerals
 
+        # Test if this well is present among the minerals / fluids
+        if self.well not in list(obj.keys()):
+            warn_txt = 'Well {} not among the given fluid / mineral mixes'.format(self.well)
+            logger.warning(warn_txt)
+            raise Warning(warn_txt)
+
+        # Use the fluid / minerals for this well only
+        obj = obj[self.well]
+
         if param not in ['k', 'mu', 'rho']:
             raise IOError('Bounds can only be calculated for k, mu and rho')
 
-        if len(list(obj.keys())) > 2:
-            warn_txt = 'The bounds calculation has only been tested for two-components mixtures'
-            print('Warning {}'.format(warn_txt))
-            logger.warning(warn_txt)
-
-        complement = None
-        this_fraction = None  # A volume fraction log
-        this_component = None  #
-        fractions = []
-        components = []
-        for this_fm in list(obj.keys()):
-            print(' Mineral: {}, volume frac: {}'.format(this_fm, obj[this_fm].volume_fraction))
-            tmp_frac = obj[this_fm].volume_fraction
-            if tmp_frac == 'complement':  # Calculated as 1. - the others
-                if complement is not None:
-                    raise IOError('Only one complement log is allowed')
-                complement = this_fm
-                this_fraction = this_fm  # Insert mineral name for the complement mineral
-            elif isinstance(tmp_frac, float):
-                this_fraction = tmp_frac
-            else:
-                _name = tmp_frac.lower()
-                if _name not in list(self.block[block].logs.keys()):
-                    warn_txt = 'The volume fraction {} is lacking in Block {} of well {}'.format(
-                        _name, block, self.well
-                    )
-                    print(warn_txt)
-                    logger.warning(warn_txt)
-                    continue
-                this_fraction = self.block[block].logs[_name].data
-            this_component = obj[this_fm].__getattribute__(param).value
-            fractions.append(this_fraction)
-            components.append(this_component)
-
-        # Calculate the complement fraction only when there are more than one constituent
-        if len(fractions) == len(components) > 1:
-            if complement not in fractions:
-                raise IOError('No complement log given')
-            compl = 1. - sum([f for f in fractions if not isinstance(f, str)])
-
-            # insert the complement at the location of the complement mineral
-            fractions[fractions.index(complement)] = compl
-
-        #return fractions, components
-        tmp = rp.vrh_bounds(fractions, components)
-        if method == 'Voigt':
-            return tmp[0]
-        elif method == 'Reuss':
-            return tmp[1]
+        if fluid:
+            fm_type = 'Fluid'
         else:
-            return tmp[2]
+            fm_type = 'Mineral'
+
+        # Calculate the fluid / mineral average k, mu or rho for each working interval
+        # Please note that the calculation is done over the entire length of the well!
+        # The user have to apply these averages in the designated working interval later
+        result = {}
+        for wi, val in obj.items():
+            complement = None
+            this_fraction = None  # A volume fraction log
+            this_component = None  #
+            fractions = []
+            components = []
+            info_txt = 'Calculating {} bound of {} for well {} in interval {}\n'.format(
+                method, param, self.well, wi
+            )
+            for m in list(val.keys()):
+                info_txt += "  {}".format(m)
+                info_txt += "    K: {}, Mu: {}, Rho {}\n".format(
+                    val[m].k.value, val[m].mu.value, val[m].rho.value)
+                info_txt += "    Volume fraction: {}\n".format(val[m].volume_fraction)
+            logger.info(info_txt)
+
+            if len(list(val.keys())) > 2:
+                warn_txt = 'The bounds calculation has only been tested for two-components mixtures\n'
+                warn_txt += 'There is no guarantee that the total fraction does not exceed one'
+                print('Warning {}'.format(warn_txt))
+                logger.warning(warn_txt)
+
+            for this_fm in list(val.keys()):  # loop over each fluid / mineral component
+                print(' {} {}: {}, volume frac: {}'.format(fm_type, param, this_fm, val[this_fm].volume_fraction))
+                tmp_frac = val[this_fm].volume_fraction
+                if tmp_frac == 'complement':  # Calculated as 1. - the others
+                    if complement is not None:
+                        raise IOError('Only one complement log is allowed')
+                    complement = this_fm
+                    this_fraction = this_fm  # Insert mineral name for the complement mineral
+                elif isinstance(tmp_frac, float):
+                    this_fraction = tmp_frac
+                else:
+                    _name = tmp_frac.lower()
+                    if _name not in list(self.block[block_name].logs.keys()):
+                        warn_txt = 'The volume fraction {} is lacking in Block {} of well {}'.format(
+                            _name, block_name, self.well
+                        )
+                        print(warn_txt)
+                        logger.warning(warn_txt)
+                        continue
+                    this_fraction = self.block[block_name].logs[_name].data
+                this_component = val[this_fm].__getattribute__(param).value
+                fractions.append(this_fraction)
+                components.append(this_component)
+
+            # Calculate the complement fraction only when there are more than one constituent
+            if len(fractions) == len(components) > 1:
+                if complement not in fractions:
+                    raise IOError('No complement log given')
+                compl = 1. - sum([f for f in fractions if not isinstance(f, str)])
+
+                # insert the complement at the location of the complement mineral
+                fractions[fractions.index(complement)] = compl
+
+            tmp = rp.vrh_bounds(fractions, components)
+            if method == 'Voigt':
+                result[wi] = tmp[0]
+            elif method == 'Reuss':
+                result[wi] = tmp[1]
+            else:
+                result[wi] = tmp[2]
+        return result
 
     def calc_mask(self,
                     cutoffs,
@@ -553,7 +585,7 @@ class Well(object):
                     wi_name=None,
                     overwrite=True,
                     append=False,
-                    log_type_input=False
+                    log_type_input=True
         ):
         """
         Based on the different cutoffs in the 'cutoffs' dictionary, each Block in well is masked accordingly.
@@ -762,6 +794,7 @@ class Well(object):
                    log_name=None,
                    mask=None,
                    tops=None,
+                   wis=None,
                    fig=None,
                    ax=None,
                    templates=None,
@@ -781,6 +814,9 @@ class Well(object):
         :param tops:
             dict
             as returned from utils.io.read_tops() function
+        :param wis:
+            dict
+            dictionary of working intervals
         :param fig:
             matplotlib.figure.Figure object
         :param ax:
@@ -851,6 +887,17 @@ class Well(object):
                         continue  # skip tops outside plotting range of md
                     ax.axhline(top_md, c='r', lw=0.5, label='_nolegend_')
                     ax.text(ax.get_xlim()[0], top_md, top_name, fontsize=FontProperties(size='smaller').get_size())
+        elif wis is not None:
+            wname = uio.fix_well_name(self.well)
+            if wname not in list(wis.keys()):
+                logger.warning('No working intervals in loaded valid for well {}'.format(wname))
+            else:
+                for top_name, top_md in wis[wname].items():
+                    if (top_md[0] < ax.get_ylim()[0]) or (top_md[0] > ax.get_ylim()[-1]):
+                        continue  # skip tops outside plotting range of md
+                    ax.axhline(top_md[0], c='r', lw=0.5, label='_nolegend_')
+                    ax.text(ax.get_xlim()[0], top_md[0], top_name, fontsize=FontProperties(size='smaller').get_size())
+                    ax.axhline(top_md[1], c='r', lw=0.5, label='_nolegend_')
 
         ax.set_ylim(ax.get_ylim()[::-1])
         this_legend = ax.legend(
@@ -1265,6 +1312,7 @@ class Block(object):
             header=header)
 
         self.add_log_curve(log_curve)
+
 
 def _read_las(file, rename_well_logs=None):
     """Convert file and Return `self`. """
