@@ -978,6 +978,11 @@ class Well(object):
         if block_name is None:
             block_name = def_lb_name
 
+        # make sure the only_these_logs is using small caps for all well logs
+        if (only_these_logs is not None) and isinstance(only_these_logs, dict):
+            for key in list(only_these_logs.keys()):
+                only_these_logs[key.lower()] = only_these_logs.pop(key)
+
         # Make sure the only_these_logs is updated with the desired name changes defined in rename_well_logs
         if isinstance(only_these_logs, dict) and (isinstance(rename_well_logs, dict)):
             for okey in list(only_these_logs.keys()):
@@ -1124,7 +1129,7 @@ class Well(object):
 
         # Make sure only_these_logs is a dictionary
         if isinstance(only_these_logs, str):
-            only_these_logs = {only_these_logs: None}
+            only_these_logs = {only_these_logs.lower(): None}
 
         null_val, generated_keys, well_dict = _read_las(filename, rename_well_logs=rename_well_logs)
         logger.debug('Reading {}'.format(filename))
