@@ -656,10 +656,15 @@ class Well(object):
                 return _cutoffs
             else:
                 # Append the depth mask from the selected working interval
-                _cutoffs['depth'] = ['><',
+                try:
+                    _cutoffs['depth'] = ['><',
                                      [wis[self.well][wi_name.upper()][0],
                                       wis[self.well][wi_name.upper()][1]]
                                      ]
+                except KeyError:
+                    warn_txt = '{} not present in {}'.format(wi_name.upper(), self.well)
+                    print('WARNING: {}'.format(warn_txt))
+                    logger.warning(warn_txt)
             return _cutoffs
 
         def apply_tops(_cutoffs):
