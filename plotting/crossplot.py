@@ -360,6 +360,7 @@ def plot(
             im.set_paths(paths)
 
     if (cbar is None) and not isinstance(cdata, str):  # don't draw a colorbar for single colored data
+        print('Creating colorbar')
         cbar = fig.colorbar(im, ax=ax)
         cbar.ax.tick_params(labelsize=t_fonts)
         cbar.ax.set_ylabel(clabel, fontsize=l_fonts)

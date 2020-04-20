@@ -121,14 +121,13 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
                  well.block[block_name].logs[logname_dict['S velocity']].data
         y_unit = '-'
 
-        print('Plotting: {}'.format(templates[wname]['color']))
         well_names.append(wname)
         # start plotting
 
         xp.plot(
             x_data,
             y_data,
-            #cdata=templates[wname]['color'],
+            cdata=templates[wname]['color'],
             mdata=templates[wname]['symbol'],
             xtempl={'full_name': 'AI',
                     'unit': x_unit},
@@ -145,7 +144,7 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
     for wname in well_names:
         legend_elements.append(
             Line2D([0], [0],
-                   #color=templates[wname]['color'],
+                   color=templates[wname]['color'],
                    lw=0, marker=templates[wname]['symbol'],
                    label=wname))
 

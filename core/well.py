@@ -727,7 +727,8 @@ class Well(object):
                 warn_txt = 'No logs selected to base the mask on'
                 print('WARNING: {}'.format(warn_txt))
                 logger.warning(warn_txt)
-                raise IOError(warn_txt)
+                #raise IOError(warn_txt)
+                continue
 
             for lname in list(cutoffs.keys()):
                 if lname not in list(self.block[lblock].logs.keys()):
