@@ -103,6 +103,7 @@ class Fluid(object):
             gas_gravity=None,
             gas_mixing=None, 
             brie_exponent=None,
+            fluid_type=None,
             name='Default',
             volume_fraction=None,
             header=None):
@@ -113,7 +114,25 @@ class Fluid(object):
             header['name'] = name
 
         self.header = Header(header)
-        
+        # initiating class variables to None to avoid warnings
+        self.calculation_method = None
+        self.k = None
+        self.mu = None
+        self.rho = None
+        self.temp_gradient = None
+        self.temp_ref = None
+        self.pressure_gradient = None
+        self.pressure_ref = None
+        self.salinity = None
+        self.gor = None
+        self.oil_api = None
+        self.gas_gravity = None
+        self.gas_mixing = None
+        self.brie_exponent = None
+        self.fluid_type = None
+        self.name = None
+        self.volume_fraction = None
+
         # Case input data is given as a float or integer, create a Param
         # object with default units and description
         for this_name, param, unit_str, desc_str, def_val in zip(
@@ -152,6 +171,7 @@ class Fluid(object):
             super(Fluid, self).__setattr__(this_name, param)
         
         super(Fluid, self).__setattr__('name', name)
+        super(Fluid, self).__setattr__('fluid_type', fluid_type)
         super(Fluid, self).__setattr__('volume_fraction', volume_fraction)
 
 #    def __getattribute__(self, item):
@@ -179,31 +199,124 @@ class Fluid(object):
         
         head = [pattern % (k, self.__dict__[k]) for k in keys]
         return "\n".join(head)
-        
+
+    def print_fluid(self, tvd=None):
+        out = '  {}\n'.format(self.name)
+        out += '      K: {}, Mu: {}, Rho {}\n'.format(
+            self.calc_k(tvd).value, self.calc_mu(tvd).value, self.calc_rho(tvd).value)
+        out += '      Volume fraction: {}\n'.format(self.volume_fraction)
+        out += '      Calculation method: {}\n'.format(self.calculation_method.value)
+        return out
 
     def keys(self):
         return self.__dict__.keys()
 
     def calc_k(self, tvd):
         if self.calculation_method.value == 'Batzle and Wang':
-            warn_txt = 'Calculation of fluid properties not yet implemented'
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
-        return object.__getattribute__(self, 'k')
+            #print('calc_k: {}, TVD: {}'.format(self.name, tvd))
+            if tvd is None:
+                warn_txt = 'No TVD value given for the fluid calculation'
+                print('WARNING: {}'.format(warn_txt))
+                logger.warning(warn_txt)
+                return Param(name='',
+                             value=np.nan,
+                             unit='',
+                             desc='')
+            _s = self.salinity
+            _p = self.pressure_ref.value + self.pressure_gradient.value * tvd
+            _t = self.temp_ref.value + self.temp_gradient.value * tvd
+            if self.fluid_type == 'brine':
+                rho_b = rp.rho_b(_s, _p,  _t).value
+                v_p_b = rp.v_p_b(_s, _p, _t).value
+                return Param(name='k_b',
+                             value=v_p_b**2 * rho_b * 1.E-6,
+                             unit='GPa',
+                             desc='Brine bulk modulus'
+                )
+            elif self.fluid_type == 'oil':
+                k_o, rho_o = rp.k_and_rho_o(
+                    self.oil_api,
+                    self.gas_gravity,
+                    self.gor,
+                    _p,
+                    _t
+                )
+                return k_o
+            elif self.fluid_type == 'gas':
+                k_g, rho_g = rp.k_and_rho_g(self.gas_gravity, _p, _t)
+                return k_g
+            else:
+                raise NotImplementedError('Bulk modulus not possible to calculate for {}'.format(self.fluid_type))
+        else:
+            return object.__getattribute__(self, 'k')
 
     def calc_mu(self, tvd):
+        #print('calc_mu: {}, TVD: {}'.format(self.name, tvd))
         if self.calculation_method.value == 'Batzle and Wang':
-            warn_txt = 'Calculation of fluid properties not yet implemented'
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
-        return object.__getattribute__(self, 'mu')
+            if tvd is None:
+                warn_txt = 'No TVD value given for the fluid calculation'
+                print('WARNING: {}'.format(warn_txt))
+                logger.warning(warn_txt)
+                return Param(name='',
+                             value=np.nan,
+                             unit='',
+                             desc='')
+            if self.fluid_type == 'brine':
+                return Param(name='mu_b',
+                             value=np.nan,
+                             unit='GPa',
+                             desc='Brine shear modulus'
+                             )
+            elif self.fluid_type == 'oil':
+                return Param(name='mu_o',
+                             value=np.nan,
+                             unit='GPa',
+                             desc='Oil shear modulus'
+                             )
+            elif self.fluid_type == 'gas':
+                return Param(name='mu_g',
+                             value=np.nan,
+                             unit='GPa',
+                             desc='Gas shear modulus'
+                             )
+            else:
+                raise NotImplementedError('Shear modulus not possible to calculate for {}'.format(self.fluid_type))
+        else:
+            return object.__getattribute__(self, 'mu')
 
     def calc_rho(self, tvd):
         if self.calculation_method.value == 'Batzle and Wang':
-            warn_txt = 'Calculation of fluid properties not yet implemented'
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
-        return object.__getattribute__(self, 'rho')
+            #print('calc_rho: {}, TVD: {}'.format(self.name, tvd))
+            if tvd is None:
+                warn_txt = 'No TVD value given for the fluid calculation'
+                print('WARNING: {}'.format(warn_txt))
+                logger.warning(warn_txt)
+                return Param(name='',
+                             value=np.nan,
+                             unit='',
+                             desc='')
+            _s = self.salinity
+            _p = self.pressure_ref.value + self.pressure_gradient.value * tvd
+            _t = self.temp_ref.value + self.temp_gradient.value * tvd
+            if self.fluid_type == 'brine':
+                rho_b = rp.rho_b(_s, _p,  _t)
+                return rho_b
+            elif self.fluid_type == 'oil':
+                k_o, rho_o = rp.k_and_rho_o(
+                    self.oil_api,
+                    self.gas_gravity,
+                    self.gor,
+                    _p,
+                    _t
+                )
+                return rho_o
+            elif self.fluid_type == 'gas':
+                k_g, rho_g = rp.k_and_rho_g(self.gas_gravity, _p, _t)
+                return rho_g
+            else:
+                raise NotImplementedError('Bulk modulus not possible to calculate for {}'.format(self.fluid_type))
+        else:
+            return object.__getattribute__(self, 'rho')
 
 
 class FluidMix(object):
@@ -232,32 +345,21 @@ class FluidMix(object):
             name = 'MyFluids'
         self.name = name
 
-    def __str__(self):
-        out = 'Fluid mixture: {}\n'.format(self.name)
+    def print_all_fluids(self, tvd=None):
         for key in ['initial', 'final']:
-            out += "{} fluids:\n".format(key)
             for w in list(self.fluids[key].keys()):
-                out += " - Well {}\n".format(w)
                 for wi in list(self.fluids[key][w].keys()):
-                    out += "  + Working interval {}\n".format(wi)
-                    for f in list(self.fluids[key][w][wi].keys()):
-                        out += "    {}\n".format(f)
-                        out += "      K: {}, Mu: {}, Rho {}\n".format(self.fluids[key][w][wi][f].k.value,
-                                                                    self.fluids[key][w][wi][f].mu.value,
-                                                                    self.fluids[key][w][wi][f].rho.value)
-                        out += "      Calc. method: {}\n".format(self.fluids[key][w][wi][f].calculation_method.value)
-                        out += "      Volume fraction: {}\n".format(self.fluids[key][w][wi][f].volume_fraction)
+                    out += self.print_fluids(key, w, wi, tvd)
         return out
 
-    def print_fluids(self, subst, well_name, wi_name):
-        out = 'Fluid mixture: {}, {}, {}, {}\n'.format(subst, well_name, wi_name, self.name)
+    def print_fluids(self, subst, well_name, wi_name, tvd=None):
+        out = 'Fluid mixture: {}, {}, {}, {}'.format(subst, well_name, wi_name, self.name)
+        if tvd is not None:
+            out += ' at TVD: {} m\n'.format(tvd)
+        else:
+            out += '\n'
         for m in list(self.fluids[subst][well_name][wi_name].keys()):
-            out += "    {}\n".format(m)
-            out += "      K: {}, Mu: {}, Rho {}\n".format(self.fluids[subst][well_name][wi_name][m].k.value,
-                                                          self.fluids[subst][well_name][wi_name][m].mu.value,
-                                                          self.fluids[subst][well_name][wi_name][m].rho.value)
-            out += "      " \
-                   "Volume fraction: {}\n".format(self.fluids[subst][well_name][wi_name][m].volume_fraction)
+            out += self.fluids[subst][well_name][wi_name][m].print_fluid(tvd)
         return out
 
 
@@ -273,10 +375,10 @@ class FluidMix(object):
         for i, name in enumerate(fluids_table['Name']):
             if isnan(name):
                 continue  # Avoid empty lines
-            if fluids_table['Calculation method'][i] == 'Batzle and Wang':
-                warn_txt = 'Calculation of fluid properties is still not implemented, please use constant values'
-                print('WARNING {}'.format(warn_txt))
-                logger.warning(warn_txt)
+            #if fluids_table['Calculation method'][i] == 'Batzle and Wang':
+            #    warn_txt = 'Calculation of fluid properties is still not implemented, please use constant values'
+            #    print('WARNING {}'.format(warn_txt))
+            #    logger.warning(warn_txt)
             this_fluid = Fluid(
                     fluids_table['Calculation method'][i],
                     float(fluids_table['Bulk moduli [GPa]'][i]),
@@ -292,6 +394,8 @@ class FluidMix(object):
                     float(fluids_table['Gas gravity'][i]),
                     fluids_table['Gas mixing'][i],
                     float(fluids_table['Brie exponent'][i]),
+                    #fluid_type=fluids_table['Fluid type'][i],
+                    fluid_type=None if isnan(fluids_table['Fluid type'][i]) else fluids_table['Fluid type'][i].lower(),
                     name=name.lower()
             )
             all_fluids[name.lower()] = this_fluid
@@ -313,10 +417,10 @@ class FluidMix(object):
             this_fluid.volume_fraction = \
                 float(vf) if (not isinstance(vf, str)) else vf.lower()
             # iterate down in this complex dictionary
-            # {this_subst:                          # 1'st level
-            #       {this_well:                     # 2'nd level
-            #           {this_wi:                   # 3'd level
-            #               {fluid_name: Fluid()    # 4'th level
+            # {this_subst:                          # 1'st level: initial or final
+            #       {this_well:                     # 2'nd level: well
+            #           {this_wi:                   # 3'd level: working interval
+            #               {fluid_name: Fluid()    # 4'th level: fluid
             #       }}}}
             # 2'nd level
             if this_well in list(fluids_mixes[this_subst].keys()):

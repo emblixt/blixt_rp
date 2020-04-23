@@ -307,7 +307,16 @@ class Project(object):
             else:  # Existing well
                 all_wells[wname].read_well_table(well_table, i, block_name=block_name, rename_well_logs=rename_logs)
 
+        # rename well names so that the well name defined in the well_table is used "inside" each well
+        for wname, well in all_wells.items():
+            well.header.well.value = wname
+            well.header.name.value = wname
+            well.block[block_name].header.well = wname
+            for key in list(well.block[block_name].logs.keys()):
+                well.block[block_name].logs[key].header.well = wname
+
         return all_wells
+
 
 class Header(AttribDict):
     """
@@ -398,6 +407,8 @@ class Well(object):
         self.header = Header(header)
         if block is None:
             self.block = {}
+        elif isinstance(block, Block):
+            self.block[block.name] = block
 
     @property
     def meta(self):
@@ -442,7 +453,7 @@ class Well(object):
         lt_list = list(set(lt_list))
         return lt_list
 
-    def calc_vrh_bounds(self, fluid_minerals, param='k', method='Voigt', block_name=None):
+    def calc_vrh_bounds(self, fluid_minerals, param='k', wis=None, method='Voigt', block_name=None):
         """
         Calculates the Voigt-Reuss-Hill bounds of parameter param, for the  fluid or mineral mixture defined in
         fluid_minerals, for the given Block.
@@ -459,6 +470,11 @@ class Well(object):
             'k' for Bulk modulus
             'mu' for shear modulus
             'rho' for density
+        :param wis:
+            dict
+            Dictionary of working intervals
+            E.G.
+            wis = utils.io.project_working_intervals(project_table.xlsx)
         :param method:
             str
             'Voigt' for the upper bound or Voigt average
@@ -500,6 +516,16 @@ class Well(object):
         # Use the fluid / minerals for this well only
         obj = obj[self.well]
 
+        # test if the wanted working intervals exists in the defined working intervals
+        if wis is not None:
+            for wi in list(obj.keys()):
+                if wi not in list(wis[self.well].keys()):
+                    warn_txt = 'Interval {} not present in the given working intervals for {}'.format(
+                        wi, self.well)
+                    print('WARNING: {}'.format(warn_txt))
+                    logger.warning(warn_txt)
+
+
         if param not in ['k', 'mu', 'rho']:
             raise IOError('Bounds can only be calculated for k, mu and rho')
 
@@ -513,6 +539,13 @@ class Well(object):
         # The user have to apply these averages in the designated working interval later
         result = {}
         for wi, val in obj.items():
+            if wis is not None:
+                logger.warning('Currently, the fluid parameters are calculated using MD instead of TVD')
+                # TODO
+                # Make this function extract the tvd, not the MD !!!
+                this_tvd = np.mean(wis[self.well][wi])
+            else:
+                this_tvd = None
             complement = None
             this_fraction = None  # A volume fraction log
             this_component = None  #
@@ -524,9 +557,10 @@ class Well(object):
             for m in list(val.keys()):
                 info_txt += "  {}".format(m)
                 info_txt += "    K: {}, Mu: {}, Rho {}\n".format(
-                    val[m].k.value, val[m].mu.value, val[m].rho.value)
+                    val[m].calc_k(this_tvd).value, val[m].calc_mu(this_tvd).value, val[m].calc_rho(this_tvd).value)
                 info_txt += "    Volume fraction: {}\n".format(val[m].volume_fraction)
             logger.info(info_txt)
+            print(info_txt)
 
             if len(list(val.keys())) > 2:
                 warn_txt = 'The bounds calculation has only been tested for two-components mixtures\n'
@@ -554,7 +588,15 @@ class Well(object):
                         logger.warning(warn_txt)
                         continue
                     this_fraction = self.block[block_name].logs[_name].data
-                this_component = val[this_fm].__getattribute__(param).value
+                if param == 'k':
+                    this_component = val[this_fm].calc_k(this_tvd).value
+                elif param == 'mu':
+                    this_component = val[this_fm].calc_mu(this_tvd).value
+                elif param == 'rho':
+                    this_component = val[this_fm].calc_rho(this_tvd).value
+                else:
+                    this_component = None
+
                 fractions.append(this_fraction)
                 components.append(this_component)
 
@@ -585,7 +627,8 @@ class Well(object):
                     wi_name=None,
                     overwrite=True,
                     append=False,
-                    log_type_input=True
+                    log_type_input=True,
+                    logname_dict=None
         ):
         """
         Based on the different cutoffs in the 'cutoffs' dictionary, each Block in well is masked accordingly.
@@ -625,6 +668,17 @@ class Well(object):
         :param log_type_input:
             bool
             if set to True, the keys in the cutoffs dictionary refer to log types, and not log names
+        :param logname_dict:
+            dict
+            Dictionary of log type: log name key: value pairs to create mask on when log_type_input is True
+            NOTE: If this is not set when log_type_input is True, the first log under each log type will be used.
+            E.G.
+                logname_dict = {
+                   'P velocity': 'vp',
+                   'S velocity': 'vs',
+                   'Density': 'rhob',
+                   'Porosity': 'phie',
+                   'Volume': 'vcl'}
         :return:
         """
         #
@@ -632,7 +686,7 @@ class Well(object):
         #
         def rename_cutoffs(_cutoffs):
             # When the cutoffs are based on log types, and not the individual log names, we need to
-            # associate each log type with it FIRST INSTANCE log name
+            # associate each log type with it FIRST INSTANCE log name if logname_dict is not set
             this_cutoffs = {}
             for _key in list(_cutoffs.keys()):
                 if len(self.get_logs_of_type(_key)) < 1:
@@ -640,7 +694,10 @@ class Well(object):
                     print('WARNING: {}'.format(warn_txt))
                     logger.warning(warn_txt)
                     continue
-                this_cutoffs[self.get_logs_of_type(_key)[0].name] = _cutoffs[_key]
+                if logname_dict is not None:
+                    this_cutoffs[logname_dict(_key)] = _cutoffs[_key]
+                else:
+                    this_cutoffs[self.get_logs_of_type(_key)[0].name] = _cutoffs[_key]
             return this_cutoffs
 
         def apply_wis(_cutoffs):
@@ -769,6 +826,13 @@ class Well(object):
                         'desc': msk_str
                     }
                 )
+                # Test for number of True values
+                if np.sum(block_mask) < 1:
+                    warn_txt = 'All values in block {} are masked out using {}'.format(lblock, msk_str)
+                    print('WARNING: {}'.format(warn_txt))
+                    logger.warning(warn_txt)
+                else:
+                    print('{} True values in mask: {}'.format(np.sum(block_mask), msk_str))
             else:
                 continue
 
@@ -938,6 +1002,8 @@ class Well(object):
             where the key is the wanted well log name, and the value list is a list of well log names to translate from
         :return:
         """
+        if block_name is None:
+            block_name = def_lb_name
         lfile = list(well_table.keys())[index]
         if 'Note' in list(well_table[lfile].keys()):
             note = well_table[lfile]['Note']
@@ -949,12 +1015,22 @@ class Well(object):
                       rename_well_logs=rename_well_logs,
                       note=note)
 
+        # rename well names so that the well name defined in the well_table is used "inside" each well
+        wname = well_table[lfile]['Given well name']
+        self.header.well.value = wname
+        self.header.name.value = wname
+        self.block[block_name].header.well = wname
+        for key in list(self.block[block_name].logs.keys()):
+            self.block[block_name].logs[key].header.well = wname
+
+
     def read_las(
             self,
             filename,
             block_name=None,
             only_these_logs=None,
             rename_well_logs=None,
+            use_this_well_name=None,
             note=None
     ):
         """
@@ -976,6 +1052,10 @@ class Well(object):
             E.G.
             {'depth': ['DEPT', 'MD']}
             where the key is the wanted well log name, and the value list is a list of well log names to translate from
+        :param use_this_well_name:
+            str
+            Name we would like to use.
+            Useful when different las file have different wells for the same well
         :param note:
             str
             String containing notes for the las file being read
@@ -1143,6 +1223,10 @@ class Well(object):
             raise Exception("Version {} not supported!".format(
                 well_dict['version']['vers']['value']))
 
+        # Rename well
+        if use_this_well_name is not None:
+            well_dict['well_info']['well']['value'] = uio.fix_well_name(use_this_well_name)
+
         # Test if this well has a header, and that we are loading from the same well
         if 'well' not in list(self.header.keys()):  # current well object is empty
             # Add all well specific headers to well header
@@ -1306,10 +1390,12 @@ class Block(object):
         # modify header
         if header is None:
             header = {}
-
-        header['name'] = name
-        header['well'] = self.well
-        header['log_type'] = log_type
+        if 'name' not in list(header.keys()):
+            header['name'] = name
+        if 'well' not in list(header.keys()):
+            header['well'] = self.well
+        if 'log_type' not in list(header.keys()):
+            header['log_type'] = log_type
         if 'unit' not in list(header.keys()):
             header['unit'] = None
         if 'desc' not in list(header.keys()):

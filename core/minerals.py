@@ -147,13 +147,36 @@ class Mineral(object):
         
         head = [pattern % (k, self.__dict__[k]) for k in keys]
         return "\n".join(head)
-        
-    
+
     def keys(self):
         """
         Return dict key list of content
         """
         return self.__dict__.keys()
+
+    def calc_k(self, dummy_tvd):
+        """
+        Dummy function that makes Mineral objects behave same way as Fluid objects
+        :param dummy_tvd:
+        :return:
+        """
+        return object.__getattribute__(self, 'k')
+
+    def calc_mu(self, dummy_tvd):
+        """
+        Dummy function that makes Mineral objects behave same way as Fluid objects
+        :param dummy_tvd:
+        :return:
+        """
+        return object.__getattribute__(self, 'mu')
+
+    def calc_rho(self, dummy_tvd):
+        """
+        Dummy function that makes Mineral objects behave same way as Fluid objects
+        :param dummy_tvd:
+        :return:
+        """
+        return object.__getattribute__(self, 'rho')
 
     def vp(self):
         """

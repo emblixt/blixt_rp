@@ -96,7 +96,12 @@ class LogCurve(object):
         if 'well' not in list(header.keys()) or header['well'] is None:
             header['well'] = well
 
-        self.header = Header(header)
+        if isinstance(header, dict):
+            self.header = Header(header)
+        elif isinstance(header, Header):
+            self.header = header
+        else:
+            raise IOError('Input header is neither dictionary nor Header')
         #super(LogCurve, self).__setattr__('data', data)
         self.data = data
 

@@ -407,6 +407,45 @@ def write_tops(filename, tops, well_names=None, interval_names=None):
     wb.save(filename)
 
 
+def read_petrel_checkshots(filename, only_these_wells=None):
+    checkshots = {}
+    keys = []
+    this_well_name = ''
+    data_section = False
+    header_section = False
+    i = 0
+    well_i = None
+
+    with open(filename, 'r') as f:
+        for line in f.readlines():
+            if line[:7] == 'BEGIN H':
+                header_section = True
+                continue
+            elif line[:5] == 'END H':
+                header_section = False
+                data_section = True
+                continue
+            if header_section:
+                if line[:4].lower() == 'well':
+                    well_i = i
+                i += 1
+                keys.append(line.strip())
+            elif data_section:
+                data = line.split()
+                this_well_name = fix_well_name(data[well_i].replace('"', ''))
+                if (only_these_wells is not None) and this_well_name not in only_these_wells:
+                    continue
+                if this_well_name not in list(checkshots.keys()):
+                    checkshots[this_well_name] = {xx: [] for xx in keys}
+                else:
+                    for j, key in enumerate(keys):
+                        checkshots[this_well_name][key].append(my_float(data[j]))
+
+    return checkshots
+
+
+
+
 def test_file_path(file_path, working_dir):
     if os.path.isfile(file_path):
         return file_path
@@ -943,3 +982,12 @@ def interpret_rename_string(rename_string):
         return None
     else:
         return return_dict
+
+
+def my_float(string):
+    try:
+        return float(string)
+    except ValueError:
+        return string
+
+
