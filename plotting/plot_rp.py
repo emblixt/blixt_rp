@@ -158,3 +158,102 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
 
     if savefig is not None:
         fig.savefig(savefig)
+
+
+def ex_rpt(x, c, **kw):
+    return kw.pop('level', 7.)+np.log(min(x)) - np.log(x) + c
+
+
+def plot_rpt(x, rpt, rpt_keywords, sizes, colors, constants, fig=None, ax=None, **kwargs):
+    """
+    Plot any RPT (rock physics template) that can be described by a function rpt(x), which can be
+    parameterized by a constant. E.G. rpt(x, const=constants[i])
+
+    :param x:
+        np.array
+        array of length N
+        x values used to draw the rockphysics template, preferably less than about 10 items long for creating
+        nice plots
+    :param rpt:
+        function
+        Rock physics template function of x
+        Should take a second argument which is used to parameterize the function
+        e.g.
+        def rpt(x, c, **rpt_keywords):
+            return c*x + rpt_keywords.pop('zero_crossing', 0)
+    :param rpt_keywords:
+        dict
+        Dictionary with keywords passed on to the rpt function
+    :param sizes:
+        float or np.array (of size N, or M x N)
+        determines the size of the markers
+        if np.array it must be same size as x
+    :param colors
+        str or np.array
+        determines the colors of the markers
+        in np.array it must be same size as x
+    :param constants:
+        list
+        list of length M of constants used to parametrize the rpt function
+    """
+    #
+    # some initial setups
+    lw = kwargs.pop('lw', 0.5)
+    tc = kwargs.pop('c', 'k')
+    edgecolor = kwargs.pop('edgecolor', 'none')
+    for test_obj, def_val in zip([sizes, colors], [90., 'red']):
+        if test_obj is None:
+            test_obj = def_val
+        elif isinstance(test_obj, np.ndarray):
+            if len(test_obj.shape) == 1:
+                # Broadcast 1D array so that it can reused for all elements in constants
+                test_obj = np.broadcast_to(test_obj, (len(constants), len(test_obj)))
+                print(test_obj.shape)
+            elif len(test_obj.shape) == 2:
+                if not test_obj.shape == (len(constants), len(x)):
+                    raise IOError('Shape of input must match constants, and x: ({}, {})'.format(len(constants), len(x)))
+        if def_val == 90.:
+            sizes = test_obj
+        else:
+            colors = test_obj
+
+    #
+    # set up plotting environment
+    if fig is None:
+        fig = plt.figure(figsize=(10, 10))
+    if ax is None:
+        ax = fig.subplots()
+
+    # start drawing the RPT
+    for i, const in enumerate(constants):
+        # First draw lines of the RPT
+        ax.plot(
+            x,
+            rpt(x, const, **rpt_keywords),
+            lw=lw,
+            c=tc,
+            label='_nolegend_',
+            **kwargs
+        )
+        # Next draw the points
+        ax.scatter(
+            x,
+            rpt(x, const, **rpt_keywords),
+            c=colors if isinstance(colors, str) else colors[i],
+            s=sizes[i] if isinstance(sizes, np.ndarray) else float(sizes),
+            edgecolor=edgecolor,
+            label='_nolegend_',
+            **kwargs
+        )
+
+
+if __name__ == '__main__':
+    x = np.linspace(2000, 6000, 6)
+    constants = [0, 1, 2]
+    #colors = np.linspace(100, 200, 6)
+    colors = 'blue'
+    #sizes = np.array([np.ones(6)*100*(i+1) for i in range(3)])
+    sizes = 800.
+    plot_rpt(x, ex_rpt, {'level': 0}, sizes, colors, constants)
+
+    plt.show()
