@@ -75,7 +75,7 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
     #
     # set up plotting environment
     if fig is None:
-        fig = plt.figure(figsize=(10,10))
+        fig = plt.figure(figsize=(10, 10))
     if ax is None:
         ax = fig.subplots()
 
