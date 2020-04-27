@@ -516,6 +516,10 @@ def hertz_mindlin(k0, mu0, phic=0.4, cn=8.6, p=None, f=1):
     mu0 = test_value(mu0, 'GPa')
     p = test_value(p, 'GPa')
 
+    k0 = k0.value
+    mu0 = mu0.value
+    p = p.value
+
     pr0 = (3*k0-2*mu0)/(6*k0+2*mu0) # poisson's ratio of mineral mixture
     k_HM = (p*(cn**2*(1-phic)**2*mu0**2) / (18*np.pi**2*(1-pr0)**2))**(1/3)
     mu_HM = ((2+3*f-pr0*(1+3*f))/(5*(2-pr0))) * (p*(3*cn**2*(1-phic)**2*mu0**2)/(2*np.pi**2*(1-pr0)**2))**(1/3)
@@ -535,6 +539,28 @@ def por_from_mass_balance(rho, rho_m, rho_f):
         Porosity
     """
     return (rho_m - rho)/(rho_m - rho_f)
+
+
+def stiffsand(K0, G0, phi, phic=0.4, Cn=8.6, P=10, f=1):
+    '''
+    Stiff-sand model
+    written by aadm (2015) from Rock Physics Handbook, p.260
+
+    INPUT
+    K0, G0: mineral bulk & shear modulus in GPa
+    phi: porosity
+    phic: critical porosity (default 0.4)
+    Cn: coordination nnumber (default 8.6)
+    P: confining pressure in MPa (default 10)
+    f: shear modulus correction factor
+       1=dry pack with perfect adhesion
+       0=dry frictionless pack
+    '''
+    K_HM, G_HM = hertz_mindlin(K0, G0, phic, Cn, P, f)
+    K_DRY  = -4/3*G0 + (((phi/phic)/(K_HM+4/3*G0)) + ((1-phi/phic)/(K0+4/3*G0)))**-1
+    tmp    = G0/6*((9*K0+8*G0) / (K0+2*G0))
+    G_DRY  = -tmp + ((phi/phic)/(G_HM+tmp) + ((1-phi/phic)/(G0+tmp)))**-1
+    return K_DRY, G_DRY
 
 
 def gassmann_vel(v_p_1, v_s_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
