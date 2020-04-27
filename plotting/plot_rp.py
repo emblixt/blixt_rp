@@ -235,7 +235,6 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
         vmin = None; vmax = None; cmap=None
     for i, const in enumerate(constants):
         x, y = rpt(t, const, **rpt_keywords)
-        print(colors[i])
         # First draw lines of the RPT
         ax.plot(
             x,
@@ -263,14 +262,14 @@ def test():
     from core.well import Project;
     import utils.io as uio
 
-    vsh = 0.0; phic = 0.4; Cn = 8; P = 10; f = 1
+    vsh = 0.6; phic = 0.4; Cn = 8; P = 45; f = 0.3
     RHO_hc = 0.2; K_hc = 0.06
-    RHO_b = 1.1 ;   K_b = 2.8
+    RHO_b = 1.1; K_b = 2.8
     RHO_qz = 2.6; K_qz = 37; MU_qz = 44
     RHO_sh = 2.8; K_sh = 15; MU_sh = 5
 
     phi = np.linspace(0.1, phic, 6)
-    sw = np.array([1., 0.5, 0.])
+    sw = np.array([0., 0.5, 1.])
     sizes = np.empty((sw.size, phi.size))
     colors = np.array([np.ones(6)*100*(i+1)**2 for i in range(3)])/900.
     # iterate over all phi values
@@ -283,20 +282,23 @@ def test():
             _rho_qz=RHO_qz, _k_qz=K_qz, _mu_qz=MU_qz,
             _rho_sh=RHO_sh, _k_sh=K_sh, _mu_sh=MU_sh):
 
+        print('phic: {}, Cn: {}, P: {}, f: {}'.format(phic, Cn, P, f))
         # Define the sw=1 case as the reference fluid
         rho_f1 = _rho_b; k_f1 = _k_b
 
         K0 = rp.vrh_bounds([_vsh, 1-_vsh], [_k_sh, _k_qz])[2]  # Mineral bulk modulus
+        print('K0: {}'.format(K0))
         MU0 = rp.vrh_bounds([_vsh, 1-_vsh], [_mu_sh, _mu_qz])[2]  # Mineral shear modulus
+        print('MU0: {}'.format(MU0))
         RHO0 = rp.vrh_bounds([_vsh, 1 - _vsh], [_rho_sh, _rho_qz])[0]  # Density of minerals
+        print('RHO0: {}'.format(RHO0))
         rho_1 = RHO0 * (1 - phi) + rho_f1 * phi
 
         # Apply the RPT on the minerals
         Kdry, MUdry = rp.stiffsand(K0, MU0, _phi, _phic, _cn, _p, _f)
-        print('A:', Kdry, MUdry)
+        print('Kdry: {}, MUdry: {}'.format(Kdry, MUdry))
 
         K_init = rp.vrh_bounds([_phi, 1.-_phi], [k_f1, Kdry])[1]
-        print('B:', K_init)
         v_s_1 = np.sqrt(MUdry / rho_1) * 1e3
         v_p_1 = np.sqrt((K_init + 4. / 3 * MUdry) / rho_1) * 1e3
         #if _sw == 1.0:
@@ -304,12 +306,14 @@ def test():
         #    #return rho_1*v_p_1, v_p_1/v_s_1
         #    return _phi, v_p_1
 
-        k_f2 = rp.vrh_bounds([_sw, 1.-_sw], [_k_b, _k_hc])[1]
-        rho_f2 = rp.vrh_bounds([_sw, 1.-_sw],  [_rho_b, _rho_hc])[0]
+        k_f2 = rp.vrh_bounds([_sw, 1.-_sw], [_k_b, _k_hc])[1]  # K_f
+        rho_f2 = rp.vrh_bounds([_sw, 1.-_sw],  [_rho_b, _rho_hc])[0]  #RHO_f
+        print('sw: {}, K_f: {}, RHO_f: {}'.format(_sw, k_f2, rho_f2))
 
-        _vp2, _vs2, _rho2, K_final = rp.gassmann_vel(v_p_1, v_s_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, Kdry, _phi)
-        #return _rho2*_vp2, _vp2/_vs2
-        return _phi, _vp2
+        _vp2, _vs2, _rho2, K_final = rp.vels(Kdry, MUdry, K0, RHO0, k_f2, rho_f2, _phi)
+        #_vp2, _vs2, _rho2, K_final = rp.gassmann_vel(v_p_1, v_s_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, Kdry, _phi)
+        return _rho2*_vp2, _vp2/_vs2
+        #return _phi, _vp2
 
     #wp = Project()
     #logname_dict = {'P velocity': 'vp_dry', 'S velocity': 'vs_dry', 'Density': 'rho_dry', 'Porosity': 'phie',
@@ -325,10 +329,10 @@ def test():
     plt.show()
 
 if __name__ == '__main__':
-    t = np.linspace(2000, 6000, 6)
-    constants = [0, 1, 2]
-    sizes = np.linspace(100, 200, 6)
-    colors = np.array([np.ones(6)*100*(i+1) for i in range(3)])
-    plot_rpt(t, ex_rpt, constants, {'level': 0}, sizes, colors)
-    #test()
+    #t = np.linspace(2000, 6000, 6)
+    #constants = [0, 1, 2]
+    #sizes = np.linspace(100, 200, 6)
+    #colors = np.array([np.ones(6)*100*(i+1) for i in range(3)])
+    #plot_rpt(t, ex_rpt, constants, {'level': 0}, sizes, colors)
+    test()
 

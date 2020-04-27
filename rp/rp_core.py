@@ -556,7 +556,8 @@ def stiffsand(K0, G0, phi, phic=0.4, Cn=8.6, P=10, f=1):
        1=dry pack with perfect adhesion
        0=dry frictionless pack
     '''
-    K_HM, G_HM = hertz_mindlin(K0, G0, phic, Cn, P, f)
+    K_HM, G_HM = hertz_mindlin(K0, G0, phic, Cn, P/1.E3, f)
+    print('K_HM: {}, G_HM: {}'.format(K_HM, G_HM))
     K_DRY  = -4/3*G0 + (((phi/phic)/(K_HM+4/3*G0)) + ((1-phi/phic)/(K0+4/3*G0)))**-1
     tmp    = G0/6*((9*K0+8*G0) / (K0+2*G0))
     G_DRY  = -tmp + ((phi/phic)/(G_HM+tmp) + ((1-phi/phic)/(G0+tmp)))**-1
@@ -638,6 +639,23 @@ def gassmann_a(_k1, _k0, _k_f1, _k_f2, _por):
     :return:
     """
     return _k1/(_k0 - _k1) + (_k_f2/(_k0 - _k_f2) - _k_f1/(_k0-_k_f1))/_por
+
+
+def vels(K_DRY, G_DRY, K0, D0, Kf, Df, phi):
+    '''
+    Calculates velocities and densities of saturated rock via Gassmann equation, (C) aadm 2015
+
+    INPUT
+    K_DRY,G_DRY: dry rock bulk & shear modulus in GPa
+    K0, D0: mineral bulk modulus and density in GPa
+    Kf, Df: fluid bulk modulus and density in GPa
+    phi: porosity
+    '''
+    rho  = D0*(1-phi)+Df*phi
+    K    = K_DRY + (1-K_DRY/K0)**2 / ( (phi/Kf) + ((1-phi)/K0) - (K_DRY/K0**2) )
+    vp   = np.sqrt((K+4./3*G_DRY)/rho)*1e3
+    vs   = np.sqrt(G_DRY/rho)*1e3
+    return vp, vs, rho, K
 
 
 def run_fluid_sub(wells, logname_dict, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, block_name='Logs'):
