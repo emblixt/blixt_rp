@@ -216,6 +216,8 @@ def calc_stats2(
     logs = list(logname_dict.values())
     ncols = len(logs)
     well_names = list(wells.keys())
+    if isinstance(wi_names, str):
+        wi_names = [wi_names]
 
     # Test if necessary log types for creating a RokDoc compatible output are present
     rokdoc_output = test_types(log_types, rokdoc_output)

@@ -483,6 +483,7 @@ def hertz_mindlin(k0, mu0, phic=0.4, cn=8.6, p=None, f=1):
     Hertz-Mindlin model
     The elastic moduli of a dry well-sorted end member at critical porosity
     Rock Physics Handbook, p.246
+    Eq. 2.3 and 2.4 in Avseth 2011
 
     :param k0:
         Param
@@ -539,6 +540,28 @@ def por_from_mass_balance(rho, rho_m, rho_f):
         Porosity
     """
     return (rho_m - rho)/(rho_m - rho_f)
+
+
+def softsand(K0, G0, phi, phic=0.4, Cn=8.6, P=10, f=1):
+    '''
+    Soft-sand (uncemented) model
+    written by aadm (2015) from Rock Physics Handbook, p.258
+
+    INPUT
+    K0, G0: mineral bulk & shear modulus in GPa
+    phi: porosity
+    phic: critical porosity (default 0.4)
+    Cn: coordination nnumber (default 8.6)
+    P: confining pressure in MPa (default 10)
+    f: shear modulus correction factor
+       1=dry pack with perfect adhesion
+       0=dry frictionless pack
+    '''
+    K_HM, G_HM = hertzmindlin(K0, G0, phi, phic, Cn, P/1.E3, f)
+    K_DRY =-4/3*G_HM + (((phi/phic)/(K_HM+4/3*G_HM)) + ((1-phi/phic)/(K0+4/3*G_HM)))**-1
+    tmp   = G_HM/6*((9*K_HM+8*G_HM) / (K_HM+2*G_HM))
+    G_DRY = -tmp + ((phi/phic)/(G_HM+tmp) + ((1-phi/phic)/(G0+tmp)))**-1
+    return K_DRY, G_DRY
 
 
 def stiffsand(K0, G0, phi, phic=0.4, Cn=8.6, P=10, f=1):

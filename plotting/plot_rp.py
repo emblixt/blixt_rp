@@ -11,7 +11,7 @@ import rp.rp_core as rp
 logger = logging.getLogger(__name__)
 
 def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
-            plot_type=None, fig=None, ax=None, block_name='Logs', savefig=None, **kwargs):
+            plot_type=None, ref_val=None, fig=None, ax=None, block_name='Logs', savefig=None, **kwargs):
 
     """
     Plots some standard rock physics crossplots for the given wells
@@ -50,7 +50,14 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
         templates dictionary as returned from utils.io.project_templates()
     :param plot_type:
         str
-        plot_type = 'AI-VpVs': AI versus Vp/Vs plot
+        plot_type =
+            'AI-VpVs': AI versus Vp/Vs plot
+            'Phi-Vp': Porosity versus Vp plot
+            'I-G': Intercept versus Gradient plot
+    :param ref_val:
+        list
+        List of reference Vp [m/s], Vs [m/s], and rho [g/cm3] that are used
+        when calculating the Intercept and gradient
     :param fig:
 
     :param ax:
@@ -69,6 +76,8 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
     # some initial setups
     if plot_type is None:
         plot_type = 'AI-VpVs'
+    elif plot_type == 'I-G' and ref_val is None:
+        ref_val = [3500., 1700., 2.6]
     log_types = list(logname_dict.keys())
     logs = list(logname_dict.values())
 
@@ -112,14 +121,35 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
         desc = well.block[block_name].masks['cmask'].header.desc
 
         # collect data for plot
-        x_data = well.block[block_name].logs[logname_dict['P velocity']].data * \
-                 well.block[block_name].logs[logname_dict['Density']].data
-        x_unit = '{} {}'.format(
-            well.block[block_name].logs[logname_dict['P velocity']].header.unit,
-                 well.block[block_name].logs[logname_dict['Density']].header.unit)
-        y_data = well.block[block_name].logs[logname_dict['P velocity']].data / \
-                 well.block[block_name].logs[logname_dict['S velocity']].data
-        y_unit = '-'
+        if plot_type == 'AI-VpVs':
+            x_data = well.block[block_name].logs[logname_dict['P velocity']].data * \
+                     well.block[block_name].logs[logname_dict['Density']].data
+            x_unit = '{} {}'.format(well.block[block_name].logs[logname_dict['P velocity']].header.unit,
+                                    well.block[block_name].logs[logname_dict['Density']].header.unit)
+            y_data = well.block[block_name].logs[logname_dict['P velocity']].data / \
+                     well.block[block_name].logs[logname_dict['S velocity']].data
+            y_unit = '-'
+            xtempl = {'full_name': 'AI', 'unit': x_unit}
+            ytempl = {'full_name': 'Vp/Vs', 'unit': y_unit}
+        elif plot_type == 'Phi-Vp':
+            x_data = well.block[block_name].logs[logname_dict['Porosity']].data
+            x_unit = '{}'.format(well.block[block_name].logs[logname_dict['Porosity']].header.unit)
+            y_data = well.block[block_name].logs[logname_dict['P velocity']].data
+            y_unit = '{}'.format(well.block[block_name].logs[logname_dict['P velocity']].header.unit)
+            xtempl = {'full_name': 'Porosity', 'unit': x_unit}
+            ytempl = {'full_name': 'Vp', 'unit': y_unit}
+        elif plot_type == 'I-G':
+            x_data = rp.intercept(ref_val[0], well.block[block_name].logs[logname_dict['P velocity']].data,
+                                  ref_val[2], well.block[block_name].logs[logname_dict['Density']].data)
+            x_unit = '-'
+            y_data = rp.gradient(ref_val[0], well.block[block_name].logs[logname_dict['P velocity']].data,
+                                  ref_val[1], well.block[block_name].logs[logname_dict['S velocity']].data,
+                                  ref_val[2], well.block[block_name].logs[logname_dict['Density']].data)
+            y_unit = '-'
+            xtempl = {'full_name': 'Intercept', 'unit': x_unit}
+            ytempl = {'full_name': 'Gradient', 'unit': y_unit}
+        else:
+            raise IOError('No known plot type selected')
 
         well_names.append(wname)
         # start plotting
@@ -129,10 +159,8 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
             y_data,
             cdata=templates[wname]['color'],
             mdata=templates[wname]['symbol'],
-            xtempl={'full_name': 'AI',
-                    'unit': x_unit},
-            ytempl={'full_name': 'Vp/Vs',
-                    'unit': y_unit},
+            xtempl=xtempl,
+            ytempl=ytempl,
             mask=mask,
             fig=fig,
             ax=ax,
@@ -282,25 +310,26 @@ def test():
             _rho_qz=RHO_qz, _k_qz=K_qz, _mu_qz=MU_qz,
             _rho_sh=RHO_sh, _k_sh=K_sh, _mu_sh=MU_sh):
 
-        print('phic: {}, Cn: {}, P: {}, f: {}'.format(phic, Cn, P, f))
+        print('phic: {}, Cn: {}, P: {}, f: {}'.format(_phic, _cn, _p, _f))
         # Define the sw=1 case as the reference fluid
         rho_f1 = _rho_b; k_f1 = _k_b
 
-        K0 = rp.vrh_bounds([_vsh, 1-_vsh], [_k_sh, _k_qz])[2]  # Mineral bulk modulus
-        print('K0: {}'.format(K0))
-        MU0 = rp.vrh_bounds([_vsh, 1-_vsh], [_mu_sh, _mu_qz])[2]  # Mineral shear modulus
-        print('MU0: {}'.format(MU0))
-        RHO0 = rp.vrh_bounds([_vsh, 1 - _vsh], [_rho_sh, _rho_qz])[0]  # Density of minerals
-        print('RHO0: {}'.format(RHO0))
-        rho_1 = RHO0 * (1 - phi) + rho_f1 * phi
+        k_min = rp.vrh_bounds([_vsh, 1-_vsh], [_k_sh, _k_qz])[2]  # Mineral bulk modulus
+        print('k_min: {}'.format(k_min))
+        mu_min = rp.vrh_bounds([_vsh, 1-_vsh], [_mu_sh, _mu_qz])[2]  # Mineral shear modulus
+        print('mu_min: {}'.format(mu_min))
+        rho_min = rp.vrh_bounds([_vsh, 1 - _vsh], [_rho_sh, _rho_qz])[0]  # Density of minerals
+        print('rho_min: {}'.format(rho_min))
+        rho_1 = rho_min * (1 - phi) + rho_f1 * phi
 
         # Apply the RPT on the minerals
-        Kdry, MUdry = rp.stiffsand(K0, MU0, _phi, _phic, _cn, _p, _f)
-        print('Kdry: {}, MUdry: {}'.format(Kdry, MUdry))
+        k_dry, mu_dry = rp.stiffsand(k_min, mu_min, _phi, _phic, _cn, _p, _f)
+        print('k_dry: {}, mu_dry: {}'.format(k_dry, mu_dry))
 
-        K_init = rp.vrh_bounds([_phi, 1.-_phi], [k_f1, Kdry])[1]
-        v_s_1 = np.sqrt(MUdry / rho_1) * 1e3
-        v_p_1 = np.sqrt((K_init + 4. / 3 * MUdry) / rho_1) * 1e3
+        k_1 = rp.vrh_bounds([_phi, 1.-_phi], [k_f1, k_dry])[1]
+        mu_1 = rp.vrh_bounds([_phi, 1.-_phi], [0., mu_dry])[2]  # trying this instead of mu_dry in vs_1 and vp_1
+        vs_1 = np.sqrt(mu_1 / rho_1) * 1e3
+        vp_1 = np.sqrt((k_1 + 4. / 3 * mu_1) / rho_1) * 1e3
         #if _sw == 1.0:
         #    print('C:', _sw, _phi, v_p_1)
         #    #return rho_1*v_p_1, v_p_1/v_s_1
@@ -310,9 +339,9 @@ def test():
         rho_f2 = rp.vrh_bounds([_sw, 1.-_sw],  [_rho_b, _rho_hc])[0]  #RHO_f
         print('sw: {}, K_f: {}, RHO_f: {}'.format(_sw, k_f2, rho_f2))
 
-        _vp2, _vs2, _rho2, K_final = rp.vels(Kdry, MUdry, K0, RHO0, k_f2, rho_f2, _phi)
-        #_vp2, _vs2, _rho2, K_final = rp.gassmann_vel(v_p_1, v_s_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, Kdry, _phi)
-        return _rho2*_vp2, _vp2/_vs2
+        vp_2, vs_2, rho_2, k_2 = rp.vels(k_dry, mu_dry, k_min, rho_min, k_f2, rho_f2, _phi)
+        #vp_2, vs_2, rho_2, k_2 = rp.gassmann_vel(vp_1, vs_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k_dry, _phi)  # dont give the same answer as using vels!!
+        return rho_2*vp_2, vp_2/vs_2
         #return _phi, _vp2
 
     #wp = Project()
