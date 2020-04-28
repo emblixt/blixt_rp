@@ -557,7 +557,7 @@ def softsand(K0, G0, phi, phic=0.4, Cn=8.6, P=10, f=1):
        1=dry pack with perfect adhesion
        0=dry frictionless pack
     '''
-    K_HM, G_HM = hertzmindlin(K0, G0, phi, phic, Cn, P/1.E3, f)
+    K_HM, G_HM = hertz_mindlin(K0, G0, phic, Cn, P/1.E3, f)
     K_DRY =-4/3*G_HM + (((phi/phic)/(K_HM+4/3*G_HM)) + ((1-phi/phic)/(K0+4/3*G_HM)))**-1
     tmp   = G_HM/6*((9*K_HM+8*G_HM) / (K_HM+2*G_HM))
     G_DRY = -tmp + ((phi/phic)/(G_HM+tmp) + ((1-phi/phic)/(G0+tmp)))**-1

@@ -9,6 +9,9 @@ from plotting import crossplot as xp
 import rp.rp_core as rp
 
 logger = logging.getLogger(__name__)
+opt1 = {'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
+opt2 = {'ha': 'right', 'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
+
 
 def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
             plot_type=None, ref_val=None, fig=None, ax=None, block_name='Logs', savefig=None, **kwargs):
@@ -284,6 +287,18 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
             edgecolor=edgecolor,
             label='_nolegend_',
             **kwargs
+        )
+        if i == len(constants)-1:
+            plt.text(
+                x[-1] + 150, y[-1] + .02, '$\phi={:.02f}$'.format(t[-1]),
+                **opt1)
+            plt.text(
+                x[0] + 150, y[0] + .02, '$\phi={:.02f}$'.format(t[0]),
+                **opt1)
+        plt.text(
+            x[-1]-200,
+            y[-1]-.015,'$S_w={:.02f}$'.format(const),
+            **opt2
         )
 
 def test():
