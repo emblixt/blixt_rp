@@ -1,21 +1,22 @@
+import logging
+from copy import deepcopy
+
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.lines import Line2D
 from matplotlib.font_manager import FontProperties
-from copy import deepcopy
-import logging
+from matplotlib.lines import Line2D
 
-from plotting import crossplot as xp
 import rp.rp_core as rp
+from plotting import crossplot as xp
 
 logger = logging.getLogger(__name__)
+# Styles useful for textboxes
 opt1 = {'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
 opt2 = {'ha': 'right', 'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
 
 
 def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
             plot_type=None, ref_val=None, fig=None, ax=None, block_name='Logs', savefig=None, **kwargs):
-
     """
     Plots some standard rock physics crossplots for the given wells
 
@@ -71,8 +72,6 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
     :param savefig
         str
         full pathname of file to save the plot to
-    :param **kwargs:
-        keyword arguments passed on to crossplot.plot()
     :return:
     """
     #
@@ -81,7 +80,6 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
         plot_type = 'AI-VpVs'
     elif plot_type == 'I-G' and ref_val is None:
         ref_val = [3500., 1700., 2.6]
-    log_types = list(logname_dict.keys())
     logs = list(logname_dict.values())
 
     #
@@ -130,7 +128,7 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
             x_unit = '{} {}'.format(well.block[block_name].logs[logname_dict['P velocity']].header.unit,
                                     well.block[block_name].logs[logname_dict['Density']].header.unit)
             y_data = well.block[block_name].logs[logname_dict['P velocity']].data / \
-                     well.block[block_name].logs[logname_dict['S velocity']].data
+                well.block[block_name].logs[logname_dict['S velocity']].data
             y_unit = '-'
             xtempl = {'full_name': 'AI', 'unit': x_unit}
             ytempl = {'full_name': 'Vp/Vs', 'unit': y_unit}
@@ -146,8 +144,8 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
                                   ref_val[2], well.block[block_name].logs[logname_dict['Density']].data)
             x_unit = '-'
             y_data = rp.gradient(ref_val[0], well.block[block_name].logs[logname_dict['P velocity']].data,
-                                  ref_val[1], well.block[block_name].logs[logname_dict['S velocity']].data,
-                                  ref_val[2], well.block[block_name].logs[logname_dict['Density']].data)
+                                 ref_val[1], well.block[block_name].logs[logname_dict['S velocity']].data,
+                                 ref_val[2], well.block[block_name].logs[logname_dict['Density']].data)
             y_unit = '-'
             xtempl = {'full_name': 'Intercept', 'unit': x_unit}
             ytempl = {'full_name': 'Gradient', 'unit': y_unit}
@@ -179,6 +177,7 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
                    lw=0, marker=templates[wname]['symbol'],
                    label=wname))
 
+    # noinspection PyUnusedLocal
     this_legend = ax.legend(
         legend_elements,
         well_names,
@@ -192,7 +191,7 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
 
 
 def ex_rpt(t, c, **kw):
-    return t, kw.pop('level', 7.)+np.log(min(t)) - np.log(t) + c
+    return t, kw.pop('level', 7.) + np.log(min(t)) - np.log(t) + c
 
 
 def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, **kwargs):
@@ -203,6 +202,8 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
         t = porosity
         x, y = rpt(t)  # x is AI, y is Vp/Vs
 
+    :param ax:
+    :param fig:
     :param t:
         np.array
         array of length N
@@ -244,7 +245,7 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
                 test_obj = np.broadcast_to(test_obj, (len(constants), len(test_obj)))
             elif len(test_obj.shape) == 2:
                 if not test_obj.shape == (len(constants), len(t)):
-                    raise IOError('Shape of input must match constants, and x: ({}, {})'.format(len(constants), len(x)))
+                    raise IOError('Shape of input must match constants, and x: ({}, {})'.format(len(constants), len(t)))
         if def_val == 90.:
             sizes = test_obj
         else:
@@ -263,7 +264,9 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
         vmax = np.max(colors)
         cmap = 'jet'
     else:
-        vmin = None; vmax = None; cmap=None
+        vmin = None
+        vmax = None
+        cmap = None
     for i, const in enumerate(constants):
         x, y = rpt(t, const, **rpt_keywords)
         # First draw lines of the RPT
@@ -288,7 +291,7 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
             label='_nolegend_',
             **kwargs
         )
-        if i == len(constants)-1:
+        if i == len(constants) - 1:
             plt.text(
                 x[-1] + 150, y[-1] + .02, '$\phi={:.02f}$'.format(t[-1]),
                 **opt1)
@@ -296,87 +299,81 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
                 x[0] + 150, y[0] + .02, '$\phi={:.02f}$'.format(t[0]),
                 **opt1)
         plt.text(
-            x[-1]-200,
-            y[-1]-.015,'$S_w={:.02f}$'.format(const),
+            x[-1] - 200,
+            y[-1] - .015, '$S_w={:.02f}$'.format(const),
             **opt2
         )
 
-def test():
-    from core.well import Project;
-    import utils.io as uio
 
-    vsh = 0.6; phic = 0.4; Cn = 8; P = 45; f = 0.3
-    RHO_hc = 0.2; K_hc = 0.06
-    RHO_b = 1.1; K_b = 2.8
-    RHO_qz = 2.6; K_qz = 37; MU_qz = 44
-    RHO_sh = 2.8; K_sh = 15; MU_sh = 5
+def test():
+    vsh = 0.6
+    phic = 0.4
+    cn = 8
+    p = 45
+    f = 0.3
+    RHO_hc = 0.2
+    K_hc = 0.06
+    RHO_b = 1.1
+    K_b = 2.8
+    RHO_qz = 2.6
+    K_qz = 37
+    MU_qz = 44
+    RHO_sh = 2.8
+    K_sh = 15
+    MU_sh = 5
 
     phi = np.linspace(0.1, phic, 6)
     sw = np.array([0., 0.5, 1.])
     sizes = np.empty((sw.size, phi.size))
-    colors = np.array([np.ones(6)*100*(i+1)**2 for i in range(3)])/900.
+    colors = np.array([np.ones(6) * 100 * (i + 1) ** 2 for i in range(3)]) / 900.
     # iterate over all phi values
     for i, val in enumerate(phi):
         sizes[:, i] = 10 + (40 * val) ** 2
 
-    def rpt(_phi, _sw, _vsh=vsh, _phic=phic, _cn=Cn, _p=P, _f=f,
+    def rpt(_phi, _sw, _vsh=vsh, _phic=phic, _cn=cn, _p=p, _f=f,
             _rho_b=RHO_b, _k_b=K_b,
             _rho_hc=RHO_hc, _k_hc=K_hc,
             _rho_qz=RHO_qz, _k_qz=K_qz, _mu_qz=MU_qz,
             _rho_sh=RHO_sh, _k_sh=K_sh, _mu_sh=MU_sh):
-
         print('phic: {}, Cn: {}, P: {}, f: {}'.format(_phic, _cn, _p, _f))
-        # Define the sw=1 case as the reference fluid
-        rho_f1 = _rho_b; k_f1 = _k_b
 
-        k_min = rp.vrh_bounds([_vsh, 1-_vsh], [_k_sh, _k_qz])[2]  # Mineral bulk modulus
+        k_min = rp.vrh_bounds([_vsh, 1 - _vsh], [_k_sh, _k_qz])[2]  # Mineral bulk modulus
         print('k_min: {}'.format(k_min))
-        mu_min = rp.vrh_bounds([_vsh, 1-_vsh], [_mu_sh, _mu_qz])[2]  # Mineral shear modulus
+        mu_min = rp.vrh_bounds([_vsh, 1 - _vsh], [_mu_sh, _mu_qz])[2]  # Mineral shear modulus
         print('mu_min: {}'.format(mu_min))
         rho_min = rp.vrh_bounds([_vsh, 1 - _vsh], [_rho_sh, _rho_qz])[0]  # Density of minerals
         print('rho_min: {}'.format(rho_min))
-        rho_1 = rho_min * (1 - phi) + rho_f1 * phi
 
         # Apply the RPT on the minerals
         k_dry, mu_dry = rp.stiffsand(k_min, mu_min, _phi, _phic, _cn, _p, _f)
         print('k_dry: {}, mu_dry: {}'.format(k_dry, mu_dry))
 
-        k_1 = rp.vrh_bounds([_phi, 1.-_phi], [k_f1, k_dry])[1]
-        mu_1 = rp.vrh_bounds([_phi, 1.-_phi], [0., mu_dry])[2]  # trying this instead of mu_dry in vs_1 and vp_1
-        vs_1 = np.sqrt(mu_1 / rho_1) * 1e3
-        vp_1 = np.sqrt((k_1 + 4. / 3 * mu_1) / rho_1) * 1e3
-        #if _sw == 1.0:
-        #    print('C:', _sw, _phi, v_p_1)
-        #    #return rho_1*v_p_1, v_p_1/v_s_1
-        #    return _phi, v_p_1
-
-        k_f2 = rp.vrh_bounds([_sw, 1.-_sw], [_k_b, _k_hc])[1]  # K_f
-        rho_f2 = rp.vrh_bounds([_sw, 1.-_sw],  [_rho_b, _rho_hc])[0]  #RHO_f
+        k_f2 = rp.vrh_bounds([_sw, 1. - _sw], [_k_b, _k_hc])[1]  # Bulk modulus of final fluid
+        rho_f2 = rp.vrh_bounds([_sw, 1. - _sw], [_rho_b, _rho_hc])[0]  # Density of final fluid
         print('sw: {}, K_f: {}, RHO_f: {}'.format(_sw, k_f2, rho_f2))
 
         vp_2, vs_2, rho_2, k_2 = rp.vels(k_dry, mu_dry, k_min, rho_min, k_f2, rho_f2, _phi)
-        #vp_2, vs_2, rho_2, k_2 = rp.gassmann_vel(vp_1, vs_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k_dry, _phi)  # dont give the same answer as using vels!!
-        return rho_2*vp_2, vp_2/vs_2
-        #return _phi, _vp2
+        return rho_2 * vp_2, vp_2 / vs_2
+        # return _phi, _vp2
 
-    #wp = Project()
-    #logname_dict = {'P velocity': 'vp_dry', 'S velocity': 'vs_dry', 'Density': 'rho_dry', 'Porosity': 'phie',
+    # wp = Project()
+    # logname_dict = {'P velocity': 'vp_dry', 'S velocity': 'vs_dry', 'Density': 'rho_dry', 'Porosity': 'phie',
     #                'Volume': 'vcl'}
-    #wis = uio.project_working_intervals(wp.project_table)
-    #templates = uio.project_templates(wp.project_table)
-    #cutoffs = {'Volume': ['<', 0.4], 'Porosity': ['>', 0.1]}
-    #wells = wp.load_all_wells()
+    # wis = uio.project_working_intervals(wp.project_table)
+    # templates = uio.project_templates(wp.project_table)
+    # cutoffs = {'Volume': ['<', 0.4], 'Porosity': ['>', 0.1]}
+    # wells = wp.load_all_wells()
 
     fig, ax = plt.subplots()
-    #plot_rp(wells, logname_dict, wis, 'SAND E', cutoffs, templates, fig=fig, ax=ax)
+    # plot_rp(wells, logname_dict, wis, 'SAND E', cutoffs, templates, fig=fig, ax=ax)
     plot_rpt(phi, rpt, sw, {}, sizes, colors, fig=fig, ax=ax)
     plt.show()
 
-if __name__ == '__main__':
-    #t = np.linspace(2000, 6000, 6)
-    #constants = [0, 1, 2]
-    #sizes = np.linspace(100, 200, 6)
-    #colors = np.array([np.ones(6)*100*(i+1) for i in range(3)])
-    #plot_rpt(t, ex_rpt, constants, {'level': 0}, sizes, colors)
-    test()
 
+if __name__ == '__main__':
+    # t = np.linspace(2000, 6000, 6)
+    # constants = [0, 1, 2]
+    # sizes = np.linspace(100, 200, 6)
+    # colors = np.array([np.ones(6)*100*(i+1) for i in range(3)])
+    # plot_rpt(t, ex_rpt, constants, {'level': 0}, sizes, colors)
+    test()
