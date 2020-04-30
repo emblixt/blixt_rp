@@ -1,21 +1,28 @@
 import unittest
 import matplotlib.pyplot as plt
+
 import utils.utils as uu
+import utils.io as uio
+from core.well import Project
 
 
 import numpy as np
 
 
 class PlotTestCase(unittest.TestCase):
+    wp = Project()
+    templates = uio.project_templates(wp.project_table)
 
+    print(templates.keys())
     def test_axis_header(self):
+        templ = PlotTestCase.templates
         fig, ax = plt.subplots()
-        lines = [[10, 20], [100, 200], [50, 75], [1000., 1.E6]]
-        legends = ['test1', 'test2', 'test3', 'test4']
-        styles = [{'lw': 1, 'color': 'k', 'ls': '-'},
-                  {'lw': 2, 'color': 'r', 'ls': '-'},
-                  {'lw': 0.5, 'color': 'k', 'ls': '--'},
-                  {'lw': 3, 'color': 'b', 'ls': 'dotted'}]
+        log_types = ['P velocity', 'Density', 'Caliper', 'Resistivity']
+        lines = [[templ[x]['min'], templ[x]['max']] for x in log_types]
+        legends = ['test [{}]'.format(templ[x]['unit']) for x in log_types]
+        styles = [{'lw': templ[x]['line width'],
+                   'color': templ[x]['line color'],
+                   'ls': templ[x]['line style']} for x in log_types]
         uu.axis_header(ax, lines, legends, styles)
         plt.show()
         with self.subTest():

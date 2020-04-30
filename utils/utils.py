@@ -210,9 +210,9 @@ def axis_header(ax, lines, legends, styles):
     n = 8
     for i in range(len(lines)):
         ax.plot([1, 2],  [n-1-2*i, n-1-2*i], **styles[i])
-        ax.text(1-0.03, n-1-2*i, str(lines[i][0]), ha='right', va='center')
-        ax.text(2+0.03, n-1-2*i, str(lines[i][1]), ha='left', va='center')
-        ax.text(1.5, n-1-2*i+0.05, legends[i], ha='center')
+        ax.text(1-0.03, n-1-2*i, str(lines[i][0]), ha='right', va='center', fontsize='smaller')
+        ax.text(2+0.03, n-1-2*i, str(lines[i][1]), ha='left', va='center', fontsize='smaller')
+        ax.text(1.5, n-1-2*i+0.05, legends[i], ha='center', fontsize='smaller')
 
     ax.set_xlim(0.8, 2.2)
     ax.get_xaxis().set_ticks([])

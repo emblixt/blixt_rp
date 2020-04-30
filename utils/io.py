@@ -80,8 +80,11 @@ def project_templates(filename):
     table = pd.read_excel(filename, header=1, sheet_name='Templates')
     result = {}
     for i, ans in enumerate(table['Log type']):
+        if not isinstance(ans, str):
+            continue
         result[ans] = {}
-        for key in ['bounds', 'center', 'colormap', 'description', 'max', 'min', 'scale', 'type', 'unit']:
+        for key in ['bounds', 'center', 'colormap', 'description', 'max', 'min',
+                    'scale', 'type', 'unit', 'line color', 'line style', 'line width']:
             result[ans][key] = None if isnan(table[key][i]) else table[key][i]
         result[ans]['full_name'] = ans
 
