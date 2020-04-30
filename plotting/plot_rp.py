@@ -7,6 +7,7 @@ import logging
 
 from plotting import crossplot as xp
 import rp.rp_core as rp
+import core.well as cw
 
 logger = logging.getLogger(__name__)
 opt1 = {'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
@@ -14,7 +15,7 @@ opt2 = {'ha': 'right', 'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': '
 
 
 def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
-            plot_type=None, ref_val=None, fig=None, ax=None, block_name='Logs', savefig=None, **kwargs):
+            plot_type=None, ref_val=None, fig=None, ax=None, block_name=None, savefig=None, **kwargs):
 
     """
     Plots some standard rock physics crossplots for the given wells
@@ -77,18 +78,27 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
     """
     #
     # some initial setups
+    if block_name is None:
+        block_name = cw.def_lb_name
+
+    _savefig = False
     if plot_type is None:
         plot_type = 'AI-VpVs'
     elif plot_type == 'I-G' and ref_val is None:
         ref_val = [3500., 1700., 2.6]
-    log_types = list(logname_dict.keys())
     logs = list(logname_dict.values())
+    if savefig is not None:
+        _savefig = True
 
     #
     # set up plotting environment
     if fig is None:
-        fig = plt.figure(figsize=(10, 10))
-    if ax is None:
+        if ax is None:
+            fig = plt.figure(figsize=(10, 10))
+            ax = fig.subplots()
+        else:  # Only ax is set, but not fig. Which means all functionality calling fig must be turned off
+            _savefig = False
+    elif ax is None:
         ax = fig.subplots()
 
     # load
@@ -187,12 +197,8 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
         markerscale=2,
         loc=1)
 
-    if savefig is not None:
+    if _savefig:
         fig.savefig(savefig)
-
-
-def ex_rpt(t, c, **kw):
-    return t, kw.pop('level', 7.)+np.log(min(t)) - np.log(t) + c
 
 
 def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, **kwargs):
@@ -229,9 +235,15 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
         str or np.array
         determines the colors of the markers
         in np.array it must be same size as x
+    :return
+        all_x, all_y
+        lists of len(constants) ndarray's of x and y data that can be used to
+        annotate the plot
     """
     #
     # some initial setups
+    all_x = []
+    all_y = []
     lw = kwargs.pop('lw', 0.5)
     tc = kwargs.pop('c', 'k')
     edgecolor = kwargs.pop('edgecolor', 'none')
@@ -253,123 +265,149 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
     #
     # set up plotting environment
     if fig is None:
-        fig = plt.figure(figsize=(10, 10))
-    if ax is None:
+        if ax is None:
+            fig = plt.figure(figsize=(10, 10))
+            ax = fig.subplots()
+    elif ax is None:
         ax = fig.subplots()
 
+    #
     # start drawing the RPT
     if not isinstance(colors, str):
         vmin = np.min(colors)
         vmax = np.max(colors)
         cmap = 'jet'
     else:
-        vmin = None; vmax = None; cmap=None
+        vmin = None; vmax = None; cmap = None
     for i, const in enumerate(constants):
         x, y = rpt(t, const, **rpt_keywords)
+        all_x.append(x)
+        all_y.append(y)
         # First draw lines of the RPT
-        ax.plot(
-            x,
-            y,
-            lw=lw,
-            c=tc,
-            label='_nolegend_',
-            **kwargs
-        )
+        ax.plot(x, y, lw=lw, c=tc, label='_nolegend_', **kwargs)
         # Next draw the points
-        ax.scatter(
-            x,
-            y,
-            c=colors if isinstance(colors, str) else colors[i],
-            s=sizes[i] if isinstance(sizes, np.ndarray) else float(sizes),
-            vmin=vmin,
-            vmax=vmax,
-            cmap=cmap,
-            edgecolor=edgecolor,
-            label='_nolegend_',
-            **kwargs
-        )
-        if i == len(constants)-1:
-            plt.text(
-                x[-1] + 150, y[-1] + .02, '$\phi={:.02f}$'.format(t[-1]),
-                **opt1)
-            plt.text(
-                x[0] + 150, y[0] + .02, '$\phi={:.02f}$'.format(t[0]),
-                **opt1)
-        plt.text(
-            x[-1]-200,
-            y[-1]-.015,'$S_w={:.02f}$'.format(const),
-            **opt2
-        )
+        ax.scatter(x, y, c=colors if isinstance(colors, str) else colors[i],
+                   s=sizes[i] if isinstance(sizes, np.ndarray) else float(sizes),
+                   vmin=vmin, vmax=vmax, cmap=cmap, edgecolor=edgecolor,
+                   label='_nolegend_', **kwargs)
+
+    return all_x, all_y
+
+def rpt_phi_sw(_phi, _sw, **kwargs):
+    plot_type = kwargs.pop('plot_type', 'AI-VpVs')
+    ref_val = kwargs.pop('ref_val', [3500., 1700., 2.6])  # ref values of Vp, Vs and rho for calculating I x G
+    model = kwargs.pop('model', 'stiff')
+    phic = kwargs.pop('phic', 0.4)  # critical porosity
+    cn = kwargs.pop('cn', 8)  # coordination number, average number of contacts per grain
+    p = kwargs.pop('p', 10)  # Confining pressure in MPa (effective pressure?)
+    f = kwargs.pop('f', 0.3)  # shear modulus correction factor  (1=dry pack with perfect adhesion, 0=dry frictionless pack)
+    rho_b = kwargs.pop('rho_b', 1.1)  # Brine density  g/cm3
+    k_b = kwargs.pop('k_b', 2.8)   # Brine bulk modulus  GPa
+    rho_hc = kwargs.pop('rho_hc', 0.2)  # HC density
+    k_hc = kwargs.pop('k_hc', 0.06)  # HC bulk modulus
+    rho_min = kwargs.pop('rho_min', 2.7)  # Density [g/cm3] of mineral mix
+    k_min = kwargs.pop('k_min', 30.)  # Bulk modulus GPa of mineral mix
+    mu_min = kwargs.pop('mu_min', 20.)  # Shear modulus of mineral mix
+
+    # Apply the rock physics model to modify the mineral properties
+    if model == 'stiff':
+        k_dry, mu_dry = rp.stiffsand(k_min, mu_min, _phi, phic, cn, p, f)
+    else:
+        k_dry, mu_dry = rp.softsand(k_min, mu_min, _phi, phic, cn, p, f)
+
+    # Calculate the final fluid properties for the given water saturation
+    k_f2 = rp.vrh_bounds([_sw, 1.-_sw], [k_b, k_hc])[1]  # K_f
+    rho_f2 = rp.vrh_bounds([_sw, 1.-_sw],  [rho_b, rho_hc])[0]  #RHO_f
+
+    # Use Gassman to calculate the final elastic properties
+    vp_2, vs_2, rho_2, k_2 = rp.vels(k_dry, mu_dry, k_min, rho_min, k_f2, rho_f2, _phi)
+
+    if plot_type == 'AI-VpVs':
+        xx = rho_2*vp_2
+        yy = vp_2/vs_2
+    elif plot_type == 'Phi-Vp':
+        xx = _phi
+        yy = vp_2
+    elif plot_type == 'I-G':
+        xx = rp.intercept(ref_val[0], vp_2, ref_val[2], rho_2)
+        yy = rp.gradient(ref_val[0], vp_2, ref_val[1], vs_2, ref_val[2], rho_2)
+    else:
+        raise IOError('No valid plot_type selected')
+
+    return xx, yy
 
 def test():
     from core.well import Project;
     import utils.io as uio
+    from core.minerals import MineralMix
+    wi_name = 'SAND E'
 
-    vsh = 0.6; phic = 0.4; Cn = 8; P = 45; f = 0.3
-    RHO_hc = 0.2; K_hc = 0.06
-    RHO_b = 1.1; K_b = 2.8
-    RHO_qz = 2.6; K_qz = 37; MU_qz = 44
-    RHO_sh = 2.8; K_sh = 15; MU_sh = 5
+    plot_type = 'AI-VpVs'
+    ref_val = [2695., 1340., 2.35]  # Kvitnos shale
 
-    phi = np.linspace(0.1, phic, 6)
-    sw = np.array([0., 0.5, 1.])
+    fig, ax = plt.subplots()
+
+    wp = Project()
+    logname_dict = {'P velocity': 'vp_dry', 'S velocity': 'vs_dry', 'Density': 'rho_dry', 'Porosity': 'phie',
+                    'Volume': 'vcl'}
+    wis = uio.project_working_intervals(wp.project_table)
+    templates = uio.project_templates(wp.project_table)
+    cutoffs = {'Volume': ['<', 0.4], 'Porosity': ['>', 0.1]}
+    wells = wp.load_all_wells()
+    plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates,
+            plot_type=plot_type, ref_val=ref_val, fig=fig, ax=ax)
+
+    # Calculate average properties of mineral mix in desired working interval
+    mm = MineralMix()
+    mm.read_excel(wp.project_table)
+    _rho_min = np.ones(0)  # zero length empty array
+    _k_min = np.ones(0)
+    _mu_min = np.ones(0)
+    for well in wells.values():
+        # calculate the mask for the given cut-offs, and for the given working interval
+        well.calc_mask(cutoffs, wis=wis, wi_name=wi_name, name='this_mask')
+        mask = well.block['Logs'].masks['this_mask'].data
+
+        _rho_min = np.append(_rho_min, well.calc_vrh_bounds(mm, param='rho', wis=wis, method='Voigt')[wi_name][mask])
+        _k_min = np.append(_k_min, well.calc_vrh_bounds(mm, param='k', wis=wis, method='Voigt-Reuss-Hill')[wi_name][mask])
+        _mu_min = np.append(_mu_min, well.calc_vrh_bounds(mm, param='mu', wis=wis, method='Voigt-Reuss-Hill')[wi_name][mask])
+
+    rho_min = np.nanmean(_rho_min)
+    k_min = np.nanmean(_k_min)
+    mu_min = np.nanmean(_mu_min)
+
+    phi = np.linspace(0.05, 0.3, 6)
+    sw = np.array([0.8, 0.95, 1.])
     sizes = np.empty((sw.size, phi.size))
-    colors = np.array([np.ones(6)*100*(i+1)**2 for i in range(3)])/900.
+    colors = np.array([np.ones(6) * 100 * (i + 1) ** 2 for i in range(3)]) / 900.
     # iterate over all phi values
     for i, val in enumerate(phi):
         sizes[:, i] = 10 + (40 * val) ** 2
 
-    def rpt(_phi, _sw, _vsh=vsh, _phic=phic, _cn=Cn, _p=P, _f=f,
-            _rho_b=RHO_b, _k_b=K_b,
-            _rho_hc=RHO_hc, _k_hc=K_hc,
-            _rho_qz=RHO_qz, _k_qz=K_qz, _mu_qz=MU_qz,
-            _rho_sh=RHO_sh, _k_sh=K_sh, _mu_sh=MU_sh):
+    xx, yy = plot_rpt(phi, rpt_phi_sw, sw,
+             {'plot_type': plot_type,
+              'ref_value': ref_val,
+              'model': 'stiff',
+              'rho_min': rho_min,
+              'k_min': k_min,
+              'mu_min': mu_min},
+             sizes, colors, fig=fig, ax=ax)
 
-        print('phic: {}, Cn: {}, P: {}, f: {}'.format(_phic, _cn, _p, _f))
-        # Define the sw=1 case as the reference fluid
-        rho_f1 = _rho_b; k_f1 = _k_b
+    # Annotate rpt
+    dx = 0; dy = 0.0
+    plt.text(
+        xx[-1][-1] + dx, yy[-1][-1] + dy, '$\phi={:.02f}$'.format(phi[-1]),
+        **opt1)
+    plt.text(
+        xx[-1][0] + dx, yy[-1][0] + dy, '$\phi={:.02f}$'.format(phi[0]),
+        **opt1)
+    for i, _sw in enumerate(sw):
+        plt.text(
+            xx[i][-1] + dx,
+            yy[i][-1] + dy, '$S_w={:.02f}$'.format(_sw),
+            **opt2
+        )
 
-        k_min = rp.vrh_bounds([_vsh, 1-_vsh], [_k_sh, _k_qz])[2]  # Mineral bulk modulus
-        print('k_min: {}'.format(k_min))
-        mu_min = rp.vrh_bounds([_vsh, 1-_vsh], [_mu_sh, _mu_qz])[2]  # Mineral shear modulus
-        print('mu_min: {}'.format(mu_min))
-        rho_min = rp.vrh_bounds([_vsh, 1 - _vsh], [_rho_sh, _rho_qz])[0]  # Density of minerals
-        print('rho_min: {}'.format(rho_min))
-        rho_1 = rho_min * (1 - phi) + rho_f1 * phi
-
-        # Apply the RPT on the minerals
-        k_dry, mu_dry = rp.stiffsand(k_min, mu_min, _phi, _phic, _cn, _p, _f)
-        print('k_dry: {}, mu_dry: {}'.format(k_dry, mu_dry))
-
-        k_1 = rp.vrh_bounds([_phi, 1.-_phi], [k_f1, k_dry])[1]
-        mu_1 = rp.vrh_bounds([_phi, 1.-_phi], [0., mu_dry])[2]  # trying this instead of mu_dry in vs_1 and vp_1
-        vs_1 = np.sqrt(mu_1 / rho_1) * 1e3
-        vp_1 = np.sqrt((k_1 + 4. / 3 * mu_1) / rho_1) * 1e3
-        #if _sw == 1.0:
-        #    print('C:', _sw, _phi, v_p_1)
-        #    #return rho_1*v_p_1, v_p_1/v_s_1
-        #    return _phi, v_p_1
-
-        k_f2 = rp.vrh_bounds([_sw, 1.-_sw], [_k_b, _k_hc])[1]  # K_f
-        rho_f2 = rp.vrh_bounds([_sw, 1.-_sw],  [_rho_b, _rho_hc])[0]  #RHO_f
-        print('sw: {}, K_f: {}, RHO_f: {}'.format(_sw, k_f2, rho_f2))
-
-        vp_2, vs_2, rho_2, k_2 = rp.vels(k_dry, mu_dry, k_min, rho_min, k_f2, rho_f2, _phi)
-        #vp_2, vs_2, rho_2, k_2 = rp.gassmann_vel(vp_1, vs_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k_dry, _phi)  # dont give the same answer as using vels!!
-        return rho_2*vp_2, vp_2/vs_2
-        #return _phi, _vp2
-
-    #wp = Project()
-    #logname_dict = {'P velocity': 'vp_dry', 'S velocity': 'vs_dry', 'Density': 'rho_dry', 'Porosity': 'phie',
-    #                'Volume': 'vcl'}
-    #wis = uio.project_working_intervals(wp.project_table)
-    #templates = uio.project_templates(wp.project_table)
-    #cutoffs = {'Volume': ['<', 0.4], 'Porosity': ['>', 0.1]}
-    #wells = wp.load_all_wells()
-
-    fig, ax = plt.subplots()
-    #plot_rp(wells, logname_dict, wis, 'SAND E', cutoffs, templates, fig=fig, ax=ax)
-    plot_rpt(phi, rpt, sw, {}, sizes, colors, fig=fig, ax=ax)
     plt.show()
 
 if __name__ == '__main__':

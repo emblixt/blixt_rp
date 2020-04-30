@@ -229,10 +229,11 @@ def plot(
 
     # set up plotting environment
     if fig is None:
-        fig = plt.figure(figsize=(10,10))
-    if ax is None:
+        if ax is None:
+            fig = plt.figure(figsize=(10,10))
+            ax = fig.subplots()
+    elif ax is None:
         ax = fig.subplots()
-
 
     # handle markers
     msymbol = None

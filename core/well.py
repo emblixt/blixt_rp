@@ -488,6 +488,8 @@ class Well(object):
             np.ndarray
             Voigt / Reuss / Hill bounds of parameter 'param'
         """
+        # TODO
+        # Subdivide this function into several subroutines, so that it can be used more easily elsewhere
         if block_name is None:
             block_name = def_lb_name
         obj = None
@@ -900,12 +902,20 @@ class Well(object):
         :param kwargs:
         :return:
         """
+        _savefig = False
+        if savefig is not None:
+            _savefig = True
 
         # set up plotting environment
         if fig is None:
-            fig = plt.figure(figsize=(8,10))
-        if ax is None:
+            if ax is None:
+                fig = plt.figure(figsize=(8,10))
+                ax = fig.subplots()
+            else:
+                _savefig = False
+        elif ax is None:
             ax = fig.subplots()
+
         show_masked = kwargs.pop('show_masked', False)
 
         if log_name is not None:
@@ -977,7 +987,7 @@ class Well(object):
             markerscale=2,
             loc=1
         )
-        if savefig is not None:
+        if _savefig:
             fig.savefig(savefig)
 
 
