@@ -183,38 +183,3 @@ def conv_tops_to_wis(tops, intervals):
     return working_intervals
 
 
-def axis_header(ax, lines, legends, styles):
-    """
-    Tries to create a "header" to a plot, similar to what is used in RokDoc and many CPI plots
-    :param ax:
-        matplotlib axes object
-    :param lines:
-        list
-        list of lists, each with min, max value of respective lines, e.g.
-        [[0, 150], [6, 16], ...]
-        Should not be more than 4 items in this list
-    :param legends:
-        list
-        list of strings, that should annotate the respective lines
-    :param styles:
-        list
-        list of dicts which describes the line styles
-        E.G. [{'lw':1, 'color':'k', 'ls':'-'}, {'lw':2, 'color':'r', 'ls':'-'}, ... ]
-    :return:
-    """
-
-    if not (len(lines) == len(legends) == len(styles)):
-        raise IOError('Must be same number of items in lines, legends and styles')
-
-    # Sub divide plot in this number of horizontal parts
-    n = 8
-    for i in range(len(lines)):
-        ax.plot([1, 2],  [n-1-2*i, n-1-2*i], **styles[i])
-        ax.text(1-0.03, n-1-2*i, str(lines[i][0]), ha='right', va='center', fontsize='smaller')
-        ax.text(2+0.03, n-1-2*i, str(lines[i][1]), ha='left', va='center', fontsize='smaller')
-        ax.text(1.5, n-1-2*i+0.05, legends[i], ha='center', fontsize='smaller')
-
-    ax.set_xlim(0.8, 2.2)
-    ax.get_xaxis().set_ticks([])
-    ax.set_ylim(0.5, 8)
-    ax.get_yaxis().set_ticks([])
