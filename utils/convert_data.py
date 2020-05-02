@@ -37,6 +37,18 @@ def convert(in_data, from_unit=None, to_unit=None):
         else:
             success = False
 
+    if from_unit == 'g/cm3':
+        if to_unit == 'kg/m3':
+            return 1000. * in_data
+        else:
+            success = False
+
+    if from_unit == 'ft' or from_unit == 'feet':
+        if to_unit == 'm':
+            return in_data / 3.28084
+        else:
+            success = False
+
     else:
         success = False
 

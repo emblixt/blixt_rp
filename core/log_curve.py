@@ -9,7 +9,23 @@ Module for handling LogCurve objects
 from utils.attribdict import AttribDict
 from utils.utils import arrange_logging, info
 from datetime import datetime
+from copy import deepcopy
 import numpy as np
+
+
+def rolling_window(a, window):
+    """
+    After
+    https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
+    :param a:
+    :param window:
+    :return:
+    """
+    shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
+    strides = a.strides + (a.strides[-1],)
+    rolled = np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
+    return rolled
+
 
 class Header(AttribDict):
     """
@@ -115,6 +131,23 @@ class LogCurve(object):
         return log_type
 
     log_type = property(get_log_type)
+
+    def smooth(self, window=None):
+        if window is None:
+            window = 13  # Around 2 meters in most wells
+        _tmp = np.median(rolling_window(self.data, window), -1)
+        out = np.pad(_tmp, int(window/2), mode='edge')
+        print('Max diff between smoothed and original version:', np.nanmax(self.data - out))
+        return out
+
+    def despike(self, max_clip, window=None):
+        smooth = self.smooth(window)
+        spikes = np.where(self.data - smooth > max_clip)[0]
+        spukes = np.where(smooth - self.data > max_clip)[0]
+        out = deepcopy(self.data)
+        out[spikes] = smooth[spikes] + max_clip  # Clip at the max allowed diff
+        out[spukes] = smooth[spukes] - max_clip  # Clip at the min allowed diff
+        return out
 
     #def get_log_name(self):
     #    log_name = None

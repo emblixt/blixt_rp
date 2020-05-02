@@ -764,6 +764,8 @@ def convert(lines, file_format='las', rename_well_logs=None):
         where the key is the wanted well log name, and the value list is a list of well log names to translate from
 
     """
+    # TODO
+    # Remove the usage of rename_well_logs
     if rename_well_logs is None:
         rename_well_logs = {'depth': ['Depth', 'DEPT', 'MD', 'DEPTH']}
     elif isinstance(rename_well_logs, dict) and ('depth' not in list(rename_well_logs.keys())):
@@ -789,7 +791,9 @@ def convert(lines, file_format='las', rename_well_logs=None):
         """
         for rname, value in rename_well_logs.items():
             if _key.lower() in [x.lower() for x in value]:
-                logger.info('Renaming log from {} to {}'.format(_key, rname))
+                info_txt = 'Renaming log from {} to {}'.format(_key, rname)
+                print('INFO: {}'.format(info_txt))
+                logger.info(info_txt)
                 return rname.lower()
         else:
             return _key
@@ -849,7 +853,8 @@ def convert(lines, file_format='las', rename_well_logs=None):
             if section == "data":
                 generated_keys = [e.lower() for e in well_dict["curve"].keys()]
                 for key in generated_keys:
-                    key = rename_log_name(key)
+                    # XXX
+                    #key = rename_log_name(key)
                     # inital all key to empty list
                     well_dict = add_section(well_dict, section, key, [])
 
@@ -902,7 +907,8 @@ def convert(lines, file_format='las', rename_well_logs=None):
 
             # divide line
             mnem = line[:mnem_end - 1].strip()
-            mnem = rename_log_name(mnem)
+            # XXX
+            # mnem = rename_log_name(mnem)
             unit = line[mnem_end:unit_end].strip()
             data = line[unit_end:colon_end].strip()
             desc = line[colon_end + 1:].strip()

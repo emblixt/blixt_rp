@@ -1228,6 +1228,25 @@ class Well(object):
             only_these_logs = {only_these_logs.lower(): None}
 
         null_val, generated_keys, well_dict = _read_las(filename, rename_well_logs=rename_well_logs)
+        # TODO
+        # Make the below test a result. Remove comments about test, and remove the usage of rename_well_logs in io.convert
+        # XXX
+        # test doing the rename after _read_las instead of inside it
+        if rename_well_logs is None:
+            rename_well_logs = {'depth': ['Depth', 'DEPT', 'MD', 'DEPTH']}
+        elif isinstance(rename_well_logs, dict) and ('depth' not in list(rename_well_logs.keys())):
+            rename_well_logs['depth'] = ['Depth', 'DEPT', 'MD', 'DEPTH']
+
+        for key in list(well_dict['curve'].keys()):
+            for rname, value in rename_well_logs.items():
+                if key.lower() in [x.lower() for x in value]:
+                    info_txt = 'Renaming log from {} to {}'.format(key, rname)
+                    print('INFO: {}'.format(info_txt))
+                    logger.info(info_txt)
+                    well_dict['curve'][rname.lower()] = well_dict['curve'].pop(key)
+                    well_dict['data'][rname.lower()] = well_dict['data'].pop(key)
+        # End of test
+        # XXX
         logger.debug('Reading {}'.format(filename))
         if well_dict['version']['vers']['value'] not in supported_version:
             raise Exception("Version {} not supported!".format(
@@ -1264,7 +1283,7 @@ class Well(object):
                 )
                 ans = input(question)
                 logger.info('{}: {}'.format(question, ans))
-                if 'y' in ans.lower:
+                if 'y' in ans.lower():
                     add_well = True
                 else:
                     add_well = False

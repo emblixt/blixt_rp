@@ -8,7 +8,11 @@ from collections import namedtuple
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import least_squares
+import os
+
 import curve_fitting as mycf
+import rp.rp_core as rp
+import plotting.plot_logs as ppl
 
 
 def straight_line(x, a, b):
@@ -176,6 +180,256 @@ def ricker(duration, dt, f, return_t=False):
     else:
         return w
 
+
+def test_synt():
+    """
+    https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
+    :return:
+    """
+    import utils.io as uio
+    import plotting.plot_logs as ppl
+    from core.well import Project
+    from core.well import Well
+    import utils.convert_data as ucd
+
+    wp = Project()
+    well_table = {os.path.join(wp.working_dir, 'test_data/L-30.las'):
+                      {'Given well name': 'WELL_L',
+                       'logs': {
+                           'dt': 'Sonic',
+                           'cald': 'Caliper',
+                           'cals': 'Caliper',
+                           'rhob': 'Density',
+                           'grd': 'Gamma ray',
+                           'grs': 'Gamma ray',
+                           'ild': 'Resistivity',
+                           'ilm': 'Resistivity',
+                           'll8': 'Resistivity',
+                           'nphils': 'Neutron density'},
+                       'Note': 'Some notes for well A'}}
+    wis = uio.project_working_intervals(wp.project_table)
+    w = Well()
+    w.read_well_table(
+        well_table,
+        0,
+        block_name='Logs')
+
+    depth = w.block['Logs'].logs['depth'].data / 3.28084  # feet to m
+    rho_orig = w.block['Logs'].logs['rhob'].data * 1000.  # g/cm3 to kg/m3
+    vp_orig = ucd.convert(w.block['Logs'].logs['dt'].data, 'us/ft', 'm/s')
+    dt_orig = w.block['Logs'].logs['dt'].data * 3.2804  # convert usec/ft to usec/m
+
+    #
+    # Start of copying the notebook results:
+    # https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
+    #
+    def f2m(item_in_feet):
+        "converts feet to meters"
+        try:
+            return item_in_feet / 3.28084
+        except TypeError:
+            return float(item_in_feet) / 3.28084
+
+    kb = f2m(w.header.kb.value)
+    water_depth = f2m(w.header.gl.value)
+    #top_of_log = f2m(w.block['Logs'].header.strt.value)  # there is an error in the header
+    top_of_log = np.min(depth)  # use the actual depth log instead
+    repl_int = top_of_log - kb + water_depth
+    water_vel = 1480  # m/s
+    EGL_time = 2.0 * np.abs(kb)/water_vel
+    #water_twt = 2.0 * abs(water_depth + EGL_time) / water_vel # ORIG THIS SEEMS LIKE MIXING distance with time!
+    water_twt = 2.0 * abs(water_depth + np.abs(kb)) / water_vel  # My version
+    repl_vel = 1600.  # m/s
+    repl_time = 2. * repl_int / repl_vel
+    log_start_time = water_twt + repl_time
+
+    print('KB elevation: {} [m]'.format(kb))
+    print('Seafloor elevation: {} [m]'.format(water_depth))
+    print('Ground level time above SRD: {} [s]'.format(EGL_time))
+    print('Water time: {} [s]'.format(water_twt))
+    print('Top of Sonic log: {} [m]'.format(top_of_log))
+    print('Replacement interval: {} [m]'.format(repl_int))
+    print('Two-way replacement time: {} [s]'.format(repl_time))
+    print('Top-of-log starting time: {} [s]'.format(log_start_time))
+
+    def tvdss(md):
+        # Assumes a vertical well
+        # md in meter
+        return md - kb
+
+    def rolling_window(a, window):
+        shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
+        strides = a.strides + (a.strides[-1],)
+        rolled = np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
+        return rolled
+
+    #plt.figure(figsize=(18, 4))
+    #plt.plot(depth, rho_sm, 'b', depth, rho, 'k', alpha=0.5)
+
+    def despike(curve, curve_sm, max_clip):
+        spikes = np.where(curve - curve_sm > max_clip)[0]
+        spukes = np.where(curve_sm - curve > max_clip)[0]
+        out = np.copy(curve)
+        out[spikes] = curve_sm[spikes] + max_clip  # Clip at the max allowed diff
+        out[spukes] = curve_sm[spukes] - max_clip  # Clip at the min allowed diff
+        return out
+
+    window = 13  # the length of filter is 13 samples or ~ 2 metres
+
+    # Density
+    rho_sm = np.median(rolling_window(rho_orig, window), -1)
+    rho_sm = np.pad(rho_sm, int(window / 2), mode='edge')
+    rho = despike(rho_orig, rho_sm, max_clip=100)
+    rho_test = w.block['Logs'].logs['rhob'].despike(0.1) * 1000.  # g/cm3 to kg/m3
+
+
+    # dt
+    dt_sm = np.median(rolling_window(dt_orig, window), -1)
+    dt_sm = np.pad(dt_sm, int(window/2), mode='edge')
+    dt = despike(dt_orig, dt_sm, max_clip=10)
+
+    # My test of despiking the velocity directly
+    vp_sm = np.median(rolling_window(vp_orig, window), -1)
+    vp_sm = np.pad(vp_sm, int(window/2), mode='edge')
+    vp = despike(vp_orig, vp_sm, max_clip=200)
+
+
+    # Plot result of despiking
+    start = 13000; end = 14500
+    plot = True
+    if plot:
+        plt.figure(figsize=(18, 4))
+        plt.plot(depth[start:end], rho_orig[start:end], 'b', lw = 3)
+        #plt.plot(depth[start:end], rho_sm[start:end], 'b')
+        plt.plot(depth[start:end], rho[start:end], 'r', lw=2)
+        plt.plot(depth[start:end], rho_test[start:end], 'k--')
+        plt.title('de-spiked density')
+
+        #plt.figure(figsize=(18, 4))
+        #plt.plot(depth[start:end], dt_orig[start:end], 'k')
+        #plt.plot(depth[start:end], dt_sm[start:end], 'b')
+        #plt.plot(depth[start:end], dt[start:end], 'r')
+        #plt.title('de-spiked sonic')
+
+        #plt.figure(figsize=(18, 4))
+        #plt.plot(depth[start:end], vp_orig[start:end], 'k')
+        #plt.plot(depth[start:end], vp_sm[start:end], 'b')
+        #plt.plot(depth[start:end], vp[start:end], 'r')
+        #plt.title('de-spiked Vp')
+
+
+    # Compute the time-depth relationship
+    # two-way-time to depth relationship
+    scaled_dt = 0.1524 * np.nan_to_num(dt) / 1.e6  # scale the sonic log by the sample interval (6 inches or 0.1524 m)
+                                                   # and go from usec to sec
+    tcum = 2 * np.cumsum(scaled_dt)  # integration
+    tdr = tcum + log_start_time
+
+    # Compute acoustic impedance
+    ai = (1e6 / dt) * rho
+
+    # Compute reflection
+    rc = (ai[1:] - ai[:-1]) / (ai[1:] + ai[:-1])
+
+    # Compute reflection "my way"
+    r0 = rp.intercept(vp, None, rho, None, no_layer=True)
+    #  The difference between rc and r0 lies basically in the difference in smoothing and clipping of dt vs. vp
+
+    plot = False
+    if plot:
+        plt.figure(figsize=(18, 4))
+        plt.plot(depth[start:end], rc[start:end], 'k')
+        plt.plot(depth[start:end], r0[start:end], 'b')
+        plt.title('Comparison of reflection coefficients')
+        plt.legend(['Notebook way', 'My way'])
+
+    def find_nearest(array, value):
+        idx = (np.abs(array - value)).argmin()
+        return idx
+
+    tops = {}
+    for _key in list(wis['WELL_L'].keys()):
+        tops[_key] = wis['WELL_L'][_key][0]
+    tops_twt = {}
+    for _key in list(wis['WELL_L'].keys()):
+        tops_twt[_key] = tdr[find_nearest(depth, wis['WELL_L'][_key][0])]
+
+    # RESAMPLING FUNCTION
+    t_step = 0.004
+    max_t = 3.0
+    t = np.arange(0, max_t, t_step)
+    ai_t = np.interp(x=t, xp=tdr, fp=ai)
+    rc_t = (ai_t[1:] - ai_t[:-1]) / (ai_t[1:] + ai_t[:-1])
+
+    # Compute the depth-time relation
+    dtr = np.array([depth[find_nearest(tdr, tt)] for tt in t])
+
+    # Define a Ricker wavelet
+    def ricker(_f, _length, _dt):
+        _t = np.linspace(-_length / 2, (_length - _dt) / 2, _length / _dt)
+        _y = (1. - 2. * (np.pi ** 2) * (_f ** 2) * (_t ** 2)) * np.exp(-(np.pi ** 2) * (_f ** 2) * (_t ** 2))
+        return _t, _y
+
+    # Do the convolution
+    rc_t = np.nan_to_num(rc_t)
+    tw, w = ricker(_f=25, _length=0.512, _dt=0.004)
+    synth = np.convolve(w, rc_t, mode='same')
+
+    plot = False
+    if plot:
+        f2 = plt.figure(figsize=[10, 12])
+
+        ax1 = f2.add_axes([0.05, 0.1, 0.2, 0.9])
+        ax1.plot(ai, depth, 'k', alpha=0.75)
+        ax1.set_title('impedance')
+        ax1.set_ylabel('measured depth ' + '$[m]$', fontsize='12')
+        ax1.set_xlabel(r'$kg/m^2s^2$ ', fontsize='16')
+        ax1.set_ylim(0, 4500)
+        ax1.set_xticks([0.0e7, 0.5e7, 1.0e7, 1.5e7, 2.0e7])
+        ax1.invert_yaxis()
+        ax1.grid()
+
+        ax2 = f2.add_axes([0.325, 0.1, 0.2, 0.9])
+        ppl.wiggle_plot(ax2, dtr[:-1], synth, fill='pos')
+        ax2.set_ylim(0, 4500)
+        ax2.invert_yaxis()
+        ax2.grid()
+
+        ax3 = f2.add_axes([0.675, 0.1, 0.1, 0.9])
+        ax3.plot(ai_t, t, 'k', alpha=0.75)
+        ax3.set_title('impedance')
+        ax3.set_ylabel('two-way time ' + '$[s]$', fontsize='12')
+        ax3.set_xlabel(r'$kg/m^2s^2$ ', fontsize='16')
+        ax3.set_ylim(0, 3)
+        ax3.set_xticks([0.0e7, 0.5e7, 1.0e7, 1.5e7, 2.0e7])
+        ax3.invert_yaxis()
+        ax3.grid()
+
+        ax4 = f2.add_axes([0.8, 0.1, 0.2, 0.9])
+        ppl.wiggle_plot(ax4, t[:-1], synth, scaling=10, fill='pos')
+        ax4.set_ylim(0, 3)
+        ax4.invert_yaxis()
+        ax4.grid()
+
+        for top, depth in tops.items():
+            f2.axes[0].axhline(y=float(depth), color='b', lw=2,
+                               alpha=0.5, xmin=0.05, xmax=0.95)
+            f2.axes[0].text(x=1e7, y=float(depth) - 0.015, s=top,
+                            alpha=0.75, color='k',
+                            fontsize='12',
+                            horizontalalignment='center',
+                            verticalalignment='center',
+                            bbox=dict(facecolor='white', alpha=0.5, lw=0.5),
+                            weight='light')
+        for top, depth in tops.items():
+            f2.axes[1].axhline(y=float(depth), color='b', lw=2,
+                               alpha=0.5, xmin=0.05, xmax=0.95)
+
+        for i in range(2, 4):
+            for twt in tops_twt.values():
+                f2.axes[i].axhline(y=float(twt), color='b', lw=2,
+                                   alpha=0.5, xmin=0.05, xmax=0.95)
+
 if __name__ == '__main__':
     vp0 = 2430
     vs0 = 919
@@ -185,6 +439,7 @@ if __name__ == '__main__':
     vs1 = 1543
     rho1 = 2.17
 
-    twolayer(vp0, vs0, rho0, vp1, vs1, rho1)
+    #twolayer(vp0, vs0, rho0, vp1, vs1, rho1)
+    test_synt()
 
     plt.show()

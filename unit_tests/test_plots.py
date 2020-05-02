@@ -64,7 +64,7 @@ class PlotTestCase(unittest.TestCase):
         styles = [{'lw': templ[x]['line width'],
                    'color': templ[x]['line color'],
                    'ls': templ[x]['line style']} for x in log_types]
-        ppl.axis_plot(ax, y, data, limits, styles)
+        ppl.axis_plot(ax, y, data, limits, styles, nxt=2)
 
         plt.show()
 

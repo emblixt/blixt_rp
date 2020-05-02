@@ -61,13 +61,19 @@ def poissons_ratio(Vp, Vs):
     return 0.5 * (Vp ** 2 - 2 * Vs ** 2) / (Vp ** 2 - Vs ** 2)
 
 
-def intercept(Vp_1, Vp_2, rho_1, rho_2):
+def intercept(Vp_1, Vp_2, rho_1, rho_2, no_layer=False):
     """
     Returns the AVO intercept, or normal incidence reflectivity
     From eq. 2 in Castagna et al. "Framework for AVO gradient and intercept interpretation"
     Geophysics 1998.
+
+    For the 'no_layer' case we calculate the difference in acoustic impedence along  one track without any layer,
+    and the '_2' input variables are not used
     """
-    return 0.5 * (step(Vp_1, Vp_2) + step(rho_1, rho_2))
+    if no_layer and isinstance(Vp_1, np.ndarray) and isinstance(rho_1, np.ndarray):
+        return (Vp_1[1:]*rho_1[1:] - Vp_1[:-1]*rho_1[:-1])/(Vp_1[1:]*rho_1[1:] + Vp_1[:-1]*rho_1[:-1])
+    else:
+        return 0.5 * (step(Vp_1, Vp_2) + step(rho_1, rho_2))
 
 
 def gradient(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2):
