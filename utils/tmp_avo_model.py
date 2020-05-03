@@ -231,7 +231,7 @@ def test_synt():
             return float(item_in_feet) / 3.28084
 
     kb = f2m(w.header.kb.value)
-    water_depth = f2m(w.header.gl.value)
+    water_depth = f2m(w.header.gl.value)  # has a negative value
     #top_of_log = f2m(w.block['Logs'].header.strt.value)  # there is an error in the header
     top_of_log = np.min(depth)  # use the actual depth log instead
     repl_int = top_of_log - kb + water_depth

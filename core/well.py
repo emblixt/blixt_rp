@@ -43,6 +43,8 @@ supported_version = {2.0, 3.0}
 logger = logging.getLogger(__name__)
 def_lb_name = 'Logs'  # default Block name
 def_msk_name = 'Mask'  # default mask name
+def_water_depth_keys = ['gl', 'egl', 'water_depth']
+def_kelly_bushing_keys = ['kb', 'apd', 'edf', 'eref']
 
 renamewelllogs = {
     # depth, or MD
@@ -452,6 +454,160 @@ class Well(object):
         # remove any duplicates
         lt_list = list(set(lt_list))
         return lt_list
+
+    def depth_unit(self, block_name=None):
+        """
+        Returns the units used for the depth measurement in Block 'block_name'.
+        :return:
+            str
+            Name of unit used for depth
+        """
+        if block_name is None:
+            block_name = def_lb_name
+        return self.block[block_name].header.strt.unit.lower()
+
+    def get_kb(self, kelly_bushing_keys=None):
+        """
+        Tries to return the Kelly bushing elevation in meters.
+        :param kelly_bushing_keys:
+            list
+            List of strings that can be the key of the kelley bushing information in the well header
+        :return:
+            float
+            Kelly bushing elevation in meters
+        """
+        info_txt = 'Extract Kelly bushing'
+        if kelly_bushing_keys is None:
+            kelly_bushing_keys = def_kelly_bushing_keys
+
+        start_unit = ''
+        for _key in list(self.header.keys()):
+            if _key in kelly_bushing_keys:
+                info_txt += ' using key: {:}, with value {:.2f} '.format(_key, self.header[_key].value)
+                if self.header[_key].unit.lower() == '':
+                    # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
+                    # set than for the Kelley bushing
+                    start_unit = self.depth_unit()
+                    if start_unit == 'm':
+                        info_txt += '[m].'
+                        kb = self.header[_key].value
+                    else:
+                        # assume it is in feet
+                        info_txt += '[feet].'
+                        kb = self.header[_key].value / 3.28084
+                elif self.header[_key].unit.lower() == 'm':
+                    info_txt += '[m].'
+                    kb = self.header[_key].value
+                else:
+                    # assume it is in feet
+                    info_txt += '[feet].'
+                    kb = self.header[_key].value / 3.28084
+                print('INFO: {}'.format(info_txt))
+                logger.info(info_txt)
+                return kb
+
+        info_txt += ' failed. No matching keys in header. Using ZERO'
+        print('WARNING: {}'.format(info_txt))
+        logger.warning(info_txt)
+        return 0.0
+
+    def get_water_depth(self, water_depth_keys=None):
+        """
+        Tries to return the Kelly bushing elevation in meters.
+        :param water_depth_keys:
+            list
+            List of strings that can be the key of the water depth information in the well header
+        :return:
+            float
+            Water depth in meters
+        """
+        info_txt = 'Extract water depth'
+        if water_depth_keys is None:
+            water_depth_keys = def_water_depth_keys
+
+        start_unit = ''
+        for _key in list(self.header.keys()):
+            if _key in water_depth_keys:
+                info_txt += ' using key: {:}, with value {:.2f} '.format(_key, self.header[_key].value)
+                if self.header[_key].unit.lower() == '':
+                    # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
+                    # set than for the water depth
+                    start_unit = self.depth_unit()
+                    if start_unit == 'm':
+                        info_txt += '[m].'
+                        wdepth = self.header[_key].value
+                    else:
+                        # assume it is in feet
+                        info_txt += '[feet].'
+                        wdepth = self.header[_key].value / 3.28084
+
+                elif self.header[_key].unit.lower() == 'm':
+                    info_txt += '[m].'
+                    wdepth = self.header[_key].value
+                else:
+                    # assume it is in feet
+                    info_txt += '[feet].'
+                    wdepth = self.header[_key].value / 3.28084
+                print('INFO: {}'.format(info_txt))
+                logger.info(info_txt)
+                return wdepth
+
+        info_txt += ' failed. No matching keys in header. Using ZERO'
+        print('WARNING: {}'.format(info_txt))
+        logger.warning(info_txt)
+        return 0.0
+
+    def twt_at_logstart(self, water_vel=None, repl_vel=None, water_depth=None, block_name=None):
+        """
+        Calculates the two-way time [s] to the top of the log for Block 'block_name'.
+
+        Inspired by
+        https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
+
+        :param water_vel:
+            float
+            Sound velocity in water [m/s]
+        :param repl_vel:
+            float
+            Sound velocity [m/s] in section between sea-floor and top of log
+        water_depth
+            float
+            Water depth in meters.
+            If not specified, tries to read from well header.
+            If that fails, uses 0 (zero) water depth
+
+        :return:
+            float
+            twt [s] to start of log
+        """
+        if block_name is None:
+            block_name = def_lb_name
+        info_txt = 'Calculating two-way time to beginning of log for well {} in block {}. '.format(
+            self.well, block_name)
+        if water_vel is None:
+            water_vel = 1480.
+        info_txt += 'Assuming a water vel. of {:.2f} [m/s], '.format(water_vel)
+
+        if repl_vel is None:
+            repl_vel = 1600.
+        info_txt += 'and a vel. of {:.2f} [m/s] in section above log. '.format(repl_vel)
+
+        if water_depth is None:
+            # Tries to extract the water depth from the well header
+            water_depth = self.get_water_depth()
+            if np.abs(water_depth) < 0.5:
+                warn_txt = 'Assume a water depth of ZERO'
+                print('WARNING: {}'.format(warn_txt))
+                logger.warning(warn_txt)
+
+        kb = self.get_kb()  # m
+
+        log_start_twt = self.block[block_name].twt_at_logstart(water_vel, repl_vel, water_depth, kb)
+
+        info_txt += 'Log start TWT: {:.2f} [s]'.format(log_start_twt)
+        print('INFO: {}'.format(info_txt))
+        logger.info(info_txt)
+        return log_start_twt
 
     def time_to_depth(self, vp_log='vp', block_name=None):
         """
@@ -1366,11 +1522,22 @@ class Block(object):
         except:
             return 0
 
+    def get_depth_unit(self):
+        return self.header.strt.unit.lower()
+
     def get_start(self):
-        start = None
-        if self.header.strt.value is not None:
-            start = self.header.strt.value
-        return start
+        """
+        The start value of the log can differ from from whats specified in the header
+        :return:
+            float
+            Start depth of log in meters
+        """
+        start = np.nanmin(self.logs['depth'].data)
+        if self.get_depth_unit() != 'm':
+           # Assume it is in feet
+            return start / 3.28084
+        else:
+            return start
 
     start = property(get_start)
 
@@ -1467,6 +1634,79 @@ class Block(object):
             header=header)
 
         self.add_log_curve(log_curve)
+
+    def twt_at_logstart(self, water_vel, repl_vel, water_depth, kb):
+        """
+        Calculates the two-way time [s] to the top of the log.
+
+        Inspired by
+        https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
+
+        :param water_vel:
+            float
+            Sound velocity in water [m/s]
+        :param repl_vel:
+            float
+            Sound velocity [m/s] in section between sea-floor and top of log
+        water_depth
+            float
+            Water depth in meters.
+        kb
+            float
+            Kelly bushing elevation in meters
+
+        :return:
+            float
+            twt [s] to start of log
+        """
+
+        top_of_log = self.get_start()  # Start of log in meters MD
+        repl_int = top_of_log - np.abs(kb) - np.abs(water_depth)  # Distance from sea-floor to start of log
+        #water_twt = 2.0 * (np.abs(water_depth) + np.abs(kb)) / water_vel  # TODO could it be np.abs(water_depth + np.abs(kb)) / water_vel
+        water_twt = 2.0 * np.abs(water_depth + np.abs(kb)) / water_vel
+        repl_twt = 2.0 * repl_int / repl_vel
+
+        print('KB elevation: {} [m]'.format(kb))
+        print('Seafloor elevation: {} [m]'.format(water_depth))
+        print('Water time: {} [s]'.format(water_twt))
+        print('Top of Sonic log: {} [m]'.format(top_of_log))
+        print('Replacement interval: {} [m]'.format(repl_int))
+        print('Two-way replacement time: {} [s]'.format(repl_twt))
+        print('Top-of-log starting time: {} [s]'.format(repl_twt + water_twt))
+
+        return water_twt + repl_twt
+
+    def time_to_depth(self, log_start_twt, vp_log='vp', spike_threshold=200.):
+        """
+        Calculates the twt as a function of md
+        https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
+
+        :param log_start_twt:
+            float
+            Two-way time in seconds down to start of log
+        :param vp_log:
+            str
+            Name of vp log to use to calculate the integrated time
+        :return:
+        """
+
+        if vp_log not in self.log_names():
+            raise IOError('Log {} does not exist in well {}'.format(
+                vp_log, self.well
+            ))
+
+        # Velocity log must have same unit as the step
+        if self.logs[vp_log].header.unit != self.header.step.value:
+            raise IOError('Vp log must have same units as the step: {} vs. {}'.format(
+                self.logs[vp_log].header.unit, self.header.step.value
+            ))
+
+        # Smooth and despiked version of vp
+        vp_sm = self.logs[vp_log].despike(spike_threshold)
+        scaled_dt = self.header.step.value / np.nan_to_num(vp_sm)
+        tcum = 2 * np.cumsum(scaled_dt)
+
+        return log_start_twt + tcum
 
 
 def _read_las(file, rename_well_logs=None):
