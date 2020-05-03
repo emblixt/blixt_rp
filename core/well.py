@@ -453,6 +453,35 @@ class Well(object):
         lt_list = list(set(lt_list))
         return lt_list
 
+    def time_to_depth(self, vp_log='vp', block_name=None):
+        """
+        Calculates the twt as a function of md
+        https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
+
+        :param vp_log:
+        :param block_name:
+        :return:
+        """
+        if block_name is None:
+            block_name = def_lb_name
+
+        tb = self.block[block_name]
+        if vp_log not in tb.log_names():
+            raise IOError('Log {} does not exist in well {}'.format(
+                vp_log, self.well
+            ))
+
+        # Velocity log must have same unit as the step
+        if tb.logs[vp_log].header.unit != tb.header.step.value:
+            raise IOError('Vp log must have same units as the step: {} vs. {}'.format(
+                tb.logs[vp_log].header.unit, tb.header.step.value
+            ))
+
+        # Smooth and despiked version of vp
+        vp_sm = tb.logs[vp_log].despike(200)
+        scaled_dt = tb.header.step.value / np.nan_to_num(vp_sm)
+        tcum = 2 * np.cumsum(scaled_dt)
+
     def calc_vrh_bounds(self, fluid_minerals, param='k', wis=None, method='Voigt', block_name=None):
         """
         Calculates the Voigt-Reuss-Hill bounds of parameter param, for the  fluid or mineral mixture defined in
