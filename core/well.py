@@ -616,8 +616,8 @@ class Well(object):
         logger.info(info_txt)
         return log_start_twt
 
-    def time_to_depth(self, log_name='vp', block_name=None,
-                      spike_threshold=None):
+    def time_to_depth(self, log_name='vp', block_name=None, sonic=None, feet_unit=None, us_unit=None,
+                      spike_threshold=None, debug=False):
         """
         Calculates the twt as a function of md
         https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
@@ -626,44 +626,51 @@ class Well(object):
         :param block_name:
         :return:
         """
-        sonic = False
-        feet_unit = False
-        us_unit = False
         if block_name is None:
             block_name = def_lb_name
 
         tb = self.block[block_name]
         if log_name not in tb.log_names():
-            raise IOError('Log {} does not exist in well {}'.format(
-                log_name, self.well
-            ))
+            warn_txt = 'Log {} does not exist in well {}'.format(log_name, self.well)
+            print('WARNING: {}'.format(warn_txt))
+            logger.warning(warn_txt)
+            return None
 
+        if sonic is None:
+            # Determine if log is a Sonic log, or a velocity log
+            if tb.logs[log_name].header.unit.lower() in def_sonic_units:
+                sonic = True
+            else:
+                sonic = False
 
-        # Determine if log is a Sonic log, or a velocity log
-        if tb.logs[log_name].header.unit.lower() in def_sonic_units:
-            sonic = True
+        if feet_unit is None:
+            # Determine if units are in feet or not
+            feet_unit = False
+            for feet_test in ['f', 'ft', 'feet']:
+                if feet_test in tb.logs[log_name].header.unit.lower():
+                    feet_unit = True
 
-        # Determine if units are in feet or not
-        for feet_test in ['f', 'ft', 'feet']:
-            if feet_test in tb.logs[log_name].header.unit.lower():
-                feet_unit = True
+        if spike_threshold is None:
+            spike_threshold = 200.
+            if feet_unit:
+                spike_threshold = 10
 
-        # Determine if units are in s or us
-        if 'u' in tb.logs[log_name].header.unit.lower():
-            us_unit = True
+        if us_unit is None:
+            # Determine if units are in s or us
+            if 'u' in tb.logs[log_name].header.unit.lower():
+                us_unit = True
+            else:
+                us_unit = False
 
-        XXXX continue here!
+        print('Sonic? {},  feets? {},  usec? {}'.format(sonic, feet_unit, us_unit))
 
-        #if vp_spike_threshold is None:
-        #    vp_spike_threshold = 200.
+        log_start_twt = self.twt_at_logstart(block_name=block_name)
 
-        # Velocity log must be in m/s, and step must be in m
-        if tb.logs[log_name].header.unit != 'm/s':
-            raise IOError('Vp log must be in m/s, not {}'.format(
-                tb.logs[vp_log].header.unit))
-        if tb.header.step.value != 'm':
-            raise IOError('Step must be given in m, not in {}'.format(
-                tb.header.step.value))
+        tdr = self.block[block_name].time_to_depth(log_start_twt, log_name,
+                                                   spike_threshold, sonic=sonic,
+                                                   us_unit=us_unit, debug=debug)
+
+        return tdr
 
     def calc_vrh_bounds(self, fluid_minerals, param='k', wis=None, method='Voigt', block_name=None):
         """
@@ -1558,14 +1565,29 @@ class Block(object):
     def get_depth_unit(self):
         return self.header.strt.unit.lower()
 
-    def get_start(self):
+    def get_start(self, log_name=None):
         """
         The start value of the log can differ from from whats specified in the header
+        log_name
+            str
+            if log_name specified, return the depth to where that log starts
         :return:
             float
             Start depth of log in meters
         """
-        start = np.nanmin(self.logs['depth'].data)
+        if log_name is not None:
+            # first check that the log exists
+            if log_name not in self.log_names():
+                raise IOError('Log {} does not exist in well {}'.format(
+                    log_name, self.well
+                ))
+            # mask out nans
+            data = self.logs[log_name].data
+            msk = np.ma.masked_invalid(data).mask
+            # Get first value depth value where data is not a nan
+            start = self.logs['depth'].data[~msk][0]
+        else:
+            start = np.nanmin(self.logs['depth'].data)
         if self.get_depth_unit() != 'm':
            # Assume it is in feet
             return start / 3.28084
@@ -1709,7 +1731,8 @@ class Block(object):
 
         return water_twt + repl_twt
 
-    def time_to_depth(self, log_start_twt, vp_log='vp', spike_threshold=200.):
+    def time_to_depth(self, log_start_twt, log_name, spike_threshold, sonic=False,  us_unit=False,
+                      debug=False):
         """
         Calculates the twt as a function of md
         https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
@@ -1722,17 +1745,36 @@ class Block(object):
             Name of vp log to use to calculate the integrated time
         :return:
         """
-
-        if vp_log not in self.log_names():
+        if log_name not in self.log_names():
             raise IOError('Log {} does not exist in well {}'.format(
-                vp_log, self.well
+                log_name, self.well
             ))
 
         # Smooth and despiked version of vp
-        vp_sm = self.logs[vp_log].despike(spike_threshold)
-        scaled_dt = self.header.step.value / np.nan_to_num(vp_sm)
+        smooth_log = self.logs[log_name].despike(spike_threshold)
+
+        if debug:
+            fig, ax = plt.subplots()
+            ax.plot(self.logs['depth'].data, smooth_log, 'r', lw=2)
+            ax.plot(self.logs['depth'].data, self.logs[log_name].data, 'k', lw=0.5)
+            ax.legend(['Smooth and despiked', 'Original'])
+
+        # Handle units
+        if sonic:
+            scaled_dt = self.header.step.value * np.nan_to_num(smooth_log)
+        else:
+            scaled_dt = self.header.step.value * np.nan_to_num(1./smooth_log)
+        if us_unit:
+            scaled_dt = scaled_dt * 1.e-6
+
+        if debug:
+            fig, ax = plt.subplots()
+            ax.plot(self.logs['depth'].data, scaled_dt, 'b', lw=1)
+
         tcum = 2 * np.cumsum(scaled_dt)
 
+        if debug:
+            plt.show()
         return log_start_twt + tcum
 
 

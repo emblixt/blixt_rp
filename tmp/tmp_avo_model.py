@@ -324,6 +324,7 @@ def test_synt():
                                                    # and go from usec to sec
     tcum = 2 * np.cumsum(scaled_dt)  # integration
     tdr = tcum + log_start_time
+    print(tdr[:10], tdr[-10:])
 
     # Compute acoustic impedance
     ai = (1e6 / dt) * rho
