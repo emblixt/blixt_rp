@@ -232,8 +232,8 @@ def test_synt():
 
     kb = f2m(w.header.kb.value)
     water_depth = f2m(w.header.gl.value)  # has a negative value
-    #top_of_log = f2m(w.block['Logs'].header.strt.value)  # there is an error in the header
-    top_of_log = np.min(depth)  # use the actual depth log instead
+    #top_of_log = f2m(w.block['Logs'].header.strt.value)
+    top_of_log = f2m(1150.5000)  # The DT log starts at this value
     repl_int = top_of_log - kb + water_depth
     water_vel = 1480  # m/s
     EGL_time = 2.0 * np.abs(kb)/water_vel

@@ -26,6 +26,20 @@ def convert(in_data, from_unit=None, to_unit=None):
 
     success = True
     # Start converting
+    if from_unit == 'ft':
+        if to_unit == 'm':
+            return in_data / 3.28084
+        elif to_unit == 'km':
+            return in_data / 3280.84
+        else:
+            success = False
+
+    if from_unit == 'm':
+        if to_unit == 'ft':
+            return in_data * 3.28084
+        else:
+            success = False
+
     if from_unit == 'us/ft':
         # clean up data
         #in_data[in_data < 20.] = np.nan

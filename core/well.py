@@ -37,6 +37,7 @@ from plotting import crossplot as xp
 from core.minerals import MineralMix
 from core.log_curve import LogCurve
 import rp.rp_core as rp
+from utils.convert_data import convert as cnvrt
 
 # global variables
 supported_version = {2.0, 3.0}
@@ -501,14 +502,14 @@ class Well(object):
                     else:
                         # assume it is in feet
                         info_txt += '[feet].'
-                        kb = self.header[_key].value / 3.28084
+                        kb = cnvrt(self.header[_key].value, 'ft', 'm')
                 elif self.header[_key].unit.lower() == 'm':
                     info_txt += '[m].'
                     kb = self.header[_key].value
                 else:
                     # assume it is in feet
                     info_txt += '[feet].'
-                    kb = self.header[_key].value / 3.28084
+                    kb = cnvrt(self.header[_key].value, 'ft', 'm')
                 print('INFO: {}'.format(info_txt))
                 logger.info(info_txt)
                 return kb
@@ -546,7 +547,7 @@ class Well(object):
                     else:
                         # assume it is in feet
                         info_txt += '[feet].'
-                        wdepth = self.header[_key].value / 3.28084
+                        wdepth = cnvrt(self.header[_key].value, 'ft', 'm')
 
                 elif self.header[_key].unit.lower() == 'm':
                     info_txt += '[m].'
@@ -554,7 +555,7 @@ class Well(object):
                 else:
                     # assume it is in feet
                     info_txt += '[feet].'
-                    wdepth = self.header[_key].value / 3.28084
+                    wdepth = cnvrt(self.header[_key].value, 'ft', 'm')
                 print('INFO: {}'.format(info_txt))
                 logger.info(info_txt)
                 return wdepth
@@ -564,41 +565,58 @@ class Well(object):
         logger.warning(info_txt)
         return 0.0
 
-    def twt_at_logstart(self, water_vel=None, repl_vel=None, water_depth=None, block_name=None):
+    def time_to_depth(self, log_name='vp', water_vel=None, repl_vel=None, water_depth=None, block_name=None,
+                      sonic=None, feet_unit=None, us_unit=None,
+                      spike_threshold=None, debug=False):
         """
-        Calculates the two-way time [s] to the top of the log for Block 'block_name'.
-
-        Inspired by
+        Calculates the twt as a function of md
         https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
 
+        :param log_name:
+            str
+            Name of slowness or velocity log used to calculate the time-depth relation
         :param water_vel:
             float
             Sound velocity in water [m/s]
         :param repl_vel:
             float
-            Sound velocity [m/s] in section between sea-floor and top of log
-        water_depth
+            Sound velocity [m/s] in section between sea-floor and top of log, Also used to fill in NaNs in sonic or velocity
+            log
+        :param water_depth:
             float
             Water depth in meters.
             If not specified, tries to read from well header.
             If that fails, uses 0 (zero) water depth
-
+        :param block_name:
+        :param sonic:
+            bool
+            Set to true if input log is sonic or slowness
+            If None, the scripts tries to guess using the units of the input log
+        :param feet_unit:
+            bool
+            Set to true if input log is using feet (e.g. "us/f")
+            If None, the scripts tries to guess using the units of the input log
+        :param us_unit:
+            bool
+            Set to true if input log is using micro seconds and not seconds (e.g. "us/f" or "s/f"
+            If None, the scripts tries to guess using the units of the input log
         :return:
-            float
-            twt [s] to start of log
         """
         if block_name is None:
             block_name = def_lb_name
-        info_txt = 'Calculating two-way time to beginning of log for well {} in block {}. '.format(
-            self.well, block_name)
+
+        tb = self.block[block_name]
+
+        if log_name not in tb.log_names():
+            warn_txt = 'Log {} does not exist in well {}'.format(log_name, self.well)
+            print('WARNING: {}'.format(warn_txt))
+            logger.warning(warn_txt)
+            return None
+
         if water_vel is None:
             water_vel = 1480.
-        info_txt += 'Assuming a water vel. of {:.2f} [m/s], '.format(water_vel)
-
         if repl_vel is None:
             repl_vel = 1600.
-        info_txt += 'and a vel. of {:.2f} [m/s] in section above log. '.format(repl_vel)
-
         if water_depth is None:
             # Tries to extract the water depth from the well header
             water_depth = self.get_water_depth()
@@ -608,33 +626,7 @@ class Well(object):
                 logger.warning(warn_txt)
 
         kb = self.get_kb()  # m
-
-        log_start_twt = self.block[block_name].twt_at_logstart(water_vel, repl_vel, water_depth, kb)
-
-        info_txt += 'Log start TWT: {:.2f} [s]'.format(log_start_twt)
-        print('INFO: {}'.format(info_txt))
-        logger.info(info_txt)
-        return log_start_twt
-
-    def time_to_depth(self, log_name='vp', block_name=None, sonic=None, feet_unit=None, us_unit=None,
-                      spike_threshold=None, debug=False):
-        """
-        Calculates the twt as a function of md
-        https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
-
-        :param vp_log:
-        :param block_name:
-        :return:
-        """
-        if block_name is None:
-            block_name = def_lb_name
-
-        tb = self.block[block_name]
-        if log_name not in tb.log_names():
-            warn_txt = 'Log {} does not exist in well {}'.format(log_name, self.well)
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
-            return None
+        log_start_twt = self.block[block_name].twt_at_logstart(log_name, water_vel, repl_vel, water_depth, kb)
 
         if sonic is None:
             # Determine if log is a Sonic log, or a velocity log
@@ -664,10 +656,8 @@ class Well(object):
 
         print('Sonic? {},  feets? {},  usec? {}'.format(sonic, feet_unit, us_unit))
 
-        log_start_twt = self.twt_at_logstart(block_name=block_name)
-
         tdr = self.block[block_name].time_to_depth(log_start_twt, log_name,
-                                                   spike_threshold, sonic=sonic,
+                                                   spike_threshold, repl_vel, sonic=sonic, feet_unit=feet_unit,
                                                    us_unit=us_unit, debug=debug)
 
         return tdr
@@ -1590,11 +1580,11 @@ class Block(object):
             start = np.nanmin(self.logs['depth'].data)
         if self.get_depth_unit() != 'm':
            # Assume it is in feet
-            return start / 3.28084
+            return cnvrt(start, 'ft', 'm')
         else:
             return start
 
-    start = property(get_start)
+    #start = property(get_start)
 
     def get_stop(self):
         stop = None
@@ -1690,7 +1680,7 @@ class Block(object):
 
         self.add_log_curve(log_curve)
 
-    def twt_at_logstart(self, water_vel, repl_vel, water_depth, kb):
+    def twt_at_logstart(self, log_name, water_vel, repl_vel, water_depth, kb):
         """
         Calculates the two-way time [s] to the top of the log.
 
@@ -1715,7 +1705,7 @@ class Block(object):
             twt [s] to start of log
         """
 
-        top_of_log = self.get_start()  # Start of log in meters MD
+        top_of_log = self.get_start(log_name=log_name)  # Start of log in meters MD
         repl_int = top_of_log - np.abs(kb) - np.abs(water_depth)  # Distance from sea-floor to start of log
         #water_twt = 2.0 * (np.abs(water_depth) + np.abs(kb)) / water_vel  # TODO could it be np.abs(water_depth + np.abs(kb)) / water_vel
         water_twt = 2.0 * np.abs(water_depth + np.abs(kb)) / water_vel
@@ -1731,7 +1721,8 @@ class Block(object):
 
         return water_twt + repl_twt
 
-    def time_to_depth(self, log_start_twt, log_name, spike_threshold, sonic=False,  us_unit=False,
+    def time_to_depth(self, log_start_twt, log_name, spike_threshold, repl_vel,
+                      sonic=False, feet_unit=False, us_unit=False,
                       debug=False):
         """
         Calculates the twt as a function of md
@@ -1740,9 +1731,22 @@ class Block(object):
         :param log_start_twt:
             float
             Two-way time in seconds down to start of log
-        :param vp_log:
+        :param log_name:
             str
-            Name of vp log to use to calculate the integrated time
+            Name of log. slowness or velocity, used to calculate the integrated time
+        :param repl_vel:
+            float
+            Sound velocity [m/s] in section between sea-floor and top of log, Also used to fill in NaNs in sonic or velocity
+            log
+        :param sonic:
+            bool
+            Set to true if input log is sonic or slowness
+        :param feet_unit:
+            bool
+            Set to true if input log is using feet (e.g. "us/f")
+        :param us_unit:
+            bool
+            Set to true if input log is using micro seconds and not seconds (e.g. "us/f" or "s/f"
         :return:
         """
         if log_name not in self.log_names():
@@ -1750,8 +1754,20 @@ class Block(object):
                 log_name, self.well
             ))
 
+        # Replace NaN values of input log using repl_vel
+        if feet_unit:
+            repl_vel = cnvrt(repl_vel, 'm', 'ft')
+        if sonic:
+            repl = 1./repl_vel
+        else:
+            repl = repl_vel
+        if us_unit:
+            repl = repl*1e6
+        nan_mask = np.ma.masked_invalid(self.logs[log_name].data).mask
+
         # Smooth and despiked version of vp
         smooth_log = self.logs[log_name].despike(spike_threshold)
+        smooth_log[nan_mask] = repl
 
         if debug:
             fig, ax = plt.subplots()
@@ -1767,15 +1783,19 @@ class Block(object):
         if us_unit:
             scaled_dt = scaled_dt * 1.e-6
 
+
+
+        tcum = 2 * np.cumsum(scaled_dt)
+        tdr = log_start_twt + tcum
+
         if debug:
             fig, ax = plt.subplots()
             ax.plot(self.logs['depth'].data, scaled_dt, 'b', lw=1)
-
-        tcum = 2 * np.cumsum(scaled_dt)
-
-        if debug:
+            ax2 = ax.twinx()
+            ax2.plot(self.logs['depth'].data, tdr, 'k', lw=1)
             plt.show()
-        return log_start_twt + tcum
+
+        return tdr
 
 
 def _read_las(file, rename_well_logs=None):
