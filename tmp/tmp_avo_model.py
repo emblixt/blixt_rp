@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import least_squares
 import os
 
-import curve_fitting as mycf
+import utils.curve_fitting as mycf
 import rp.rp_core as rp
 import plotting.plot_logs as ppl
 

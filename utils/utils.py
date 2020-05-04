@@ -15,7 +15,6 @@ from datetime import datetime
 import numpy as np
 
 import utils.masks as msks
-#import masks as msks
 
 
 def log_header_to_template(log_header):

@@ -32,11 +32,11 @@ import utils.io as uio
 from utils.io import convert
 import utils.masks as msks
 from utils.utils import arrange_logging
+from utils.harmonize_logs import harmonize_logs as fixlogs
 from plotting import crossplot as xp
 from core.minerals import MineralMix
 from core.log_curve import LogCurve
 import rp.rp_core as rp
-from utils.harmonize_logs import harmonize_logs as fixlogs
 
 # global variables
 supported_version = {2.0, 3.0}
@@ -45,6 +45,9 @@ def_lb_name = 'Logs'  # default Block name
 def_msk_name = 'Mask'  # default mask name
 def_water_depth_keys = ['gl', 'egl', 'water_depth']
 def_kelly_bushing_keys = ['kb', 'apd', 'edf', 'eref']
+def_sonic_units = ['us/f', 'us/ft', 'us/feet',
+                   'usec/f', 'usec/ft', 'usec/feet',
+                   'us/m', 'usec/m', 's/m']
 
 renamewelllogs = {
     # depth, or MD
@@ -307,13 +310,17 @@ class Project(object):
                 all_wells[wname] = w
                 last_wname = wname
             else:  # Existing well
-                all_wells[wname].read_well_table(well_table, i, block_name=block_name, rename_well_logs=rename_logs)
+                all_wells[wname].read_well_table(well_table, i,
+                                                 block_name=block_name,
+                                                 rename_well_logs=rename_logs,
+                                                 use_this_well_name=wname)
 
         # rename well names so that the well name defined in the well_table is used "inside" each well
         for wname, well in all_wells.items():
             well.header.well.value = wname
             well.header.name.value = wname
             well.block[block_name].header.well = wname
+            well.block[block_name].__setattr__('well', wname)
             for key in list(well.block[block_name].logs.keys()):
                 well.block[block_name].logs[key].header.well = wname
 
@@ -609,7 +616,8 @@ class Well(object):
         logger.info(info_txt)
         return log_start_twt
 
-    def time_to_depth(self, vp_log='vp', block_name=None):
+    def time_to_depth(self, log_name='vp', block_name=None,
+                      spike_threshold=None):
         """
         Calculates the twt as a function of md
         https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
@@ -618,25 +626,44 @@ class Well(object):
         :param block_name:
         :return:
         """
+        sonic = False
+        feet_unit = False
+        us_unit = False
         if block_name is None:
             block_name = def_lb_name
 
         tb = self.block[block_name]
-        if vp_log not in tb.log_names():
+        if log_name not in tb.log_names():
             raise IOError('Log {} does not exist in well {}'.format(
-                vp_log, self.well
+                log_name, self.well
             ))
 
-        # Velocity log must have same unit as the step
-        if tb.logs[vp_log].header.unit != tb.header.step.value:
-            raise IOError('Vp log must have same units as the step: {} vs. {}'.format(
-                tb.logs[vp_log].header.unit, tb.header.step.value
-            ))
 
-        # Smooth and despiked version of vp
-        vp_sm = tb.logs[vp_log].despike(200)
-        scaled_dt = tb.header.step.value / np.nan_to_num(vp_sm)
-        tcum = 2 * np.cumsum(scaled_dt)
+        # Determine if log is a Sonic log, or a velocity log
+        if tb.logs[log_name].header.unit.lower() in def_sonic_units:
+            sonic = True
+
+        # Determine if units are in feet or not
+        for feet_test in ['f', 'ft', 'feet']:
+            if feet_test in tb.logs[log_name].header.unit.lower():
+                feet_unit = True
+
+        # Determine if units are in s or us
+        if 'u' in tb.logs[log_name].header.unit.lower():
+            us_unit = True
+
+        XXXX continue here!
+
+        #if vp_spike_threshold is None:
+        #    vp_spike_threshold = 200.
+
+        # Velocity log must be in m/s, and step must be in m
+        if tb.logs[log_name].header.unit != 'm/s':
+            raise IOError('Vp log must be in m/s, not {}'.format(
+                tb.logs[vp_log].header.unit))
+        if tb.header.step.value != 'm':
+            raise IOError('Step must be given in m, not in {}'.format(
+                tb.header.step.value))
 
     def calc_vrh_bounds(self, fluid_minerals, param='k', wis=None, method='Voigt', block_name=None):
         """
@@ -1176,7 +1203,8 @@ class Well(object):
             fig.savefig(savefig)
 
 
-    def read_well_table(self, well_table, index, block_name=None, rename_well_logs=None):
+    def read_well_table(self, well_table, index, block_name=None,
+                        rename_well_logs=None, use_this_well_name=None):
         """
         Takes the well_table and reads in the well defined by the index number.
 
@@ -1195,6 +1223,10 @@ class Well(object):
             E.G.
             {'depth': ['DEPT', 'MD']}
             where the key is the wanted well log name, and the value list is a list of well log names to translate from
+        :param use_this_well_name:
+            str
+            Name we would like to use.
+            Useful when different las file have different wells for the same well
         :return:
         """
         if block_name is None:
@@ -1208,6 +1240,7 @@ class Well(object):
                       only_these_logs=well_table[lfile]['logs'],
                       block_name=block_name,
                       rename_well_logs=rename_well_logs,
+                      use_this_well_name=use_this_well_name,
                       note=note)
 
         # rename well names so that the well name defined in the well_table is used "inside" each well
@@ -1693,12 +1726,6 @@ class Block(object):
         if vp_log not in self.log_names():
             raise IOError('Log {} does not exist in well {}'.format(
                 vp_log, self.well
-            ))
-
-        # Velocity log must have same unit as the step
-        if self.logs[vp_log].header.unit != self.header.step.value:
-            raise IOError('Vp log must have same units as the step: {} vs. {}'.format(
-                self.logs[vp_log].header.unit, self.header.step.value
             ))
 
         # Smooth and despiked version of vp
