@@ -37,6 +37,26 @@ class RpTestCase(unittest.TestCase):
         0,
         block_name='Logs')
 
+    def test_step(self):
+        i = 5
+        x1 = np.linspace(1, 10, 10)
+        x2 = np.linspace(2, 11, 10)
+        x3 = np.linspace(3, 12, 10)
+        d1 = rp.step(x1[i], x1[i+1])
+        d2 = rp.step(x1, None, along_wiggle=True)
+        incept1 = rp.intercept(x1[i], x1[i+1], x3[i], x3[i+1])
+        incept2 = rp.intercept(x1, None, x3, None, along_wiggle=True)
+        grad1 = rp.gradient(x1[i], x1[i+1], x2[i], x2[i+1], x3[i], x3[i+1])
+        grad2 = rp.gradient(x1, None, x2, None, x3, None, along_wiggle=True)
+
+        with self.subTest():
+            print('Layer based step at i {}: {}'.format(i, d1))
+            print('Wiggle based step at i {}: {}'.format(i, d2[i]))
+            print('Layer based intercept at i {}: {}'.format(i, incept1))
+            print('Wiggle based intercept at i {}: {}'.format(i, incept2[i]))
+            print('Layer based gradient at i {}: {}'.format(i, grad1))
+            print('Wiggle based gradient at i {}: {}'.format(i, grad2[i]))
+
     def test_intercept(self):
         """
         Should test if the intercept calculation returns the same result when using 'along_wiggle' as for single layer

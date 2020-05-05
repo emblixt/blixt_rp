@@ -63,6 +63,7 @@ def step(x_1, x_2, along_wiggle=False):
     else:
         return 2 * (x_2 - x_1) / (x_2 + x_1)
 
+
 def sqrd_avg(x):
     """
     Common term occuring in the reflection coefficient, see eq. 4.6 in Avseth et. al 2011
@@ -70,6 +71,7 @@ def sqrd_avg(x):
     :return:
     """
     return 0.25 * (x[1:] + x[:-1])**2
+
 
 def poissons_ratio(Vp, Vs):
     return 0.5 * (Vp ** 2 - 2 * Vs ** 2) / (Vp ** 2 - Vs ** 2)
