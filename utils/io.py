@@ -3,9 +3,11 @@ import os
 import re
 import numpy as np
 from datetime import datetime
+from openpyxl import load_workbook, Workbook
+from copy import deepcopy
 import logging
 
-from utils.utils import isnan
+from utils.utils import isnan, info
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +22,7 @@ def project_wells(filename, working_dir):
             for key in list(table.keys()):
                 if (key == 'las file') or (key == 'Use'):
                     continue
-                elif (key == 'Given well name') or (key == 'Note'):
+                elif (key == 'Given well name') or (key == 'Note') or (key == 'Translate log names'):
                     if isinstance(table[key][i], str):
                         if key == 'Given well name':
                             value = fix_well_name(table[key][i])
@@ -47,16 +49,71 @@ def project_wells(filename, working_dir):
     return result
 
 
+def get_rename_logs_dict(well_table):
+    """
+    Interprets the "Translate log names"  keys of the well_table and returns a rename_logs dict.
+
+    :param well_table:
+        dict
+        as returned from project_wells()
+    :return:
+        dict or None
+    """
+    rename_logs = {}
+    for las_file, val in well_table.items():
+        if val['Translate log names'] is None:
+            continue
+        _dict = interpret_rename_string(val['Translate log names'])
+        for key in list(_dict.keys()):
+            if key in list(rename_logs.keys()):
+                if not _dict[key] in rename_logs[key]:  # only insert same rename pair once
+                    rename_logs[key].append(_dict[key])
+            else:
+                rename_logs[key] = [_dict[key]]
+    if len(rename_logs) < 1:
+        return None
+    else:
+        return rename_logs
+
+
 def project_templates(filename):
     table = pd.read_excel(filename, header=1, sheet_name='Templates')
     result = {}
     for i, ans in enumerate(table['Log type']):
+        if not isinstance(ans, str):
+            continue
         result[ans] = {}
-        for key in ['bounds', 'center', 'colormap', 'description', 'max', 'min', 'scale', 'type', 'unit']:
+        for key in ['bounds', 'center', 'colormap', 'description', 'max', 'min',
+                    'scale', 'type', 'unit', 'line color', 'line style', 'line width']:
             result[ans][key] = None if isnan(table[key][i]) else table[key][i]
         result[ans]['full_name'] = ans
 
+    # Also add the well settings
+    table = pd.read_excel(filename, header=1, sheet_name='Well settings')
+    for i, ans in enumerate(table['Given well name']):
+        if not isinstance(ans, str):
+            continue
+        result[ans.upper()] = {}
+        for key in ['Color', 'Symbol', 'Content', 'KB', 'UWI', 'UTM', 'X', 'Y', 'Water depth', 'Note']:
+            result[ans.upper()][key.lower()] = None if isnan(table[key][i]) else table[key][i]
+
     return result
+
+
+#def project_well_settings(filename):
+#    table = pd.read_excel(filename, header=1, sheet_name='Well settings')
+#    result = {}
+#    for i, ans in enumerate(table['Given well name']):
+#        result[ans] = {}
+#        for key in ['Color', 'Symbol', 'Content', 'KB', 'UWI', 'UTM', 'X', 'Y', 'Water depth', 'Note']:
+#            result[ans][key.lower()] = None if isnan(table[key][i]) else table[key][i]
+#    return result
+
+
+def project_working_intervals(filename):
+    table = pd.read_excel(filename, header=4, sheet_name='Working intervals')
+    result = {}
+    return return_dict_from_tops(table, 'Given well name', 'Interval name', 'Top depth', include_base='Base depth')
 
 
 def collect_project_wells(well_table, target_dir):
@@ -251,6 +308,147 @@ def read_petrel_tops(filename, header=None, top=True, zstick='md', only_these_we
     return return_dict_from_tops(tops, 'Well identifier', 'Surface', key_name, only_these_wells=only_these_wells)
 
 
+def write_tops(filename, tops, well_names=None, interval_names=None):
+    """
+    Writes the tops to the excel file "filename", in the sheet name 'Working intervals'
+    If "filename" exists, and is open, it raises a warning
+
+    :param filename:
+        str
+        full pathname of excel file to write to.
+        Assumes we're trying to write to the default project_table.xlsx, in the 'Working intervals' sheet.
+
+    :param tops:
+        dict
+        As output from utils.io.read_tops()
+        {'well_A name': {'top1 name': top1_depth, 'top2 name': top2_depth, ...},  'well_B name': {...} }
+
+    :param well_names:
+        list
+        list of str's
+        list of names of the wells we would like to save to to file
+        If None, all wells are saved
+
+    :param interval_names:
+        list
+        list of str's
+        list of names of the intervals (working intervals) we would like to save to to file,
+        if None, all intervals are saved
+
+    :return:
+    """
+    sheet_name = 'Working intervals'
+
+    # test write access
+    taccs = check_if_excelfile_writable(filename)
+    if not taccs:
+        warn_txt = 'Not possible to write to {}'.format(filename)
+        return
+
+    if not os.path.isfile(filename):
+        wb = Workbook()
+    else:
+        wb = load_workbook(filename)
+
+    if sheet_name not in wb.sheetnames:
+        print('Creating new sheet')
+        ws = wb.create_sheet(sheet_name, -1)
+    else:
+        print('Opening existing sheet')
+        ws = wb[sheet_name]
+
+    # modify first line
+    ws['A1'] = info()
+
+    # test if fifth row exists
+    if ws[5][0].value is None:
+        ws['A2'] = 'Depth are in meters MD'
+        for j, val in enumerate(['Use', 'Given well name', 'Interval name', 'Top depth', 'Base depth']):
+            ws.cell(5, j+1).value = val
+
+    # start appending data
+    if well_names is None:
+        well_names = list(tops.keys())
+
+    for wname in well_names:
+        these_tops = list(tops[wname].keys())
+        if interval_names is None:
+            int_names = these_tops
+            # Add a duplicate of the last interval to avoid running out-of-index
+            int_names.append(int_names[-1])
+        else:
+            int_names = deepcopy(interval_names)
+
+        # Add the 'TD' top name to catch it if it exists
+        int_names.append('TD')
+
+        # Find list of common top names
+        ct = [tn for tn in int_names if tn in these_tops]
+        # Find the index in these_tops to the last common top
+        if len(ct) > 0:
+            ind = these_tops.index(ct[-1])
+            if ind + 1 <= len(these_tops):
+                # if this is the last index of these_tops
+                ct.append(ct[-1])
+            else:
+                # Add the next top in these_tops
+                ct.append(these_tops[ind+1])
+        else:
+            ct.append(ct[-1])
+
+        try:
+            while 'TD' in ct:
+                ct.remove('TD')
+        except ValueError as ve:
+            print(ve)
+
+
+        for i in range(len(ct)-1):
+            ws.append(['', wname, ct[i], tops[wname][ct[i]], tops[wname][ct[i+1]]])
+
+
+    wb.save(filename)
+
+
+def read_petrel_checkshots(filename, only_these_wells=None):
+    checkshots = {}
+    keys = []
+    this_well_name = ''
+    data_section = False
+    header_section = False
+    i = 0
+    well_i = None
+
+    with open(filename, 'r') as f:
+        for line in f.readlines():
+            if line[:7] == 'BEGIN H':
+                header_section = True
+                continue
+            elif line[:5] == 'END H':
+                header_section = False
+                data_section = True
+                continue
+            if header_section:
+                if line[:4].lower() == 'well':
+                    well_i = i
+                i += 1
+                keys.append(line.strip())
+            elif data_section:
+                data = line.split()
+                this_well_name = fix_well_name(data[well_i].replace('"', ''))
+                if (only_these_wells is not None) and this_well_name not in only_these_wells:
+                    continue
+                if this_well_name not in list(checkshots.keys()):
+                    checkshots[this_well_name] = {xx: [] for xx in keys}
+                else:
+                    for j, key in enumerate(keys):
+                        checkshots[this_well_name][key].append(my_float(data[j]))
+
+    return checkshots
+
+
+
+
 def test_file_path(file_path, working_dir):
     if os.path.isfile(file_path):
         return file_path
@@ -258,6 +456,36 @@ def test_file_path(file_path, working_dir):
         return os.path.join(working_dir, file_path)
     else:
         return False
+
+
+def check_if_excelfile_writable(fnm):
+    from openpyxl.utils.exceptions import InvalidFileException
+    if os.path.exists(fnm):
+        # path exists
+        if os.path.isfile(fnm): # is it a file or a dir?
+            # also works when file is a link and the target is writable
+            # try to open and save it
+            try:
+                wb = load_workbook(fnm)
+            except InvalidFileException as ie:
+                print(ie)
+                return False
+            try:
+                wb.save(fnm)
+            except PermissionError as pe:
+                print(pe)
+                print('File is open. Please close it and try again')
+                return False
+            return True
+        else:
+            return False # path is a dir, so cannot write as a file
+
+    # target does not exist, check perms on parent dir
+    pdir = os.path.dirname(fnm)
+    if not pdir:
+        pdir = '.'
+    # target is creatable if parent dir is writable
+    return os.access(pdir, os.W_OK)
 
 
 def fix_well_name(well_name):
@@ -280,7 +508,27 @@ def unique_names(table, column_name, well_names=True):
         return [x for x in list(set(table[column_name])) if isinstance(x, str)]
 
 
-def return_dict_from_tops(tops, well_key, top_key, key_name, only_these_wells=None):
+def return_dict_from_tops(tops, well_key, top_key, key_name, only_these_wells=None, include_base=None):
+    """
+
+    :param tops:
+    :param well_key:
+        str
+        Name of the column which contain the well names
+    :param top_key:
+        str
+        Name of the column which contain the tops / interval names
+    :param key_name:
+        str
+        Name of the column which contain the top depth
+    :param only_these_wells:
+    :param include_base:
+        str
+        Name of the column which contain the base depth
+        if this is used each top / interval will contain a list of of top and base depth
+        else it is just the top depth
+    :return:
+    """
     if only_these_wells:
         unique_wells = only_these_wells
     else:
@@ -294,7 +542,10 @@ def return_dict_from_tops(tops, well_key, top_key, key_name, only_these_wells=No
         for i, marker_name in enumerate(list(tops[top_key])):
             if fix_well_name(tops[well_key][i]) != well_name:
                 continue  # not on the right well
-            answer[well_name][marker_name.upper()] = tops[key_name][i]
+            if include_base is not None:
+                answer[well_name][marker_name.upper()] = [tops[key_name][i], tops[include_base][i]]
+            else:
+                answer[well_name][marker_name.upper()] = tops[key_name][i]
 
     return answer
 
@@ -320,10 +571,10 @@ def write_las(filename, wh, lh, data, overwrite=False):
         well header =  w.header, where w is a core.well.Well object
     :param lh:
         core.well.Header
-        log header = w.log_blocks['LogBlock name'].header, where w is a core.well.Well object
+        log header = w.block['Block name'].header, where w is a core.well.Well object
     :param data:
         dict
-        data = w.log_blocks['LogBlock name'].logs, where w is a core.well.Well object
+        data = w.block['Block name'].logs, where w is a core.well.Well object
     :param overwrite:
         bool
         Set to True to allow overwriting an existing las file
@@ -344,7 +595,8 @@ def write_las(filename, wh, lh, data, overwrite=False):
     )
 
     out += '# {}\n'.format(wh['creation_info'].value)
-    out += '# NOTE: {}\n'.format(wh['note'].value)
+    if 'note' in list(wh.keys()):
+        out += '# NOTE: {}\n'.format(wh['note'].value)
     out += '# Written to las on: {}\n'.format(datetime.now().isoformat())
     out += '# Modified on: {}\n'.format(wh['modification_date'].value)
     for key, value in data.items():
@@ -358,9 +610,9 @@ def write_las(filename, wh, lh, data, overwrite=False):
         '#----------      ------------         -------------------------------\n'
     )
 
-    # add info about start stop etc. from LogBlock header
+    # add info about start stop etc. from Block header
     for key in list(lh.keys()):
-        if key in ['name', 'creation_info', 'creation_date', 'modification_date']:
+        if key in ['name', 'creation_info', 'creation_date', 'modification_date', 'well']:
             continue
         out += '{0: <7}.{1: <9}{2: <21}:{3:}\n'.format(
             key.upper(),
@@ -431,6 +683,7 @@ def write_las(filename, wh, lh, data, overwrite=False):
 
     with open(filename, 'w+') as f:
         f.write(out)
+
 
 def get_las_header(filename):
     """
@@ -511,6 +764,8 @@ def convert(lines, file_format='las', rename_well_logs=None):
         where the key is the wanted well log name, and the value list is a list of well log names to translate from
 
     """
+    # TODO
+    # Remove the usage of rename_well_logs
     if rename_well_logs is None:
         rename_well_logs = {'depth': ['Depth', 'DEPT', 'MD', 'DEPTH']}
     elif isinstance(rename_well_logs, dict) and ('depth' not in list(rename_well_logs.keys())):
@@ -536,7 +791,9 @@ def convert(lines, file_format='las', rename_well_logs=None):
         """
         for rname, value in rename_well_logs.items():
             if _key.lower() in [x.lower() for x in value]:
-                logger.info('Renaming log from {} to {}'.format(_key, rname))
+                info_txt = 'Renaming log from {} to {}'.format(_key, rname)
+                print('INFO: {}'.format(info_txt))
+                logger.info(info_txt)
                 return rname.lower()
         else:
             return _key
@@ -596,7 +853,8 @@ def convert(lines, file_format='las', rename_well_logs=None):
             if section == "data":
                 generated_keys = [e.lower() for e in well_dict["curve"].keys()]
                 for key in generated_keys:
-                    key = rename_log_name(key)
+                    # XXX
+                    #key = rename_log_name(key)
                     # inital all key to empty list
                     well_dict = add_section(well_dict, section, key, [])
 
@@ -649,7 +907,8 @@ def convert(lines, file_format='las', rename_well_logs=None):
 
             # divide line
             mnem = line[:mnem_end - 1].strip()
-            mnem = rename_log_name(mnem)
+            # XXX
+            # mnem = rename_log_name(mnem)
             unit = line[mnem_end:unit_end].strip()
             data = line[unit_end:colon_end].strip()
             desc = line[colon_end + 1:].strip()
@@ -703,3 +962,41 @@ def convert(lines, file_format='las', rename_well_logs=None):
             well_dict = add_section(well_dict, section, None, line)
 
     return null_val, generated_keys, well_dict
+
+
+def interpret_rename_string(rename_string):
+    """
+    creates a rename dictionary ({'VCL': 'VSH', 'Vp': 'Vp_dry'}) from input string
+    :param rename_string:
+        str
+        renaming defined by "VSH->VCL, Vp_dry->Vp"
+    :return:
+        dict or None
+    """
+    if len(rename_string) < 3:
+        return None
+
+    return_dict = {}
+    for pair in rename_string.split(','):
+        if '->' not in pair:
+            continue
+        names = pair.split('->')
+        if len(names) > 2:
+            warn_txt = "Translation pairs should be separated by ',': ".format(pair)
+            print('WARNING: {}'.format(warn_txt))
+            logger.warning(warn_txt)
+            continue
+        return_dict[names[1].strip().lower()] = names[0].strip().lower()
+    if len(return_dict) < 1:
+        return None
+    else:
+        return return_dict
+
+
+def my_float(string):
+    try:
+        return float(string)
+    except ValueError:
+        return string
+
+

@@ -16,6 +16,7 @@ import numpy as np
 
 import utils.masks as msks
 
+
 def log_header_to_template(log_header):
     """
     Returns a template dictionary from the information in the log header.
@@ -58,6 +59,7 @@ def arrange_logging(log_to_stdout, log_to_this_file, level=logging.INFO):
                             format=frmt,
                             level=level)
 
+
 def gitversion():
     thisgit =  os.path.realpath(__file__).replace('utils/returnVersion.py','.git')
     tagstring = ''
@@ -87,6 +89,7 @@ def gitversion():
         hashstring = 'Unknown hash'
 
     return 'Git: %s, %s' % (tagstring, hashstring)
+
 
 def svnversion():
     try:
@@ -132,4 +135,50 @@ def isnan(val):
         return np.isnan(val)
     except:
         raise NotImplementedError('Cant handle this input properly')
+
+
+def conv_tops_to_wis(tops, intervals):
+    """
+    Convert a set of tops and intervals to "working intervals"
+
+    :param tops:
+        dict
+        {'Well_name':
+            {'top_A': top depth,
+             'base_A': top depth,
+             'top_B': top depth,
+             'base_A': top depth},
+         ...
+        }
+    :param intervals:
+        list
+        [{'name': 'w_interval_A',
+             'tops': ['top_A', 'base_A']},
+         {'name': 'w_interval_B',
+             'tops': ['top_B', 'base_B']}]
+
+    :return:
+    working_intervals
+    dict
+    {'Well name':
+        {'w_interval_A': [top depth, base depth],
+         'w_interval_B': [top depth, base depth],
+         ...
+        },
+     ...
+    }
+    """
+    working_intervals = {}
+    for wname in list(tops.keys()):
+        working_intervals[wname] = {}
+        for i, iname in enumerate([x['name'] for x in intervals]):
+            top_name = intervals[i]['tops'][0]
+            base_name = intervals[i]['tops'][1]
+            if top_name.upper() not in list(tops[wname].keys()):
+                continue
+            if base_name.upper() not in list(tops[wname].keys()):
+                continue
+            working_intervals[wname][iname] = [tops[wname][top_name.upper()], tops[wname][base_name.upper()]]
+    return working_intervals
+
 

@@ -42,17 +42,13 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
     input_step = well_dict['well_info']['step']['value']
 
     # Extract the depth (MD) log from the input logs
-    if 'depth' in list(well_dict['data'].keys()):
-        input_md = np.array(well_dict['data']['depth'])
-    else:
-        input_md = np.arange(input_start, input_stop+input_step, input_step)
+    if 'depth' not in list(well_dict['data'].keys()):
+        raise IOError('Depth log is missing in input')
+    input_md = np.array(well_dict['data']['depth'])
 
-    # Create a true MD array from the given start, stop, step
-    true_md = np.arange(start, stop+step, step)
-    if len(true_md) > orig_len:
-        true_md = np.arange(start, stop, step)
-    if len(true_md) < orig_len:
-        raise Warning('Length of true data ({}) does not match')
+    # Create a true MD array
+    #true_md = np.arange(start, stop+step, step)
+    true_md = np.linspace(start, stop, orig_len)
 
     info_txt = 'Actual length versus desired length: {} - {}'.format(len(input_md), len(true_md))
     #print(info_txt)
@@ -70,6 +66,7 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
         dd = None
         for key in list(well_dict['data'].keys()):
             # re-sample the data
+            #dd, this_data = interpolate(input_md, well_dict['data'][key], 0., length=orig_len)
             dd, this_data = interpolate(input_md, well_dict['data'][key], step)
             # re-insert them
             well_dict['data'][key] = list(this_data)
@@ -133,16 +130,35 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
         # Update well_info
         well_dict['well_info']['stop']['value'] = stop
 
+    # Now test the result if it has the same length as the desired length
+    if len(well_dict['data']['depth']) != orig_len:
+        warn_txt = 'Lengths does not match. Input versus desired length: {} - {}\n Interpolation started'.format(
+            len(well_dict['data']['depth']), orig_len)
+        logger.warning(warn_txt)
+        print('WARNING: {}'.format(warn_txt))
+        this_md =  well_dict['data']['depth']
+        for key in list(well_dict['data'].keys()):
+            # re-sample the data
+            dd, this_data = interpolate(this_md, well_dict['data'][key], 0., length=orig_len)
+            # re-insert them
+            well_dict['data'][key] = list(this_data)
+
+
     info_txt = 'New length versus desired length: {} - {}'.format(len(well_dict['data']['depth']), len(true_md))
     #print(info_txt)
     #logger.info(info_txt)
 
 
-def interpolate(MD, log, step, kind='linear'):
+def interpolate(MD, log, step, length=None, kind='linear'):
     """
     Takes an array of log values ("log") with corresponding MD values and creates a regularly sampled log with step = "step"
     """
-    outMD = np.arange(MD[0], MD[-1], step)
+    if length is not None:
+        outMD = np.linspace(MD[0], MD[-1], length)
+    else:
+        outMD = np.arange(MD[0], MD[-1], step)
+
+    #print('In interpolation: length = {}'.format(length))
 
     return outMD, interp1d(MD, log, kind=kind)(outMD)
 
@@ -151,7 +167,9 @@ def info(wd):
     input_start = wd['well_info']['strt']['value']
     input_stop = wd['well_info']['stop']['value']
     input_step = wd['well_info']['step']['value']
-    length = np.arange(input_start, input_stop + input_step, input_step)
     txt = 'Start: {}, Stop: {}, Step: {}\n'.format(input_start, input_stop, input_step)
-    txt += 'Actual length vs estimated length: {} vs {}'.format(len(wd['data']['depth']), len(length))
     return txt
+
+def check_lengths(wd):
+    for key in list(wd['data'].keys()):
+        print(' - Length of {}: {}'.format(key, len(wd['data'][key])))

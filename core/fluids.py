@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from decorator import decorator
 import inspect
+from copy import deepcopy
 import logging
 from datetime import datetime
 
@@ -102,6 +103,7 @@ class Fluid(object):
             gas_gravity=None,
             gas_mixing=None, 
             brie_exponent=None,
+            fluid_type=None,
             name='Default',
             volume_fraction=None,
             header=None):
@@ -112,7 +114,25 @@ class Fluid(object):
             header['name'] = name
 
         self.header = Header(header)
-        
+        # initiating class variables to None to avoid warnings
+        self.calculation_method = None
+        self.k = None
+        self.mu = None
+        self.rho = None
+        self.temp_gradient = None
+        self.temp_ref = None
+        self.pressure_gradient = None
+        self.pressure_ref = None
+        self.salinity = None
+        self.gor = None
+        self.oil_api = None
+        self.gas_gravity = None
+        self.gas_mixing = None
+        self.brie_exponent = None
+        self.fluid_type = None
+        self.name = None
+        self.volume_fraction = None
+
         # Case input data is given as a float or integer, create a Param
         # object with default units and description
         for this_name, param, unit_str, desc_str, def_val in zip(
@@ -151,6 +171,7 @@ class Fluid(object):
             super(Fluid, self).__setattr__(this_name, param)
         
         super(Fluid, self).__setattr__('name', name)
+        super(Fluid, self).__setattr__('fluid_type', fluid_type)
         super(Fluid, self).__setattr__('volume_fraction', volume_fraction)
 
 #    def __getattribute__(self, item):
@@ -178,34 +199,134 @@ class Fluid(object):
         
         head = [pattern % (k, self.__dict__[k]) for k in keys]
         return "\n".join(head)
-        
+
+    def print_fluid(self, tvd=None):
+        out = '  {}\n'.format(self.name)
+        out += '      K: {}, Mu: {}, Rho {}\n'.format(
+            self.calc_k(tvd).value, self.calc_mu(tvd).value, self.calc_rho(tvd).value)
+        out += '      Volume fraction: {}\n'.format(self.volume_fraction)
+        out += '      Calculation method: {}\n'.format(self.calculation_method.value)
+        return out
 
     def keys(self):
         return self.__dict__.keys()
 
     def calc_k(self, tvd):
         if self.calculation_method.value == 'Batzle and Wang':
-            warn_txt = 'Calculation of fluid properties not yet implemented'
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
-        return object.__getattribute__(self, 'k')
+            #print('calc_k: {}, TVD: {}'.format(self.name, tvd))
+            if tvd is None:
+                warn_txt = 'No TVD value given for the fluid calculation'
+                print('WARNING: {}'.format(warn_txt))
+                logger.warning(warn_txt)
+                return Param(name='',
+                             value=np.nan,
+                             unit='',
+                             desc='')
+            _s = self.salinity
+            _p = self.pressure_ref.value + self.pressure_gradient.value * tvd
+            _t = self.temp_ref.value + self.temp_gradient.value * tvd
+            if self.fluid_type == 'brine':
+                rho_b = rp.rho_b(_s, _p,  _t).value
+                v_p_b = rp.v_p_b(_s, _p, _t).value
+                return Param(name='k_b',
+                             value=v_p_b**2 * rho_b * 1.E-6,
+                             unit='GPa',
+                             desc='Brine bulk modulus'
+                )
+            elif self.fluid_type == 'oil':
+                k_o, rho_o = rp.k_and_rho_o(
+                    self.oil_api,
+                    self.gas_gravity,
+                    self.gor,
+                    _p,
+                    _t
+                )
+                return k_o
+            elif self.fluid_type == 'gas':
+                k_g, rho_g = rp.k_and_rho_g(self.gas_gravity, _p, _t)
+                return k_g
+            else:
+                raise NotImplementedError('Bulk modulus not possible to calculate for {}'.format(self.fluid_type))
+        else:
+            return object.__getattribute__(self, 'k')
 
     def calc_mu(self, tvd):
+        #print('calc_mu: {}, TVD: {}'.format(self.name, tvd))
         if self.calculation_method.value == 'Batzle and Wang':
-            warn_txt = 'Calculation of fluid properties not yet implemented'
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
-        return object.__getattribute__(self, 'mu')
+            if tvd is None:
+                warn_txt = 'No TVD value given for the fluid calculation'
+                print('WARNING: {}'.format(warn_txt))
+                logger.warning(warn_txt)
+                return Param(name='',
+                             value=np.nan,
+                             unit='',
+                             desc='')
+            if self.fluid_type == 'brine':
+                return Param(name='mu_b',
+                             value=np.nan,
+                             unit='GPa',
+                             desc='Brine shear modulus'
+                             )
+            elif self.fluid_type == 'oil':
+                return Param(name='mu_o',
+                             value=np.nan,
+                             unit='GPa',
+                             desc='Oil shear modulus'
+                             )
+            elif self.fluid_type == 'gas':
+                return Param(name='mu_g',
+                             value=np.nan,
+                             unit='GPa',
+                             desc='Gas shear modulus'
+                             )
+            else:
+                raise NotImplementedError('Shear modulus not possible to calculate for {}'.format(self.fluid_type))
+        else:
+            return object.__getattribute__(self, 'mu')
 
     def calc_rho(self, tvd):
         if self.calculation_method.value == 'Batzle and Wang':
-            warn_txt = 'Calculation of fluid properties not yet implemented'
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
-        return object.__getattribute__(self, 'rho')
+            #print('calc_rho: {}, TVD: {}'.format(self.name, tvd))
+            if tvd is None:
+                warn_txt = 'No TVD value given for the fluid calculation'
+                print('WARNING: {}'.format(warn_txt))
+                logger.warning(warn_txt)
+                return Param(name='',
+                             value=np.nan,
+                             unit='',
+                             desc='')
+            _s = self.salinity
+            _p = self.pressure_ref.value + self.pressure_gradient.value * tvd
+            _t = self.temp_ref.value + self.temp_gradient.value * tvd
+            if self.fluid_type == 'brine':
+                rho_b = rp.rho_b(_s, _p,  _t)
+                return rho_b
+            elif self.fluid_type == 'oil':
+                k_o, rho_o = rp.k_and_rho_o(
+                    self.oil_api,
+                    self.gas_gravity,
+                    self.gor,
+                    _p,
+                    _t
+                )
+                return rho_o
+            elif self.fluid_type == 'gas':
+                k_g, rho_g = rp.k_and_rho_g(self.gas_gravity, _p, _t)
+                return rho_g
+            else:
+                raise NotImplementedError('Bulk modulus not possible to calculate for {}'.format(self.fluid_type))
+        else:
+            return object.__getattribute__(self, 'rho')
 
-class FluidSet(object):
-    
+
+class FluidMix(object):
+    """
+    Dictionary containing the initial, and final, fluids for given wells and intervals
+    {substition order:
+        {well name:
+            {working interval:
+                {fluid name: Fluid()}}}}
+    """
     def __init__(self,
                  name=None,
                  fluids=None, 
@@ -224,54 +345,96 @@ class FluidSet(object):
             name = 'MyFluids'
         self.name = name
 
-    def __str__(self):
-        out = ''
+    def print_all_fluids(self, tvd=None):
         for key in ['initial', 'final']:
-            out += "{} fluids:\n".format(key)
-            for f in list(self.fluids[key].keys()):
-                out += "  {}\n".format(f)
-                out += "    K: {}, Mu: {}, Rho {}\n".format(self.fluids[key][f].k.value,
-                                                            self.fluids[key][f].mu.value,
-                                                            self.fluids[key][f].rho.value)
-                out += "    Calc. method: {}\n".format(self.fluids[key][f].calculation_method.value)
-                out += "    Volume fraction: {}\n".format(self.fluids[key][f].volume_fraction)
+            for w in list(self.fluids[key].keys()):
+                for wi in list(self.fluids[key][w].keys()):
+                    out += self.print_fluids(key, w, wi, tvd)
+        return out
+
+    def print_fluids(self, subst, well_name, wi_name, tvd=None):
+        out = 'Fluid mixture: {}, {}, {}, {}'.format(subst, well_name, wi_name, self.name)
+        if tvd is not None:
+            out += ' at TVD: {} m\n'.format(tvd)
+        else:
+            out += '\n'
+        for m in list(self.fluids[subst][well_name][wi_name].keys()):
+            out += self.fluids[subst][well_name][wi_name][m].print_fluid(tvd)
         return out
 
 
-    def read_excel(self, filename, sheet_name='Fluids', header=1):
-        fluids = {
+    def read_excel(self, filename,
+                   fluid_sheet='Fluids', fluid_header=1,
+                   mix_sheet='Fluid mixtures', mix_header=1):
+
+        # First read in all fluids defined in the project table
+        all_fluids = {}
+        fluids_table = pd.read_excel(filename,
+                                     sheet_name=fluid_sheet, header=fluid_header)
+
+        for i, name in enumerate(fluids_table['Name']):
+            if isnan(name):
+                continue  # Avoid empty lines
+            #if fluids_table['Calculation method'][i] == 'Batzle and Wang':
+            #    warn_txt = 'Calculation of fluid properties is still not implemented, please use constant values'
+            #    print('WARNING {}'.format(warn_txt))
+            #    logger.warning(warn_txt)
+            this_fluid = Fluid(
+                    fluids_table['Calculation method'][i],
+                    float(fluids_table['Bulk moduli [GPa]'][i]),
+                    float(fluids_table['Shear moduli [GPa]'][i]),
+                    float(fluids_table['Density [g/cm3]'][i]),
+                    float(fluids_table['T gradient [deg C/m]'][i]),
+                    float(fluids_table['T ref [C]'][i]),
+                    float(fluids_table['P gradient [MPa/m]'][i]),
+                    float(fluids_table['P ref [MPa]'][i]),
+                    float(fluids_table['Salinity [ppm]'][i]),
+                    float(fluids_table['GOR'][i]),
+                    float(fluids_table['Oil API'][i]),
+                    float(fluids_table['Gas gravity'][i]),
+                    fluids_table['Gas mixing'][i],
+                    float(fluids_table['Brie exponent'][i]),
+                    #fluid_type=fluids_table['Fluid type'][i],
+                    fluid_type=None if isnan(fluids_table['Fluid type'][i]) else fluids_table['Fluid type'][i].lower(),
+                    name=name.lower()
+            )
+            all_fluids[name.lower()] = this_fluid
+
+        # Then read in the fluid mixes
+        fluids_mixes = {
             'initial': {},
             'final': {}
         }
-        table = pd.read_excel(filename, sheet_name=sheet_name, header=header)
-        for i, name in enumerate(table['Name']):
-            vf = table['Volume fraction'][i]
+        mix_table = pd.read_excel(filename, sheet_name=mix_sheet, header=mix_header)
+        for i, name in enumerate(mix_table['Fluid name']):
+            vf = mix_table['Volume fraction'][i]
             if isnan(vf):
                 continue  # Avoid fluids where the volume fraction is not set
-            if table['Calculation method'][i] == 'Batzle and Wang':
-                warn_txt = 'Calculation of fluid properties is still not implemented, please use constant values'
-                print('WARNING {}'.format(warn_txt))
-                logger.warning(warn_txt)
-            this_fluid = Fluid(
-                    table['Calculation method'][i],
-                    float(table['Bulk moduli [GPa]'][i]),
-                    float(table['Shear moduli [GPa]'][i]),
-                    float(table['Density [g/cm3]'][i]),
-                    float(table['T gradient [deg C/m]'][i]),
-                    float(table['T ref [C]'][i]),
-                    float(table['P gradient [MPa/m]'][i]),
-                    float(table['P ref [MPa]'][i]), 
-                    float(table['Salinity [ppm]'][i]), 
-                    float(table['GOR'][i]),
-                    float(table['Oil API'][i]), 
-                    float(table['Gas gravity'][i]),
-                    table['Gas mixing'][i],
-                    float(table['Brie exponent'][i]),
-                    name=name.lower(),
-                    volume_fraction=float(vf) if (not isinstance(vf, str)) else vf.lower()
-            )
-            fluids[table['Substitution order'][i].lower()][name.lower()] = this_fluid
-        self.fluids = fluids
+            this_subst = mix_table['Substitution order'][i].lower()
+            this_well = mix_table['Well name'][i].upper()
+            this_wi = mix_table['Interval name'][i].upper()
+            this_fluid = deepcopy(all_fluids[name.lower()])
+            this_fluid.volume_fraction = \
+                float(vf) if (not isinstance(vf, str)) else vf.lower()
+            # iterate down in this complex dictionary
+            # {this_subst:                          # 1'st level: initial or final
+            #       {this_well:                     # 2'nd level: well
+            #           {this_wi:                   # 3'd level: working interval
+            #               {fluid_name: Fluid()    # 4'th level: fluid
+            #       }}}}
+            # 2'nd level
+            if this_well in list(fluids_mixes[this_subst].keys()):
+                # 3'rd level
+                if this_wi in list(fluids_mixes[this_subst][this_well].keys()):
+                    # 4'th level
+                    fluids_mixes[this_subst][this_well][this_wi][name.lower()] \
+                        = this_fluid
+                else:
+                    fluids_mixes[this_subst][this_well][this_wi] = {name.lower(): this_fluid}
+            else:
+                fluids_mixes[this_subst][this_well] = {this_wi: {name.lower(): this_fluid}}
+
+        self.fluids = fluids_mixes
         self.header['orig_file'] = filename
 
 
@@ -301,18 +464,18 @@ def test_fluidsub():
          'Note': ''}}
     w.read_well_table(well_table, 0)
     w.calc_mask({'vcl': ['<', 0.4], 'phie': ['>', 0.1]}, name='sand')
-    mask = w.log_blocks['LogBlock'].masks['sand'].data
-    vp = w.log_blocks['LogBlock'].logs['vp_dry'].data[mask]
-    vs = w.log_blocks['LogBlock'].logs['vs_dry'].data[mask]
-    rho = w.log_blocks['LogBlock'].logs['rho_dry'].data[mask]
-    por = w.log_blocks['LogBlock'].logs['phie'].data[mask]
+    mask = w.block['Logs'].masks['sand'].data
+    vp = w.block['Logs'].logs['vp_dry'].data[mask]
+    vs = w.block['Logs'].logs['vs_dry'].data[mask]
+    rho = w.block['Logs'].logs['rho_dry'].data[mask]
+    por = w.block['Logs'].logs['phie'].data[mask]
 
     test = 'constants'  #'array'
     # Test with constant Vsh and constant Sw
     v_sh = 0.2
     s_w = 0.2
     if test == 'array':  # test with arrays of v_sh and s_w
-        v_sh = w.log_blocks['LogBlock'].logs['vcl'].data[mask]
+        v_sh = w.block['Logs'].logs['vcl'].data[mask]
         # create a mock-up water saturation
         s_w = 0.2 + v_sh
         s_w[s_w > 1.0] = 1.0
@@ -345,7 +508,7 @@ def test_fluidsub():
     v_p_2, v_s_2, rho_2, k_2 = rp.gassmann_vel(vp, vs, rho, k_f1, rho_f1, k_f2, rho_f2, k0, por)
 
     plt.plot(vp, label='dry')
-    plt.plot(w.log_blocks['LogBlock'].logs['vp_so08'].data[mask], label='RD oil')
+    plt.plot(w.block['Logs'].logs['vp_so08'].data[mask], label='RD oil')
     plt.plot(v_p_2, label='my oil')
     plt.legend()
     plt.show()

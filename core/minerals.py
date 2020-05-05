@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 from decorator import decorator
 import inspect
+from copy import deepcopy
 from datetime import datetime
 from dataclasses import dataclass
 
@@ -37,6 +38,7 @@ class MineralData:
     value: float
     unit: str
     desc: str
+
 
 class Header(AttribDict):
     """
@@ -145,13 +147,36 @@ class Mineral(object):
         
         head = [pattern % (k, self.__dict__[k]) for k in keys]
         return "\n".join(head)
-        
-    
+
     def keys(self):
         """
         Return dict key list of content
         """
         return self.__dict__.keys()
+
+    def calc_k(self, dummy_tvd):
+        """
+        Dummy function that makes Mineral objects behave same way as Fluid objects
+        :param dummy_tvd:
+        :return:
+        """
+        return object.__getattribute__(self, 'k')
+
+    def calc_mu(self, dummy_tvd):
+        """
+        Dummy function that makes Mineral objects behave same way as Fluid objects
+        :param dummy_tvd:
+        :return:
+        """
+        return object.__getattribute__(self, 'mu')
+
+    def calc_rho(self, dummy_tvd):
+        """
+        Dummy function that makes Mineral objects behave same way as Fluid objects
+        :param dummy_tvd:
+        :return:
+        """
+        return object.__getattribute__(self, 'rho')
 
     def vp(self):
         """
@@ -164,7 +189,8 @@ class Mineral(object):
         vp = rp.v_p(self.k.value, self.mu.value, self.rho.value)
         return MineralData('vp', vp, 'km/s', 'P-wave velocity')
 
-class MineralSet(object):
+
+class MineralMix(object):
     """
     Class handling a set of minerals
     """
@@ -189,38 +215,69 @@ class MineralSet(object):
         self.name = name
 
     def __str__(self):
-        out = ''
-        for m in list(self.minerals.keys()):
-            out += "{}\n".format(m)
-            out += "  K: {}, Mu: {}, Rho {}\n".format(self.minerals[m].k.value,
-                                                        self.minerals[m].mu.value,
-                                                        self.minerals[m].rho.value)
-            out += "  Volume fraction: {}\n".format(self.minerals[m].volume_fraction)
+        out = 'Mineral mixture: {}\n'.format(self.name)
+        for w in list(self.minerals.keys()):
+            out += " - Well {}\n".format(w)
+            for wi in list(self.minerals[w].keys()):
+                out += "  + Working interval {}\n".format(wi)
+                for m in list(self.minerals[w][wi].keys()):
+                    out += "    {}\n".format(m)
+                    out += "      K: {}, Mu: {}, Rho {}\n".format(self.minerals[w][wi][m].k.value,
+                                                                self.minerals[w][wi][m].mu.value,
+                                                                self.minerals[w][wi][m].rho.value)
+                    out += "      " \
+                           "Volume fraction: {}\n".format(self.minerals[w][wi][m].volume_fraction)
         return out
 
-    def read_excel(self, filename, sheet_name='Minerals', header=1):
-        """ 
-        Read an excel file that contains Mineral data
-        
-        Should be in format:
-            Name	Bulk moduli [GPa]	Shear moduli [GPa]	Density [g/cm3]	API
-            Quartz	36,6	45	2,65	0
-            Shale	11,4	3	2,35	0
+    def print_minerals(self, well_name, wi_name):
+        out = 'Mineral mixture: {}, {}, {}\n'.format(well_name, wi_name, self.name)
+        for m in list(self.minerals[well_name][wi_name].keys()):
+            out += "    {}\n".format(m)
+            out += "      K: {}, Mu: {}, Rho {}\n".format(self.minerals[well_name][wi_name][m].k.value,
+                                                          self.minerals[well_name][wi_name][m].mu.value,
+                                                          self.minerals[well_name][wi_name][m].rho.value)
+            out += "      " \
+                   "Volume fraction: {}\n".format(self.minerals[well_name][wi_name][m].volume_fraction)
+        return out
 
+    def read_excel(self, filename,
+                   min_sheet='Minerals', min_header=1,
+                   mix_sheet='Mineral mixtures', mix_header=1):
+        """ 
+        Read the mineral mixtures from the project table
         """
-        minerals = {}
-        table = pd.read_excel(filename, sheet_name=sheet_name, header=header)
-        for i, name in enumerate(table['Name']):
-            vf = table['Volume fraction'][i]
+        # first read in all minerals
+        all_minerals = {}
+        min_table = pd.read_excel(filename, sheet_name=min_sheet, header=min_header)
+        for i, name in enumerate(min_table['Name']):
+            if isnan(name):
+                continue
+            this_min = Mineral(
+                float(min_table['Bulk moduli [GPa]'][i]),
+                float(min_table['Shear moduli [GPa]'][i]),
+                float(min_table['Density [g/cm3]'][i]),
+                name.lower(),
+            )
+            all_minerals[name.lower()] = this_min
+
+        # Then read in the mineral mixtures
+        min_mixes = {}
+        mix_table = pd.read_excel(filename, sheet_name=mix_sheet, header=mix_header)
+        for i, name in enumerate(mix_table['Mineral name']):
+            vf = mix_table['Volume fraction'][i]
             if isnan(vf):
                 continue  # Avoid minerals where the volume fraction is not set
-            this_mineral = Mineral(
-                    float(table['Bulk moduli [GPa]'][i]),
-                    float(table['Shear moduli [GPa]'][i]),
-                    float(table['Density [g/cm3]'][i]),
-                    name.lower(),
-                    volume_fraction=float(vf) if (not isinstance(vf, str)) else vf.lower()
-                    )
-            minerals[name] = this_mineral
-        self.minerals = minerals
+            this_well = mix_table['Well name'][i].upper()
+            this_wi = mix_table['Interval name'][i].upper()
+            this_mineral = deepcopy(all_minerals[name.lower()])
+            this_mineral.volume_fraction = float(vf) if (not isinstance(vf, str)) else vf.lower()
+            if this_well in list(min_mixes.keys()):
+                if this_wi in list(min_mixes[this_well].keys()):
+                    min_mixes[this_well][this_wi][name.lower()] = this_mineral
+                else:
+                    min_mixes[this_well][this_wi] = {name.lower(): this_mineral}
+            else:
+                min_mixes[this_well] = {this_wi: {name.lower(): this_mineral}}
+
+        self.minerals = min_mixes
         self.header['orig_file'] = filename

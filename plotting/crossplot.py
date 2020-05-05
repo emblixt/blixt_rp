@@ -229,10 +229,11 @@ def plot(
 
     # set up plotting environment
     if fig is None:
-        fig = plt.figure(figsize=(10,10))
-    if ax is None:
+        if ax is None:
+            fig = plt.figure(figsize=(10,10))
+            ax = fig.subplots()
+    elif ax is None:
         ax = fig.subplots()
-
 
     # handle markers
     msymbol = None
@@ -314,8 +315,10 @@ def plot(
             ydata[~mask][nodi],
             c='0.4',
             s=npdata,
+            marker=msymbol,
             edgecolors='none',
-            alpha=0.5
+            alpha=0.5,
+            label='_nolegend_'
         )
     # Then plot the remaining points
     im = ax.scatter(
@@ -358,6 +361,7 @@ def plot(
             im.set_paths(paths)
 
     if (cbar is None) and not isinstance(cdata, str):  # don't draw a colorbar for single colored data
+        print('Creating colorbar')
         cbar = fig.colorbar(im, ax=ax)
         cbar.ax.tick_params(labelsize=t_fonts)
         cbar.ax.set_ylabel(clabel, fontsize=l_fonts)
