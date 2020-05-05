@@ -85,13 +85,13 @@ class RpTestCase(unittest.TestCase):
         vs = cnvrt(RpTestCase.w.block['Logs'].logs['acs'].data, 'us/ft', 'm/s')
         grad2 = rp.gradient(vp, None, vs, None, rho, None, along_wiggle=True)
         i = 10637
-        grad1 = rp.gradient(vp[i+1], vp[i], vs[i+1], vs[i], rho[i+1], rho[i])
-        grad1_2 = rp.gradient(vp[i+2], vp[i+1], vs[i+2], vs[i+1], rho[i+2], rho[i+1])
+        grad1 = rp.gradient(vp[i], vp[i+1], vs[i], vs[i+1], rho[i], rho[i+1])
+        grad1_2 = rp.gradient(vp[i+1], vp[i+2], vs[i+1], vs[i+2], rho[i+1], rho[i+2])
 
         with self.subTest():
             print('Layer based gradient at i {}: {}'.format(i, grad1))
             print('Layer based gradient at i {}: {}'.format(i+1, grad1_2))
-            print('Wiggle based gradient at i {}: {}'.format(i, grad2[i-2:i+2]))
+            print('Wiggle based gradient at i {}: {}'.format(i, grad2[i:i+2]))
             self.assertTrue(True)
 
 
