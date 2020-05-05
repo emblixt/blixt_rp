@@ -49,41 +49,68 @@ def test_value(val, unit):
     return val
 
 
-def step(x_1, x_2):
+def step(x_1, x_2, along_wiggle=False):
     """
     Returns the averaged difference from layer 1 (top) to layer 2 (bottom)
     of variable x.
-    """
-    return 2 * (x_2 - x_1) / (x_2 + x_1)
+    E.G. Delta X / X_avg according to eq. 4.6 in Avseth et. al 2011
 
+    For the 'along_wiggle' case we calculate the difference in acoustic impedence along  one track without any layer,
+    and the '_2' input variables are not used
+    """
+    if along_wiggle and isinstance(x_1, np.ndarray):
+        return 2.*(x_1[1:] - x_1[:-1]) / (x_1[1:] + x_1[:-1])
+    else:
+        return 2 * (x_2 - x_1) / (x_2 + x_1)
+
+def sqrd_avg(x):
+    """
+    Common term occuring in the reflection coefficient, see eq. 4.6 in Avseth et. al 2011
+    :param x:
+    :return:
+    """
+    return 0.25 * (x[1:] + x[:-1])**2
 
 def poissons_ratio(Vp, Vs):
     return 0.5 * (Vp ** 2 - 2 * Vs ** 2) / (Vp ** 2 - Vs ** 2)
 
 
-def intercept(Vp_1, Vp_2, rho_1, rho_2, no_layer=False):
+def intercept(Vp_1, Vp_2, rho_1, rho_2, along_wiggle=False):
     """
     Returns the AVO intercept, or normal incidence reflectivity
     From eq. 2 in Castagna et al. "Framework for AVO gradient and intercept interpretation"
     Geophysics 1998.
 
-    For the 'no_layer' case we calculate the difference in acoustic impedence along  one track without any layer,
+    For the 'along_wiggle' case we calculate the difference in acoustic impedence along  one track without any layer,
     and the '_2' input variables are not used
     """
-    if no_layer and isinstance(Vp_1, np.ndarray) and isinstance(rho_1, np.ndarray):
+    if along_wiggle and isinstance(Vp_1, np.ndarray) and isinstance(rho_1, np.ndarray):
         return (Vp_1[1:]*rho_1[1:] - Vp_1[:-1]*rho_1[:-1])/(Vp_1[1:]*rho_1[1:] + Vp_1[:-1]*rho_1[:-1])
+        #return 2.*(step(Vp_1, None, along_wiggle=along_wiggle) + step(rho_1, None, along_wiggle=along_wiggle))
     else:
         return 0.5 * (step(Vp_1, Vp_2) + step(rho_1, rho_2))
 
 
-def gradient(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2):
+def gradient(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, along_wiggle=False):
     """
     Returns the AVO gradient
     From eq. 3 in Castagna et al. "Framework for AVO gradient and intercept interpretation"
     Geophysics 1998.
+
+    For the 'along_wiggle' case we calculate the difference in acoustic impedence along  one track without any layer,
+    and the '_2' input variables are not used
     """
-    return 0.5 * step(Vp_1, Vp_2) - 2. * ((Vs_1 + Vs_2) / (Vp_1 + Vp_2)) ** 2 * \
-           (2. * step(Vs_1, Vs_2) + step(rho_1, rho_2))
+    if along_wiggle and isinstance(Vp_1, np.ndarray) and isinstance(Vs_1, np.ndarray) and isinstance(rho_1, np.ndarray):
+        #r0 = intercept(Vp_1, None, rho_1, None, along_wiggle=along_wiggle)
+        #out = r0 - step(rho_1, None, along_wiggle=along_wiggle) * (0.5 + 2.*sqrd_avg(Vs_1)/sqrd_avg(Vp_1)) -\
+        #    4. * (sqrd_avg(Vs_1)/sqrd_avg(Vp_1)) * step(Vs_1, None, along_wiggle=along_wiggle)
+        out = 0.5 * step(Vp_1, None,  along_wiggle=along_wiggle) - 2.*(sqrd_avg(Vs_1)/sqrd_avg(Vp_1)) * \
+            (step(rho_1, None, along_wiggle=along_wiggle) + 2.*step(Vs_1, None, along_wiggle=along_wiggle))
+        return out
+
+    else:
+        return 0.5 * step(Vp_1, Vp_2) - 2. * ((Vs_1 + Vs_2) / (Vp_1 + Vp_2)) ** 2 * \
+               (2. * step(Vs_1, Vs_2) + step(rho_1, rho_2))
 
 
 def reflectivity(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, version='WigginsAkiRich'):

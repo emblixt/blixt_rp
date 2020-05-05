@@ -1773,6 +1773,8 @@ class Block(object):
             fig, ax = plt.subplots()
             ax.plot(self.logs['depth'].data, smooth_log, 'r', lw=2)
             ax.plot(self.logs['depth'].data, self.logs[log_name].data, 'k', lw=0.5)
+            #ax.plot(self.logs['depth'].data[13000:14500]/3.2804, smooth_log[13000:14500]*3.2804, 'r', lw=2)
+            #ax.plot(self.logs['depth'].data[13000:14500]/3.2804, self.logs[log_name].data[13000:14500]*3.2804, 'k', lw=0.5)
             ax.legend(['Smooth and despiked', 'Original'])
 
         # Handle units

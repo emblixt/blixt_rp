@@ -305,11 +305,11 @@ def test_synt():
         plt.plot(depth[start:end], rho_test[start:end], 'k--')
         plt.title('de-spiked density')
 
-        #plt.figure(figsize=(18, 4))
-        #plt.plot(depth[start:end], dt_orig[start:end], 'k')
-        #plt.plot(depth[start:end], dt_sm[start:end], 'b')
-        #plt.plot(depth[start:end], dt[start:end], 'r')
-        #plt.title('de-spiked sonic')
+        plt.figure(figsize=(18, 4))
+        plt.plot(depth[start:end], dt_orig[start:end], 'k')
+        plt.plot(depth[start:end], dt_sm[start:end], 'b')
+        plt.plot(depth[start:end], dt[start:end], 'r')
+        plt.title('de-spiked sonic')
 
         #plt.figure(figsize=(18, 4))
         #plt.plot(depth[start:end], vp_orig[start:end], 'k')
@@ -333,7 +333,7 @@ def test_synt():
     rc = (ai[1:] - ai[:-1]) / (ai[1:] + ai[:-1])
 
     # Compute reflection "my way"
-    r0 = rp.intercept(vp, None, rho, None, no_layer=True)
+    r0 = rp.intercept(vp, None, rho, None, along_wiggle=True)
     #  The difference between rc and r0 lies basically in the difference in smoothing and clipping of dt vs. vp
 
     plot = False
@@ -431,6 +431,66 @@ def test_synt():
                 f2.axes[i].axhline(y=float(twt), color='b', lw=2,
                                    alpha=0.5, xmin=0.05, xmax=0.95)
 
+
+def test_synt2():
+    """
+    This essentially tries to copy test_synt(), which is based on
+    https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
+    but using blixt_rp built in functionality instead
+    :return:
+    """
+    import utils.io as uio
+    import plotting.plot_logs as ppl
+    from core.well import Project
+    from core.well import Well
+    import utils.convert_data as ucd
+
+    wp = Project()
+    wells = wp.load_all_wells()
+    w = wells[list(wells.keys())[0]]  # take first well
+    wis = uio.project_working_intervals(wp.project_table)
+    logname_dict = {
+        'P velocity': 'vp_dry',
+        'S velocity': 'vs_dry',
+        'Density': 'rho_dry'
+    }
+
+    # when input is in feet and usec
+    #depth = ucd.convert(w.block['Logs'].logs['depth'].data, 'ft', 'm')
+    #rho_orig = w.block['Logs'].logs['rhob'].data * 1000.  # g/cm3 to kg/m3
+    #vp_orig = ucd.convert(w.block['Logs'].logs['dt'].data, 'us/ft', 'm/s')
+    #dt_orig = w.block['Logs'].logs['dt'].data * 3.2804  # convert usec/ft to usec/m
+    # else
+    depth = w.block['Logs'].logs['depth'].data
+    rho_orig = w.block['Logs'].logs[logname_dict['Density']].data * 1000.  # g/cm3 to kg/m3
+    vp_orig = w.block['Logs'].logs[logname_dict['P velocity']].data
+    vs_orig = w.block['Logs'].logs[logname_dict['S velocity']].data
+
+    # when input is in feet and usec
+    #rho = w.block['Logs'].logs['rhob'].despike(0.1) * 1000.  # g/cm3 to kg/m3
+    #vp = ucd.convert(w.block['Logs'].logs['dt'].despike(5), 'us/ft', 'm/s')
+    #dt = w.block['Logs'].logs['dt'].despike(5) * 3.2804  # convert usec/ft to usec/m
+    # else
+    rho = w.block['Logs'].logs[logname_dict['Density']].despike(0.1) * 1000.  # g/cm3 to kg/m3
+    vp = w.block['Logs'].logs[logname_dict['P velocity']].despike(200)
+    vs = w.block['Logs'].logs[logname_dict['S velocity']].despike(200)
+
+    start = 13000; end = 14500
+    # Plot despiking results
+    plot = False
+    if plot:
+        fig, axes = plt.subplots(3,1, sharex=True, figsize=(18,12))
+        for i, y1, y2 in zip([0,1,2], [rho_orig, vp_orig, vs_orig], [rho, vp, vs]):
+            axes[i].plot(depth[start:end], y2[start:end], 'y', lw=3)
+            axes[i].plot(depth[start:end], y1[start:end], 'k', lw=0.5)
+            axes[i].legend(['Smooth & despiked', 'Original'])
+
+    tdr = w.time_to_depth(logname_dict['P velocity'], debug=False)
+    r0 = rp.intercept(vp, None, rho, None, along_wiggle=True)
+
+    plot = True
+
+
 if __name__ == '__main__':
     vp0 = 2430
     vs0 = 919
@@ -441,6 +501,6 @@ if __name__ == '__main__':
     rho1 = 2.17
 
     #twolayer(vp0, vs0, rho0, vp1, vs1, rho1)
-    test_synt()
+    test_synt2()
 
     plt.show()
