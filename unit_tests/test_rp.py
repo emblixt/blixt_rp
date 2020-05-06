@@ -39,6 +39,7 @@ class RpTestCase(unittest.TestCase):
 
     def test_step(self):
         i = 5
+        theta = 10. # degrees
         x1 = np.linspace(1, 10, 10)
         x2 = np.linspace(2, 11, 10)
         x3 = np.linspace(3, 12, 10)
@@ -48,6 +49,8 @@ class RpTestCase(unittest.TestCase):
         incept2 = rp.intercept(x1, None, x3, None, along_wiggle=True)
         grad1 = rp.gradient(x1[i], x1[i+1], x2[i], x2[i+1], x3[i], x3[i+1])
         grad2 = rp.gradient(x1, None, x2, None, x3, None, along_wiggle=True)
+        func1 = rp.reflectivity(x1[i], x1[i+1], x2[i], x2[i+1], x3[i], x3[i+1])
+        func2 = rp.reflectivity(x1, None, x2, None, x3, None, along_wiggle=True)
 
         with self.subTest():
             print('Layer based step at i {}: {}'.format(i, d1))
@@ -56,6 +59,9 @@ class RpTestCase(unittest.TestCase):
             print('Wiggle based intercept at i {}: {}'.format(i, incept2[i]))
             print('Layer based gradient at i {}: {}'.format(i, grad1))
             print('Wiggle based gradient at i {}: {}'.format(i, grad2[i]))
+            print('Layer based refl. coeff. at i {} at {} deg.: {}'.format(i, theta,  func1(theta)))
+            print('Wiggle based refl. coeff. at i {} at {} deg.: {}'.format(i, theta, func2(theta)[i]))
+            self.assertTrue(True)
 
     def test_intercept(self):
         """
@@ -94,6 +100,27 @@ class RpTestCase(unittest.TestCase):
             print('Wiggle based gradient at i {}: {}'.format(i, grad2[i:i+2]))
             self.assertTrue(True)
 
+
+    def test_reflectivity(self):
+        """
+        What happens when the input to the reflectivity is an array?
+        :return:
+        """
+        i = 10637
+        theta = 10.  # degrees
+        rho = RpTestCase.w.block['Logs'].logs['den'].data
+        vp = cnvrt(RpTestCase.w.block['Logs'].logs['ac'].data, 'us/ft', 'm/s')
+        vs = cnvrt(RpTestCase.w.block['Logs'].logs['acs'].data, 'us/ft', 'm/s')
+
+        func1 = rp.reflectivity(vp[i], vp[i+1], vs[i], vs[i+1], rho[i], rho[i+1])
+        func1_2 = rp.reflectivity(vp[i+1], vp[i+2], vs[i+1], vs[i+2], rho[i+1], rho[i+2])
+        func2 = rp.reflectivity(vp, None, vs, None, rho, None, along_wiggle=True)
+
+        with self.subTest():
+            print('Layer based refl. coeff. at i {} at {} deg.: {}'.format(i, theta,  func1(theta)))
+            print('Layer based refl. coeff. at i {} at {} deg.: {}'.format(i+1, theta,  func1_2(theta)))
+            print('Wiggle based refl. coeff. at i {} at {} deg.: {}'.format(i, theta, func2(theta)[i:i+2]))
+            self.assertTrue(True)
 
 
 

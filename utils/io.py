@@ -49,6 +49,31 @@ def project_wells(filename, working_dir):
     return result
 
 
+def invert_well_table(well_table, well_name):
+    """
+    Typically, the "logname_dict"
+    :param well_table:
+        dict
+        As output from project_wells() above
+    :param well_name:
+        str
+        name of the well we want to extract the "inverted well table" from well_table
+    :return:
+        dict
+        As opposed to the commonly used "logname_dict", which relates a log type with one specific log, this dictionary
+        relates a log type with multiple log names
+        E.G. {'Resisitivity': ['rdep', 'rmed', 'rsha'], ...}
+    """
+    out = {}
+    for key in list(well_table.keys()):
+        if well_table[key]['Given well name'] == well_name:
+            for lname, logtype in well_table[key]['logs'].items():
+                if logtype not in list(out.keys()):
+                    out[logtype] = []
+                out[logtype].append(lname)
+    return out
+
+
 def get_rename_logs_dict(well_table):
     """
     Interprets the "Translate log names"  keys of the well_table and returns a rename_logs dict.

@@ -463,6 +463,15 @@ class Well(object):
         lt_list = list(set(lt_list))
         return lt_list
 
+    def get_step(self, block_name=None):
+        """
+        Tries to return the step length in meters
+        :return:
+        """
+        if block_name is None:
+            block_name = def_lb_name
+        return self.block[block_name].get_step()
+
     def depth_unit(self, block_name=None):
         """
         Returns the units used for the depth measurement in Block 'block_name'.
@@ -536,7 +545,7 @@ class Well(object):
         start_unit = ''
         for _key in list(self.header.keys()):
             if _key in water_depth_keys:
-                info_txt += ' using key: {:}, with value {:.2f} '.format(_key, self.header[_key].value)
+                info_txt += ' using key: {:}, with value {:} '.format(_key, self.header[_key].value)
                 if self.header[_key].unit.lower() == '':
                     # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
                     # set than for the water depth
@@ -1515,6 +1524,7 @@ class Well(object):
 
 
 class Block(object):
+
     """
     A  Block is a collection of logs (or other data, perhaps with non-uniform sampling) which share the same
     depth information, e.g start, stop, step
@@ -1584,7 +1594,7 @@ class Block(object):
         else:
             return start
 
-    #start = property(get_start)
+    start = property(get_start)
 
     def get_stop(self):
         stop = None
@@ -1595,9 +1605,15 @@ class Block(object):
     stop = property(get_stop)
 
     def get_step(self):
+        """
+        Tries to return the step length in meters
+        :return:
+        """
         step = None
         if self.header.step.value is not None:
             step = self.header.step.value
+            if 'f' in self.header.step.unit:  # step length is in feet
+                step = cnvrt(step, 'ft', 'm')
         return step
 
     step = property(get_step)
@@ -1778,10 +1794,16 @@ class Block(object):
             ax.legend(['Smooth and despiked', 'Original'])
 
         # Handle units
+        # TODO step units can be different from sonic or velocity units! NEED to capture this!
+        # Use a function similar to get_kb, that returns the step in meter, ALWAYS
         if sonic:
-            scaled_dt = self.header.step.value * np.nan_to_num(smooth_log)
+            scaled_dt = self.get_step() * np.nan_to_num(smooth_log)
+            if feet_unit:  #  sonic is in feet units, step is always in meters
+                scaled_dt = scaled_dt * 3.28084
         else:
-            scaled_dt = self.header.step.value * np.nan_to_num(1./smooth_log)
+            scaled_dt = self.get_step() * np.nan_to_num(1./smooth_log)
+            if feet_unit:  # velcity is in feet, step is always in meters
+                scaled_dt = scaled_dt / 3.28084
         if us_unit:
             scaled_dt = scaled_dt * 1.e-6
 

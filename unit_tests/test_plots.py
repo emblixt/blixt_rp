@@ -18,6 +18,7 @@ class PlotTestCase(unittest.TestCase):
                            'acs': 'Shear sonic',
                            'cali': 'Caliper',
                            'den': 'Density',
+                           'neu': 'Neutron density',
                            'gr': 'Gamma ray',
                            'rdep': 'Resistivity',
                            'rmed': 'Resistivity',
@@ -49,14 +50,15 @@ class PlotTestCase(unittest.TestCase):
         styles = [{'lw': templ[x]['line width'],
                    'color': templ[x]['line color'],
                    'ls': templ[x]['line style']} for x in log_types]
-        ppl.axis_header(ax, limits, legends, styles)
+        ppl.header_plot(ax, limits, legends, styles)
         plt.show()
         with self.subTest():
             self.assertTrue(True)
 
     def test_axis_plot(self):
         templ = uio.project_templates(PlotTestCase.wp.project_table)
-        fig, ax = plt.subplots()
+        fig = plt.figure()
+        ax = fig.add_subplot(2, 2, 1)
         log_types = ['Gamma ray', 'Caliper']
         limits = [[templ[x]['min'], templ[x]['max']] for x in log_types]
         data = [PlotTestCase.w.get_logs_of_type(x)[0].data for x in log_types]
@@ -67,4 +69,13 @@ class PlotTestCase(unittest.TestCase):
         ppl.axis_plot(ax, y, data, limits, styles, nxt=2)
 
         plt.show()
+
+
+    def test_plot_logs(self):
+        w = PlotTestCase.w
+        templates = uio.project_templates(PlotTestCase.wp.project_table)
+        ppl.plot_logs(w, PlotTestCase.well_table, PlotTestCase.wis, "SAND E", templates, buffer=50.,
+                      savefig='C:/Users/marten/PycharmProjects/blixt_rp/results_folder/test.png')
+        with self.subTest():
+            self.assertTrue(True)
 

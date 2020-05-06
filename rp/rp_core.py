@@ -88,7 +88,6 @@ def intercept(Vp_1, Vp_2, rho_1, rho_2, along_wiggle=False):
     """
     if along_wiggle and isinstance(Vp_1, np.ndarray) and isinstance(rho_1, np.ndarray):
         return (Vp_1[1:]*rho_1[1:] - Vp_1[:-1]*rho_1[:-1])/(Vp_1[1:]*rho_1[1:] + Vp_1[:-1]*rho_1[:-1])
-        #return 2.*(step(Vp_1, None, along_wiggle=along_wiggle) + step(rho_1, None, along_wiggle=along_wiggle))
     else:
         return 0.5 * (step(Vp_1, Vp_2) + step(rho_1, rho_2))
 
@@ -103,9 +102,6 @@ def gradient(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, along_wiggle=False):
     and the '_2' input variables are not used
     """
     if along_wiggle and isinstance(Vp_1, np.ndarray) and isinstance(Vs_1, np.ndarray) and isinstance(rho_1, np.ndarray):
-        #r0 = intercept(Vp_1, None, rho_1, None, along_wiggle=along_wiggle)
-        #out = r0 - step(rho_1, None, along_wiggle=along_wiggle) * (0.5 + 2.*sqrd_avg(Vs_1)/sqrd_avg(Vp_1)) -\
-        #    4. * (sqrd_avg(Vs_1)/sqrd_avg(Vp_1)) * step(Vs_1, None, along_wiggle=along_wiggle)
         out = 0.5 * step(Vp_1, None,  along_wiggle=along_wiggle) - 2.*(sqrd_avg(Vs_1)/sqrd_avg(Vp_1)) * \
             (step(rho_1, None, along_wiggle=along_wiggle) + 2.*step(Vs_1, None, along_wiggle=along_wiggle))
         return out
@@ -115,7 +111,7 @@ def gradient(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, along_wiggle=False):
                (2. * step(Vs_1, Vs_2) + step(rho_1, rho_2))
 
 
-def reflectivity(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, version='WigginsAkiRich'):
+def reflectivity(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, version='WigginsAkiRich', along_wiggle=False):
     """
     returns function which returns the reflectivity as function of theta
     theta is in degrees
@@ -127,9 +123,9 @@ def reflectivity(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, version='WigginsAkiRich')
 
     """
     if (version == 'WigginsAkiRich') or (version == 'ShueyAkiRich'):
-        a = intercept(Vp_1, Vp_2, rho_1, rho_2)
-        b = gradient(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2)
-        c = 0.5 * step(Vp_1, Vp_2)
+        a = intercept(Vp_1, Vp_2, rho_1, rho_2, along_wiggle=along_wiggle)
+        b = gradient(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, along_wiggle=along_wiggle)
+        c = 0.5 * step(Vp_1, Vp_2, along_wiggle=along_wiggle)
         if version == 'WigginsAkiRich':
             def func(theta):
                 return a + b * (np.sin(theta * np.pi / 180.)) ** 2 + \
