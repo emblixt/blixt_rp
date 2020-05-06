@@ -81,5 +81,39 @@ class LasTestCase(unittest.TestCase):
             print('Data contains NaN:', any(t))
             self.assertTrue(any(t))
 
+class UtilsTestCase(unittest.TestCase):
+    well_table = {'test_data/Well A.las':
+                      {'Given well name': 'WELL_A',
+                       'logs': {
+                           'vp_dry': 'P velocity',
+                           'vp_gas': 'P velocity',
+                           'vs_dry': 'S velocity',
+                           'vs_gas': 'S velocity',
+                           'vs_test': 'S velocity',
+                           'rho_dry': 'Density',
+                           'rho_gas': 'Density',
+                           'phie': 'Porosity',
+                           'vcl': 'Volume'},
+                       'Translate log names': 'Vs_gas->Vs_g, VS_TEST->VS_T, phie->phi',
+                       'Note': 'Some notes for well A'},
+                  'test_data/Well B.las':
+                      {'Given well name': 'WELL_B',
+                       'logs': {
+                           'vp_dry': 'P velocity',
+                           'vp_sg08': 'P velocity',
+                           'vs_dry': 'S velocity',
+                           'vs_sg08': 'S velocity',
+                           'rho_dry': 'Density',
+                           'rho_sg08': 'Density',
+                           'phie': 'Porosity',
+                           'vcl': 'Volume'},
+                       'Translate log names': 'vs_sg08->Vs_g, phie->phi',
+                       'Note': 'Some notes for well B'}}
+    def test_well_table(self):
+        wt = UtilsTestCase.well_table
+        out = uio.invert_well_table(wt, well_name='WELL_A', rename=True)
+        with self.subTest():
+            print(out)
+            self.assertTrue(True)
 
 

@@ -86,7 +86,7 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
         plot_type = 'AI-VpVs'
     elif plot_type == 'I-G' and ref_val is None:
         ref_val = [3500., 1700., 2.6]
-    logs = list(logname_dict.values())
+    logs = [n.lower() for n in list(logname_dict.values())]
     if savefig is not None:
         _savefig = True
 
@@ -135,29 +135,29 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
 
         # collect data for plot
         if plot_type == 'AI-VpVs':
-            x_data = well.block[block_name].logs[logname_dict['P velocity']].data * \
-                     well.block[block_name].logs[logname_dict['Density']].data
-            x_unit = '{} {}'.format(well.block[block_name].logs[logname_dict['P velocity']].header.unit,
-                                    well.block[block_name].logs[logname_dict['Density']].header.unit)
-            y_data = well.block[block_name].logs[logname_dict['P velocity']].data / \
-                     well.block[block_name].logs[logname_dict['S velocity']].data
+            x_data = well.block[block_name].logs[logname_dict['P velocity'].lower()].data * \
+                     well.block[block_name].logs[logname_dict['Density'].lower()].data
+            x_unit = '{} {}'.format(well.block[block_name].logs[logname_dict['P velocity'].lower()].header.unit,
+                                    well.block[block_name].logs[logname_dict['Density'].lower()].header.unit)
+            y_data = well.block[block_name].logs[logname_dict['P velocity'].lower()].data / \
+                     well.block[block_name].logs[logname_dict['S velocity'].lower()].data
             y_unit = '-'
             xtempl = {'full_name': 'AI', 'unit': x_unit}
             ytempl = {'full_name': 'Vp/Vs', 'unit': y_unit}
         elif plot_type == 'Phi-Vp':
-            x_data = well.block[block_name].logs[logname_dict['Porosity']].data
-            x_unit = '{}'.format(well.block[block_name].logs[logname_dict['Porosity']].header.unit)
-            y_data = well.block[block_name].logs[logname_dict['P velocity']].data
-            y_unit = '{}'.format(well.block[block_name].logs[logname_dict['P velocity']].header.unit)
+            x_data = well.block[block_name].logs[logname_dict['Porosity'].lower()].data
+            x_unit = '{}'.format(well.block[block_name].logs[logname_dict['Porosity'].lower()].header.unit)
+            y_data = well.block[block_name].logs[logname_dict['P velocity'].lower()].data
+            y_unit = '{}'.format(well.block[block_name].logs[logname_dict['P velocity'].lower()].header.unit)
             xtempl = {'full_name': 'Porosity', 'unit': x_unit}
             ytempl = {'full_name': 'Vp', 'unit': y_unit}
         elif plot_type == 'I-G':
-            x_data = rp.intercept(ref_val[0], well.block[block_name].logs[logname_dict['P velocity']].data,
-                                  ref_val[2], well.block[block_name].logs[logname_dict['Density']].data)
+            x_data = rp.intercept(ref_val[0], well.block[block_name].logs[logname_dict['P velocity'].lower()].data,
+                                  ref_val[2], well.block[block_name].logs[logname_dict['Density'].lower()].data)
             x_unit = '-'
-            y_data = rp.gradient(ref_val[0], well.block[block_name].logs[logname_dict['P velocity']].data,
-                                  ref_val[1], well.block[block_name].logs[logname_dict['S velocity']].data,
-                                  ref_val[2], well.block[block_name].logs[logname_dict['Density']].data)
+            y_data = rp.gradient(ref_val[0], well.block[block_name].logs[logname_dict['P velocity'].lower()].data,
+                                  ref_val[1], well.block[block_name].logs[logname_dict['S velocity'].lower()].data,
+                                  ref_val[2], well.block[block_name].logs[logname_dict['Density'].lower()].data)
             y_unit = '-'
             xtempl = {'full_name': 'Intercept', 'unit': x_unit}
             ytempl = {'full_name': 'Gradient', 'unit': y_unit}
