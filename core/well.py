@@ -281,6 +281,15 @@ class Project(object):
                         print("WARNING: {}".format(warn_txt))
                         logger.warning(warn_txt)
 
+    def active_wells(self):
+        active_wells = []
+        well_table = uio.project_wells(self.project_table, self.working_dir)
+        for _key, _value in well_table.items():
+            active_wells.append(_value['Given well name'])
+
+        # remove duplicates
+        return list(set(active_wells))
+
     def load_all_wells(self, block_name=None, rename_logs=None):
         """
         :param rename_logs:

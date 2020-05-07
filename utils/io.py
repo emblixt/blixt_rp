@@ -397,6 +397,8 @@ def write_tops(filename, tops, well_names=None, interval_names=None):
 
     for wname in well_names:
         these_tops = list(tops[wname].keys())
+        if len(these_tops) == 0:
+            continue  # skip wells without tops
         if interval_names is None:
             int_names = these_tops
             # Add a duplicate of the last interval to avoid running out-of-index
@@ -470,8 +472,6 @@ def read_petrel_checkshots(filename, only_these_wells=None):
                         checkshots[this_well_name][key].append(my_float(data[j]))
 
     return checkshots
-
-
 
 
 def test_file_path(file_path, working_dir):

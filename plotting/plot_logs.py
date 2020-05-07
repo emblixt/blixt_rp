@@ -11,12 +11,6 @@ import tmp.tmp_avo_model as tta
 logger = logging.getLogger(__name__)
 
 
-## Define a Ricker wavelet
-#def ricker(_f, _length, _dt):
-#    _t = np.linspace(-_length / 2, (_length - _dt) / 2, _length / _dt)
-#    _y = (1. - 2. * (np.pi ** 2) * (_f ** 2) * (_t ** 2)) * np.exp(-(np.pi ** 2) * (_f ** 2) * (_t ** 2))
-#    return _t, _y
-
 def find_nearest(data, value):
     return np.nanargmin(np.abs(data - value))
 
@@ -421,3 +415,54 @@ def wiggle_plot(ax, y, wiggle, zero_at=0., scaling=1., fill_pos_style='default',
     ax.axvline(zero_at, **zero_style)
 
     ax.set_ylim(ax.get_ylim()[::-1])
+
+
+def overview_plot(wells, wis, wi_name, templates, log_types=None, block_name=None, savefig=None):
+    """
+    Overview plot designed to show data coverage in given working interval together with sea water depth
+    :param wells:
+    :param wis:
+    :param wi_name:
+    :param templates:
+    :param block_name:
+    :param savefig:
+    :return:
+    """
+    if block_name is None:
+        block_name = cw.def_lb_name
+    if log_types is None:
+        log_types = ['P velocity', 'S velocity', 'Density']
+
+    fig, ax = plt.subplots(figsize=(20, 10))
+    fig.suptitle('{} interval'.format(wi_name))
+
+    # create fake x axes
+    x = np.arange(len(wells))
+
+    # create common TVD depth axis for all wells
+    y_max = -1E6
+    c_styles = {}  # style of line that defines the center of each well.
+                   # Thin dashed if TVD present, thicker solid if not
+    for i, well in enumerate(wells.values()):
+        print(well.well)
+        well.calc_mask({}, name='XXX', wis=wis, wi_name=wi_name)
+        # extract the relevant log block
+        tb = well.block[block_name]
+        try:
+            mask = tb.masks['XXX'].data
+        except TypeError:
+            print('{} not present in well {}. Continue'.format(wi_name, well.well))
+        if 'tvd' in well.log_names():
+            c_styles[well.well] = {'color': 'k', 'ls': '--', 'lw': 0.5}
+            depth_key = 'tvd'
+        else:
+            c_styles[well.well] = {'color': 'k', 'ls': '-', 'lw': 1}
+            depth_key = 'depth'
+        if np.nanmax(tb.logs[depth_key].data[mask]) > y_max:
+            y_max = np.nanmax(tb.logs[depth_key].data[mask])
+        ax.axvline(i, **c_styles[well.well])
+
+    ax.set_ylim(y_max, 0)
+
+
+
