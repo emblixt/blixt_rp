@@ -49,7 +49,7 @@ def project_wells(filename, working_dir):
     return result
 
 
-def invert_well_table(well_table, well_name):
+def invert_well_table(well_table, well_name, rename=True):
     """
     Typically, the "logname_dict"
     :param well_table:
@@ -58,6 +58,9 @@ def invert_well_table(well_table, well_name):
     :param well_name:
         str
         name of the well we want to extract the "inverted well table" from well_table
+    :param rename:
+        bool
+        if True it uses the "Translate log name" information to rename log names
     :return:
         dict
         As opposed to the commonly used "logname_dict", which relates a log type with one specific log, this dictionary
@@ -65,12 +68,22 @@ def invert_well_table(well_table, well_name):
         E.G. {'Resisitivity': ['rdep', 'rmed', 'rsha'], ...}
     """
     out = {}
+    rdt = None
+    if rename:
+        rdt = get_rename_logs_dict(well_table)
     for key in list(well_table.keys()):
         if well_table[key]['Given well name'] == well_name:
             for lname, logtype in well_table[key]['logs'].items():
+                _renamed = False
                 if logtype not in list(out.keys()):
                     out[logtype] = []
-                out[logtype].append(lname)
+                if rename:
+                    for to_name, from_names in rdt.items():
+                        if lname.lower() in from_names:
+                            _renamed = True
+                            out[logtype].append(to_name.lower())
+                if not _renamed:
+                    out[logtype].append(lname.lower())
     return out
 
 
@@ -92,9 +105,9 @@ def get_rename_logs_dict(well_table):
         for key in list(_dict.keys()):
             if key in list(rename_logs.keys()):
                 if not _dict[key] in rename_logs[key]:  # only insert same rename pair once
-                    rename_logs[key].append(_dict[key])
+                    rename_logs[key].append(_dict[key].lower())
             else:
-                rename_logs[key] = [_dict[key]]
+                rename_logs[key] = [_dict[key].lower()]
     if len(rename_logs) < 1:
         return None
     else:

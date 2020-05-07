@@ -75,7 +75,8 @@ class PlotTestCase(unittest.TestCase):
         w = PlotTestCase.w
         templates = uio.project_templates(PlotTestCase.wp.project_table)
         ppl.plot_logs(w, PlotTestCase.well_table, PlotTestCase.wis, "SAND E", templates, buffer=50.,
-                      savefig='C:/Users/marten/PycharmProjects/blixt_rp/results_folder/test.png')
+                      savefig='C:/users/mblixt/PycharmProjects/blixt_rp/results_folder/test.png')
+                      #savefig='C:/Users/marten/PycharmProjects/blixt_rp/results_folder/test.png')
         with self.subTest():
             self.assertTrue(True)
 
