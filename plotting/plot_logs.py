@@ -417,10 +417,20 @@ def wiggle_plot(ax, y, wiggle, zero_at=0., scaling=1., fill_pos_style='default',
     ax.set_ylim(ax.get_ylim()[::-1])
 
 
-def overview_plot(wells, wis, wi_name, templates, log_types=None, block_name=None, savefig=None):
+def overview_plot(wells, logname_dict, wis, wi_name, templates, log_types=None, block_name=None, savefig=None):
     """
     Overview plot designed to show data coverage in given working interval together with sea water depth
     :param wells:
+    :param logname_dict:
+        dict
+        Dictionary of log type: log name key: value pairs which decides which log, under each log type, to plot
+        E.G.
+            logname_dict = {
+               'P velocity': 'vp',
+               'S velocity': 'vs',
+               'Density': 'rhob',
+               'Porosity': 'phie',
+               'Volume': 'vcl'}
     :param wis:
     :param wi_name:
     :param templates:
@@ -433,6 +443,8 @@ def overview_plot(wells, wis, wi_name, templates, log_types=None, block_name=Non
     if log_types is None:
         log_types = ['P velocity', 'S velocity', 'Density']
 
+    sea_style = {'lw': 10, 'color': 'b', 'alpha': 0.5}
+    kb_style = {'lw': 10, 'color': 'k', 'alpha': 0.5}
     fig, ax = plt.subplots(figsize=(20, 10))
     fig.suptitle('{} interval'.format(wi_name))
 
@@ -441,10 +453,12 @@ def overview_plot(wells, wis, wi_name, templates, log_types=None, block_name=Non
 
     # create common TVD depth axis for all wells
     y_max = -1E6
+    wnames = []
     c_styles = {}  # style of line that defines the center of each well.
                    # Thin dashed if TVD present, thicker solid if not
     for i, well in enumerate(wells.values()):
         print(well.well)
+        wnames.append(well.well)
         well.calc_mask({}, name='XXX', wis=wis, wi_name=wi_name)
         # extract the relevant log block
         tb = well.block[block_name]
@@ -460,9 +474,15 @@ def overview_plot(wells, wis, wi_name, templates, log_types=None, block_name=Non
             depth_key = 'depth'
         if np.nanmax(tb.logs[depth_key].data[mask]) > y_max:
             y_max = np.nanmax(tb.logs[depth_key].data[mask])
+        ax.plot([i,i], [0.,  # this is not exact, because the linewidth makes the lines look longer than what they are
+                        templates[well.well]['water depth']+templates[well.well]['kb']], **sea_style)
+        ax.plot([i,i], [0., templates[well.well]['kb']], **kb_style)
         ax.axvline(i, **c_styles[well.well])
 
     ax.set_ylim(y_max, 0)
+    ax.set_ylabel('TVD [m]')
+    ax.get_xaxis().set_ticks(range(len(wnames)))
+    ax.get_xaxis().set_ticklabels(wnames)
 
 
 

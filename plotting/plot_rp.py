@@ -26,8 +26,7 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
         As returned from core.well.Project.load_all_wells()
     :param logname_dict:
         dict
-        Dictionary of log type: log name key: value pairs to create statistics on
-        The Vp, Vs, Rho and Phi logs are necessary for output to RokDoc compatible Sums & Average excel file
+        Dictionary of log type: log name key: value pairs which decides which log, under each log type, to plot
         E.G.
             logname_dict = {
                'P velocity': 'vp',
