@@ -14,7 +14,7 @@ def_msk_name = 'Mask'  # default mask name
 
 def calc_stats2_tops(
         wells,
-        logname_dict,
+        log_table,
         tops,
         intervals,
         cutoffs,
@@ -34,12 +34,12 @@ def calc_stats2_tops(
         eg.
             wp = Project(...)
             wells = wp.load_all_wells
-    :param logname_dict:
+    :param log_table:
         dict
         Dictionary of log type: log name key: value pairs to create statistics on
         The Vp, Vs, Rho and Phi logs are necessary for output to RokDoc compatible Sums & Average excel file
         E.G.
-            logname_dict = {
+            log_table = {
                'P velocity': 'vp',
                'S velocity': 'vs',
                'Density': 'rhob',
@@ -84,8 +84,8 @@ def calc_stats2_tops(
     """
     # some initial setups
     suffix, cutoffs_str = fix_strings(suffix, cutoffs)
-    log_types = list(logname_dict.keys())
-    logs = [n.lower() for n in list(logname_dict.values())]
+    log_types = list(log_table.keys())
+    logs = [n.lower() for n in list(log_table.values())]
     ncols = len(logs)
     well_names = list(wells.keys())
 
@@ -121,7 +121,7 @@ def calc_stats2_tops(
         plot_histograms(logs, results, interval, ncols, well_names, results_per_well, working_dir, cutoffs_str, suffix)
 
         # Write result to RokDoc compatible excel Sums And Average xls file:
-        save_rokdoc_output(rokdoc_output, results, interval, logname_dict, cutoffs_str, suffix)
+        save_rokdoc_output(rokdoc_output, results, interval, log_table, cutoffs_str, suffix)
 
     # arrange the interval plots
     well_names.append('All')
@@ -145,7 +145,7 @@ def calc_stats2_tops(
 
 def calc_stats2(
         wells,
-        logname_dict,
+        log_table,
         wis,
         wi_names,
         cutoffs,
@@ -165,12 +165,12 @@ def calc_stats2(
         eg.
             wp = Project(...)
             wells = wp.load_all_wells
-    :param logname_dict:
+    :param log_table:
         dict
         Dictionary of log type: log name key: value pairs to create statistics on
         The Vp, Vs, Rho and Phi logs are necessary for output to RokDoc compatible Sums & Average excel file
         E.G.
-            logname_dict = {
+            log_table = {
                'P velocity': 'vp',
                'S velocity': 'vs',
                'Density': 'rhob',
@@ -212,8 +212,8 @@ def calc_stats2(
     """
     # some initial setups
     suffix, cutoffs_str = fix_strings(suffix, cutoffs)
-    log_types = list(logname_dict.keys())
-    logs = [n.lower() for n in list(logname_dict.values())]
+    log_types = list(log_table.keys())
+    logs = [n.lower() for n in list(log_table.values())]
     ncols = len(logs)
     well_names = list(wells.keys())
     if isinstance(wi_names, str):
@@ -251,7 +251,7 @@ def calc_stats2(
         plot_histograms(logs, results, wi_name, ncols, well_names, results_per_well, working_dir, cutoffs_str, suffix)
 
         # Write result to RokDoc compatible excel Sums And Average xls file:
-        save_rokdoc_output(rokdoc_output, results, wi_name, logname_dict, cutoffs_str, suffix)
+        save_rokdoc_output(rokdoc_output, results, wi_name, log_table, cutoffs_str, suffix)
 
     # arrange the interval plots
     well_names.append('All')
@@ -322,7 +322,7 @@ def create_containers(_logs):
     return _results, _results_per_well, _depth_from_top
 
 
-def test_top_presence_tops(tops, interval, this_well_name, results_per_well, depth_from_top):
+def test_top_presence_tops(tops, interval, this_well_name, results_per_well, logs, depth_from_top):
     results_per_well[this_well_name] = {}
     _cont = False
     try:
@@ -335,14 +335,14 @@ def test_top_presence_tops(tops, interval, this_well_name, results_per_well, dep
         logger.info(
             'Tops {} & {} not present in {}'.format(interval['tops'][0], interval['tops'][1], this_well_name))
         depth_from_top[this_well_name] = np.empty(0)
-        for key in log_types:
+        for key in logs:
             results_per_well[this_well_name][key.lower()] = np.empty(0)
         _cont = True
 
     return _cont
 
 
-def test_top_presence(wis, wi_name, this_well_name, results_per_well, depth_from_top):
+def test_top_presence(wis, wi_name, this_well_name, results_per_well, logs, depth_from_top):
     results_per_well[this_well_name] = {}
     _cont = False
     try:
@@ -354,7 +354,7 @@ def test_top_presence(wis, wi_name, this_well_name, results_per_well, depth_from
         logger.info(
             'Interval {} not present in {}'.format(wi_name, this_well_name))
         depth_from_top[this_well_name] = np.empty(0)
-        for key in log_types:
+        for key in logs:
             results_per_well[this_well_name][key.lower()] = np.empty(0)
         _cont = True
 
@@ -367,7 +367,7 @@ def collect_data_for_this_interval_tops(
     # start looping over the well objects
     for this_well_name, well in wells.items():
         print(' Well: {}'.format(this_well_name))
-        cont = test_top_presence(tops, interval, this_well_name, results_per_well, depth_from_top)
+        cont = test_top_presence(tops, interval, this_well_name, results_per_well, logs, depth_from_top)
         if cont:
             continue
 
@@ -401,7 +401,7 @@ def collect_data_for_this_interval(
     # start looping over the well objects
     for this_well_name, well in wells.items():
         print(' Well: {}'.format(this_well_name))
-        cont = test_top_presence(wis, wi_name, this_well_name, results_per_well, depth_from_top)
+        cont = test_top_presence(wis, wi_name, this_well_name, results_per_well, logs, depth_from_top)
         if cont:
             continue
 
@@ -598,7 +598,7 @@ def plot_histograms(logs, results, wi_name, ncols, well_names, results_per_well,
     if working_dir is not None:
         fig.savefig(os.path.join(working_dir, '{}_logs_hist{}.png'.format(wi_name, suffix)))
 
-def save_rokdoc_output_tops(rokdoc_output, results, interval, logname_dict, cutoffs_str, suffix):
+def save_rokdoc_output_tops(rokdoc_output, results, interval, log_table, cutoffs_str, suffix):
     # Write result to RokDoc compatible excel Sums And Average xls file:
     if rokdoc_output is not None:
         uio.write_sums_and_averages(rokdoc_output,
@@ -609,21 +609,21 @@ def save_rokdoc_output_tops(rokdoc_output, results, interval, logname_dict, cuto
                                         -999.25,
                                         -999.25,
                                         -999.25,
-                                        np.nanmean(results[logname_dict['P velocity'].lower()]),
-                                        np.nanmean(results[logname_dict['S velocity'].lower()]),
-                                        np.nanmean(results[logname_dict['Density'].lower()]),
-                                        np.nanmedian(results[logname_dict['P velocity'].lower()]),
-                                        np.nanmedian(results[logname_dict['S velocity'].lower()]),
-                                        np.nanmedian(results[logname_dict['Density'].lower()]),
-                                        np.nanmean(results[logname_dict['P velocity'].lower()]),
+                                        np.nanmean(results[log_table['P velocity'].lower()]),
+                                        np.nanmean(results[log_table['S velocity'].lower()]),
+                                        np.nanmean(results[log_table['Density'].lower()]),
+                                        np.nanmedian(results[log_table['P velocity'].lower()]),
+                                        np.nanmedian(results[log_table['S velocity'].lower()]),
+                                        np.nanmedian(results[log_table['Density'].lower()]),
+                                        np.nanmean(results[log_table['P velocity'].lower()]),
                                         # this should be a mode value, but uncertain what it means
-                                        np.nanmean(results[logname_dict['S velocity'].lower()]),
+                                        np.nanmean(results[log_table['S velocity'].lower()]),
                                         # this should be a mode value, but uncertain what it means
-                                        np.nanmean(results[logname_dict['Density'].lower()]),
+                                        np.nanmean(results[log_table['Density'].lower()]),
                                         # this should be a mode value, but uncertain what it means
                                         'NONE',
-                                        np.nanmean(results[logname_dict['Porosity'].lower()]),
-                                        np.nanstd(results[logname_dict['Porosity'].lower()]),
+                                        np.nanmean(results[log_table['Porosity'].lower()]),
+                                        np.nanstd(results[log_table['Porosity'].lower()]),
                                         -999.25,
                                         -999.25,
                                         -999.25,
@@ -635,22 +635,18 @@ def save_rokdoc_output_tops(rokdoc_output, results, interval, logname_dict, cuto
                                         -999.25,
                                         -999.25,
                                         -999.25,
-                                        np.nanstd(results[logname_dict['P velocity'].lower()]),
-                                        np.nanstd(results[logname_dict['S velocity'].lower()]),
-                                        np.nanstd(results[logname_dict['Density'].lower()]),
+                                        np.nanstd(results[log_table['P velocity'].lower()]),
+                                        np.nanstd(results[log_table['S velocity'].lower()]),
+                                        np.nanstd(results[log_table['Density'].lower()]),
                                         -999.25,
                                         -999.25,
                                         -999.25,
-                                        nan_corrcoef(results[logname_dict['P velocity'].lower()],
-                                                     results[logname_dict['S velocity'].lower()])[0, 1],
-                                        nan_corrcoef(results[logname_dict['P velocity'].lower()],
-                                                     results[logname_dict['Density'].lower()])[0, 1],
-                                        nan_corrcoef(results[logname_dict['S velocity'].lower()],
-                                                     results[logname_dict['Density'].lower()])[0, 1],
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
+                                        nan_corrcoef(results[log_table['P velocity'].lower()],
+                                                     results[log_table['S velocity'].lower()])[0, 1],
+                                        nan_corrcoef(results[log_table['P velocity'].lower()],
+                                                     results[log_table['Density'].lower()])[0, 1],
+                                        nan_corrcoef(results[log_table['S velocity'].lower()],
+                                                     results[log_table['Density'].lower()])[0, 1],
                                         -999.25,
                                         -999.25,
                                         -999.25,
@@ -658,8 +654,12 @@ def save_rokdoc_output_tops(rokdoc_output, results, interval, logname_dict, cuto
                                         -999.25,
                                         -999.25,
                                         -999.25,
-                                        np.nanmean(results[logname_dict['Volume'].lower()]),
-                                        np.nanstd(results[logname_dict['Volume'].lower()]),
+                                        -999.25,
+                                        -999.25,
+                                        -999.25,
+                                        -999.25,
+                                        np.nanmean(results[log_table['Volume'].lower()]),
+                                        np.nanstd(results[log_table['Volume'].lower()]),
                                         'None',
                                         0.0,
                                         cutoffs_str,
@@ -668,7 +668,7 @@ def save_rokdoc_output_tops(rokdoc_output, results, interval, logname_dict, cuto
                                     )
 
 
-def save_rokdoc_output(rokdoc_output, results, wi_name, logname_dict, cutoffs_str, suffix):
+def save_rokdoc_output(rokdoc_output, results, wi_name, log_table, cutoffs_str, suffix):
     # Write result to RokDoc compatible excel Sums And Average xls file:
     if rokdoc_output is not None:
         uio.write_sums_and_averages(rokdoc_output,
@@ -679,21 +679,21 @@ def save_rokdoc_output(rokdoc_output, results, wi_name, logname_dict, cutoffs_st
                                         -999.25,
                                         -999.25,
                                         -999.25,
-                                        np.nanmean(results[logname_dict['P velocity'].lower()]),
-                                        np.nanmean(results[logname_dict['S velocity'].lower()]),
-                                        np.nanmean(results[logname_dict['Density'].lower()]),
-                                        np.nanmedian(results[logname_dict['P velocity'].lower()]),
-                                        np.nanmedian(results[logname_dict['S velocity'].lower()]),
-                                        np.nanmedian(results[logname_dict['Density'].lower()]),
-                                        np.nanmean(results[logname_dict['P velocity'].lower()]),
+                                        np.nanmean(results[log_table['P velocity'].lower()]),
+                                        np.nanmean(results[log_table['S velocity'].lower()]),
+                                        np.nanmean(results[log_table['Density'].lower()]),
+                                        np.nanmedian(results[log_table['P velocity'].lower()]),
+                                        np.nanmedian(results[log_table['S velocity'].lower()]),
+                                        np.nanmedian(results[log_table['Density'].lower()]),
+                                        np.nanmean(results[log_table['P velocity'].lower()]),
                                         # this should be a mode value, but uncertain what it means
-                                        np.nanmean(results[logname_dict['S velocity'].lower()]),
+                                        np.nanmean(results[log_table['S velocity'].lower()]),
                                         # this should be a mode value, but uncertain what it means
-                                        np.nanmean(results[logname_dict['Density'].lower()]),
+                                        np.nanmean(results[log_table['Density'].lower()]),
                                         # this should be a mode value, but uncertain what it means
                                         'NONE',
-                                        np.nanmean(results[logname_dict['Porosity'].lower()]),
-                                        np.nanstd(results[logname_dict['Porosity'].lower()]),
+                                        np.nanmean(results[log_table['Porosity'].lower()]),
+                                        np.nanstd(results[log_table['Porosity'].lower()]),
                                         -999.25,
                                         -999.25,
                                         -999.25,
@@ -705,22 +705,18 @@ def save_rokdoc_output(rokdoc_output, results, wi_name, logname_dict, cutoffs_st
                                         -999.25,
                                         -999.25,
                                         -999.25,
-                                        np.nanstd(results[logname_dict['P velocity'].lower()]),
-                                        np.nanstd(results[logname_dict['S velocity'].lower()]),
-                                        np.nanstd(results[logname_dict['Density'].lower()]),
+                                        np.nanstd(results[log_table['P velocity'].lower()]),
+                                        np.nanstd(results[log_table['S velocity'].lower()]),
+                                        np.nanstd(results[log_table['Density'].lower()]),
                                         -999.25,
                                         -999.25,
                                         -999.25,
-                                        nan_corrcoef(results[logname_dict['P velocity'].lower()],
-                                                     results[logname_dict['S velocity'].lower()])[0, 1],
-                                        nan_corrcoef(results[logname_dict['P velocity'].lower()],
-                                                     results[logname_dict['Density'].lower()])[0, 1],
-                                        nan_corrcoef(results[logname_dict['S velocity'].lower()],
-                                                     results[logname_dict['Density'].lower()])[0, 1],
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
-                                        -999.25,
+                                        nan_corrcoef(results[log_table['P velocity'].lower()],
+                                                     results[log_table['S velocity'].lower()])[0, 1],
+                                        nan_corrcoef(results[log_table['P velocity'].lower()],
+                                                     results[log_table['Density'].lower()])[0, 1],
+                                        nan_corrcoef(results[log_table['S velocity'].lower()],
+                                                     results[log_table['Density'].lower()])[0, 1],
                                         -999.25,
                                         -999.25,
                                         -999.25,
@@ -728,8 +724,12 @@ def save_rokdoc_output(rokdoc_output, results, wi_name, logname_dict, cutoffs_st
                                         -999.25,
                                         -999.25,
                                         -999.25,
-                                        np.nanmean(results[logname_dict['Volume'].lower()]),
-                                        np.nanstd(results[logname_dict['Volume'].lower()]),
+                                        -999.25,
+                                        -999.25,
+                                        -999.25,
+                                        -999.25,
+                                        np.nanmean(results[log_table['Volume'].lower()]),
+                                        np.nanstd(results[log_table['Volume'].lower()]),
                                         'None',
                                         0.0,
                                         cutoffs_str,

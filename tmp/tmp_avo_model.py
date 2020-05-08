@@ -449,7 +449,7 @@ def test_synt2():
     wells = wp.load_all_wells()
     w = wells[list(wells.keys())[0]]  # take first well
     wis = uio.project_working_intervals(wp.project_table)
-    logname_dict = {
+    log_table = {
         'P velocity': 'vp_dry',
         'S velocity': 'vs_dry',
         'Density': 'rho_dry'
@@ -462,18 +462,18 @@ def test_synt2():
     #dt_orig = w.block['Logs'].logs['dt'].data * 3.2804  # convert usec/ft to usec/m
     # else
     depth = w.block['Logs'].logs['depth'].data
-    rho_orig = w.block['Logs'].logs[logname_dict['Density']].data * 1000.  # g/cm3 to kg/m3
-    vp_orig = w.block['Logs'].logs[logname_dict['P velocity']].data
-    vs_orig = w.block['Logs'].logs[logname_dict['S velocity']].data
+    rho_orig = w.block['Logs'].logs[log_table['Density']].data * 1000.  # g/cm3 to kg/m3
+    vp_orig = w.block['Logs'].logs[log_table['P velocity']].data
+    vs_orig = w.block['Logs'].logs[log_table['S velocity']].data
 
     # when input is in feet and usec
     #rho = w.block['Logs'].logs['rhob'].despike(0.1) * 1000.  # g/cm3 to kg/m3
     #vp = ucd.convert(w.block['Logs'].logs['dt'].despike(5), 'us/ft', 'm/s')
     #dt = w.block['Logs'].logs['dt'].despike(5) * 3.2804  # convert usec/ft to usec/m
     # else
-    rho = w.block['Logs'].logs[logname_dict['Density']].despike(0.1) * 1000.  # g/cm3 to kg/m3
-    vp = w.block['Logs'].logs[logname_dict['P velocity']].despike(200)
-    vs = w.block['Logs'].logs[logname_dict['S velocity']].despike(200)
+    rho = w.block['Logs'].logs[log_table['Density']].despike(0.1) * 1000.  # g/cm3 to kg/m3
+    vp = w.block['Logs'].logs[log_table['P velocity']].despike(200)
+    vs = w.block['Logs'].logs[log_table['S velocity']].despike(200)
 
     start = 13000; end = 14500
     # Plot despiking results
@@ -485,7 +485,7 @@ def test_synt2():
             axes[i].plot(depth[start:end], y1[start:end], 'k', lw=0.5)
             axes[i].legend(['Smooth & despiked', 'Original'])
 
-    tdr = w.time_to_depth(logname_dict['P velocity'], debug=False)
+    tdr = w.time_to_depth(log_table['P velocity'], debug=False)
     r0 = rp.intercept(vp, None, rho, None, along_wiggle=True)
 
     plot = True

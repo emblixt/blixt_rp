@@ -182,3 +182,44 @@ def conv_tops_to_wis(tops, intervals):
     return working_intervals
 
 
+def norm(arr, method='median'):
+    if method == 'mean':
+        x0 = np.nanmean(arr)
+    elif method == 'median':
+        x0 = np.nanmedian(arr)
+    else:
+        x0 = np.nanmin(arr)
+
+    return (arr - x0) / np.abs(np.nanmax(arr) - np.nanmin(arr))
+
+
+def handle_sonic(well):
+    """
+    Converts sonic to velocity
+
+    :param well:
+        a well object
+    :return:
+    """
+    from utils.convert_data import convert
+
+    for ss, vv, vtype in zip(
+            ['ac', 'acs'], ['vp', 'vs'], ['P velocity', 'S velocity']
+    ):
+        info_txt = ''
+        if ss not in well.log_names():
+            continue
+        else:
+            din = well.block['Logs'].logs[ss].data
+            dout = convert(din, 'us/ft', 'm/s')
+
+        well.block['Logs'].add_log(
+            dout,
+            vv,
+            vtype,
+            header={
+                'unit': 'm/s',
+                'modification_history': '{} Calculated from {}'.format(info_txt, ss.upper()),
+                'orig_filename': well.block['Logs'].logs['ac'].header.orig_filename
+            }
+        )

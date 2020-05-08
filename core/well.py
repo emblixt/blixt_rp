@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 def_lb_name = 'Logs'  # default Block name
 def_msk_name = 'Mask'  # default mask name
 def_water_depth_keys = ['gl', 'egl', 'water_depth']
-def_kelly_bushing_keys = ['kb', 'apd', 'edf', 'eref']
+def_kelly_bushing_keys = ['kb', 'ekb', 'apd', 'edf', 'eref']
 def_sonic_units = ['us/f', 'us/ft', 'us/feet',
                    'usec/f', 'usec/ft', 'usec/feet',
                    'us/m', 'usec/m', 's/m']
@@ -509,25 +509,31 @@ class Well(object):
         start_unit = ''
         for _key in list(self.header.keys()):
             if _key in kelly_bushing_keys:
-                info_txt += ' using key: {:}, with value {:.2f} '.format(_key, self.header[_key].value)
+                if self.header[_key].value is None:
+                    continue
+                this_kb = self.header[_key].value
+                if isinstance(this_kb, str):
+                    # TODO Remove any trailing units in the well reader instead of here
+                    this_kb = float(this_kb[:-2])
+                info_txt += ' using key: {:}, with value {:.2f} '.format(_key, this_kb)
                 if self.header[_key].unit.lower() == '':
                     # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
                     # set than for the Kelley bushing
                     start_unit = self.depth_unit()
                     if start_unit == 'm':
                         info_txt += '[m].'
-                        kb = self.header[_key].value
+                        kb = this_kb
                     else:
                         # assume it is in feet
                         info_txt += '[feet].'
-                        kb = cnvrt(self.header[_key].value, 'ft', 'm')
+                        kb = cnvrt(this_kb, 'ft', 'm')
                 elif self.header[_key].unit.lower() == 'm':
                     info_txt += '[m].'
-                    kb = self.header[_key].value
+                    kb = this_kb
                 else:
                     # assume it is in feet
                     info_txt += '[feet].'
-                    kb = cnvrt(self.header[_key].value, 'ft', 'm')
+                    kb = cnvrt(this_kb, 'ft', 'm')
                 print('INFO: {}'.format(info_txt))
                 logger.info(info_txt)
                 return kb
@@ -547,6 +553,9 @@ class Well(object):
             float
             Water depth in meters
         """
+        # TODO
+        # This function and get_kb are nearly similar
+        # Write a new general function that returns any header value in meters and replace these with the new
         info_txt = 'Extract water depth'
         if water_depth_keys is None:
             water_depth_keys = def_water_depth_keys
@@ -554,26 +563,32 @@ class Well(object):
         start_unit = ''
         for _key in list(self.header.keys()):
             if _key in water_depth_keys:
-                info_txt += ' using key: {:}, with value {:} '.format(_key, self.header[_key].value)
+                if self.header[_key].value is None:
+                    continue
+                this_wd = self.header[_key].value
+                if isinstance(this_wd, str):
+                    # TODO Remove any trailing units in the well reader instead of here
+                    this_wd = float(this_wd[:-2])
+                info_txt += ' using key: {:}, with value {:} ({}) '.format(_key, this_wd, type(this_wd))
                 if self.header[_key].unit.lower() == '':
                     # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
                     # set than for the water depth
                     start_unit = self.depth_unit()
                     if start_unit == 'm':
                         info_txt += '[m].'
-                        wdepth = self.header[_key].value
+                        wdepth = this_wd
                     else:
                         # assume it is in feet
                         info_txt += '[feet].'
-                        wdepth = cnvrt(self.header[_key].value, 'ft', 'm')
+                        wdepth = cnvrt(this_wd, 'ft', 'm')
 
                 elif self.header[_key].unit.lower() == 'm':
                     info_txt += '[m].'
-                    wdepth = self.header[_key].value
+                    wdepth = this_wd
                 else:
                     # assume it is in feet
                     info_txt += '[feet].'
-                    wdepth = cnvrt(self.header[_key].value, 'ft', 'm')
+                    wdepth = cnvrt(this_wd, 'ft', 'm')
                 print('INFO: {}'.format(info_txt))
                 logger.info(info_txt)
                 return wdepth
@@ -857,7 +872,7 @@ class Well(object):
                     overwrite=True,
                     append=False,
                     log_type_input=True,
-                    logname_dict=None
+                    log_table=None
         ):
         """
         Based on the different cutoffs in the 'cutoffs' dictionary, each Block in well is masked accordingly.
@@ -897,12 +912,12 @@ class Well(object):
         :param log_type_input:
             bool
             if set to True, the keys in the cutoffs dictionary refer to log types, and not log names
-        :param logname_dict:
+        :param log_table:
             dict
             Dictionary of log type: log name key: value pairs to create mask on when log_type_input is True
             NOTE: If this is not set when log_type_input is True, the first log under each log type will be used.
             E.G.
-                logname_dict = {
+                log_table = {
                    'P velocity': 'vp',
                    'S velocity': 'vs',
                    'Density': 'rhob',
@@ -915,7 +930,7 @@ class Well(object):
         #
         def rename_cutoffs(_cutoffs):
             # When the cutoffs are based on log types, and not the individual log names, we need to
-            # associate each log type with it FIRST INSTANCE log name if logname_dict is not set
+            # associate each log type with it FIRST INSTANCE log name if log_table is not set
             this_cutoffs = {}
             for _key in list(_cutoffs.keys()):
                 if len(self.get_logs_of_type(_key)) < 1:
@@ -923,8 +938,8 @@ class Well(object):
                     print('WARNING: {}'.format(warn_txt))
                     logger.warning(warn_txt)
                     continue
-                if logname_dict is not None:
-                    this_cutoffs[logname_dict(_key)] = _cutoffs[_key]
+                if log_table is not None:
+                    this_cutoffs[log_table(_key)] = _cutoffs[_key]
                 else:
                     this_cutoffs[self.get_logs_of_type(_key)[0].name] = _cutoffs[_key]
             return this_cutoffs
@@ -1061,7 +1076,8 @@ class Well(object):
                     print('WARNING: {}'.format(warn_txt))
                     logger.warning(warn_txt)
                 else:
-                    print('{} True values in mask: {}'.format(np.sum(block_mask), msk_str))
+                    #print('{} True values in mask: {}'.format(np.sum(block_mask), msk_str))
+                    pass
             else:
                 continue
 
@@ -1736,13 +1752,13 @@ class Block(object):
         water_twt = 2.0 * np.abs(water_depth + np.abs(kb)) / water_vel
         repl_twt = 2.0 * repl_int / repl_vel
 
-        print('KB elevation: {} [m]'.format(kb))
-        print('Seafloor elevation: {} [m]'.format(water_depth))
-        print('Water time: {} [s]'.format(water_twt))
-        print('Top of Sonic log: {} [m]'.format(top_of_log))
-        print('Replacement interval: {} [m]'.format(repl_int))
-        print('Two-way replacement time: {} [s]'.format(repl_twt))
-        print('Top-of-log starting time: {} [s]'.format(repl_twt + water_twt))
+        #print('KB elevation: {} [m]'.format(kb))
+        #print('Seafloor elevation: {} [m]'.format(water_depth))
+        #print('Water time: {} [s]'.format(water_twt))
+        #print('Top of Sonic log: {} [m]'.format(top_of_log))
+        #print('Replacement interval: {} [m]'.format(repl_int))
+        #print('Two-way replacement time: {} [s]'.format(repl_twt))
+        #print('Top-of-log starting time: {} [s]'.format(repl_twt + water_twt))
 
         return water_twt + repl_twt
 
@@ -1803,8 +1819,6 @@ class Block(object):
             ax.legend(['Smooth and despiked', 'Original'])
 
         # Handle units
-        # TODO step units can be different from sonic or velocity units! NEED to capture this!
-        # Use a function similar to get_kb, that returns the step in meter, ALWAYS
         if sonic:
             scaled_dt = self.get_step() * np.nan_to_num(smooth_log)
             if feet_unit:  #  sonic is in feet units, step is always in meters

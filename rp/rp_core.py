@@ -712,7 +712,7 @@ def vels(K_DRY, G_DRY, K0, D0, Kf, Df, phi):
     return vp, vs, rho, K
 
 
-def run_fluid_sub(wells, logname_dict, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, block_name='Logs'):
+def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, block_name='Logs'):
     """
 
     :param wells:
@@ -722,12 +722,12 @@ def run_fluid_sub(wells, logname_dict, mineral_mix, fluid_mix, cutoffs, working_
             from core.well import Project
             wp = Project( ... )
             wells = wp.load_all_wells()
-    :param logname_dict:
+    :param log_table:
         dict
         Dictionary of log type: log name key: value pairs to create statistics on
         The Vp, Vs, Rho and Phi logs are necessary for output to RokDoc compatible Sums & Average excel file
         E.G.
-            logname_dict = {
+            log_table = {
                'P velocity': 'vp',
                'S velocity': 'vs',
                'Density': 'rhob',
@@ -760,7 +760,7 @@ def run_fluid_sub(wells, logname_dict, mineral_mix, fluid_mix, cutoffs, working_
 
     # rename variables to shorten lines
     wis = working_intervals
-    lnd = logname_dict
+    lnd = log_table
     mm = mineral_mix
     fm = fluid_mix
 

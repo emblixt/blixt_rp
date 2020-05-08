@@ -51,7 +51,7 @@ def project_wells(filename, working_dir):
 
 def invert_well_table(well_table, well_name, rename=True):
     """
-    Typically, the "logname_dict"
+    Typically, the "log_table"
     :param well_table:
         dict
         As output from project_wells() above
@@ -63,7 +63,7 @@ def invert_well_table(well_table, well_name, rename=True):
         if True it uses the "Translate log name" information to rename log names
     :return:
         dict
-        As opposed to the commonly used "logname_dict", which relates a log type with one specific log, this dictionary
+        As opposed to the commonly used "log_table", which relates a log type with one specific log, this dictionary
         relates a log type with multiple log names
         E.G. {'Resisitivity': ['rdep', 'rmed', 'rsha'], ...}
     """
