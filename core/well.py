@@ -598,6 +598,14 @@ class Well(object):
         logger.warning(info_txt)
         return 0.0
 
+
+    def sonic_to_vel(self, block_name=None):
+        if block_name is None:
+            block_name = def_lb_name
+
+        self.block[block_name].sonic_to_vel()
+
+
     def time_to_depth(self, log_name='vp', water_vel=None, repl_vel=None, water_depth=None, block_name=None,
                       sonic=None, feet_unit=None, us_unit=None,
                       spike_threshold=None, debug=False):
@@ -1490,7 +1498,7 @@ class Well(object):
             for rname, value in rename_well_logs.items():
                 if key.lower() in [x.lower() for x in value]:
                     info_txt = 'Renaming log from {} to {}'.format(key, rname)
-                    print('INFO: {}'.format(info_txt))
+                    #print('INFO: {}'.format(info_txt))
                     logger.info(info_txt)
                     well_dict['curve'][rname.lower()] = well_dict['curve'].pop(key)
                     well_dict['data'][rname.lower()] = well_dict['data'].pop(key)
@@ -1843,6 +1851,34 @@ class Block(object):
             plt.show()
 
         return tdr
+
+    def sonic_to_vel(self):
+        """
+        Converts sonic to velocity
+        :return:
+        """
+        from utils.convert_data import convert
+
+        for ss, vv, vtype in zip(
+                ['ac', 'acs'], ['vp', 'vs'], ['P velocity', 'S velocity']
+        ):
+            info_txt = ''
+            if ss not in self.log_names():
+                continue
+            else:
+                din = self.logs[ss].data
+                dout = convert(din, 'us/ft', 'm/s')
+
+            self.add_log(
+                dout,
+                vv,
+                vtype,
+                header={
+                    'unit': 'm/s',
+                    'modification_history': '{} Calculated from {}'.format(info_txt, ss.upper()),
+                    'orig_filename': well.block['Logs'].logs['ac'].header.orig_filename
+                }
+            )
 
 
 def _read_las(file, rename_well_logs=None):

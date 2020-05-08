@@ -59,7 +59,7 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
         warn_txt = 'Step lengths are not equal. {:.4f} vs {:.4f} in well {}'.format(
             input_step, step, well_dict['well_info']['well']['value'])
         logger.warning(warn_txt)
-        print('WARNING: {}'.format(warn_txt))
+        # print('WARNING: {}'.format(warn_txt))
         logger.info('Re-sampling the log with step {} to use {} instead.'.format(
             input_step, step
         ))

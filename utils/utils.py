@@ -194,32 +194,4 @@ def norm(arr, method='median'):
 
 
 def handle_sonic(well):
-    """
-    Converts sonic to velocity
-
-    :param well:
-        a well object
-    :return:
-    """
-    from utils.convert_data import convert
-
-    for ss, vv, vtype in zip(
-            ['ac', 'acs'], ['vp', 'vs'], ['P velocity', 'S velocity']
-    ):
-        info_txt = ''
-        if ss not in well.log_names():
-            continue
-        else:
-            din = well.block['Logs'].logs[ss].data
-            dout = convert(din, 'us/ft', 'm/s')
-
-        well.block['Logs'].add_log(
-            dout,
-            vv,
-            vtype,
-            header={
-                'unit': 'm/s',
-                'modification_history': '{} Calculated from {}'.format(info_txt, ss.upper()),
-                'orig_filename': well.block['Logs'].logs['ac'].header.orig_filename
-            }
-        )
+    raise NotImplementedError('Please use native well method, sonic_to_vel ')
