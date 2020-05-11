@@ -9,9 +9,9 @@ import logging
 from dataclasses import dataclass
 from copy import deepcopy
 
+import core.well as cw
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class Param:
@@ -712,7 +712,7 @@ def vels(K_DRY, G_DRY, K0, D0, Kf, Df, phi):
     return vp, vs, rho, K
 
 
-def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, block_name='Logs'):
+def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, block_name=None):
     """
 
     :param wells:
@@ -725,7 +725,7 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
     :param log_table:
         dict
         Dictionary of log type: log name key: value pairs to create statistics on
-        The Vp, Vs, Rho and Phi logs are necessary for output to RokDoc compatible Sums & Average excel file
+        The Vp, Vs, Rho and Phi logs are necessary to calculate the fluid substitution
         E.G.
             log_table = {
                'P velocity': 'vp',
@@ -753,6 +753,8 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
         Name of the log block which should contain the logs to fluid substitute
     :return:
     """
+    if block_name is None:
+        block_name =  cw.def_lb_name
     if tag is None:
         tag = ''
     elif tag[0] != '_':
@@ -824,9 +826,9 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
             # Add the fluid substituted results to the well
             for xx, yy in zip([v_p_1, v_s_1, rho_1], [_v_p_2, _v_s_2, _rho_2]):
                 new_name = deepcopy(xx.name)
-                new_name += '_{}{}'.format(wi.lower().replace(' ','_'), tag.lower())
+                new_name += '{}'.format(tag.lower())
                 new_header = deepcopy(xx.header)
-                new_header.name += '_{}{}'.format(wi.lower().replace(' ','_'), tag.lower())
+                new_header.name += '{}'.format(tag.lower())
                 new_header.desc = 'Fluid substituted {}'.format(xx.name)
                 mod_history = 'Calculated using Gassmann fluid substitution using following\n'
                 mod_history += 'Mineral mixtures: {}\n'.format(mm.print_minerals(wname, wi))

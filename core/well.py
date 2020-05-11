@@ -746,7 +746,10 @@ class Well(object):
         fluid = False
 
         if not (isinstance(fluid_minerals, MineralMix) or isinstance(fluid_minerals, dict)):
-            warn_txt = 'Input fluid_minerals must be a MineralMix or a subselection of a FluidMix object'
+            warn_txt = \
+                'Input fluid_minerals must be a MineralMix or a subselection of a FluidMix object, not {}'.format(
+                    type(fluid_minerals)
+                )
             logger.warning(warn_txt)
             raise Warning(warn_txt)
 
@@ -1876,7 +1879,7 @@ class Block(object):
                 header={
                     'unit': 'm/s',
                     'modification_history': '{} Calculated from {}'.format(info_txt, ss.upper()),
-                    'orig_filename': well.block['Logs'].logs['ac'].header.orig_filename
+                    'orig_filename': self.logs['ac'].header.orig_filename
                 }
             )
 

@@ -77,7 +77,7 @@ def invert_well_table(well_table, well_name, rename=True):
                 _renamed = False
                 if logtype not in list(out.keys()):
                     out[logtype] = []
-                if rename:
+                if rename and (rdt is not None):
                     for to_name, from_names in rdt.items():
                         if lname.lower() in from_names:
                             _renamed = True

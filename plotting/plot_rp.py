@@ -273,7 +273,7 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
                 test_obj = np.broadcast_to(test_obj, (len(constants), len(test_obj)))
             elif len(test_obj.shape) == 2:
                 if not test_obj.shape == (len(constants), len(t)):
-                    raise IOError('Shape of input must match constants, and x: ({}, {})'.format(len(constants), len(x)))
+                    raise IOError('Shape of input must match constants, and t: ({}, {})'.format(len(constants), len(t)))
         if def_val == 90.:
             sizes = test_obj
         else:
