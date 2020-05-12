@@ -239,47 +239,44 @@ class Project(object):
 
         logger.info('Loaded project settings from: {}'.format(file_name))
 
-    def check_well_names(self):
+    def check_wells(self, all=True):
         """
-        Loops through the well names in the project table and checks if they are in
-        a consistent format (E.G. "6507_3_1S" and NOT "6507/3-1 S"), and if they corresponds to the well name
-        in the given las files.
+        Loops through the well names in the project table and checks if las files can be read,  if the requested
+        logs are to be found in the las file, and if the well name is in a consistent format
+        (E.G. "6507_3_1S" and NOT "6507/3-1 S")
 
         :return:
         """
 
-        _well_table = uio.project_wells(self.project_table, self.working_dir)
+        _well_table = uio.project_wells(self.project_table, self.working_dir, all=True)
         for lfile in list(_well_table.keys()):
             wname = _well_table[lfile]['Given well name']
+            print('Checking {}: {}'.format(wname, os.path.split(lfile)[-1]))
+
+            # Check if las file exists (Redundant test, as uio.project_wells() tests that too
+            if not os.path.isfile(lfile):
+                warn_txt = 'Las file: {} does not exist'
+                print('WARNING: {}'.format(warn_txt))
+                logger.warning(warn_txt)
+                continue
+
+            # Check if well logs exists
+            for log_name in list(_well_table[lfile]['logs'].keys()):
+                log_exists = False
+                for line in uio.get_las_curve_info(fname):
+                    if lname in line.lower():
+                        log_exists = True
+                if not log_exists:
+                    warn_txt = 'Log {} does not exist in {}'.format(log_name, os.path.split(lfile)[-1])
+                    print('WARNING: {}'.format(warn_txt))
+                    logger.warning(warn_txt)
+
+            # Check if well name is consistent
             if ('/' in wname) or ('-' in wname) or (' ' in wname):
                 warn_txt = "Special signs, like '/', '-' or ' ', are not allowed in well name: {}".format(wname)
                 print("WARNING: {}".format(warn_txt))
                 logger.warning(warn_txt)
-            for line in uio.get_las_well_info(lfile):
-                # noinspection Annotator
-                if re.search("[.]{1}", line) is None:
-                    continue
-                # noinspection Annotator
-                if re.search("[ ]{1}", line) is None:
-                    continue
-                # noinspection Annotator
-                if re.search("[:]{1}", line) is None:
-                    continue
-                # noinspection Annotator
-                mnem_end = re.search("[.]{1}", line).end()
-                # noinspection Annotator
-                unit_end = mnem_end + re.search("[ ]{1}", line[mnem_end:]).end()
-                # noinspection Annotator
-                colon_end = unit_end + re.search("[:]{1}", line[unit_end:]).start()
-                # divide line
-                mnem = line[:mnem_end - 1].strip()
-                data = line[unit_end:colon_end].strip()
-                if mnem == 'WELL':
-                    if uio.fix_well_name(data) != wname:
-                        warn_txt = 'Well name in las file ({}) does not correspond to well name in project table ({})'.format(
-                            uio.fix_well_name(data), wname)
-                        print("WARNING: {}".format(warn_txt))
-                        logger.warning(warn_txt)
+
 
     def active_wells(self):
         active_wells = []
