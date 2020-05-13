@@ -12,10 +12,22 @@ from utils.utils import isnan, info
 logger = logging.getLogger(__name__)
 
 
-def project_wells(filename, working_dir):
+def project_wells(filename, working_dir, all=False):
+    """
+    Returns a table containing the requested wells
+
+    :param filename:
+    :param working_dir:
+    :param all:
+        bool
+        if True, all wells are loaded in the table, and not only the ones for which Use = Yes
+    :return:
+    """
     table = pd.read_excel(filename, header=1, sheet_name='Wells table')
     result = {}
     for i, ans in enumerate(table['Use']):
+        if all:
+            ans = 'Yes'
         if ans == 'Yes':
             temp_dict = {}
             log_dict = {}

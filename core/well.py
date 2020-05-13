@@ -247,7 +247,6 @@ class Project(object):
 
         :return:
         """
-
         _well_table = uio.project_wells(self.project_table, self.working_dir, all=True)
         for lfile in list(_well_table.keys()):
             wname = _well_table[lfile]['Given well name']
@@ -263,8 +262,8 @@ class Project(object):
             # Check if well logs exists
             for log_name in list(_well_table[lfile]['logs'].keys()):
                 log_exists = False
-                for line in uio.get_las_curve_info(fname):
-                    if lname in line.lower():
+                for line in uio.get_las_curve_info(lfile):
+                    if log_name in line.lower():
                         log_exists = True
                 if not log_exists:
                     warn_txt = 'Log {} does not exist in {}'.format(log_name, os.path.split(lfile)[-1])

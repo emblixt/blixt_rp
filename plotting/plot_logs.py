@@ -489,6 +489,7 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
                    # Thin dashed if TVD present, thicker solid if not
     for i, well in enumerate(wells.values()):
         wnames.append(well.well)
+        c_styles[well.well] = {'color': 'k', 'ls': '-', 'lw': 1}
         # extract the relevant log block
         tb = well.block[block_name]
 
@@ -507,7 +508,6 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
                 c_styles[well.well] = {'color': 'k', 'ls': '--', 'lw': 0.5}
                 depth_key = 'tvd'
             else:
-                c_styles[well.well] = {'color': 'k', 'ls': '-', 'lw': 1}
                 depth_key = 'depth'
             if np.nanmax(tb.logs[depth_key].data[mask]) > y_max:
                 y_max = np.nanmax(tb.logs[depth_key].data[mask])
