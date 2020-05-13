@@ -542,7 +542,7 @@ class Well(object):
 
     def get_water_depth(self, water_depth_keys=None):
         """
-        Tries to return the Kelly bushing elevation in meters.
+        Tries to return the water depth in meters.
         :param water_depth_keys:
             list
             List of strings that can be the key of the water depth information in the well header

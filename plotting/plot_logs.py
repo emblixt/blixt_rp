@@ -522,6 +522,9 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
                           'color': templates[ltype]['line color'], 'ls': templates[ltype]['line style']}
                 ax.plot(i + x*pw, tb.logs[depth_key].data[mask], **styles)
 
+        # TODO
+        # Use the wells function get_kb() and get_water_depth() to decide if to plot these or not
+        # MAYBE let above two *get* functions take *template* as input
         ax.plot([i, i], [0.,  # this is not exact, because the linewidth makes the lines look longer than what they are
                         templates[well.well]['water depth']+templates[well.well]['kb']], label='_nolegend_', **sea_style)
         ax.plot([i, i], [0., templates[well.well]['kb']], label='_nolegend_', **kb_style)
