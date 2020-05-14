@@ -45,13 +45,15 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
     if 'depth' not in list(well_dict['data'].keys()):
         raise IOError('Depth log is missing in input')
     input_md = np.array(well_dict['data']['depth'])
+    print(input_md[:10])
+    print(input_md[-10:])
 
     # Create a true MD array
     #true_md = np.arange(start, stop+step, step)
     true_md = np.linspace(start, stop, orig_len)
 
     info_txt = 'Actual length versus desired length: {} - {}'.format(len(input_md), len(true_md))
-    #print(info_txt)
+    print(info_txt)
     #logger.info(info_txt)
 
     # First make sure the step is the same
@@ -59,15 +61,21 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
         warn_txt = 'Step lengths are not equal. {:.4f} vs {:.4f} in well {}'.format(
             input_step, step, well_dict['well_info']['well']['value'])
         logger.warning(warn_txt)
-        # print('WARNING: {}'.format(warn_txt))
-        logger.info('Re-sampling the log with step {} to use {} instead.'.format(
-            input_step, step
-        ))
+        print('WARNING: {}'.format(warn_txt))
+        info_txt = 'Re-sampling the log with step {} to use {} instead.'.format(input_step, step)
+        print(info_txt)
+        logger.info(info_txt)
         dd = None
         for key in list(well_dict['data'].keys()):
             # re-sample the data
             #dd, this_data = interpolate(input_md, well_dict['data'][key], 0., length=orig_len)
             dd, this_data = interpolate(input_md, well_dict['data'][key], step)
+            if key == 'tvd':
+                print(key)
+                print(dd[:10])
+                print(dd[-10:])
+                print(this_data[:10])
+                print(this_data[-10:])
             # re-insert them
             well_dict['data'][key] = list(this_data)
         # Update well_info and the input_md
@@ -76,6 +84,7 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
 
     # Test the start value
     if input_start < start:  # input logs starts above given start value
+        print('Input starts above the start in the existing well')
         # Find index in input depth which corresponds to start
         ind = np.nanargmin((input_md-start)**2)
         for key in list(well_dict['data'].keys()):
@@ -84,6 +93,10 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
             this_data = this_data[ind:]
             # re-insert them
             well_dict['data'][key] = this_data
+            if key == 'tvd':
+                print(key)
+                print(this_data[:10])
+                print(this_data[-10:])
         # Update well_info and the input_md
         well_dict['well_info']['strt']['value'] = start
         input_md = input_md[ind:]
@@ -140,12 +153,20 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
         for key in list(well_dict['data'].keys()):
             # re-sample the data
             dd, this_data = interpolate(this_md, well_dict['data'][key], 0., length=orig_len)
+            if key == 'tvd':
+                print(key)
+                print(this_md[:10])
+                print(this_md[-10:])
+                print(well_dict['data'][key][:10])
+                print(well_dict['data'][key][-10:])
+                print(this_data[:10])
+                print(this_data[-10:])
             # re-insert them
             well_dict['data'][key] = list(this_data)
 
 
     info_txt = 'New length versus desired length: {} - {}'.format(len(well_dict['data']['depth']), len(true_md))
-    #print(info_txt)
+    print(info_txt)
     #logger.info(info_txt)
 
 

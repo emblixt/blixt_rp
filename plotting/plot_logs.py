@@ -488,6 +488,7 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
     c_styles = {}  # style of line that defines the center of each well.
                    # Thin dashed if TVD present, thicker solid if not
     for i, well in enumerate(wells.values()):
+        print(i, well.well)
         wnames.append(well.well)
         c_styles[well.well] = {'color': 'k', 'ls': '-', 'lw': 1}
         # extract the relevant log block
@@ -496,6 +497,7 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
         # Try finding the depth interval of the desired working interval 'wi_name'
         well.calc_mask({}, name='XXX', wis=wis, wi_name=wi_name)
         try:
+            print('Lysing exists!')
             mask = tb.masks['XXX'].data
             int_exists = True
         except TypeError:
@@ -505,21 +507,27 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
 
         if int_exists:
             if 'tvd' in well.log_names():
+                print('TVD')
                 c_styles[well.well] = {'color': 'k', 'ls': '--', 'lw': 0.5}
                 depth_key = 'tvd'
             else:
+                print('MD')
                 depth_key = 'depth'
-            if np.nanmax(tb.logs[depth_key].data[mask]) > y_max:
-                y_max = np.nanmax(tb.logs[depth_key].data[mask])
+            if wis[well.well][wi_name][1] > y_max:
+                y_max = wis[well.well][wi_name][1]
+            #if np.nanmax(tb.logs[depth_key].data[mask]) > y_max:
+            #    y_max = np.nanmax(tb.logs[depth_key].data[mask])
 
             # plot the desired logs
             for ltype in log_types:
                 lname = log_table[ltype]
                 if lname not in well.log_names():  # skip this log
+                    print('skipping {}'.format(lname))
                     continue
                 x = uu.norm(tb.logs[lname].data[mask], method='median')
                 styles = {'lw': templates[ltype]['line width'],
                           'color': templates[ltype]['line color'], 'ls': templates[ltype]['line style']}
+                print(i, pw)
                 ax.plot(i + x*pw, tb.logs[depth_key].data[mask], **styles)
 
         # TODO

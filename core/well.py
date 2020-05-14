@@ -1079,7 +1079,8 @@ class Well(object):
                 )
                 # Test for number of True values
                 if np.sum(block_mask) < 1:
-                    warn_txt = 'All values in block {} are masked out using {}'.format(lblock, msk_str)
+                    warn_txt = 'All values in well {}, block {}, are masked out using {}'.format(
+                        self.well, lblock, msk_str)
                     print('WARNING: {}'.format(warn_txt))
                     logger.warning(warn_txt)
                 else:

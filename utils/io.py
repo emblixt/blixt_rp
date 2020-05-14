@@ -28,15 +28,15 @@ def project_wells(filename, working_dir, all=False):
     for i, ans in enumerate(table['Use']):
         if all:
             ans = 'Yes'
-        if ans == 'Yes':
+        if ans.lower() == 'yes':
             temp_dict = {}
             log_dict = {}
             for key in list(table.keys()):
-                if (key == 'las file') or (key == 'Use'):
+                if (key.lower() == 'las file') or (key.lower() == 'use'):
                     continue
-                elif (key == 'Given well name') or (key == 'Note') or (key == 'Translate log names'):
+                elif (key.lower() == 'given well name') or (key.lower() == 'note') or (key.lower() == 'translate log names'):
                     if isinstance(table[key][i], str):
-                        if key == 'Given well name':
+                        if key.lower() == 'given well name':
                             value = fix_well_name(table[key][i])
                         else:
                             value = table[key][i]
@@ -358,7 +358,7 @@ def read_petrel_tops(filename, header=None, top=True, zstick='md', only_these_we
     return return_dict_from_tops(tops, 'Well identifier', 'Surface', key_name, only_these_wells=only_these_wells)
 
 
-def write_tops(filename, tops, well_names=None, interval_names=None):
+def write_tops(filename, tops, well_names=None, interval_names=None, sheet_name=None):
     """
     Writes the tops to the excel file "filename", in the sheet name 'Working intervals'
     If "filename" exists, and is open, it raises a warning
@@ -387,7 +387,8 @@ def write_tops(filename, tops, well_names=None, interval_names=None):
 
     :return:
     """
-    sheet_name = 'Working intervals'
+    if sheet_name is None:
+        sheet_name = 'Working intervals'
 
     # test write access
     taccs = check_if_excelfile_writable(filename)
