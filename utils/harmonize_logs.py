@@ -8,13 +8,14 @@
 #
 # --------------------------------------------------------------------
 import numpy as np
+import matplotlib.pyplot as plt
 import logging
 from scipy.interpolate import interp1d
 
 logger = logging.getLogger(__name__)
 
 
-def harmonize_logs(well_dict, start, stop, step, orig_len):
+def harmonize_logs(well_dict, start, stop, step, orig_len, debug=False):
     """
     Takes the input well_dict and arranges the logs inside to fit the given start, stop and step values.
 
@@ -34,6 +35,9 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
     :param orig_len:
         int
         The desired length of the data array
+    :param debug:
+        bool
+        if True, plots and extra information is generated
     :return:
     """
     # Extract the input start, stop and step values
@@ -51,7 +55,14 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
     true_md = np.linspace(start, stop, orig_len)
 
     info_txt = 'Actual length versus desired length: {} - {}'.format(len(input_md), len(true_md))
-    #print(info_txt)
+    if debug:
+        #key = list(well_dict['data'].keys())[0]  # select the first inp
+        lname = 'tvd'
+        fig, axes = plt.subplots(2, 1, figsize=(8, 14))
+        print(info_txt)
+        axes[0].plot(input_md, well_dict['data'][lname], 'o', lw=0, c='y')
+        axes[0].axvline(start)
+        axes[0].axvline(stop)
     #logger.info(info_txt)
 
     # First make sure the step is the same
@@ -87,6 +98,8 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
         # Update well_info and the input_md
         well_dict['well_info']['strt']['value'] = start
         input_md = input_md[ind:]
+        if debug:
+            axes[0].plot(input_md, well_dict['data'][lname], 'o', lw=0, c='b')
 
     elif input_start > start:  # input logs starts below given stop value
         # Find index in the true depth which corresponds to input_start
@@ -103,6 +116,8 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
         nan_pad = list(np.ones(ind) * np.nan)
         nan_pad.extend(list(input_md))
         input_md = np.array(nan_pad)
+        if debug:
+            axes[0].plot(input_md, well_dict['data'][lname], 'o', lw=0, c='b')
 
     # Test the stop value
     if input_stop > stop:  # input logs ends below the given stop value
