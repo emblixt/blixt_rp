@@ -9,12 +9,13 @@
 # --------------------------------------------------------------------
 import numpy as np
 import logging
+import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 
 logger = logging.getLogger(__name__)
 
 
-def harmonize_logs(well_dict, start, stop, step, orig_len):
+def harmonize_logs(well_dict, start, stop, step, orig_len, debug=False):
     """
     Takes the input well_dict and arranges the logs inside to fit the given start, stop and step values.
 
@@ -51,8 +52,14 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
     true_md = np.linspace(start, stop, orig_len)
 
     info_txt = 'Actual length versus desired length: {} - {}'.format(len(input_md), len(true_md))
-    #print(info_txt)
     #logger.info(info_txt)
+    if debug:
+        lname = 'tvd'
+        fig, ax = plt.subplots()
+        print(info_txt)
+        ax.plot(input_md, well_dict['data'][lname], 'o', lw=0, c='y')
+        ax.axvline(start)
+        ax.axvline(stop)
 
     # First make sure the step is the same
     if input_step != step:
@@ -87,6 +94,8 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
         # Update well_info and the input_md
         well_dict['well_info']['strt']['value'] = start
         input_md = input_md[ind:]
+        if debug:
+            ax.plot(input_md, well_dict['data'][lname], 'o', lw=0, c='b')
 
     elif input_start > start:  # input logs starts below given stop value
         # Find index in the true depth which corresponds to input_start
@@ -103,6 +112,8 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
         nan_pad = list(np.ones(ind) * np.nan)
         nan_pad.extend(list(input_md))
         input_md = np.array(nan_pad)
+        if debug:
+            ax.plot(input_md, well_dict['data'][lname], 'o', lw=0, c='b')
 
     # Test the stop value
     if input_stop > stop:  # input logs ends below the given stop value
@@ -116,32 +127,46 @@ def harmonize_logs(well_dict, start, stop, step, orig_len):
             well_dict['data'][key] = this_data
         # Update well_info
         well_dict['well_info']['stop']['value'] = stop
+        if debug:
+            ax.plot(input_md, well_dict['data'][lname], 'o', lw=0, c='r')
 
     elif input_stop < stop:  # input logs ends above given stop value
         # Find index in the true depth which corresponds to input_stop
         ind = np.nanargmin((true_md-input_stop)**2)
+        pad_length = len(true_md) - ind - 1
+        # Test the length of the padding, it is often out with one item
+        if orig_len - len(input_md) - pad_length == 1:
+            pad_length += 1
+        elif orig_len - len(input_md) - pad_length == -1:
+            pad_length -= 1
+
+        nan_pad = list(np.ones(pad_length) * np.nan)
         for key in list(well_dict['data'].keys()):
             this_data = well_dict['data'][key]
-            nan_pad = list(np.ones(len(true_md)-ind-1)*np.nan)
             # pad the log with nans
             this_data.extend(nan_pad)
             # re-insert it
             well_dict['data'][key] = this_data
         # Update well_info
         well_dict['well_info']['stop']['value'] = stop
+        if debug:
+            print(orig_len - len(input_md) - pad_length, len(input_md) + pad_length, len(well_dict['data'][lname]))
+            ax.plot(np.append(input_md, np.ones(len(nan_pad))*input_md[-1]), np.nan_to_num(well_dict['data'][lname]), 'o', lw=0, c='r')
 
     # Now test the result if it has the same length as the desired length
     if len(well_dict['data']['depth']) != orig_len:
         warn_txt = 'Lengths does not match. Input versus desired length: {} - {}\n Interpolation started'.format(
             len(well_dict['data']['depth']), orig_len)
         logger.warning(warn_txt)
-        print('WARNING: {}'.format(warn_txt))
+        #print('WARNING: {}'.format(warn_txt))
         this_md =  well_dict['data']['depth']
         for key in list(well_dict['data'].keys()):
             # re-sample the data
             dd, this_data = interpolate(this_md, well_dict['data'][key], 0., length=orig_len)
             # re-insert them
             well_dict['data'][key] = list(this_data)
+        if debug:
+            ax.plot(dd, well_dict['data'][lname], '-', lw=1, c='k')
 
 
     info_txt = 'New length versus desired length: {} - {}'.format(len(well_dict['data']['depth']), len(true_md))

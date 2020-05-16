@@ -802,26 +802,13 @@ def get_las_curve_info(filename):
             continue
 
 
-def convert(lines, file_format='las', rename_well_logs=None):
+def convert(lines, file_format='las'):
     """
     class handling wells, with logs, and well related information
     The reading .las files is more or less copied from converter.py
         https://pypi.org/project/las-converter/
 
-    :param rename_well_logs:
-        dict
-        E.G.
-        {'depth': ['DEPT', 'MD']}
-        where the key is the wanted well log name, and the value list is a list of well log names to translate from
-
     """
-    # TODO
-    # Remove the usage of rename_well_logs
-    if rename_well_logs is None:
-        rename_well_logs = {'depth': ['Depth', 'DEPT', 'MD', 'DEPTH']}
-    elif isinstance(rename_well_logs, dict) and ('depth' not in list(rename_well_logs.keys())):
-        rename_well_logs['depth'] = ['Depth', 'DEPT', 'MD', 'DEPTH']
-
     def parse(x):
         try:
             x = int(x)
@@ -831,23 +818,6 @@ def convert(lines, file_format='las', rename_well_logs=None):
             except ValueError:
                 pass
         return x
-
-    def rename_log_name(_key):
-        """
-        Helper function that translates different "depth" names to a common "depth" name.
-        :param _key:
-            str
-        :return:
-            str
-        """
-        for rname, value in rename_well_logs.items():
-            if _key.lower() in [x.lower() for x in value]:
-                info_txt = 'Renaming log from {} to {}'.format(_key, rname)
-                print('INFO: {}'.format(info_txt))
-                logger.info(info_txt)
-                return rname.lower()
-        else:
-            return _key
 
     def get_current_section(line):
         if '~V' in line : return 'version'
@@ -1049,5 +1019,24 @@ def my_float(string):
         return float(string)
     except ValueError:
         return string
+
+def rename_log_name(_key):
+    """
+    Helper function that translates different "depth" names to a common "depth" name.
+    :param _key:
+        str
+    :return:
+        str
+    """
+    # This function is stalled, and will not work right now\
+    rename_well_logs = {}
+    for rname, value in rename_well_logs.items():
+        if _key.lower() in [x.lower() for x in value]:
+            info_txt = 'Renaming log from {} to {}'.format(_key, rname)
+            print('INFO: {}'.format(info_txt))
+            logger.info(info_txt)
+            return rname.lower()
+    else:
+        return _key
 
 

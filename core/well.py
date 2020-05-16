@@ -1484,11 +1484,8 @@ class Well(object):
         if isinstance(only_these_logs, str):
             only_these_logs = {only_these_logs.lower(): None}
 
-        null_val, generated_keys, well_dict = _read_las(filename, rename_well_logs=rename_well_logs)
-        # TODO
-        # Make the below test a result. Remove comments about test, and remove the usage of rename_well_logs in io.convert
-        # XXX
-        # test doing the rename after _read_las instead of inside it
+        null_val, generated_keys, well_dict = _read_las(filename)
+        # Rename well logs
         if rename_well_logs is None:
             rename_well_logs = {'depth': ['Depth', 'DEPT', 'MD', 'DEPTH']}
         elif isinstance(rename_well_logs, dict) and ('depth' not in list(rename_well_logs.keys())):
@@ -1502,8 +1499,7 @@ class Well(object):
                     logger.info(info_txt)
                     well_dict['curve'][rname.lower()] = well_dict['curve'].pop(key)
                     well_dict['data'][rname.lower()] = well_dict['data'].pop(key)
-        # End of test
-        # XXX
+
         logger.debug('Reading {}'.format(filename))
         if well_dict['version']['vers']['value'] not in supported_version:
             raise Exception("Version {} not supported!".format(
@@ -1881,7 +1877,7 @@ class Block(object):
             )
 
 
-def _read_las(file, rename_well_logs=None):
+def _read_las(file):
     """Convert file and Return `self`. """
     file_format = None
     ext = file.rsplit(".", 1)[-1].lower()
@@ -1897,7 +1893,7 @@ def _read_las(file, rename_well_logs=None):
 
     with open(file, "r") as f:
         lines = f.readlines()
-    return convert(lines, file_format=file_format, rename_well_logs=rename_well_logs)  # read all lines from data
+    return convert(lines, file_format=file_format)  # read all lines from data
 
 
 def add_one(instring):
