@@ -754,7 +754,7 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
     :return:
     """
     if block_name is None:
-        block_name =  cw.def_lb_name
+        block_name = cw.def_lb_name
     if tag is None:
         tag = ''
     elif tag[0] != '_':
@@ -787,12 +787,12 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
             continue
 
         # Variables constant through fluid substitution:
-        k0_dict = well.calc_vrh_bounds(mm, param='k', wis=wis, method='Voigt-Reuss-Hill')
+        k0_dict = well.calc_vrh_bounds(mm, param='k', wis=wis, method='Voigt-Reuss-Hill', block_name=block_name)
         por = lb.logs[lnd['Porosity']].data
 
         # Initial fluids
-        rho_f1_dict = well.calc_vrh_bounds(fm.fluids['initial'], param='rho', wis=wis, method='Voigt')
-        k_f1_dict = well.calc_vrh_bounds(fm.fluids['initial'], param='k', wis=wis, method='Reuss')
+        rho_f1_dict = well.calc_vrh_bounds(fm.fluids['initial'], param='rho', wis=wis, method='Voigt', block_name=block_name)
+        k_f1_dict = well.calc_vrh_bounds(fm.fluids['initial'], param='k', wis=wis, method='Reuss', block_name=block_name)
 
         # Initial elastic logs as LogCurve objects
         v_p_1 = lb.logs[lnd['P velocity']]
@@ -800,8 +800,8 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
         rho_1 = lb.logs[lnd['Density']]
 
         # Final fluids
-        rho_f2_dict = well.calc_vrh_bounds(fm.fluids['final'], param='rho', wis=wis, method='Voigt')
-        k_f2_dict = well.calc_vrh_bounds(fm.fluids['final'], param='k', wis=wis, method='Reuss')
+        rho_f2_dict = well.calc_vrh_bounds(fm.fluids['final'], param='rho', wis=wis, method='Voigt', block_name=block_name)
+        k_f2_dict = well.calc_vrh_bounds(fm.fluids['final'], param='k', wis=wis, method='Reuss', block_name=block_name)
 
         # Run the fluid substitution separately in each interval
         for wi in list(rho_f1_dict.keys()):
