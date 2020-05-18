@@ -712,6 +712,17 @@ def vels(K_DRY, G_DRY, K0, D0, Kf, Df, phi):
     return vp, vs, rho, K
 
 
+def linear_gassmann(_por, _por_r, _delta_k_fl):
+    """
+    Calculates the change in saturated rock bulk modulus, k_delta, as a
+    function of porosity, _por, and the difference in bulk modulus between inital and final
+    fluids, _delta_k_fl, calculated at the 'intercept porosity', _por_r
+    See page 171 in Rock physics handbook, Mavko et al. 1998.
+    :return:
+    """
+    delta_k = (_por/(_por_r**2)) * _delta_k_fl
+    return delta_k
+
 def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, block_name=None):
     """
 
