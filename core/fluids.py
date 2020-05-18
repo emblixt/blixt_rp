@@ -394,8 +394,8 @@ class FluidMix(object):
                     float(fluids_table['Gas gravity'][i]),
                     fluids_table['Gas mixing'][i],
                     float(fluids_table['Brie exponent'][i]),
-                    #fluid_type=fluids_table['Fluid type'][i],
-                    fluid_type=None if isnan(fluids_table['Fluid type'][i]) else fluids_table['Fluid type'][i].lower(),
+                    # Fluid type is now defined in the fluid mixture sheet
+                    #fluid_type=None if isnan(fluids_table['Fluid type'][i]) else fluids_table['Fluid type'][i].lower(),
                     name=name.lower()
             )
             all_fluids[name.lower()] = this_fluid
@@ -407,7 +407,11 @@ class FluidMix(object):
         }
         mix_table = pd.read_excel(filename, sheet_name=mix_sheet, header=mix_header)
         for i, name in enumerate(mix_table['Fluid name']):
+            if mix_table['Use'][i] != 'Yes':
+                continue
             vf = mix_table['Volume fraction'][i]
+            ftype = mix_table['Fluid type'][i]
+            this_name = '{}_{}'.format(name.lower(), '' if isnan(ftype) else ftype.lower())
             if isnan(vf):
                 continue  # Avoid fluids where the volume fraction is not set
             this_subst = mix_table['Substitution order'][i].lower()
@@ -416,6 +420,12 @@ class FluidMix(object):
             this_fluid = deepcopy(all_fluids[name.lower()])
             this_fluid.volume_fraction = \
                 float(vf) if (not isinstance(vf, str)) else vf.lower()
+            this_fluid.fluid_type = None if isnan(ftype) else ftype.lower()
+            this_fluid.name = this_name
+            this_fluid.header.name = this_name
+
+
+
             # iterate down in this complex dictionary
             # {this_subst:                          # 1'st level: initial or final
             #       {this_well:                     # 2'nd level: well
@@ -427,12 +437,11 @@ class FluidMix(object):
                 # 3'rd level
                 if this_wi in list(fluids_mixes[this_subst][this_well].keys()):
                     # 4'th level
-                    fluids_mixes[this_subst][this_well][this_wi][name.lower()] \
-                        = this_fluid
+                    fluids_mixes[this_subst][this_well][this_wi][this_name] = this_fluid
                 else:
-                    fluids_mixes[this_subst][this_well][this_wi] = {name.lower(): this_fluid}
+                    fluids_mixes[this_subst][this_well][this_wi] = {this_name: this_fluid}
             else:
-                fluids_mixes[this_subst][this_well] = {this_wi: {name.lower(): this_fluid}}
+                fluids_mixes[this_subst][this_well] = {this_wi: {this_name: this_fluid}}
 
         self.fluids = fluids_mixes
         self.header['orig_file'] = filename

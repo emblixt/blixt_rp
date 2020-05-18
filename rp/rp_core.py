@@ -9,9 +9,9 @@ import logging
 from dataclasses import dataclass
 from copy import deepcopy
 
+import core.well as cw
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class Param:
@@ -88,7 +88,6 @@ def intercept(Vp_1, Vp_2, rho_1, rho_2, along_wiggle=False):
     """
     if along_wiggle and isinstance(Vp_1, np.ndarray) and isinstance(rho_1, np.ndarray):
         return (Vp_1[1:]*rho_1[1:] - Vp_1[:-1]*rho_1[:-1])/(Vp_1[1:]*rho_1[1:] + Vp_1[:-1]*rho_1[:-1])
-        #return 2.*(step(Vp_1, None, along_wiggle=along_wiggle) + step(rho_1, None, along_wiggle=along_wiggle))
     else:
         return 0.5 * (step(Vp_1, Vp_2) + step(rho_1, rho_2))
 
@@ -103,9 +102,6 @@ def gradient(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, along_wiggle=False):
     and the '_2' input variables are not used
     """
     if along_wiggle and isinstance(Vp_1, np.ndarray) and isinstance(Vs_1, np.ndarray) and isinstance(rho_1, np.ndarray):
-        #r0 = intercept(Vp_1, None, rho_1, None, along_wiggle=along_wiggle)
-        #out = r0 - step(rho_1, None, along_wiggle=along_wiggle) * (0.5 + 2.*sqrd_avg(Vs_1)/sqrd_avg(Vp_1)) -\
-        #    4. * (sqrd_avg(Vs_1)/sqrd_avg(Vp_1)) * step(Vs_1, None, along_wiggle=along_wiggle)
         out = 0.5 * step(Vp_1, None,  along_wiggle=along_wiggle) - 2.*(sqrd_avg(Vs_1)/sqrd_avg(Vp_1)) * \
             (step(rho_1, None, along_wiggle=along_wiggle) + 2.*step(Vs_1, None, along_wiggle=along_wiggle))
         return out
@@ -115,7 +111,7 @@ def gradient(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, along_wiggle=False):
                (2. * step(Vs_1, Vs_2) + step(rho_1, rho_2))
 
 
-def reflectivity(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, version='WigginsAkiRich'):
+def reflectivity(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, version='WigginsAkiRich', along_wiggle=False):
     """
     returns function which returns the reflectivity as function of theta
     theta is in degrees
@@ -127,9 +123,9 @@ def reflectivity(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, version='WigginsAkiRich')
 
     """
     if (version == 'WigginsAkiRich') or (version == 'ShueyAkiRich'):
-        a = intercept(Vp_1, Vp_2, rho_1, rho_2)
-        b = gradient(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2)
-        c = 0.5 * step(Vp_1, Vp_2)
+        a = intercept(Vp_1, Vp_2, rho_1, rho_2, along_wiggle=along_wiggle)
+        b = gradient(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, along_wiggle=along_wiggle)
+        c = 0.5 * step(Vp_1, Vp_2, along_wiggle=along_wiggle)
         if version == 'WigginsAkiRich':
             def func(theta):
                 return a + b * (np.sin(theta * np.pi / 180.)) ** 2 + \
@@ -716,7 +712,7 @@ def vels(K_DRY, G_DRY, K0, D0, Kf, Df, phi):
     return vp, vs, rho, K
 
 
-def run_fluid_sub(wells, logname_dict, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, block_name='Logs'):
+def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, block_name=None):
     """
 
     :param wells:
@@ -726,12 +722,12 @@ def run_fluid_sub(wells, logname_dict, mineral_mix, fluid_mix, cutoffs, working_
             from core.well import Project
             wp = Project( ... )
             wells = wp.load_all_wells()
-    :param logname_dict:
+    :param log_table:
         dict
         Dictionary of log type: log name key: value pairs to create statistics on
-        The Vp, Vs, Rho and Phi logs are necessary for output to RokDoc compatible Sums & Average excel file
+        The Vp, Vs, Rho and Phi logs are necessary to calculate the fluid substitution
         E.G.
-            logname_dict = {
+            log_table = {
                'P velocity': 'vp',
                'S velocity': 'vs',
                'Density': 'rhob',
@@ -757,6 +753,8 @@ def run_fluid_sub(wells, logname_dict, mineral_mix, fluid_mix, cutoffs, working_
         Name of the log block which should contain the logs to fluid substitute
     :return:
     """
+    if block_name is None:
+        block_name = cw.def_lb_name
     if tag is None:
         tag = ''
     elif tag[0] != '_':
@@ -764,7 +762,7 @@ def run_fluid_sub(wells, logname_dict, mineral_mix, fluid_mix, cutoffs, working_
 
     # rename variables to shorten lines
     wis = working_intervals
-    lnd = logname_dict
+    lnd = log_table
     mm = mineral_mix
     fm = fluid_mix
 
@@ -789,12 +787,12 @@ def run_fluid_sub(wells, logname_dict, mineral_mix, fluid_mix, cutoffs, working_
             continue
 
         # Variables constant through fluid substitution:
-        k0_dict = well.calc_vrh_bounds(mm, param='k', wis=wis, method='Voigt-Reuss-Hill')
+        k0_dict = well.calc_vrh_bounds(mm, param='k', wis=wis, method='Voigt-Reuss-Hill', block_name=block_name)
         por = lb.logs[lnd['Porosity']].data
 
         # Initial fluids
-        rho_f1_dict = well.calc_vrh_bounds(fm.fluids['initial'], param='rho', wis=wis, method='Voigt')
-        k_f1_dict = well.calc_vrh_bounds(fm.fluids['initial'], param='k', wis=wis, method='Reuss')
+        rho_f1_dict = well.calc_vrh_bounds(fm.fluids['initial'], param='rho', wis=wis, method='Voigt', block_name=block_name)
+        k_f1_dict = well.calc_vrh_bounds(fm.fluids['initial'], param='k', wis=wis, method='Reuss', block_name=block_name)
 
         # Initial elastic logs as LogCurve objects
         v_p_1 = lb.logs[lnd['P velocity']]
@@ -802,8 +800,8 @@ def run_fluid_sub(wells, logname_dict, mineral_mix, fluid_mix, cutoffs, working_
         rho_1 = lb.logs[lnd['Density']]
 
         # Final fluids
-        rho_f2_dict = well.calc_vrh_bounds(fm.fluids['final'], param='rho', wis=wis, method='Voigt')
-        k_f2_dict = well.calc_vrh_bounds(fm.fluids['final'], param='k', wis=wis, method='Reuss')
+        rho_f2_dict = well.calc_vrh_bounds(fm.fluids['final'], param='rho', wis=wis, method='Voigt', block_name=block_name)
+        k_f2_dict = well.calc_vrh_bounds(fm.fluids['final'], param='k', wis=wis, method='Reuss', block_name=block_name)
 
         # Run the fluid substitution separately in each interval
         for wi in list(rho_f1_dict.keys()):
@@ -828,9 +826,9 @@ def run_fluid_sub(wells, logname_dict, mineral_mix, fluid_mix, cutoffs, working_
             # Add the fluid substituted results to the well
             for xx, yy in zip([v_p_1, v_s_1, rho_1], [_v_p_2, _v_s_2, _rho_2]):
                 new_name = deepcopy(xx.name)
-                new_name += '_{}{}'.format(wi.lower().replace(' ','_'), tag.lower())
+                new_name += '{}'.format(tag.lower())
                 new_header = deepcopy(xx.header)
-                new_header.name += '_{}{}'.format(wi.lower().replace(' ','_'), tag.lower())
+                new_header.name += '{}'.format(tag.lower())
                 new_header.desc = 'Fluid substituted {}'.format(xx.name)
                 mod_history = 'Calculated using Gassmann fluid substitution using following\n'
                 mod_history += 'Mineral mixtures: {}\n'.format(mm.print_minerals(wname, wi))

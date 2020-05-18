@@ -12,19 +12,31 @@ from utils.utils import isnan, info
 logger = logging.getLogger(__name__)
 
 
-def project_wells(filename, working_dir):
+def project_wells(filename, working_dir, all=False):
+    """
+    Returns a table containing the requested wells
+
+    :param filename:
+    :param working_dir:
+    :param all:
+        bool
+        if True, all wells are loaded in the table, and not only the ones for which Use = Yes
+    :return:
+    """
     table = pd.read_excel(filename, header=1, sheet_name='Wells table')
     result = {}
     for i, ans in enumerate(table['Use']):
-        if ans == 'Yes':
+        if all:
+            ans = 'Yes'
+        if ans.lower() == 'yes':
             temp_dict = {}
             log_dict = {}
             for key in list(table.keys()):
-                if (key == 'las file') or (key == 'Use'):
+                if (key.lower() == 'las file') or (key.lower() == 'use'):
                     continue
-                elif (key == 'Given well name') or (key == 'Note') or (key == 'Translate log names'):
+                elif (key.lower() == 'given well name') or (key.lower() == 'note') or (key.lower() == 'translate log names'):
                     if isinstance(table[key][i], str):
-                        if key == 'Given well name':
+                        if key.lower() == 'given well name':
                             value = fix_well_name(table[key][i])
                         else:
                             value = table[key][i]
@@ -49,6 +61,44 @@ def project_wells(filename, working_dir):
     return result
 
 
+def invert_well_table(well_table, well_name, rename=True):
+    """
+    Typically, the "log_table"
+    :param well_table:
+        dict
+        As output from project_wells() above
+    :param well_name:
+        str
+        name of the well we want to extract the "inverted well table" from well_table
+    :param rename:
+        bool
+        if True it uses the "Translate log name" information to rename log names
+    :return:
+        dict
+        As opposed to the commonly used "log_table", which relates a log type with one specific log, this dictionary
+        relates a log type with multiple log names
+        E.G. {'Resisitivity': ['rdep', 'rmed', 'rsha'], ...}
+    """
+    out = {}
+    rdt = None
+    if rename:
+        rdt = get_rename_logs_dict(well_table)
+    for key in list(well_table.keys()):
+        if well_table[key]['Given well name'] == well_name:
+            for lname, logtype in well_table[key]['logs'].items():
+                _renamed = False
+                if logtype not in list(out.keys()):
+                    out[logtype] = []
+                if rename and (rdt is not None):
+                    for to_name, from_names in rdt.items():
+                        if lname.lower() in from_names:
+                            _renamed = True
+                            out[logtype].append(to_name.lower())
+                if not _renamed:
+                    out[logtype].append(lname.lower())
+    return out
+
+
 def get_rename_logs_dict(well_table):
     """
     Interprets the "Translate log names"  keys of the well_table and returns a rename_logs dict.
@@ -67,9 +117,9 @@ def get_rename_logs_dict(well_table):
         for key in list(_dict.keys()):
             if key in list(rename_logs.keys()):
                 if not _dict[key] in rename_logs[key]:  # only insert same rename pair once
-                    rename_logs[key].append(_dict[key])
+                    rename_logs[key].append(_dict[key].lower())
             else:
-                rename_logs[key] = [_dict[key]]
+                rename_logs[key] = [_dict[key].lower()]
     if len(rename_logs) < 1:
         return None
     else:
@@ -308,7 +358,7 @@ def read_petrel_tops(filename, header=None, top=True, zstick='md', only_these_we
     return return_dict_from_tops(tops, 'Well identifier', 'Surface', key_name, only_these_wells=only_these_wells)
 
 
-def write_tops(filename, tops, well_names=None, interval_names=None):
+def write_tops(filename, tops, well_names=None, interval_names=None, sheet_name=None):
     """
     Writes the tops to the excel file "filename", in the sheet name 'Working intervals'
     If "filename" exists, and is open, it raises a warning
@@ -337,7 +387,8 @@ def write_tops(filename, tops, well_names=None, interval_names=None):
 
     :return:
     """
-    sheet_name = 'Working intervals'
+    if sheet_name is None:
+        sheet_name = 'Working intervals'
 
     # test write access
     taccs = check_if_excelfile_writable(filename)
@@ -372,6 +423,8 @@ def write_tops(filename, tops, well_names=None, interval_names=None):
 
     for wname in well_names:
         these_tops = list(tops[wname].keys())
+        if len(these_tops) == 0:
+            continue  # skip wells without tops
         if interval_names is None:
             int_names = these_tops
             # Add a duplicate of the last interval to avoid running out-of-index
@@ -445,8 +498,6 @@ def read_petrel_checkshots(filename, only_these_wells=None):
                         checkshots[this_well_name][key].append(my_float(data[j]))
 
     return checkshots
-
-
 
 
 def test_file_path(file_path, working_dir):
@@ -751,26 +802,13 @@ def get_las_curve_info(filename):
             continue
 
 
-def convert(lines, file_format='las', rename_well_logs=None):
+def convert(lines, file_format='las'):
     """
     class handling wells, with logs, and well related information
     The reading .las files is more or less copied from converter.py
         https://pypi.org/project/las-converter/
 
-    :param rename_well_logs:
-        dict
-        E.G.
-        {'depth': ['DEPT', 'MD']}
-        where the key is the wanted well log name, and the value list is a list of well log names to translate from
-
     """
-    # TODO
-    # Remove the usage of rename_well_logs
-    if rename_well_logs is None:
-        rename_well_logs = {'depth': ['Depth', 'DEPT', 'MD', 'DEPTH']}
-    elif isinstance(rename_well_logs, dict) and ('depth' not in list(rename_well_logs.keys())):
-        rename_well_logs['depth'] = ['Depth', 'DEPT', 'MD', 'DEPTH']
-
     def parse(x):
         try:
             x = int(x)
@@ -780,23 +818,6 @@ def convert(lines, file_format='las', rename_well_logs=None):
             except ValueError:
                 pass
         return x
-
-    def rename_log_name(_key):
-        """
-        Helper function that translates different "depth" names to a common "depth" name.
-        :param _key:
-            str
-        :return:
-            str
-        """
-        for rname, value in rename_well_logs.items():
-            if _key.lower() in [x.lower() for x in value]:
-                info_txt = 'Renaming log from {} to {}'.format(_key, rname)
-                print('INFO: {}'.format(info_txt))
-                logger.info(info_txt)
-                return rname.lower()
-        else:
-            return _key
 
     def get_current_section(line):
         if '~V' in line : return 'version'
@@ -998,5 +1019,24 @@ def my_float(string):
         return float(string)
     except ValueError:
         return string
+
+def rename_log_name(_key):
+    """
+    Helper function that translates different "depth" names to a common "depth" name.
+    :param _key:
+        str
+    :return:
+        str
+    """
+    # This function is stalled, and will not work right now\
+    rename_well_logs = {}
+    for rname, value in rename_well_logs.items():
+        if _key.lower() in [x.lower() for x in value]:
+            info_txt = 'Renaming log from {} to {}'.format(_key, rname)
+            print('INFO: {}'.format(info_txt))
+            logger.info(info_txt)
+            return rname.lower()
+    else:
+        return _key
 
 

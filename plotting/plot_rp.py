@@ -8,13 +8,14 @@ import logging
 from plotting import crossplot as xp
 import rp.rp_core as rp
 import core.well as cw
+from utils.convert_data import convert as cnvrt
 
 logger = logging.getLogger(__name__)
 opt1 = {'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
 opt2 = {'ha': 'right', 'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
 
 
-def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
+def plot_rp(wells, log_table, wis, wi_name, cutoffs, templates=None,
             plot_type=None, ref_val=None, fig=None, ax=None, block_name=None, savefig=None, **kwargs):
 
     """
@@ -24,12 +25,11 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
         dict
         dictionary with well names as keys, and core.well.Well object as values
         As returned from core.well.Project.load_all_wells()
-    :param logname_dict:
+    :param log_table:
         dict
-        Dictionary of log type: log name key: value pairs to create statistics on
-        The Vp, Vs, Rho and Phi logs are necessary for output to RokDoc compatible Sums & Average excel file
+        Dictionary of log type: log name key: value pairs which decides which log, under each log type, to plot
         E.G.
-            logname_dict = {
+            log_table = {
                'P velocity': 'vp',
                'S velocity': 'vs',
                'Density': 'rhob',
@@ -86,7 +86,7 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
         plot_type = 'AI-VpVs'
     elif plot_type == 'I-G' and ref_val is None:
         ref_val = [3500., 1700., 2.6]
-    logs = list(logname_dict.values())
+    logs = [n.lower() for n in list(log_table.values())]
     if savefig is not None:
         _savefig = True
 
@@ -135,29 +135,46 @@ def plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates=None,
 
         # collect data for plot
         if plot_type == 'AI-VpVs':
-            x_data = well.block[block_name].logs[logname_dict['P velocity']].data * \
-                     well.block[block_name].logs[logname_dict['Density']].data
-            x_unit = '{} {}'.format(well.block[block_name].logs[logname_dict['P velocity']].header.unit,
-                                    well.block[block_name].logs[logname_dict['Density']].header.unit)
-            y_data = well.block[block_name].logs[logname_dict['P velocity']].data / \
-                     well.block[block_name].logs[logname_dict['S velocity']].data
+            if 'P velocity' in list(log_table.keys()):
+                # Calculating Vp / Vs using vp and vs
+                x_data = well.block[block_name].logs[log_table['P velocity'].lower()].data * \
+                         well.block[block_name].logs[log_table['Density'].lower()].data
+                x_unit = '{} {}'.format(well.block[block_name].logs[log_table['P velocity'].lower()].header.unit,
+                                        well.block[block_name].logs[log_table['Density'].lower()].header.unit)
+                y_data = well.block[block_name].logs[log_table['P velocity'].lower()].data / \
+                         well.block[block_name].logs[log_table['S velocity'].lower()].data
+            else:
+                # Assume we are calculating Vp / Vs using sonic logs
+                x_data = well.block[block_name].logs[log_table['Density'].lower()].data / \
+                         well.block[block_name].logs[log_table['Sonic'].lower()].data
+                x_unit = '{}/{}'.format(well.block[block_name].logs[log_table['Density'].lower()].header.unit,
+                                        well.block[block_name].logs[log_table['Sonic'].lower()].header.unit)
+                y_data = well.block[block_name].logs[log_table['Shear sonic'].lower()].data / \
+                         well.block[block_name].logs[log_table['Sonic'].lower()].data
+
             y_unit = '-'
             xtempl = {'full_name': 'AI', 'unit': x_unit}
             ytempl = {'full_name': 'Vp/Vs', 'unit': y_unit}
         elif plot_type == 'Phi-Vp':
-            x_data = well.block[block_name].logs[logname_dict['Porosity']].data
-            x_unit = '{}'.format(well.block[block_name].logs[logname_dict['Porosity']].header.unit)
-            y_data = well.block[block_name].logs[logname_dict['P velocity']].data
-            y_unit = '{}'.format(well.block[block_name].logs[logname_dict['P velocity']].header.unit)
+            x_data = well.block[block_name].logs[log_table['Porosity'].lower()].data
+            x_unit = '{}'.format(well.block[block_name].logs[log_table['Porosity'].lower()].header.unit)
+            if 'P velocity' in list(log_table.keys()):
+                # Calculating Vp using vp
+                y_data = well.block[block_name].logs[log_table['P velocity'].lower()].data
+                y_unit = '{}'.format(well.block[block_name].logs[log_table['P velocity'].lower()].header.unit)
+            else:
+                # Assume we are calculating Vp using sonic logs
+                y_data = cnvrt(well.block[block_name].logs[log_table['P velocity'].lower()].data, 'us/ft', 'm/s')
+                y_unit = 'm/s'
             xtempl = {'full_name': 'Porosity', 'unit': x_unit}
             ytempl = {'full_name': 'Vp', 'unit': y_unit}
         elif plot_type == 'I-G':
-            x_data = rp.intercept(ref_val[0], well.block[block_name].logs[logname_dict['P velocity']].data,
-                                  ref_val[2], well.block[block_name].logs[logname_dict['Density']].data)
+            x_data = rp.intercept(ref_val[0], well.block[block_name].logs[log_table['P velocity'].lower()].data,
+                                  ref_val[2], well.block[block_name].logs[log_table['Density'].lower()].data)
             x_unit = '-'
-            y_data = rp.gradient(ref_val[0], well.block[block_name].logs[logname_dict['P velocity']].data,
-                                  ref_val[1], well.block[block_name].logs[logname_dict['S velocity']].data,
-                                  ref_val[2], well.block[block_name].logs[logname_dict['Density']].data)
+            y_data = rp.gradient(ref_val[0], well.block[block_name].logs[log_table['P velocity'].lower()].data,
+                                  ref_val[1], well.block[block_name].logs[log_table['S velocity'].lower()].data,
+                                  ref_val[2], well.block[block_name].logs[log_table['Density'].lower()].data)
             y_unit = '-'
             xtempl = {'full_name': 'Intercept', 'unit': x_unit}
             ytempl = {'full_name': 'Gradient', 'unit': y_unit}
@@ -256,7 +273,7 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
                 test_obj = np.broadcast_to(test_obj, (len(constants), len(test_obj)))
             elif len(test_obj.shape) == 2:
                 if not test_obj.shape == (len(constants), len(t)):
-                    raise IOError('Shape of input must match constants, and x: ({}, {})'.format(len(constants), len(x)))
+                    raise IOError('Shape of input must match constants, and t: ({}, {})'.format(len(constants), len(t)))
         if def_val == 90.:
             sizes = test_obj
         else:
@@ -348,13 +365,13 @@ def test():
     fig, ax = plt.subplots()
 
     wp = Project()
-    logname_dict = {'P velocity': 'vp_dry', 'S velocity': 'vs_dry', 'Density': 'rho_dry', 'Porosity': 'phie',
+    log_table = {'P velocity': 'vp_dry', 'S velocity': 'vs_dry', 'Density': 'rho_dry', 'Porosity': 'phie',
                     'Volume': 'vcl'}
     wis = uio.project_working_intervals(wp.project_table)
     templates = uio.project_templates(wp.project_table)
     cutoffs = {'Volume': ['<', 0.4], 'Porosity': ['>', 0.1]}
     wells = wp.load_all_wells()
-    plot_rp(wells, logname_dict, wis, wi_name, cutoffs, templates,
+    plot_rp(wells, log_table, wis, wi_name, cutoffs, templates,
             plot_type=plot_type, ref_val=ref_val, fig=fig, ax=ax)
 
     # Calculate average properties of mineral mix in desired working interval

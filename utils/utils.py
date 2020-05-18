@@ -182,3 +182,16 @@ def conv_tops_to_wis(tops, intervals):
     return working_intervals
 
 
+def norm(arr, method='median'):
+    if method == 'mean':
+        x0 = np.nanmean(arr)
+    elif method == 'median':
+        x0 = np.nanmedian(arr)
+    else:
+        x0 = np.nanmin(arr)
+
+    return (arr - x0) / np.abs(np.nanmax(arr) - np.nanmin(arr))
+
+
+def handle_sonic(well):
+    raise NotImplementedError('Please use native well method, sonic_to_vel ')

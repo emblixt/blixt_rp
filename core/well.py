@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 def_lb_name = 'Logs'  # default Block name
 def_msk_name = 'Mask'  # default mask name
 def_water_depth_keys = ['gl', 'egl', 'water_depth']
-def_kelly_bushing_keys = ['kb', 'apd', 'edf', 'eref']
+def_kelly_bushing_keys = ['kb', 'ekb', 'apd', 'edf', 'eref']
 def_sonic_units = ['us/f', 'us/ft', 'us/feet',
                    'usec/f', 'usec/ft', 'usec/feet',
                    'us/m', 'usec/m', 's/m']
@@ -239,47 +239,52 @@ class Project(object):
 
         logger.info('Loaded project settings from: {}'.format(file_name))
 
-    def check_well_names(self):
+    def check_wells(self, all=True):
         """
-        Loops through the well names in the project table and checks if they are in
-        a consistent format (E.G. "6507_3_1S" and NOT "6507/3-1 S"), and if they corresponds to the well name
-        in the given las files.
+        Loops through the well names in the project table and checks if las files can be read,  if the requested
+        logs are to be found in the las file, and if the well name is in a consistent format
+        (E.G. "6507_3_1S" and NOT "6507/3-1 S")
 
         :return:
         """
-
-        _well_table = uio.project_wells(self.project_table, self.working_dir)
+        _well_table = uio.project_wells(self.project_table, self.working_dir, all=True)
         for lfile in list(_well_table.keys()):
             wname = _well_table[lfile]['Given well name']
+            print('Checking {}: {}'.format(wname, os.path.split(lfile)[-1]))
+
+            # Check if las file exists (Redundant test, as uio.project_wells() tests that too
+            if not os.path.isfile(lfile):
+                warn_txt = 'Las file: {} does not exist'
+                print('WARNING: {}'.format(warn_txt))
+                logger.warning(warn_txt)
+                continue
+
+            # Check if well logs exists
+            for log_name in list(_well_table[lfile]['logs'].keys()):
+                log_exists = False
+                for line in uio.get_las_curve_info(lfile):
+                    if log_name in line.lower():
+                        log_exists = True
+                if not log_exists:
+                    warn_txt = 'Log {} does not exist in {}'.format(log_name, os.path.split(lfile)[-1])
+                    print('WARNING: {}'.format(warn_txt))
+                    logger.warning(warn_txt)
+
+            # Check if well name is consistent
             if ('/' in wname) or ('-' in wname) or (' ' in wname):
                 warn_txt = "Special signs, like '/', '-' or ' ', are not allowed in well name: {}".format(wname)
                 print("WARNING: {}".format(warn_txt))
                 logger.warning(warn_txt)
-            for line in uio.get_las_well_info(lfile):
-                # noinspection Annotator
-                if re.search("[.]{1}", line) is None:
-                    continue
-                # noinspection Annotator
-                if re.search("[ ]{1}", line) is None:
-                    continue
-                # noinspection Annotator
-                if re.search("[:]{1}", line) is None:
-                    continue
-                # noinspection Annotator
-                mnem_end = re.search("[.]{1}", line).end()
-                # noinspection Annotator
-                unit_end = mnem_end + re.search("[ ]{1}", line[mnem_end:]).end()
-                # noinspection Annotator
-                colon_end = unit_end + re.search("[:]{1}", line[unit_end:]).start()
-                # divide line
-                mnem = line[:mnem_end - 1].strip()
-                data = line[unit_end:colon_end].strip()
-                if mnem == 'WELL':
-                    if uio.fix_well_name(data) != wname:
-                        warn_txt = 'Well name in las file ({}) does not correspond to well name in project table ({})'.format(
-                            uio.fix_well_name(data), wname)
-                        print("WARNING: {}".format(warn_txt))
-                        logger.warning(warn_txt)
+
+
+    def active_wells(self):
+        active_wells = []
+        well_table = uio.project_wells(self.project_table, self.working_dir)
+        for _key, _value in well_table.items():
+            active_wells.append(_value['Given well name'])
+
+        # remove duplicates
+        return list(set(active_wells))
 
     def load_all_wells(self, block_name=None, rename_logs=None):
         """
@@ -463,6 +468,15 @@ class Well(object):
         lt_list = list(set(lt_list))
         return lt_list
 
+    def get_step(self, block_name=None):
+        """
+        Tries to return the step length in meters
+        :return:
+        """
+        if block_name is None:
+            block_name = def_lb_name
+        return self.block[block_name].get_step()
+
     def depth_unit(self, block_name=None):
         """
         Returns the units used for the depth measurement in Block 'block_name'.
@@ -491,25 +505,31 @@ class Well(object):
         start_unit = ''
         for _key in list(self.header.keys()):
             if _key in kelly_bushing_keys:
-                info_txt += ' using key: {:}, with value {:.2f} '.format(_key, self.header[_key].value)
+                if self.header[_key].value is None:
+                    continue
+                this_kb = self.header[_key].value
+                if isinstance(this_kb, str):
+                    # TODO Remove any trailing units in the well reader instead of here
+                    this_kb = float(this_kb[:-2])
+                info_txt += ' using key: {:}, with value {:.2f} '.format(_key, this_kb)
                 if self.header[_key].unit.lower() == '':
                     # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
                     # set than for the Kelley bushing
                     start_unit = self.depth_unit()
                     if start_unit == 'm':
                         info_txt += '[m].'
-                        kb = self.header[_key].value
+                        kb = this_kb
                     else:
                         # assume it is in feet
                         info_txt += '[feet].'
-                        kb = cnvrt(self.header[_key].value, 'ft', 'm')
+                        kb = cnvrt(this_kb, 'ft', 'm')
                 elif self.header[_key].unit.lower() == 'm':
                     info_txt += '[m].'
-                    kb = self.header[_key].value
+                    kb = this_kb
                 else:
                     # assume it is in feet
                     info_txt += '[feet].'
-                    kb = cnvrt(self.header[_key].value, 'ft', 'm')
+                    kb = cnvrt(this_kb, 'ft', 'm')
                 print('INFO: {}'.format(info_txt))
                 logger.info(info_txt)
                 return kb
@@ -521,7 +541,7 @@ class Well(object):
 
     def get_water_depth(self, water_depth_keys=None):
         """
-        Tries to return the Kelly bushing elevation in meters.
+        Tries to return the water depth in meters.
         :param water_depth_keys:
             list
             List of strings that can be the key of the water depth information in the well header
@@ -529,6 +549,9 @@ class Well(object):
             float
             Water depth in meters
         """
+        # TODO
+        # This function and get_kb are nearly similar
+        # Write a new general function that returns any header value in meters and replace these with the new
         info_txt = 'Extract water depth'
         if water_depth_keys is None:
             water_depth_keys = def_water_depth_keys
@@ -536,26 +559,32 @@ class Well(object):
         start_unit = ''
         for _key in list(self.header.keys()):
             if _key in water_depth_keys:
-                info_txt += ' using key: {:}, with value {:.2f} '.format(_key, self.header[_key].value)
+                if self.header[_key].value is None:
+                    continue
+                this_wd = self.header[_key].value
+                if isinstance(this_wd, str):
+                    # TODO Remove any trailing units in the well reader instead of here
+                    this_wd = float(this_wd[:-2])
+                info_txt += ' using key: {:}, with value {:} ({}) '.format(_key, this_wd, type(this_wd))
                 if self.header[_key].unit.lower() == '':
                     # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
                     # set than for the water depth
                     start_unit = self.depth_unit()
                     if start_unit == 'm':
                         info_txt += '[m].'
-                        wdepth = self.header[_key].value
+                        wdepth = this_wd
                     else:
                         # assume it is in feet
                         info_txt += '[feet].'
-                        wdepth = cnvrt(self.header[_key].value, 'ft', 'm')
+                        wdepth = cnvrt(this_wd, 'ft', 'm')
 
                 elif self.header[_key].unit.lower() == 'm':
                     info_txt += '[m].'
-                    wdepth = self.header[_key].value
+                    wdepth = this_wd
                 else:
                     # assume it is in feet
                     info_txt += '[feet].'
-                    wdepth = cnvrt(self.header[_key].value, 'ft', 'm')
+                    wdepth = cnvrt(this_wd, 'ft', 'm')
                 print('INFO: {}'.format(info_txt))
                 logger.info(info_txt)
                 return wdepth
@@ -564,6 +593,14 @@ class Well(object):
         print('WARNING: {}'.format(info_txt))
         logger.warning(info_txt)
         return 0.0
+
+
+    def sonic_to_vel(self, block_name=None):
+        if block_name is None:
+            block_name = def_lb_name
+
+        self.block[block_name].sonic_to_vel()
+
 
     def time_to_depth(self, log_name='vp', water_vel=None, repl_vel=None, water_depth=None, block_name=None,
                       sonic=None, feet_unit=None, us_unit=None,
@@ -705,7 +742,10 @@ class Well(object):
         fluid = False
 
         if not (isinstance(fluid_minerals, MineralMix) or isinstance(fluid_minerals, dict)):
-            warn_txt = 'Input fluid_minerals must be a MineralMix or a subselection of a FluidMix object'
+            warn_txt = \
+                'Input fluid_minerals must be a MineralMix or a subselection of a FluidMix object, not {}'.format(
+                    type(fluid_minerals)
+                )
             logger.warning(warn_txt)
             raise Warning(warn_txt)
 
@@ -839,7 +879,7 @@ class Well(object):
                     overwrite=True,
                     append=False,
                     log_type_input=True,
-                    logname_dict=None
+                    log_table=None
         ):
         """
         Based on the different cutoffs in the 'cutoffs' dictionary, each Block in well is masked accordingly.
@@ -879,12 +919,12 @@ class Well(object):
         :param log_type_input:
             bool
             if set to True, the keys in the cutoffs dictionary refer to log types, and not log names
-        :param logname_dict:
+        :param log_table:
             dict
             Dictionary of log type: log name key: value pairs to create mask on when log_type_input is True
             NOTE: If this is not set when log_type_input is True, the first log under each log type will be used.
             E.G.
-                logname_dict = {
+                log_table = {
                    'P velocity': 'vp',
                    'S velocity': 'vs',
                    'Density': 'rhob',
@@ -897,7 +937,7 @@ class Well(object):
         #
         def rename_cutoffs(_cutoffs):
             # When the cutoffs are based on log types, and not the individual log names, we need to
-            # associate each log type with it FIRST INSTANCE log name if logname_dict is not set
+            # associate each log type with it FIRST INSTANCE log name if log_table is not set
             this_cutoffs = {}
             for _key in list(_cutoffs.keys()):
                 if len(self.get_logs_of_type(_key)) < 1:
@@ -905,8 +945,8 @@ class Well(object):
                     print('WARNING: {}'.format(warn_txt))
                     logger.warning(warn_txt)
                     continue
-                if logname_dict is not None:
-                    this_cutoffs[logname_dict(_key)] = _cutoffs[_key]
+                if log_table is not None:
+                    this_cutoffs[log_table(_key)] = _cutoffs[_key]
                 else:
                     this_cutoffs[self.get_logs_of_type(_key)[0].name] = _cutoffs[_key]
             return this_cutoffs
@@ -1039,11 +1079,13 @@ class Well(object):
                 )
                 # Test for number of True values
                 if np.sum(block_mask) < 1:
-                    warn_txt = 'All values in block {} are masked out using {}'.format(lblock, msk_str)
+                    warn_txt = 'All values in well {}, block {}, are masked out using {}'.format(
+                        self.well, lblock, msk_str)
                     print('WARNING: {}'.format(warn_txt))
                     logger.warning(warn_txt)
                 else:
-                    print('{} True values in mask: {}'.format(np.sum(block_mask), msk_str))
+                    #print('{} True values in mask: {}'.format(np.sum(block_mask), msk_str))
+                    pass
             else:
                 continue
 
@@ -1442,11 +1484,8 @@ class Well(object):
         if isinstance(only_these_logs, str):
             only_these_logs = {only_these_logs.lower(): None}
 
-        null_val, generated_keys, well_dict = _read_las(filename, rename_well_logs=rename_well_logs)
-        # TODO
-        # Make the below test a result. Remove comments about test, and remove the usage of rename_well_logs in io.convert
-        # XXX
-        # test doing the rename after _read_las instead of inside it
+        null_val, generated_keys, well_dict = _read_las(filename)
+        # Rename well logs
         if rename_well_logs is None:
             rename_well_logs = {'depth': ['Depth', 'DEPT', 'MD', 'DEPTH']}
         elif isinstance(rename_well_logs, dict) and ('depth' not in list(rename_well_logs.keys())):
@@ -1456,12 +1495,11 @@ class Well(object):
             for rname, value in rename_well_logs.items():
                 if key.lower() in [x.lower() for x in value]:
                     info_txt = 'Renaming log from {} to {}'.format(key, rname)
-                    print('INFO: {}'.format(info_txt))
+                    #print('INFO: {}'.format(info_txt))
                     logger.info(info_txt)
                     well_dict['curve'][rname.lower()] = well_dict['curve'].pop(key)
                     well_dict['data'][rname.lower()] = well_dict['data'].pop(key)
-        # End of test
-        # XXX
+
         logger.debug('Reading {}'.format(filename))
         if well_dict['version']['vers']['value'] not in supported_version:
             raise Exception("Version {} not supported!".format(
@@ -1515,6 +1553,7 @@ class Well(object):
 
 
 class Block(object):
+
     """
     A  Block is a collection of logs (or other data, perhaps with non-uniform sampling) which share the same
     depth information, e.g start, stop, step
@@ -1584,7 +1623,7 @@ class Block(object):
         else:
             return start
 
-    #start = property(get_start)
+    start = property(get_start)
 
     def get_stop(self):
         stop = None
@@ -1595,9 +1634,15 @@ class Block(object):
     stop = property(get_stop)
 
     def get_step(self):
+        """
+        Tries to return the step length in meters
+        :return:
+        """
         step = None
         if self.header.step.value is not None:
             step = self.header.step.value
+            if 'f' in self.header.step.unit:  # step length is in feet
+                step = cnvrt(step, 'ft', 'm')
         return step
 
     step = property(get_step)
@@ -1711,13 +1756,13 @@ class Block(object):
         water_twt = 2.0 * np.abs(water_depth + np.abs(kb)) / water_vel
         repl_twt = 2.0 * repl_int / repl_vel
 
-        print('KB elevation: {} [m]'.format(kb))
-        print('Seafloor elevation: {} [m]'.format(water_depth))
-        print('Water time: {} [s]'.format(water_twt))
-        print('Top of Sonic log: {} [m]'.format(top_of_log))
-        print('Replacement interval: {} [m]'.format(repl_int))
-        print('Two-way replacement time: {} [s]'.format(repl_twt))
-        print('Top-of-log starting time: {} [s]'.format(repl_twt + water_twt))
+        #print('KB elevation: {} [m]'.format(kb))
+        #print('Seafloor elevation: {} [m]'.format(water_depth))
+        #print('Water time: {} [s]'.format(water_twt))
+        #print('Top of Sonic log: {} [m]'.format(top_of_log))
+        #print('Replacement interval: {} [m]'.format(repl_int))
+        #print('Two-way replacement time: {} [s]'.format(repl_twt))
+        #print('Top-of-log starting time: {} [s]'.format(repl_twt + water_twt))
 
         return water_twt + repl_twt
 
@@ -1779,9 +1824,13 @@ class Block(object):
 
         # Handle units
         if sonic:
-            scaled_dt = self.header.step.value * np.nan_to_num(smooth_log)
+            scaled_dt = self.get_step() * np.nan_to_num(smooth_log)
+            if feet_unit:  #  sonic is in feet units, step is always in meters
+                scaled_dt = scaled_dt * 3.28084
         else:
-            scaled_dt = self.header.step.value * np.nan_to_num(1./smooth_log)
+            scaled_dt = self.get_step() * np.nan_to_num(1./smooth_log)
+            if feet_unit:  # velcity is in feet, step is always in meters
+                scaled_dt = scaled_dt / 3.28084
         if us_unit:
             scaled_dt = scaled_dt * 1.e-6
 
@@ -1799,8 +1848,36 @@ class Block(object):
 
         return tdr
 
+    def sonic_to_vel(self):
+        """
+        Converts sonic to velocity
+        :return:
+        """
+        from utils.convert_data import convert
 
-def _read_las(file, rename_well_logs=None):
+        for ss, vv, vtype in zip(
+                ['ac', 'acs'], ['vp', 'vs'], ['P velocity', 'S velocity']
+        ):
+            info_txt = ''
+            if ss not in self.log_names():
+                continue
+            else:
+                din = self.logs[ss].data
+                dout = convert(din, 'us/ft', 'm/s')
+
+            self.add_log(
+                dout,
+                vv,
+                vtype,
+                header={
+                    'unit': 'm/s',
+                    'modification_history': '{} Calculated from {}'.format(info_txt, ss.upper()),
+                    'orig_filename': self.logs['ac'].header.orig_filename
+                }
+            )
+
+
+def _read_las(file):
     """Convert file and Return `self`. """
     file_format = None
     ext = file.rsplit(".", 1)[-1].lower()
@@ -1816,7 +1893,7 @@ def _read_las(file, rename_well_logs=None):
 
     with open(file, "r") as f:
         lines = f.readlines()
-    return convert(lines, file_format=file_format, rename_well_logs=rename_well_logs)  # read all lines from data
+    return convert(lines, file_format=file_format)  # read all lines from data
 
 
 def add_one(instring):

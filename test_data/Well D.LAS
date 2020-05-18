@@ -21,13 +21,13 @@ API .                                                  : API Number
 LATI.          070 20' 40.0  " N DMS                   : Latitude
 LONG.          020 30' 20.000" E DMS                   : Longitude
 PDAT.          MSL                                     : Perm Datum
-EPD .m         0.000000 M                              : Elevation
+EPD .m         0.000000                                : Elevation
 LMF .          DF                                      : Log Measured From
 DMF .          DF                                      : Drill Measured From
-APD .m         32.099998 M                             : Above Perm Datum
-EKB .m         0.000000 M                              : Elev-Kelly Bushing
-EDF .m         32.099998 M                             : Elev-Drill Floor
-EGL .m         -376.000000 M                           : Elev-Ground Level
+APD .m         32.099998                               : Above Perm Datum
+EKB .m         0.000000                                : Elev-Kelly Bushing
+EDF .m         32.099998                               : Elev-Drill Floor
+EGL .m         -376.000000                             : Elev-Ground Level
 SRVC.          WEATHERFORD INTERNATIONAL LTD           : Service Company
 DATE .                                                 : Logging Date
 R01.            COMPOSITE SPLICED DATA INCL:                                : Remarks R01
