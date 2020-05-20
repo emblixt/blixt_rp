@@ -100,7 +100,6 @@ class RpTestCase(unittest.TestCase):
             print('Wiggle based gradient at i {}: {}'.format(i, grad2[i:i+2]))
             self.assertTrue(True)
 
-
     def test_reflectivity(self):
         """
         What happens when the input to the reflectivity is an array?
@@ -122,6 +121,22 @@ class RpTestCase(unittest.TestCase):
             print('Wiggle based refl. coeff. at i {} at {} deg.: {}'.format(i, theta, func2(theta)[i:i+2]))
             self.assertTrue(True)
 
+    def test_greenberg_castagna(self):
+        """
+        Example taken from p. 248 in Rock physics handbook, Mavko et al. 1999
+        :return:
+        """
+        vp = 3000.
+        f = [0.6, 0.4]
+        mono_mins = ['sandstone', 'SHALE']
+        gc_coeffs = {
+            'sandstone': [0., 0.80416, -0.85588],
+            'limestone': [-0.05508, 1.01677, -1.03049],
+            'dolomite': [0., 0.58321, -0.07775],
+            'shale': [0., 0.76969, -0.86735]
+        }
+        vs = rp.greenberg_castagna(vp, f, mono_mins, gc_coeffs)
 
-
-
+        with self.subTest():
+            print('Greenberg Castagna Vs estimate: {}'.format(vs.value))
+            self.assertAlmostEqual(vs.value, 1509.58, places=1)

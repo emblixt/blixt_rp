@@ -189,6 +189,56 @@ def han_castagna(v_p, method=None):
     )
 
 
+def greenberg_castagna(v_p, f, mono_mins, gc_coeffs=None):
+    """
+    Estimates Vs in a L-component multimineral brine saturated rock based on p. 246 in Rock physics handbook (Mavko et al. 1999)
+    which is based on Greenberg & Castagna (1992).
+
+    :param v_p:
+        Param
+        P velocity [m/s]
+        float, or ndarray of floats
+    :param f:
+        list
+        list of Volumetric fractions for each monomineralic constituent
+        The items in f could either be all constants, or all arrays of same length (as vp)
+        sum(f) must equal one
+    :param mono_mins:
+        list
+        List of names of each constituent in the multimineral rock
+        Length of mono_mins and f must be the same
+
+    :return:
+        vs
+    """
+    if gc_coeffs is None:
+        gc_coeffs = {
+            'sandstone': [0., 0.80416, -0.85588],
+            'limestone': [-0.05508, 1.01677, -1.03049],
+            'dolomite': [0., 0.58321, -0.07775],
+            'shale': [0., 0.76969, -0.86735]
+        }
+
+    # make sure names of each mineral is in lowercase
+    for key in list(gc_coeffs.keys()):
+        gc_coeffs[key.lower()] = gc_coeffs.pop(key)
+
+    v_p = test_value(v_p, 'm/s')
+
+    def calc_vs(_vp, _coeffs):
+        # convert to km/s
+        _vp = _vp/1000.
+        return _coeffs[0]*_vp**2 + _coeffs[1]*_vp + _coeffs[2]
+
+    m = [calc_vs(v_p.value, gc_coeffs[this_mono.lower()]) for this_mono in mono_mins]
+
+    return Param(
+        name='v_s',
+        value=vrh_bounds(f, m)[2]*1000.,
+        unit='m/s',
+        desc='Vs estimated from Greenberg Castagna')
+
+
 def k_and_rho_o(oil_gravity, gas_gravity, g_o_ratio, p, t):
     """
     Calculates the bulk modulus and density of oil using Batzle & Wang 1992.
@@ -712,6 +762,22 @@ def vels(K_DRY, G_DRY, K0, D0, Kf, Df, phi):
     return vp, vs, rho, K
 
 
+def linear_gassmann(_phi, _phi_r, _delta_k_fl):
+    """
+    Calculates the change in saturated rock bulk modulus, k_delta, as a
+    function of porosity, _phi, and the difference in bulk modulus between initial and final
+    fluids, _delta_k_fl, calculated at the 'intercept porosity', _phi_r
+    See page 171 in Rock physics handbook, Mavko et al. 1998.
+    :return:
+    """
+    delta_k = (_phi/(_phi_r**2)) * _delta_k_fl
+    return delta_k
+
+
+def linear_brine_elastics():
+    pass
+
+
 def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, block_name=None):
     """
 
@@ -840,3 +906,25 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
                 new_data = deepcopy(xx.data)
                 new_data[mask] = yy[mask]
                 lb.add_log(new_data, new_name, xx.get_log_type(), new_header)
+
+
+def test_mineral_existance(well_name, wi_name, mineral_mix, gc_coeffs):
+    """
+    Just keeping track of a useful code snippet
+    :param well_name:
+    :param wi_name:
+    :param mineral_mix:
+    :return:
+    """
+    # Test if minerals are present in given well, for the given working interval
+    warn_txt = None
+    if well_name not in list(mineral_mix.minerals.keys()):
+        warn_txt = 'Well {} not present in the given mineral mix {}'.format(well_name, mineral_mix.name)
+    elif wi_name not in list(mineral_mix.minerals[well_name].keys()):
+        warn_txt = 'Working interval {} not present in the given mineral mix {}'.format(wi_name, mineral_mix.name)
+    elif not any([xx.lower() in list(mineral_mix.minerals[well_name][wi_name].keys()) for xx in list(gc_coeffs)]):
+        warn_txt = 'No minerals in {} ({}) present among the Greenberg Castagna coefficients'.format(
+            mineral_mix.name, ','.join(list(mineral_mix.minerals[well_name][wi_name].keys()))
+        )
+    if warn_txt is not None:
+        raise IOError(warn_txt)

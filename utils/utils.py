@@ -105,7 +105,7 @@ def svnversion():
 def version():
     # TODO
     # Fix the return of version
-    return 'XXX'        
+    return '0.1.1'
 
 
 def info():
