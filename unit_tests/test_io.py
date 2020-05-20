@@ -116,4 +116,6 @@ class UtilsTestCase(unittest.TestCase):
             print(out)
             self.assertTrue(True)
 
-
+class OthersTestCase(unittest.TestCase):
+    mask_str = 'VCL>0.8, PHIE>0.1'
+    print(uio.interpret_cutoffs_string(mask_str))

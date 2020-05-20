@@ -1039,7 +1039,7 @@ class Well(object):
                 continue
 
             for lname in list(cutoffs.keys()):
-                if lname not in list(self.block[lblock].logs.keys()):
+                if lname.lower() not in list(self.block[lblock].logs.keys()):
                     warn_txt = 'Log {} to calculate mask from is not present in well {}'.format(lname, self.well)
                     print('WARNING: {}'.format(warn_txt))
                     logger.warning(warn_txt)
@@ -1047,7 +1047,7 @@ class Well(object):
                 else:
                     # calculate mask
                     masks.append(msks.create_mask(
-                        self.block[lblock].logs[lname].data, cutoffs[lname][0], cutoffs[lname][1]
+                        self.block[lblock].logs[lname.lower()].data, cutoffs[lname][0], cutoffs[lname][1]
                     ))
             if len(masks) > 0:
                 # combine all masks for this Block

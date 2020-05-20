@@ -1013,6 +1013,51 @@ def interpret_rename_string(rename_string):
     else:
         return return_dict
 
+def interpret_cutoffs_string(cutoffs_string):
+    """
+    creates a cutoffs dictionary ({'VCL': ['<', 0.5], 'PHIE': ['>', 0.1]}) from input string
+    :param cutoffs_string:
+        str
+        renaming defined by "VCL>0.8, PHIE>0.1"
+    :return:
+        dict or None
+    """
+    if len(cutoffs_string) < 3:
+        return None
+
+    return_dict = {}
+    for pair in cutoffs_string.split(','):
+        m_symb = None
+        # search for masking symbol
+        if '==' in pair:
+            m_symb = '=='  # equal
+        elif '<=' in pair:
+            m_symb = '<='  # less or equal
+        elif '>=' in pair:
+            m_symb = '>='  # greater or equal
+        elif '!=' in pair:
+            m_symb = '!='  # not equal
+        elif '>' in pair:
+            m_symb = '>'  # greater
+        elif '<' in pair:
+            m_symb = '<'  # less
+        else:
+            warn_txt = 'No valid masking symbol given in {}'.format(pair)
+            print('WARNING: {}'.format(warn_txt))
+            logger.warning(warn_txt)
+            continue
+
+        tmp = pair.split(m_symb)
+        if len(tmp) > 2:
+            warn_txt = "Something fishy in cutoffs string: ".format(cutoffs_string)
+            print('WARNING: {}'.format(warn_txt))
+            logger.warning(warn_txt)
+            continue
+        return_dict[tmp[0].strip().lower()] = [m_symb, float(tmp[1].strip())]
+    if len(return_dict) < 1:
+        return None
+    else:
+        return return_dict
 
 def my_float(string):
     try:

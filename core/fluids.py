@@ -8,18 +8,17 @@ Module for handling rockphysics fluid models
     (https://www.gnu.org/copyleft/lesser.html)       
 @author: mblixt
 """
-import numpy as np
-import pandas as pd
-from decorator import decorator
-import inspect
-from copy import deepcopy
 import logging
+from copy import deepcopy
 from datetime import datetime
 
+import numpy as np
+import pandas as pd
+
+import rp.rp_core as rp
+from rp.rp_core import Param
 from utils.attribdict import AttribDict
 from utils.utils import info, isnan
-from rp.rp_core import Param
-import rp.rp_core as rp
 
 # data class decorator explained here:
 # https://realpython.com/python-data-classes/
@@ -106,6 +105,7 @@ class Fluid(object):
             fluid_type=None,
             name='Default',
             volume_fraction=None,
+            status=None,
             header=None):
 
         if header is None:
@@ -139,24 +139,24 @@ class Fluid(object):
                 ['k', 'mu', 'rho', 'calculation_method', 'temp_gradient', 'temp_ref',
                 #['calculation_method', 'temp_gradient', 'temp_ref',
                  'pressure_gradient', 'pressure_ref', 'salinity', 'gor', 
-                 'oil_api', 'gas_gravity', 'gas_mixing', 'brie_exponent'],
+                 'oil_api', 'gas_gravity', 'gas_mixing', 'brie_exponent', 'status'],
                 [k, mu, rho, calculation_method, temp_gradient, temp_ref,
                 #[calculation_method, temp_gradient, temp_ref,
                  pressure_gradient, pressure_ref, salinity, gor, 
-                 oil_api, gas_gravity, gas_mixing, brie_exponent],
+                 oil_api, gas_gravity, gas_mixing, brie_exponent, status],
                 ['GPa', 'GPa', 'g/cm3', '', 'C/m', 'C',
                 #['', 'C/m', 'C',
                  'MPa/m', 'MPa', 'ppm', '',
-                 'API', '', '', ''],
+                 'API', '', '', '', 'str'],
                 ['Bulk moduli', 'Shear moduli', 'Density', '', '', '',
                 #['', '', '',
                  '', '', '', 'Gas/Oil ratio',
-                 '', '', 'Wood or Brie', ''],
+                 '', '', 'Wood or Brie', '', 'Status'],
                 [0.9, 0.0, 0.8, 'User specified', 0.03, 10.,
                 #['User specified', 0.03, 10.,
                    0.0107, 0., 70000., 1., 
-                   30., 0.6, 'Wood', 2.]):
-            if param is None:
+                   30., 0.6, 'Wood', 2., None]):
+            if (param is None) or isnan(param):
                 param = def_val
                 #print('param {} is None'.format(this_name))
             if isinstance(param, int):
@@ -166,7 +166,9 @@ class Fluid(object):
                 #print('param {} is float or string'.format(this_name))
                 param = Param(this_name, param, unit_str, desc_str)
             # TODO
-            # catch the cases where input data is neither None, int,  float or str 
+            # catch the cases where input data is neither None, int,  float or str
+            # TODO
+            # The handling of parameters that are strings are different for fluids (Param) and minerals (strings)
             
             super(Fluid, self).__setattr__(this_name, param)
         
@@ -346,6 +348,7 @@ class FluidMix(object):
         self.name = name
 
     def print_all_fluids(self, tvd=None):
+        out = ''
         for key in ['initial', 'final']:
             for w in list(self.fluids[key].keys()):
                 for wi in list(self.fluids[key][w].keys()):
@@ -396,7 +399,8 @@ class FluidMix(object):
                     float(fluids_table['Brie exponent'][i]),
                     # Fluid type is now defined in the fluid mixture sheet
                     #fluid_type=None if isnan(fluids_table['Fluid type'][i]) else fluids_table['Fluid type'][i].lower(),
-                    name=name.lower()
+                    name=name.lower(),
+                    status='from excel'
             )
             all_fluids[name.lower()] = this_fluid
 
