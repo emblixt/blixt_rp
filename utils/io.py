@@ -173,14 +173,18 @@ def collect_project_wells(well_table, target_dir):
     :param well_table:
     :return:
     """
-    from shutil import copyfile
+    from shutil import copyfile, SameFileError
     for las_file in list(well_table.keys()):
         if os.path.isfile(las_file):
             short_name = os.path.split(las_file)[-1]
             print('Copying file {} to {}'.format(
                 short_name, target_dir
             ))
-            copyfile(las_file, os.path.join(target_dir, short_name))
+            try:
+                copyfile(las_file, os.path.join(target_dir, short_name))
+            except SameFileError:
+                print('  File {} exists in target directory. Skipping to next'.format(short_name))
+                continue
 
 
 def read_sums_and_averages(filename, header=20):

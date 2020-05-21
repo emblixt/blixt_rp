@@ -467,7 +467,7 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
     if block_name is None:
         block_name = cw.def_lb_name
     if log_types is None:
-        log_types = ['Sonic', 'Shear sonic', 'Density']
+        log_types = list(log_table.keys())
     _savefig = False
     if savefig is not None:
         _savefig = True
