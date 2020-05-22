@@ -160,26 +160,26 @@ class Mineral(object):
         """
         return self.__dict__.keys()
 
-    def calc_k(self, dummy_tvd):
+    def calc_k(self, dummy_bd):
         """
         Dummy function that makes Mineral objects behave same way as Fluid objects
-        :param dummy_tvd:
+        :param dummy_bd:
         :return:
         """
         return object.__getattribute__(self, 'k')
 
-    def calc_mu(self, dummy_tvd):
+    def calc_mu(self, dummy_bd):
         """
         Dummy function that makes Mineral objects behave same way as Fluid objects
-        :param dummy_tvd:
+        :param dummy_bd:
         :return:
         """
         return object.__getattribute__(self, 'mu')
 
-    def calc_rho(self, dummy_tvd):
+    def calc_rho(self, dummy_bd):
         """
         Dummy function that makes Mineral objects behave same way as Fluid objects
-        :param dummy_tvd:
+        :param dummy_bd:
         :return:
         """
         return object.__getattribute__(self, 'rho')

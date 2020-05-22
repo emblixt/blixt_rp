@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 def find_nearest(data, value):
     return np.nanargmin(np.abs(data - value))
 
+
 def plot_logs(well, well_table, wis, wi_name, templates, buffer=None, block_name=None, savefig=None, **kwargs):
     """
     Attempts to draw a plot similar to the "CPI plots", for one working interval with some buffer.
@@ -158,11 +159,15 @@ def plot_logs(well, well_table, wis, wi_name, templates, buffer=None, block_name
 
     #
     # AI
+    tt = ''
     if 'Density' in list(lognames.keys()):
+        tt += lognames['Density'][0]
         if 'P velocity' in list(lognames.keys()):
             ai = tb.logs[lognames['Density'][0]].data * tb.logs[lognames['P velocity'][0]].data
+            tt += '*{}'.format(lognames['P velocity'][0])
         elif 'Sonic' in list(lognames.keys()):
             ai = tb.logs[lognames['Density'][0]].data / tb.logs[lognames['Sonic'][0]].data
+            tt += '/{}'.format(lognames['Sonic'][0])
         else:
             ai = None
     else:
@@ -171,7 +176,7 @@ def plot_logs(well, well_table, wis, wi_name, templates, buffer=None, block_name
         styles = [{'lw': 1, 'color': 'k', 'ls': '--'}]
         xlims = axis_plot(axes['ai_ax'], depth[mask], [ai[mask]], [[None, None]], styles,
                   yticks=False)
-        header_plot(header_axes['ai_ax'], xlims, ['AI'], styles)
+        header_plot(header_axes['ai_ax'], xlims, ['AI ({})'.format(tt)], styles)
     else:
         header_plot(header_axes['ai_ax'], None, None, None, title='AI is lacking')
         axis_plot(axes['ai_ax'], None, None, None, None)

@@ -505,6 +505,8 @@ def read_petrel_checkshots(filename, only_these_wells=None):
 
 
 def test_file_path(file_path, working_dir):
+    # Convert backward slashes to forward slashes
+    file_path = file_path.replace("\\", "/")
     if os.path.isfile(file_path):
         return file_path
     elif os.path.isfile(os.path.join(working_dir, file_path)):

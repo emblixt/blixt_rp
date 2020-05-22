@@ -150,7 +150,7 @@ class Fluid(object):
                  'API', '', '', '', 'str'],
                 ['Bulk moduli', 'Shear moduli', 'Density', '', '', '',
                 #['', '', '',
-                 '', '', '', 'Gas/Oil ratio',
+                 '', 'Pressure at mudline', '', 'Gas/Oil ratio',
                  '', '', 'Wood or Brie', '', 'Status'],
                 [0.9, 0.0, 0.8, 'User specified', 0.03, 10.,
                 #['User specified', 0.03, 10.,
@@ -202,10 +202,10 @@ class Fluid(object):
         head = [pattern % (k, self.__dict__[k]) for k in keys]
         return "\n".join(head)
 
-    def print_fluid(self, tvd=None):
+    def print_fluid(self, bd=None):
         out = '  {}\n'.format(self.name)
         out += '      K: {}, Mu: {}, Rho {}\n'.format(
-            self.calc_k(tvd).value, self.calc_mu(tvd).value, self.calc_rho(tvd).value)
+            self.calc_k(bd).value, self.calc_mu(bd).value, self.calc_rho(bd).value)
         out += '      Volume fraction: {}\n'.format(self.volume_fraction)
         out += '      Calculation method: {}\n'.format(self.calculation_method.value)
         return out
@@ -213,11 +213,16 @@ class Fluid(object):
     def keys(self):
         return self.__dict__.keys()
 
-    def calc_k(self, tvd):
+    def calc_k(self, bd):
+        """
+        Calculates the fluid bulk modulus at given burial depth
+        :param bd:
+        :return:
+        """
         if self.calculation_method.value == 'Batzle and Wang':
-            #print('calc_k: {}, TVD: {}'.format(self.name, tvd))
-            if tvd is None:
-                warn_txt = 'No TVD value given for the fluid calculation'
+            #print('calc_k: {}, Burial depth: {}'.format(self.name, bd))
+            if bd is None:
+                warn_txt = 'No Burial depth value given for the fluid calculation'
                 print('WARNING: {}'.format(warn_txt))
                 logger.warning(warn_txt)
                 return Param(name='',
@@ -225,8 +230,8 @@ class Fluid(object):
                              unit='',
                              desc='')
             _s = self.salinity
-            _p = self.pressure_ref.value + self.pressure_gradient.value * tvd
-            _t = self.temp_ref.value + self.temp_gradient.value * tvd
+            _p = self.pressure_ref.value + self.pressure_gradient.value * bd
+            _t = self.temp_ref.value + self.temp_gradient.value * bd
             if self.fluid_type == 'brine':
                 rho_b = rp.rho_b(_s, _p,  _t).value
                 v_p_b = rp.v_p_b(_s, _p, _t).value
@@ -252,11 +257,11 @@ class Fluid(object):
         else:
             return object.__getattribute__(self, 'k')
 
-    def calc_mu(self, tvd):
-        #print('calc_mu: {}, TVD: {}'.format(self.name, tvd))
+    def calc_mu(self, bd):
+        #print('calc_mu: {}, Burial depth: {}'.format(self.name, bd))
         if self.calculation_method.value == 'Batzle and Wang':
-            if tvd is None:
-                warn_txt = 'No TVD value given for the fluid calculation'
+            if bd is None:
+                warn_txt = 'No Burial depth value given for the fluid calculation'
                 print('WARNING: {}'.format(warn_txt))
                 logger.warning(warn_txt)
                 return Param(name='',
@@ -286,11 +291,11 @@ class Fluid(object):
         else:
             return object.__getattribute__(self, 'mu')
 
-    def calc_rho(self, tvd):
+    def calc_rho(self, bd):
         if self.calculation_method.value == 'Batzle and Wang':
-            #print('calc_rho: {}, TVD: {}'.format(self.name, tvd))
-            if tvd is None:
-                warn_txt = 'No TVD value given for the fluid calculation'
+            #print('calc_rho: {}, Burial depth: {}'.format(self.name, bd))
+            if bd is None:
+                warn_txt = 'No Burial depth value given for the fluid calculation'
                 print('WARNING: {}'.format(warn_txt))
                 logger.warning(warn_txt)
                 return Param(name='',
@@ -298,8 +303,8 @@ class Fluid(object):
                              unit='',
                              desc='')
             _s = self.salinity
-            _p = self.pressure_ref.value + self.pressure_gradient.value * tvd
-            _t = self.temp_ref.value + self.temp_gradient.value * tvd
+            _p = self.pressure_ref.value + self.pressure_gradient.value * bd
+            _t = self.temp_ref.value + self.temp_gradient.value * bd
             if self.fluid_type == 'brine':
                 rho_b = rp.rho_b(_s, _p,  _t)
                 return rho_b
@@ -347,24 +352,23 @@ class FluidMix(object):
             name = 'MyFluids'
         self.name = name
 
-    def print_all_fluids(self, tvd=None):
+    def print_all_fluids(self, bd=None):
         out = ''
         for key in ['initial', 'final']:
             for w in list(self.fluids[key].keys()):
                 for wi in list(self.fluids[key][w].keys()):
-                    out += self.print_fluids(key, w, wi, tvd)
+                    out += self.print_fluids(key, w, wi, bd)
         return out
 
-    def print_fluids(self, subst, well_name, wi_name, tvd=None):
+    def print_fluids(self, subst, well_name, wi_name, bd=None):
         out = 'Fluid mixture: {}, {}, {}, {}'.format(subst, well_name, wi_name, self.name)
-        if tvd is not None:
-            out += ' at TVD: {} m\n'.format(tvd)
+        if bd is not None:
+            out += ' at Burial depth: {} m\n'.format(bd)
         else:
             out += '\n'
         for m in list(self.fluids[subst][well_name][wi_name].keys()):
-            out += self.fluids[subst][well_name][wi_name][m].print_fluid(tvd)
+            out += self.fluids[subst][well_name][wi_name][m].print_fluid(bd)
         return out
-
 
     def read_excel(self, filename,
                    fluid_sheet='Fluids', fluid_header=1,
@@ -415,7 +419,8 @@ class FluidMix(object):
                 continue
             vf = mix_table['Volume fraction'][i]
             ftype = mix_table['Fluid type'][i]
-            this_name = '{}_{}'.format(name.lower(), '' if isnan(ftype) else ftype.lower())
+            #this_name = '{}_{}'.format(name.lower(), '' if isnan(ftype) else ftype.lower())
+            this_name = name.lower()
             if isnan(vf):
                 continue  # Avoid fluids where the volume fraction is not set
             this_subst = mix_table['Substitution order'][i].lower()
@@ -450,6 +455,53 @@ class FluidMix(object):
         self.fluids = fluids_mixes
         self.header['orig_file'] = filename
 
+    def calc_press_ref(self, wells, templates=None, rho_sea=None, debug=False):
+        """
+        Calculates the reference pressure in MPa (pressure at mudline (seafloor)) based on the water depth and
+        sea water density.
+        The pressure reference value is only calculated if the existing value is set to zero
+        :param wells:
+            dict
+            dictionary of {well name: core.wells.Well} key: value pairs
+        :param templates:
+            dict
+            templates that can contain the sea water depth at well position
+            templates = utils.io.project_tempplates(wp.project_table)
+        :param rho_sea:
+            float
+            Density of sea water in g/cm3
+        :param debug:
+        :return:
+        """
+        if rho_sea is None:
+            rho_sea = 1.025  # g/cm3
+
+        # iterate over all fluids in this fluid mixture
+        for subst_ordr in list(self.fluids.keys()):
+            for this_well in list(self.fluids[subst_ordr].keys()):
+                if this_well not in list(wells.keys()):
+                    warn_txt = 'Pressure reference not calculated for {}'.format(this_well)
+                    print('WARNING: {}'.format(warn_txt))
+                    logger.warning(warn_txt)
+                    continue
+                for wi_name in list(self.fluids[subst_ordr][this_well].keys()):
+                    for fluid in list(self.fluids[subst_ordr][this_well][wi_name].keys()):
+                        if self.fluids[subst_ordr][this_well][wi_name][fluid].pressure_ref.value == 0.0:
+                            # try to extract water depth
+                            water_depth = wells[this_well].get_water_depth()
+                            if np.abs(water_depth) < 0.5:  # and then from the templates
+                                if templates is not None:
+                                    if (this_well in list(templates.keys())) and \
+                                            ('water depth' in list(templates[this_well].keys())) and \
+                                                (templates[this_well]['water depth'] is not None):
+                                        water_depth = templates[this_well]['water depth']
+                            if np.abs(water_depth) < 0.5:
+                                warn_txt = 'Assume a water depth of ZERO'
+                                print('WARNING: {}'.format(warn_txt))
+                                logger.warning(warn_txt)
+
+                            self.fluids[subst_ordr][this_well][wi_name][fluid].pressure_ref.value = \
+                                rho_sea * abs(water_depth) * 9.81 * 1.E-3   # MPa
 
 def test_fluidsub():
     from importlib import reload
