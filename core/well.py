@@ -589,7 +589,7 @@ class Well(object):
                 logger.info(info_txt)
                 return wdepth
 
-        info_txt += ' failed. No matching keys in header. Using ZERO'
+        info_txt += ' failed. No matching keys in header.'
         print('WARNING: {}'.format(info_txt))
         logger.warning(info_txt)
         return 0.0
@@ -604,7 +604,7 @@ class Well(object):
 
     def time_to_depth(self, log_name='vp', water_vel=None, repl_vel=None, water_depth=None, block_name=None,
                       sonic=None, feet_unit=None, us_unit=None,
-                      spike_threshold=None, debug=False):
+                      spike_threshold=None, templates=None, debug=False):
         """
         Calculates the twt as a function of md
         https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
@@ -623,6 +623,7 @@ class Well(object):
             float
             Water depth in meters.
             If not specified, tries to read from well header.
+            if that fails, it tries to read it from the templates (if given)
             If that fails, uses 0 (zero) water depth
         :param block_name:
         :param sonic:
@@ -657,6 +658,12 @@ class Well(object):
         if water_depth is None:
             # Tries to extract the water depth from the well header
             water_depth = self.get_water_depth()
+            if np.abs(water_depth) < 0.5:  # and then from the templates
+                if templates is not None:
+                    if (self.well in list(templates.keys())) and \
+                            ('water depth' in list(templates[self.well].keys())) and \
+                            (templates[self.well]['water depth'] is not None):
+                        water_depth = templates[self.well]['water depth']
             if np.abs(water_depth) < 0.5:
                 warn_txt = 'Assume a water depth of ZERO'
                 print('WARNING: {}'.format(warn_txt))
