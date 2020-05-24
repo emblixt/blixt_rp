@@ -465,8 +465,8 @@ class FluidMix(object):
             dictionary of {well name: core.wells.Well} key: value pairs
         :param templates:
             dict
-            templates that can contain the sea water depth at well position
-            templates = utils.io.project_tempplates(wp.project_table)
+            templates that can contain the sea water depth for wells
+            templates = utils.io.project_templates(wp.project_table)
         :param rho_sea:
             float
             Density of sea water in g/cm3
@@ -488,20 +488,44 @@ class FluidMix(object):
                     for fluid in list(self.fluids[subst_ordr][this_well][wi_name].keys()):
                         if self.fluids[subst_ordr][this_well][wi_name][fluid].pressure_ref.value == 0.0:
                             # try to extract water depth
-                            water_depth = wells[this_well].get_water_depth()
-                            if np.abs(water_depth) < 0.5:  # and then from the templates
-                                if templates is not None:
-                                    if (this_well in list(templates.keys())) and \
-                                            ('water depth' in list(templates[this_well].keys())) and \
-                                                (templates[this_well]['water depth'] is not None):
-                                        water_depth = templates[this_well]['water depth']
-                            if np.abs(water_depth) < 0.5:
-                                warn_txt = 'Assume a water depth of ZERO'
-                                print('WARNING: {}'.format(warn_txt))
-                                logger.warning(warn_txt)
+                            water_depth = wells[this_well].get_water_depth(templates=templates)
 
                             self.fluids[subst_ordr][this_well][wi_name][fluid].pressure_ref.value = \
                                 rho_sea * abs(water_depth) * 9.81 * 1.E-3   # MPa
+
+
+    def calc_elastics(self, wells, log_table, wis, templates=None, block_name=None, calculation_method=None, debug=False):
+        """
+        Calculates k, mu, and rho for each well and working interval they are defined in, and where the
+        mineral calculation method is set to interval average
+        :param wells:
+            dict
+            {well name: core.wells.Well} key: value pairs
+        :param log_table:
+            dict
+            Dictionary of {log type: log name} key: value pairs which decides which logs to use to calculate the averages
+            E.G.
+                log_table = {
+                   'P velocity': 'vp',
+                   'S velocity': 'vs',
+                   'Density': 'den'}
+        :param wis:
+            dict
+            dictionary of working intervals,
+            e.g. wis = utils.io.project_working_intervals(project_table)
+        :param templates:
+            dict
+            templates that can contain well information such as kelly bushing and sea water depth
+            templates = utils.io.project_tempplates(wp.project_table)
+        :param calculation_method:
+            str
+            Name of the calculation method. 'Batzle and Wang' or 'User specified'
+        :param debug:
+            bool
+            if True, generate verbose information and create some plots
+        :return:
+        """
+
 
 def test_fluidsub():
     from importlib import reload

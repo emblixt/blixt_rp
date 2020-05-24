@@ -488,9 +488,13 @@ class Well(object):
             block_name = def_lb_name
         return self.block[block_name].header.strt.unit.lower()
 
-    def get_kb(self, kelly_bushing_keys=None):
+    def get_kb(self, templates=None, kelly_bushing_keys=None):
         """
         Tries to return the Kelly bushing elevation in meters.
+        :param templates:
+            dict
+            templates that can contain the kelly bushing for wells
+            templates = utils.io.project_tempplates(wp.project_table)
         :param kelly_bushing_keys:
             list
             List of strings that can be the key of the kelley bushing information in the well header
@@ -498,7 +502,7 @@ class Well(object):
             float
             Kelly bushing elevation in meters
         """
-        info_txt = 'Extract Kelly bushing'
+        info_txt = 'Extract Kelly bushing in well {}'.format(self.well)
         if kelly_bushing_keys is None:
             kelly_bushing_keys = def_kelly_bushing_keys
 
@@ -534,14 +538,28 @@ class Well(object):
                 logger.info(info_txt)
                 return kb
 
+        # When above didn't work, try the templates
+        if templates is not None:
+            if (self.well in list(templates.keys())) and \
+                    ('kb' in list(templates[self.well].keys())) and \
+                    (templates[self.well]['kb'] is not None):
+                info_txt += ' from templates'
+                print('INFO: {}'.format(info_txt))
+                logger.info(info_txt)
+                return templates[self.well]['kb']
+
         info_txt += ' failed. No matching keys in header. Using ZERO'
         print('WARNING: {}'.format(info_txt))
         logger.warning(info_txt)
         return 0.0
 
-    def get_water_depth(self, water_depth_keys=None):
+    def get_water_depth(self, templates=None, water_depth_keys=None):
         """
         Tries to return the water depth in meters.
+        :param templates:
+            dict
+            templates that can contain the sea water depth for wells
+            templates = utils.io.project_templates(wp.project_table)
         :param water_depth_keys:
             list
             List of strings that can be the key of the water depth information in the well header
@@ -552,7 +570,7 @@ class Well(object):
         # TODO
         # This function and get_kb are nearly similar
         # Write a new general function that returns any header value in meters and replace these with the new
-        info_txt = 'Extract water depth'
+        info_txt = 'Extract water depth in well {}'.format(self.well)
         if water_depth_keys is None:
             water_depth_keys = def_water_depth_keys
 
@@ -588,6 +606,16 @@ class Well(object):
                 print('INFO: {}'.format(info_txt))
                 logger.info(info_txt)
                 return wdepth
+
+        # When above didn't work, try the templates
+        if templates is not None:
+            if (self.well in list(templates.keys())) and \
+                    ('water depth' in list(templates[self.well].keys())) and \
+                    (templates[self.well]['water depth'] is not None):
+                info_txt += ' from templates'
+                print('INFO: {}'.format(info_txt))
+                logger.info(info_txt)
+                return templates[self.well]['water depth']
 
         info_txt += ' failed. No matching keys in header.'
         print('WARNING: {}'.format(info_txt))
@@ -657,19 +685,9 @@ class Well(object):
             repl_vel = 1600.
         if water_depth is None:
             # Tries to extract the water depth from the well header
-            water_depth = self.get_water_depth()
-            if np.abs(water_depth) < 0.5:  # and then from the templates
-                if templates is not None:
-                    if (self.well in list(templates.keys())) and \
-                            ('water depth' in list(templates[self.well].keys())) and \
-                            (templates[self.well]['water depth'] is not None):
-                        water_depth = templates[self.well]['water depth']
-            if np.abs(water_depth) < 0.5:
-                warn_txt = 'Assume a water depth of ZERO'
-                print('WARNING: {}'.format(warn_txt))
-                logger.warning(warn_txt)
+            water_depth = self.get_water_depth(templates=templates)
 
-        kb = self.get_kb()  # m
+        kb = self.get_kb(templates=templates)  # m
         log_start_twt = self.block[block_name].twt_at_logstart(log_name, water_vel, repl_vel, water_depth, kb)
 
         if sonic is None:
@@ -710,6 +728,10 @@ class Well(object):
         """
         Calculates the Voigt-Reuss-Hill bounds of parameter param, for the  fluid or mineral mixture defined in
         fluid_minerals, for the given Block.
+
+        IMPORTANT
+        If the fluids or minerals are defined using a "Calculation method", it is necessary to run XXX.calc_elastics()
+        on them before
 
         :param fluid_minerals:
             core.minerals.MineralMix
