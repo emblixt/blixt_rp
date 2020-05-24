@@ -622,6 +622,13 @@ class Well(object):
         logger.warning(info_txt)
         return 0.0
 
+    def get_burial_depth(self, block_name=None, templates=None, tvd_key=None):
+        if block_name is None:
+            block_name = def_lb_name
+
+        tvd = self.block[block_name].get_tvd(tvd_key=tvd_key)
+
+        return tvd - np.abs(self.get_water_depth(templates)) - np.abs(self.get_kb(templates))
 
     def sonic_to_vel(self, block_name=None):
         if block_name is None:
@@ -1675,6 +1682,23 @@ class Block(object):
         return step
 
     step = property(get_step)
+
+    def get_md(self):
+        return self.logs['depth'].data
+
+    def get_tvd(self, tvd_key=None):
+        if tvd_key is None:
+            tvd_key = 'tvd'
+
+        if tvd_key not in self.log_names():
+            warn_txt = 'No True Vertical Depth log in {}, using MD'.format(self.well)
+            print('WARNING: {}'.format(warn_txt))
+            logger.warning(warn_txt)
+            tvd = self.get_md()
+        else:
+            tvd = self.logs[tvd_key].data
+        return tvd
+
 
     def keys(self):
         return self.__dict__.keys()

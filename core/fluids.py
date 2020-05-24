@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 import rp.rp_core as rp
+import core.well as cw
 from rp.rp_core import Param
 from utils.attribdict import AttribDict
 from utils.utils import info, isnan
@@ -152,7 +153,7 @@ class Fluid(object):
                 #['', '', '',
                  '', 'Pressure at mudline', '', 'Gas/Oil ratio',
                  '', '', 'Wood or Brie', '', 'Status'],
-                [0.9, 0.0, 0.8, 'User specified', 0.03, 10.,
+                [np.nan, np.nan, np.nan, 'User specified', 0.03, 10.,
                 #['User specified', 0.03, 10.,
                    0.0107, 0., 70000., 1., 
                    30., 0.6, 'Wood', 2., None]):
@@ -387,7 +388,8 @@ class FluidMix(object):
             #    print('WARNING {}'.format(warn_txt))
             #    logger.warning(warn_txt)
             this_fluid = Fluid(
-                    fluids_table['Calculation method'][i],
+                    'User specified' if isnan(fluids_table['Calculation method'][i]) else \
+                        fluids_table['Calculation method'][i],
                     float(fluids_table['Bulk moduli [GPa]'][i]),
                     float(fluids_table['Shear moduli [GPa]'][i]),
                     float(fluids_table['Density [g/cm3]'][i]),
@@ -494,21 +496,13 @@ class FluidMix(object):
                                 rho_sea * abs(water_depth) * 9.81 * 1.E-3   # MPa
 
 
-    def calc_elastics(self, wells, log_table, wis, templates=None, block_name=None, calculation_method=None, debug=False):
+    def calc_elastics(self, wells, wis, templates=None, block_name=None, debug=False):
         """
-        Calculates k, mu, and rho for each well and working interval they are defined in, and where the
-        mineral calculation method is set to interval average
+        Calculates k, mu, and rho for all fluids for each well and working interval they are defined in, and where the
+        calculation method is not 'User specified'
         :param wells:
             dict
             {well name: core.wells.Well} key: value pairs
-        :param log_table:
-            dict
-            Dictionary of {log type: log name} key: value pairs which decides which logs to use to calculate the averages
-            E.G.
-                log_table = {
-                   'P velocity': 'vp',
-                   'S velocity': 'vs',
-                   'Density': 'den'}
         :param wis:
             dict
             dictionary of working intervals,
@@ -517,14 +511,50 @@ class FluidMix(object):
             dict
             templates that can contain well information such as kelly bushing and sea water depth
             templates = utils.io.project_tempplates(wp.project_table)
-        :param calculation_method:
-            str
-            Name of the calculation method. 'Batzle and Wang' or 'User specified'
         :param debug:
             bool
             if True, generate verbose information and create some plots
         :return:
         """
+        if block_name is None:
+            block_name = cw.def_lb_name
+
+        for key in ['initial', 'final']:
+            for w in list(self.fluids[key].keys()):
+                if w not in list(wells.keys()):
+                    warn_txt = 'Well {} not present among the input wells'.format(w)
+                    print('WARNING: {}'.format(warn_txt))
+                    logger.warning(warn_txt)
+                    continue
+
+                # test if this will is listed in the working intervals
+                if w not in list(wis.keys()):
+                    warn_txt = 'Well {} not present among the working intervals'.format(w)
+                    print('WARNING: {}'.format(warn_txt))
+                    logger.warning(warn_txt)
+                    continue
+
+                for wi in list(self.fluids[key][w].keys()):
+                    if wi not in list(wis[w].keys()):
+                        warn_txt = 'Interval {} not present among the working intervals'.format(wi)
+                        print('WARNING: {}'.format(warn_txt))
+                        logger.warning(warn_txt)
+                        continue
+                    if debug:
+                        print('{}, Well: {}, interval: {}'.format(key, w, wi))
+                    # iterate over all fluids
+                    for f in list(self.fluids[key][w][wi].keys()):
+                        this_fluid = self.fluids[key][w][wi][f]
+                        if this_fluid.calculation_method.value == 'User specified':
+                            continue
+                        if this_fluid.status.value == 'from excel':
+                            # start calculating fluid properties
+                            if this_fluid.calculation_method.value == 'Batzle and Wang':
+                                # Extract burial depth
+                                bd = wells[w].get_burial_depth(block_name=block_name, templates=templates)
+                                # TODO Find a smart way to extract the burial depth for a given working interval
+                                XXX
+                        print('  {}'.format(f))
 
 
 def test_fluidsub():
