@@ -871,10 +871,6 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
 
         # Run the fluid substitution separately in each interval
         for wi in list(rho_f1_dict.keys()):
-            print('WORKING INTERVAL (USING MD INSTEAD OF TVD) {}'.format(wi.upper()))
-            # TODO Make this function extract the tvd, not the MD !!!
-            this_tvd = np.mean(wis[wname][wi])
-
             k_f1 = k_f1_dict[wi]
             rho_f1 = rho_f1_dict[wi]
             k_f2 = k_f2_dict[wi]
@@ -899,9 +895,9 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
                 mod_history = 'Calculated using Gassmann fluid substitution using following\n'
                 mod_history += 'Mineral mixtures: {}\n'.format(mm.print_minerals(wname, wi))
                 mod_history += 'Initial fluids: {}\n'.format(
-                    fm.print_fluids('initial', wname, wi, this_tvd))
+                    fm.print_fluids('initial', wname, wi))
                 mod_history += 'Final fluids: {}\n'.format(
-                    fm.print_fluids('final', wname, wi, this_tvd))
+                    fm.print_fluids('final', wname, wi))
                 new_header.modification_history = mod_history
                 new_data = deepcopy(xx.data)
                 new_data[mask] = yy[mask]

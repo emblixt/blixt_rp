@@ -826,13 +826,6 @@ class Well(object):
         # The user have to apply these averages in the designated working interval later
         result = {}
         for wi, val in obj.items():
-            if wis is not None:
-                logger.warning('Currently, the fluid parameters are calculated using MD instead of TVD')
-                # TODO
-                # Make this function extract the tvd, not the MD !!!
-                this_tvd = np.mean(wis[self.well][wi])
-            else:
-                this_tvd = None
             complement = None
             this_fraction = None  # A volume fraction log
             this_component = None  #
@@ -844,7 +837,7 @@ class Well(object):
             for m in list(val.keys()):
                 info_txt += "  {}".format(m)
                 info_txt += "    K: {}, Mu: {}, Rho {}\n".format(
-                    val[m].calc_k(this_tvd).value, val[m].calc_mu(this_tvd).value, val[m].calc_rho(this_tvd).value)
+                    val[m].k.value, val[m].mu.value, val[m].rho.value)
                 info_txt += "    Volume fraction: {}\n".format(val[m].volume_fraction)
             logger.info(info_txt)
             print(info_txt)
@@ -876,11 +869,11 @@ class Well(object):
                         continue
                     this_fraction = self.block[block_name].logs[_name].data
                 if param == 'k':
-                    this_component = val[this_fm].calc_k(this_tvd).value
+                    this_component = val[this_fm].k.value
                 elif param == 'mu':
-                    this_component = val[this_fm].calc_mu(this_tvd).value
+                    this_component = val[this_fm].mu.value
                 elif param == 'rho':
-                    this_component = val[this_fm].calc_rho(this_tvd).value
+                    this_component = val[this_fm].rho.value
                 else:
                     this_component = None
 

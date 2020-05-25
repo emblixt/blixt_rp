@@ -166,7 +166,7 @@ class Mineral(object):
         :param dummy_bd:
         :return:
         """
-        return object.__getattribute__(self, 'k')
+        pass
 
     def calc_mu(self, dummy_bd):
         """
@@ -174,7 +174,7 @@ class Mineral(object):
         :param dummy_bd:
         :return:
         """
-        return object.__getattribute__(self, 'mu')
+        pass
 
     def calc_rho(self, dummy_bd):
         """
@@ -182,7 +182,7 @@ class Mineral(object):
         :param dummy_bd:
         :return:
         """
-        return object.__getattribute__(self, 'rho')
+        pass
 
     def vp(self):
         """

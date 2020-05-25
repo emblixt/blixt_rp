@@ -16,13 +16,19 @@ def find_nearest(data, value):
     return np.nanargmin(np.abs(data - value))
 
 
-def plot_logs(well, well_table, wis, wi_name, templates, buffer=None, block_name=None, savefig=None, **kwargs):
+def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=None, savefig=None, **kwargs):
     """
     Attempts to draw a plot similar to the "CPI plots", for one working interval with some buffer.
     :param well:
-    :param well_table:
+    :param log_table:
         dict
-        The resulting well_table from utils.io.project_wells(project_table_file)
+        Dictionary of log type: log name key: value pairs which decides which log to use when selecting which
+        velocity / sonic and density logs. Other logs (e.g. 'Resistivity') are selected based on their presence
+        E.G.
+            log_table = {
+               'P velocity': 'vp',
+               'S velocity': 'vs',
+               'Density': 'rhob'}
     :param buffer:
         float
         distance in meters
@@ -33,6 +39,10 @@ def plot_logs(well, well_table, wis, wi_name, templates, buffer=None, block_name
         buffer = 50.
     if block_name is None:
         block_name = cw.def_lb_name
+
+    time_step = kwargs.pop('time_step', 0.001)
+    c_f = kwargs.pop('center_frequency', 30.)
+    duration = kwargs.pop('duration', 0.512)
 
     fig = plt.figure(figsize=(20, 10))
     fig.suptitle('{} interval in well {}'.format(wi_name, well.well))
@@ -57,22 +67,22 @@ def plot_logs(well, well_table, wis, wi_name, templates, buffer=None, block_name
     # Start plotting data
     #
     tb = well.block[block_name]  # this log block
-    lognames = uio.invert_well_table(well_table, well_name=well.well)
     depth = tb.logs['depth'].data
     mask = np.ma.masked_inside(depth, wis[well.well][wi_name][0]-buffer, wis[well.well][wi_name][1]+buffer).mask
 
     #
     # Gamma ray and Caliper
     try_these_log_types = ['Gamma ray', 'Caliper', 'Inclination']
-    log_types = [x for x in try_these_log_types if x in list(lognames.keys())]
+    log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
+    lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
     limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
     styles = [{'lw': templates[x]['line width'],
                'color': templates[x]['line color'],
                'ls': templates[x]['line style']} for x in log_types]
-    legends = ['{} [{}]'.format(lognames[x][0], templates[x]['unit']) for x in log_types]
+    legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
 
     xlims = axis_plot(axes['gr_ax'], depth[mask],
-              [tb.logs[lognames[xx][0]].data[mask] for xx in log_types],
+              [tb.logs[lognames[xx]].data[mask] for xx in log_types],
               limits, styles)
     header_plot(header_axes['gr_ax'], xlims, legends, styles)
 
@@ -90,10 +100,10 @@ def plot_logs(well, well_table, wis, wi_name, templates, buffer=None, block_name
     # TWT
     # Get the time-depth relation (time as a function of md)
     _x = None
-    if 'P velocity' in list(lognames.keys()):
-        _x = lognames['P velocity'][0]
-    elif 'Sonic' in list(lognames.keys()):
-        _x = lognames['Sonic'][0]
+    if 'P velocity' in list(log_table.keys()):
+        _x = log_table['P velocity']
+    elif 'Sonic' in list(log_table.keys()):
+        _x = log_table['Sonic']
     if _x is not None:
         tdr = well.time_to_depth(_x, templates=templates)
         header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]')
@@ -113,6 +123,7 @@ def plot_logs(well, well_table, wis, wi_name, templates, buffer=None, block_name
     #
     # Resistivity
     log_types = ['Resistivity']
+    lognames = {ltype: [x.name for x in well.get_logs_of_type(ltype)] for ltype in log_types}
     limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
     cls = ['r', 'b', 'k', 'g', 'c']  # should not plot more than 5 lines in this plot!
     lws = [2, 1, 1, 1, 1]
@@ -127,56 +138,70 @@ def plot_logs(well, well_table, wis, wi_name, templates, buffer=None, block_name
     #
     # Rho
     try_these_log_types = ['Density', 'Neutron density']
-    log_types = [x for x in try_these_log_types if x in list(lognames.keys())]
+    log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
+    lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
+    # Replace the density with the one selected by log_table
+    lognames['Density'] = log_table['Density']
     limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
     styles = [{'lw': templates[x]['line width'],
                'color': templates[x]['line color'],
                'ls': templates[x]['line style']} for x in log_types]
-    legends = ['{} [{}]'.format(lognames[x][0], templates[x]['unit']) for x in log_types]
+    legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
 
     xlims = axis_plot(axes['rho_ax'], depth[mask],
-              [tb.logs[lognames[xx][0]].data[mask] for xx in log_types],
+              [tb.logs[lognames[xx]].data[mask] for xx in log_types],
               limits, styles, yticks=False)
     header_plot(header_axes['rho_ax'], xlims, legends, styles)
 
     #
     # CPI
     try_these_log_types = ['Saturation', 'Porosity', 'Volume']
-    log_types = [x for x in try_these_log_types if x in list(lognames.keys())]
+    log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
+    lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
     limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
     styles = [{'lw': templates[x]['line width'],
                'color': templates[x]['line color'],
                'ls': templates[x]['line style']} for x in log_types]
-    legends = ['{} [{}]'.format(lognames[x][0], templates[x]['unit']) for x in log_types]
+    legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
 
     if len(log_types) == 0:
         header_plot(header_axes['cpi_ax'], None, None, None, title='CPI is lacking')
         axis_plot(axes['cpi_ax'], None, None, None, None)
     xlims = axis_plot(axes['cpi_ax'], depth[mask],
-              [tb.logs[lognames[xx][0]].data[mask] for xx in log_types],
+              [tb.logs[lognames[xx]].data[mask] for xx in log_types],
               limits, styles, yticks=False)
     header_plot(header_axes['cpi_ax'], xlims, legends, styles)
 
     #
     # AI
     tt = ''
-    if 'Density' in list(lognames.keys()):
-        tt += lognames['Density'][0]
-        if 'P velocity' in list(lognames.keys()):
-            ai = tb.logs[lognames['Density'][0]].data * tb.logs[lognames['P velocity'][0]].data
-            tt += '*{}'.format(lognames['P velocity'][0])
-        elif 'Sonic' in list(lognames.keys()):
-            ai = tb.logs[lognames['Density'][0]].data / tb.logs[lognames['Sonic'][0]].data
-            tt += '/{}'.format(lognames['Sonic'][0])
+    if 'Density' in list(log_table.keys()):
+        tt += log_table['Density']
+        if 'P velocity' in list(log_table.keys()):
+            ai = tb.logs[log_table['Density']].data * tb.logs[log_table['P velocity']].data
+            tt += '*{}'.format(log_table['P velocity'])
+        elif 'Sonic' in list(log_table.keys()):
+            ai = tb.logs[log_table['Density']].data / tb.logs[log_table['Sonic']].data
+            tt += '/{}'.format(log_table['Sonic'])
         else:
             ai = None
     else:
         ai = None
     if ai is not None:
-        styles = [{'lw': 1, 'color': 'k', 'ls': '--'}]
-        xlims = axis_plot(axes['ai_ax'], depth[mask], [ai[mask]], [[None, None]], styles,
+        #styles = [{'lw': 1, 'color': 'k', 'ls': '--'}]
+        log_types = ['AI']
+        lognames = {'AI': 'AI'}
+        limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
+        styles = [{'lw': templates[x]['line width'],
+                   'color': templates[x]['line color'],
+                   'ls': templates[x]['line style']} for x in log_types]
+        legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
+        # TODO
+        # Now we blindly assumes AI is in m/s g/cm3 Make this more robust
+        xlims = axis_plot(axes['ai_ax'], depth[mask], [ai[mask]/1000.], limits, styles,
                   yticks=False)
-        header_plot(header_axes['ai_ax'], xlims, ['AI ({})'.format(tt)], styles)
+        #header_plot(header_axes['ai_ax'], xlims, ['AI ({})'.format(tt)], styles)
+        header_plot(header_axes['ai_ax'], xlims, legends, styles)
     else:
         header_plot(header_axes['ai_ax'], None, None, None, title='AI is lacking')
         axis_plot(axes['ai_ax'], None, None, None, None)
@@ -185,23 +210,23 @@ def plot_logs(well, well_table, wis, wi_name, templates, buffer=None, block_name
     #
     # Wiggles
     #t = np.arange(tdr[mask][0], tdr[mask][-1], 0.004)  # A uniformly sampled array of time steps, from A to B
-    t = np.arange(0., np.nanmax(tdr), 0.0001)  # A uniformly sampled array of time steps, from 0 to 3
+    t = np.arange(0., np.nanmax(tdr), time_step)  # A uniformly sampled array of time steps, from 0 to 3
     #print(len(t))
-    if 'P velocity' in list(lognames.keys()):
-        vp_t = np.interp(x=t, xp=tdr, fp=tb.logs[lognames['P velocity'][0]].data)
-    elif 'Sonic' in list(lognames.keys()):
-        vp_t = np.interp(x=t, xp=tdr, fp=1./tb.logs[lognames['Sonic'][0]].data)
+    if 'P velocity' in list(log_table.keys()):
+        vp_t = np.interp(x=t, xp=tdr, fp=tb.logs[log_table['P velocity']].data)
+    elif 'Sonic' in list(log_table.keys()):
+        vp_t = np.interp(x=t, xp=tdr, fp=1./tb.logs[log_table['Sonic']].data)
     else:
         vp_t = None
     #print(len(vp_t))
-    if 'S velocity' in list(lognames.keys()):
-        vs_t = np.interp(x=t, xp=tdr, fp=tb.logs[lognames['S velocity'][0]].data)
-    elif 'Shear sonic' in list(lognames.keys()):
-        vs_t = np.interp(x=t, xp=tdr, fp=1./tb.logs[lognames['Shear sonic'][0]].data)
+    if 'S velocity' in list(log_table.keys()):
+        vs_t = np.interp(x=t, xp=tdr, fp=tb.logs[log_table['S velocity']].data)
+    elif 'Shear sonic' in list(log_table.keys()):
+        vs_t = np.interp(x=t, xp=tdr, fp=1./tb.logs[log_table['Shear sonic']].data)
     else:
         vs_t = None
-    if 'Density' in list(lognames.keys()):
-        rho_t = np.interp(x=t, xp=tdr, fp=tb.logs[lognames['Density'][0]].data)
+    if 'Density' in list(log_table.keys()):
+        rho_t = np.interp(x=t, xp=tdr, fp=tb.logs[log_table['Density']].data)
     else:
         rho_t = None
 
@@ -212,8 +237,8 @@ def plot_logs(well, well_table, wis, wi_name, templates, buffer=None, block_name
 
     if reff is not None:
         #print(len(reff(10)))
-        #tw, w = ricker(_f=25, _length=0.512, _dt=0.001)
-        w = tta.ricker(0.512, 0.001, 25.)
+        #tw, w = ricker(_f=c_f, _length=duration, _dt=time_step)
+        w = tta.ricker(duration, time_step, c_f)
         #print(len(w))
 
         # Compute the depth-time relation
@@ -223,7 +248,8 @@ def plot_logs(well, well_table, wis, wi_name, templates, buffer=None, block_name
         t_mask = np.ma.masked_inside(t[:-1], np.nanmin(tdr[mask]), np.nanmax(tdr[mask])).mask
         #wiggle_plot(axes['synt_ax'], t[:-1][t_mask], wig[t_mask], 10)
 
-        header_plot(header_axes['synt_ax'], None, None, None, title='Incidence angle')
+        header_plot(header_axes['synt_ax'], None, None, None,
+                    title='Incidence angle\nRicker f={:.0f} Hz, l={:.3f} s'.format(c_f, duration))
         for inc_a in range(0, 35, 5):
             wig = np.convolve(w, np.nan_to_num(reff(inc_a)), mode='same')
             wiggle_plot(axes['synt_ax'], dtr[:-1][t_mask], wig[t_mask], inc_a, scaling=30.)
@@ -299,7 +325,7 @@ def axis_plot(ax, y, data, limits, styles, yticks=True, nxt=4, **kwargs):
     # set up the x range differently for each plot
     for i in range(len(data)):
         #axes[i].set_xlim(*limits[i])
-        #set_lim(axes[i], limits[i], 'x')
+        set_lim(axes[i], limits[i], 'x')
         #print(limits[i])
         xlims.append(axes[i].get_xlim())
         # Change major ticks to set up the grid as desired
@@ -624,10 +650,12 @@ def set_lim(ax, limits, axis=None):
         return
 
     if None in limits:
+        print('limits', limits)
         # first autoscale
         ax.autoscale(True, axis=axis)
         if axis == 'x':
             _lims = ax.get_xlim()
+            print(_lims)
             ax.set_xlim(
                 limits[0] if limits[0] is not None else _lims[0],
                 limits[1] if limits[1] is not None else _lims[1]
