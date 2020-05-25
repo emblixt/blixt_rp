@@ -191,24 +191,29 @@ class Fluid(object):
 
     def __str__(self):
         keys = list(self.__dict__.keys())
-        r_keys = []
-        for k in keys:
-            if isinstance(self.__dict__[k],Param) and isnan(self.__dict__[k].value):
-                r_keys.append(k)
-        for k in r_keys:
-            keys.remove(k)
+        #r_keys = []
+        #for k in keys:
+        #    if isinstance(self.__dict__[k], Param) and isnan(self.__dict__[k].value):
+        #        r_keys.append(k)
+        #for k in r_keys:
+        #    keys.remove(k)
         
         pattern = "%%%ds: %%s" % len(keys)
-        
-        head = [pattern % (k, self.__dict__[k]) for k in keys]
+
+        #head = [pattern % (k, self.__dict__[k]) for k in keys]
+        head = [pattern % (k, '{}, {}'.format( self.__dict__[k].value,  self.__dict__[k].desc)) if \
+                isinstance(self.__dict__[k], Param) else pattern % (k, self.__dict__[k]) for k in keys]
         return "\n".join(head)
 
-    def print_fluid(self, bd=None):
+    def print_fluid(self, verbose=False):
         out = '  {}\n'.format(self.name)
-        out += '      K: {}, Mu: {}, Rho {}\n'.format(
-            self.calc_k(bd).value, self.calc_mu(bd).value, self.calc_rho(bd).value)
-        out += '      Volume fraction: {}\n'.format(self.volume_fraction)
-        out += '      Calculation method: {}\n'.format(self.calculation_method.value)
+        if verbose:
+            out = str(self)
+        else:
+            out += '      K: {}, Mu: {}, Rho {}\n'.format(
+                self.k.value, self.mu.value, self.rho.value)
+            out += '      Volume fraction: {}\n'.format(self.volume_fraction)
+            out += '      Calculation method: {}\n'.format(self.calculation_method.value)
         return out
 
     def keys(self):
@@ -222,109 +227,103 @@ class Fluid(object):
         """
         if self.calculation_method.value == 'Batzle and Wang':
             #print('calc_k: {}, Burial depth: {}'.format(self.name, bd))
-            if bd is None:
-                warn_txt = 'No Burial depth value given for the fluid calculation'
+            if (bd is None) or isnan(bd):
+                warn_txt = 'No Burial depth value given for the fluid calculation. ' \
+                           'Batzle and Wang not possible to calculate'
                 print('WARNING: {}'.format(warn_txt))
                 logger.warning(warn_txt)
-                return Param(name='',
-                             value=np.nan,
-                             unit='',
-                             desc='')
+
             _s = self.salinity
             _p = self.pressure_ref.value + self.pressure_gradient.value * bd
             _t = self.temp_ref.value + self.temp_gradient.value * bd
             if self.fluid_type == 'brine':
                 rho_b = rp.rho_b(_s, _p,  _t).value
                 v_p_b = rp.v_p_b(_s, _p, _t).value
-                return Param(name='k_b',
+                this_k = Param(name='k_b',
                              value=v_p_b**2 * rho_b * 1.E-6,
                              unit='GPa',
                              desc='Brine bulk modulus'
                 )
             elif self.fluid_type == 'oil':
-                k_o, rho_o = rp.k_and_rho_o(
+                this_k, rho_o = rp.k_and_rho_o(
                     self.oil_api,
                     self.gas_gravity,
                     self.gor,
                     _p,
                     _t
                 )
-                return k_o
             elif self.fluid_type == 'gas':
-                k_g, rho_g = rp.k_and_rho_g(self.gas_gravity, _p, _t)
-                return k_g
+                this_k, rho_g = rp.k_and_rho_g(self.gas_gravity, _p, _t)
             else:
                 raise NotImplementedError('Bulk modulus not possible to calculate for {}'.format(self.fluid_type))
+            self.k = this_k
         else:
-            return object.__getattribute__(self, 'k')
+            # No calculation done
+            pass
 
     def calc_mu(self, bd):
         #print('calc_mu: {}, Burial depth: {}'.format(self.name, bd))
         if self.calculation_method.value == 'Batzle and Wang':
             if bd is None:
-                warn_txt = 'No Burial depth value given for the fluid calculation'
+                warn_txt = 'No Burial depth value given for the fluid calculation. ' \
+                           'Batzle and Wang not possible to calculate'
                 print('WARNING: {}'.format(warn_txt))
                 logger.warning(warn_txt)
-                return Param(name='',
-                             value=np.nan,
-                             unit='',
-                             desc='')
             if self.fluid_type == 'brine':
-                return Param(name='mu_b',
+                this_mu = Param(name='mu_b',
                              value=np.nan,
                              unit='GPa',
                              desc='Brine shear modulus'
                              )
             elif self.fluid_type == 'oil':
-                return Param(name='mu_o',
+                this_mu = Param(name='mu_o',
                              value=np.nan,
                              unit='GPa',
                              desc='Oil shear modulus'
                              )
             elif self.fluid_type == 'gas':
-                return Param(name='mu_g',
+                this_mu = Param(name='mu_g',
                              value=np.nan,
                              unit='GPa',
                              desc='Gas shear modulus'
                              )
             else:
                 raise NotImplementedError('Shear modulus not possible to calculate for {}'.format(self.fluid_type))
+            self.mu = this_mu
         else:
-            return object.__getattribute__(self, 'mu')
+            # No calculation done
+            pass
 
     def calc_rho(self, bd):
         if self.calculation_method.value == 'Batzle and Wang':
             #print('calc_rho: {}, Burial depth: {}'.format(self.name, bd))
             if bd is None:
-                warn_txt = 'No Burial depth value given for the fluid calculation'
+                warn_txt = 'No Burial depth value given for the fluid calculation. ' \
+                           'Batzle and Wang not possible to calculate'
                 print('WARNING: {}'.format(warn_txt))
                 logger.warning(warn_txt)
-                return Param(name='',
-                             value=np.nan,
-                             unit='',
-                             desc='')
+
             _s = self.salinity
             _p = self.pressure_ref.value + self.pressure_gradient.value * bd
             _t = self.temp_ref.value + self.temp_gradient.value * bd
             if self.fluid_type == 'brine':
-                rho_b = rp.rho_b(_s, _p,  _t)
-                return rho_b
+                this_rho = rp.rho_b(_s, _p,  _t)
             elif self.fluid_type == 'oil':
-                k_o, rho_o = rp.k_and_rho_o(
+                k_o, this_rho = rp.k_and_rho_o(
                     self.oil_api,
                     self.gas_gravity,
                     self.gor,
                     _p,
                     _t
                 )
-                return rho_o
             elif self.fluid_type == 'gas':
-                k_g, rho_g = rp.k_and_rho_g(self.gas_gravity, _p, _t)
-                return rho_g
+                k_g, this_rho = rp.k_and_rho_g(self.gas_gravity, _p, _t)
             else:
                 raise NotImplementedError('Bulk modulus not possible to calculate for {}'.format(self.fluid_type))
+            self.rho = this_rho
         else:
-            return object.__getattribute__(self, 'rho')
+            # No calculation done
+            pass
 
 
 class FluidMix(object):
@@ -353,22 +352,18 @@ class FluidMix(object):
             name = 'MyFluids'
         self.name = name
 
-    def print_all_fluids(self, bd=None):
+    def print_all_fluids(self, verbose=False):
         out = ''
         for key in ['initial', 'final']:
             for w in list(self.fluids[key].keys()):
                 for wi in list(self.fluids[key][w].keys()):
-                    out += self.print_fluids(key, w, wi, bd)
+                    out += self.print_fluids(key, w, wi, verbose)
         return out
 
-    def print_fluids(self, subst, well_name, wi_name, bd=None):
-        out = 'Fluid mixture: {}, {}, {}, {}'.format(subst, well_name, wi_name, self.name)
-        if bd is not None:
-            out += ' at Burial depth: {} m\n'.format(bd)
-        else:
-            out += '\n'
+    def print_fluids(self, subst, well_name, wi_name, verbose=False):
+        out = 'Fluid mixture: {}, {}, {}, {}\n'.format(subst, well_name, wi_name, self.name)
         for m in list(self.fluids[subst][well_name][wi_name].keys()):
-            out += self.fluids[subst][well_name][wi_name][m].print_fluid(bd)
+            out += self.fluids[subst][well_name][wi_name][m].print_fluid(verbose)
         return out
 
     def read_excel(self, filename,
@@ -495,7 +490,6 @@ class FluidMix(object):
                             self.fluids[subst_ordr][this_well][wi_name][fluid].pressure_ref.value = \
                                 rho_sea * abs(water_depth) * 9.81 * 1.E-3   # MPa
 
-
     def calc_elastics(self, wells, wis, templates=None, block_name=None, debug=False):
         """
         Calculates k, mu, and rho for all fluids for each well and working interval they are defined in, and where the
@@ -520,6 +514,7 @@ class FluidMix(object):
             block_name = cw.def_lb_name
 
         for key in ['initial', 'final']:
+            # loop over all wells
             for w in list(self.fluids[key].keys()):
                 if w not in list(wells.keys()):
                     warn_txt = 'Well {} not present among the input wells'.format(w)
@@ -534,27 +529,52 @@ class FluidMix(object):
                     logger.warning(warn_txt)
                     continue
 
+                # Extract the measured and burial depth for this well
+                bd = wells[w].get_burial_depth(block_name=block_name, templates=templates)
+                md = wells[w].block[block_name].get_md()
+
+                # loop over all working intervals
                 for wi in list(self.fluids[key][w].keys()):
                     if wi not in list(wis[w].keys()):
                         warn_txt = 'Interval {} not present among the working intervals'.format(wi)
                         print('WARNING: {}'.format(warn_txt))
                         logger.warning(warn_txt)
                         continue
+                    # Extract the mean burial depth for this working interval
+                    wi_md = np.mean(wis[w][wi])
+                    wi_md_i = np.nanargmin((md - wi_md)**2)
+                    wi_bd = bd[wi_md_i]
+
                     if debug:
-                        print('{}, Well: {}, interval: {}'.format(key, w, wi))
+                        print('{}, Well: {}, interval: {}, burial depth: {:.2f}'.format(key, w, wi, wi_bd))
+
                     # iterate over all fluids
+                    info_txt = ''
                     for f in list(self.fluids[key][w][wi].keys()):
                         this_fluid = self.fluids[key][w][wi][f]
+                        info_txt += ' Fluid: {}, '.format(f)
                         if this_fluid.calculation_method.value == 'User specified':
+                            info_txt += 'user specified. Skipped.'
                             continue
                         if this_fluid.status.value == 'from excel':
                             # start calculating fluid properties
+                            info_txt += "has status 'from excel', "
                             if this_fluid.calculation_method.value == 'Batzle and Wang':
-                                # Extract burial depth
-                                bd = wells[w].get_burial_depth(block_name=block_name, templates=templates)
-                                # TODO Find a smart way to extract the burial depth for a given working interval
-                                XXX
-                        print('  {}'.format(f))
+                                info_txt += "and will be calculated using 'Batzle and Wang'. "
+                                if debug:
+                                    print(info_txt)
+                                # Start Batzle and Wang calculation
+                                this_fluid.calc_k(wi_bd)
+                                this_fluid.calc_mu(wi_bd)
+                                this_fluid.calc_rho(wi_bd)
+                                this_fluid.status.value = \
+                                    'calculated using Batzle and Wang at burial depth {:.2f}'.format(wi_bd)
+                        else:
+                            if debug:
+                                info_txt += 'has already been calculated'
+                                print(info_txt)
+                            continue
+
 
 
 def test_fluidsub():

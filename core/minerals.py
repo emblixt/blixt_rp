@@ -307,7 +307,6 @@ class MineralMix(object):
         self.minerals = min_mixes
         self.header['orig_file'] = filename
 
-
     def calc_elastics(self, wells, log_table, wis, block_name=None, calculation_method=None, debug=False):
         """
         Calculates k, mu, and rho for each well and working interval they are defined in, AND where the
@@ -384,7 +383,6 @@ class MineralMix(object):
                             _n += 1
                     figs[well_name][wi_name] = plt.figure(figsize=(12, 4*_n))
                     axes[well_name][wi_name] = figs[well_name][wi_name].subplots(nrows=_n, ncols=3)
-                # TODO There should be one figure per well and interval. Each figure should have _n rows,
 
             _n = 0  # number of minerals
             for jj, wi_name in enumerate(list(self.minerals[well_name].keys())):
