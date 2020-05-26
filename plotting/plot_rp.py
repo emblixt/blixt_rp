@@ -15,7 +15,7 @@ opt1 = {'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
 opt2 = {'ha': 'right', 'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
 
 
-def plot_rp(wells, log_table, wis, wi_name, cutoffs, templates=None,
+def plot_rp(wells, log_table, wis, wi_name, cutoffs, templates=None, legend_items=None,
             plot_type=None, ref_val=None, fig=None, ax=None, block_name=None, savefig=None, **kwargs):
 
     """
@@ -52,6 +52,10 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs, templates=None,
     :param templates:
         dict
         templates dictionary as returned from utils.io.project_templates()
+    :param legend_items:
+        list
+        list of Line2D objects that are used in the legends.
+        if None, the well names will be used
     :param plot_type:
         str
         plot_type =
@@ -198,17 +202,20 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs, templates=None,
         )
     ax.autoscale(True, axis='both')
     ax.set_title('{}, {}'.format(wi_name, desc))
-    legend_elements = []
-    for wname in well_names:
-        legend_elements.append(
-            Line2D([0], [0],
-                   color=templates[wname]['color'],
-                   lw=0, marker=templates[wname]['symbol'],
-                   label=wname))
+    #
+    if legend_items is None:
+        legend_items = []
+        for wname in well_names:
+            legend_items.append(
+                Line2D([0], [0],
+                       color=templates[wname]['color'],
+                       lw=0, marker=templates[wname]['symbol'],
+                       label=wname))
 
+    legend_names = [x._label for x in legend_items]
     this_legend = ax.legend(
-        legend_elements,
-        well_names,
+        legend_items,
+        legend_names,
         prop=FontProperties(size='smaller'),
         scatterpoints=1,
         markerscale=2,

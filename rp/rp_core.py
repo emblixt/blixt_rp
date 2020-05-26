@@ -780,6 +780,9 @@ def linear_brine_elastics():
 
 def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, templates=None, block_name=None):
     """
+    Run fluid substitution using the defined fluids and minerals given in mineral_mix and fluid_mix, and only for the
+    wells where they have been defined.
+
 
     :param wells:
         dict
@@ -838,13 +841,16 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
 
     # Calculate the elastic properties of the fluids
     fm.calc_press_ref(wells, templates=templates)
-    fm.calc_elastics(wells, wis, templates=templates)
+    fm.calc_elastics(wells, wis, templates=templates, block_name=block_name)
 
     # and for the minerals
-    mm.calc_elastics(wells, log_table, wis)
+    mm.calc_elastics(wells, log_table, wis, block_name=block_name)
 
     # Loop over all wells
     for wname, well in wells.items():
+        if wname not in list(fm.fluids['initial'].keys()):
+            print('Well {} not listed in the fluid mixture, skipping'.format(wname))
+            continue
         info_txt = 'Starting Gassmann fluid substitution on well {}'.format(wname)
         print('INFO: {}'.format(info_txt))
         logger.info(info_txt)

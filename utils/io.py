@@ -658,7 +658,7 @@ def write_las(filename, wh, lh, data, overwrite=False):
     out += '# Modified on: {}\n'.format(wh['modification_date'].value)
     for key, value in data.items():
         if value.header['modification_history'] is not None:
-            out += '#  Modification: {}: {}\n'.format(key, value.header['modification_history'])
+            out += '#  Modification: {}: {}\n'.format(key, value.header['modification_history'].replace('\n','\n#   '))
 
     out += (
         '#--------------------------------------------------------------------\n'

@@ -43,6 +43,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     time_step = kwargs.pop('time_step', 0.001)
     c_f = kwargs.pop('center_frequency', 30.)
     duration = kwargs.pop('duration', 0.512)
+    scaling = kwargs.pop('scaling', 30.0)
 
     fig = plt.figure(figsize=(20, 10))
     fig.suptitle('{} interval in well {}'.format(wi_name, well.well))
@@ -252,7 +253,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
                     title='Incidence angle\nRicker f={:.0f} Hz, l={:.3f} s'.format(c_f, duration))
         for inc_a in range(0, 35, 5):
             wig = np.convolve(w, np.nan_to_num(reff(inc_a)), mode='same')
-            wiggle_plot(axes['synt_ax'], dtr[:-1][t_mask], wig[t_mask], inc_a, scaling=30.)
+            wiggle_plot(axes['synt_ax'], dtr[:-1][t_mask], wig[t_mask], inc_a, scaling=scaling)
     else:
         header_plot(header_axes['synt_ax'], None, None, None, title='Refl. coeff. lacking')
         wiggle_plot(axes['synt_ax'], None, None, None)

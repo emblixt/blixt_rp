@@ -488,7 +488,7 @@ class Well(object):
             block_name = def_lb_name
         return self.block[block_name].header.strt.unit.lower()
 
-    def get_kb(self, templates=None, kelly_bushing_keys=None):
+    def get_kb(self, templates=None, block_name=None, kelly_bushing_keys=None):
         """
         Tries to return the Kelly bushing elevation in meters.
         :param templates:
@@ -519,7 +519,7 @@ class Well(object):
                 if self.header[_key].unit.lower() == '':
                     # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
                     # set than for the Kelley bushing
-                    start_unit = self.depth_unit()
+                    start_unit = self.depth_unit(block_name=block_name)
                     if start_unit == 'm':
                         info_txt += '[m].'
                         kb = this_kb
@@ -553,7 +553,7 @@ class Well(object):
         logger.warning(info_txt)
         return 0.0
 
-    def get_water_depth(self, templates=None, water_depth_keys=None):
+    def get_water_depth(self, templates=None, block_name=None, water_depth_keys=None):
         """
         Tries to return the water depth in meters.
         :param templates:
@@ -587,7 +587,7 @@ class Well(object):
                 if self.header[_key].unit.lower() == '':
                     # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
                     # set than for the water depth
-                    start_unit = self.depth_unit()
+                    start_unit = self.depth_unit(block_name=block_name)
                     if start_unit == 'm':
                         info_txt += '[m].'
                         wdepth = this_wd
@@ -628,7 +628,8 @@ class Well(object):
 
         tvd = self.block[block_name].get_tvd(tvd_key=tvd_key)
 
-        return tvd - np.abs(self.get_water_depth(templates)) - np.abs(self.get_kb(templates))
+        return tvd - np.abs(self.get_water_depth(templates, block_name=block_name)) - \
+               np.abs(self.get_kb(templates, block_name=block_name))
 
     def sonic_to_vel(self, block_name=None):
         if block_name is None:
