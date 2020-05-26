@@ -488,9 +488,13 @@ class Well(object):
             block_name = def_lb_name
         return self.block[block_name].header.strt.unit.lower()
 
-    def get_kb(self, kelly_bushing_keys=None):
+    def get_kb(self, templates=None, block_name=None, kelly_bushing_keys=None):
         """
         Tries to return the Kelly bushing elevation in meters.
+        :param templates:
+            dict
+            templates that can contain the kelly bushing for wells
+            templates = utils.io.project_tempplates(wp.project_table)
         :param kelly_bushing_keys:
             list
             List of strings that can be the key of the kelley bushing information in the well header
@@ -498,7 +502,7 @@ class Well(object):
             float
             Kelly bushing elevation in meters
         """
-        info_txt = 'Extract Kelly bushing'
+        info_txt = 'Extract Kelly bushing in well {}'.format(self.well)
         if kelly_bushing_keys is None:
             kelly_bushing_keys = def_kelly_bushing_keys
 
@@ -515,7 +519,7 @@ class Well(object):
                 if self.header[_key].unit.lower() == '':
                     # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
                     # set than for the Kelley bushing
-                    start_unit = self.depth_unit()
+                    start_unit = self.depth_unit(block_name=block_name)
                     if start_unit == 'm':
                         info_txt += '[m].'
                         kb = this_kb
@@ -534,14 +538,28 @@ class Well(object):
                 logger.info(info_txt)
                 return kb
 
+        # When above didn't work, try the templates
+        if templates is not None:
+            if (self.well in list(templates.keys())) and \
+                    ('kb' in list(templates[self.well].keys())) and \
+                    (templates[self.well]['kb'] is not None):
+                info_txt += ' from templates'
+                print('INFO: {}'.format(info_txt))
+                logger.info(info_txt)
+                return templates[self.well]['kb']
+
         info_txt += ' failed. No matching keys in header. Using ZERO'
         print('WARNING: {}'.format(info_txt))
         logger.warning(info_txt)
         return 0.0
 
-    def get_water_depth(self, water_depth_keys=None):
+    def get_water_depth(self, templates=None, block_name=None, water_depth_keys=None):
         """
         Tries to return the water depth in meters.
+        :param templates:
+            dict
+            templates that can contain the sea water depth for wells
+            templates = utils.io.project_templates(wp.project_table)
         :param water_depth_keys:
             list
             List of strings that can be the key of the water depth information in the well header
@@ -552,7 +570,7 @@ class Well(object):
         # TODO
         # This function and get_kb are nearly similar
         # Write a new general function that returns any header value in meters and replace these with the new
-        info_txt = 'Extract water depth'
+        info_txt = 'Extract water depth in well {}'.format(self.well)
         if water_depth_keys is None:
             water_depth_keys = def_water_depth_keys
 
@@ -569,7 +587,7 @@ class Well(object):
                 if self.header[_key].unit.lower() == '':
                     # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
                     # set than for the water depth
-                    start_unit = self.depth_unit()
+                    start_unit = self.depth_unit(block_name=block_name)
                     if start_unit == 'm':
                         info_txt += '[m].'
                         wdepth = this_wd
@@ -589,11 +607,29 @@ class Well(object):
                 logger.info(info_txt)
                 return wdepth
 
-        info_txt += ' failed. No matching keys in header. Using ZERO'
+        # When above didn't work, try the templates
+        if templates is not None:
+            if (self.well in list(templates.keys())) and \
+                    ('water depth' in list(templates[self.well].keys())) and \
+                    (templates[self.well]['water depth'] is not None):
+                info_txt += ' from templates'
+                print('INFO: {}'.format(info_txt))
+                logger.info(info_txt)
+                return templates[self.well]['water depth']
+
+        info_txt += ' failed. No matching keys in header.'
         print('WARNING: {}'.format(info_txt))
         logger.warning(info_txt)
         return 0.0
 
+    def get_burial_depth(self, block_name=None, templates=None, tvd_key=None):
+        if block_name is None:
+            block_name = def_lb_name
+
+        tvd = self.block[block_name].get_tvd(tvd_key=tvd_key)
+
+        return tvd - np.abs(self.get_water_depth(templates, block_name=block_name)) - \
+               np.abs(self.get_kb(templates, block_name=block_name))
 
     def sonic_to_vel(self, block_name=None):
         if block_name is None:
@@ -604,7 +640,7 @@ class Well(object):
 
     def time_to_depth(self, log_name='vp', water_vel=None, repl_vel=None, water_depth=None, block_name=None,
                       sonic=None, feet_unit=None, us_unit=None,
-                      spike_threshold=None, debug=False):
+                      spike_threshold=None, templates=None, debug=False):
         """
         Calculates the twt as a function of md
         https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
@@ -623,6 +659,7 @@ class Well(object):
             float
             Water depth in meters.
             If not specified, tries to read from well header.
+            if that fails, it tries to read it from the templates (if given)
             If that fails, uses 0 (zero) water depth
         :param block_name:
         :param sonic:
@@ -656,13 +693,9 @@ class Well(object):
             repl_vel = 1600.
         if water_depth is None:
             # Tries to extract the water depth from the well header
-            water_depth = self.get_water_depth()
-            if np.abs(water_depth) < 0.5:
-                warn_txt = 'Assume a water depth of ZERO'
-                print('WARNING: {}'.format(warn_txt))
-                logger.warning(warn_txt)
+            water_depth = self.get_water_depth(templates=templates)
 
-        kb = self.get_kb()  # m
+        kb = self.get_kb(templates=templates)  # m
         log_start_twt = self.block[block_name].twt_at_logstart(log_name, water_vel, repl_vel, water_depth, kb)
 
         if sonic is None:
@@ -703,6 +736,10 @@ class Well(object):
         """
         Calculates the Voigt-Reuss-Hill bounds of parameter param, for the  fluid or mineral mixture defined in
         fluid_minerals, for the given Block.
+
+        IMPORTANT
+        If the fluids or minerals are defined using a "Calculation method", it is necessary to run XXX.calc_elastics()
+        on them before
 
         :param fluid_minerals:
             core.minerals.MineralMix
@@ -790,13 +827,6 @@ class Well(object):
         # The user have to apply these averages in the designated working interval later
         result = {}
         for wi, val in obj.items():
-            if wis is not None:
-                logger.warning('Currently, the fluid parameters are calculated using MD instead of TVD')
-                # TODO
-                # Make this function extract the tvd, not the MD !!!
-                this_tvd = np.mean(wis[self.well][wi])
-            else:
-                this_tvd = None
             complement = None
             this_fraction = None  # A volume fraction log
             this_component = None  #
@@ -808,7 +838,7 @@ class Well(object):
             for m in list(val.keys()):
                 info_txt += "  {}".format(m)
                 info_txt += "    K: {}, Mu: {}, Rho {}\n".format(
-                    val[m].calc_k(this_tvd).value, val[m].calc_mu(this_tvd).value, val[m].calc_rho(this_tvd).value)
+                    val[m].k.value, val[m].mu.value, val[m].rho.value)
                 info_txt += "    Volume fraction: {}\n".format(val[m].volume_fraction)
             logger.info(info_txt)
             print(info_txt)
@@ -840,11 +870,11 @@ class Well(object):
                         continue
                     this_fraction = self.block[block_name].logs[_name].data
                 if param == 'k':
-                    this_component = val[this_fm].calc_k(this_tvd).value
+                    this_component = val[this_fm].k.value
                 elif param == 'mu':
-                    this_component = val[this_fm].calc_mu(this_tvd).value
+                    this_component = val[this_fm].mu.value
                 elif param == 'rho':
-                    this_component = val[this_fm].calc_rho(this_tvd).value
+                    this_component = val[this_fm].rho.value
                 else:
                     this_component = None
 
@@ -1646,6 +1676,23 @@ class Block(object):
         return step
 
     step = property(get_step)
+
+    def get_md(self):
+        return self.logs['depth'].data
+
+    def get_tvd(self, tvd_key=None):
+        if tvd_key is None:
+            tvd_key = 'tvd'
+
+        if tvd_key not in self.log_names():
+            warn_txt = 'No True Vertical Depth log in {}, using MD'.format(self.well)
+            print('WARNING: {}'.format(warn_txt))
+            logger.warning(warn_txt)
+            tvd = self.get_md()
+        else:
+            tvd = self.logs[tvd_key].data
+        return tvd
+
 
     def keys(self):
         return self.__dict__.keys()

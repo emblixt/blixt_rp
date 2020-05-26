@@ -173,14 +173,18 @@ def collect_project_wells(well_table, target_dir):
     :param well_table:
     :return:
     """
-    from shutil import copyfile
+    from shutil import copyfile, SameFileError
     for las_file in list(well_table.keys()):
         if os.path.isfile(las_file):
             short_name = os.path.split(las_file)[-1]
             print('Copying file {} to {}'.format(
                 short_name, target_dir
             ))
-            copyfile(las_file, os.path.join(target_dir, short_name))
+            try:
+                copyfile(las_file, os.path.join(target_dir, short_name))
+            except SameFileError:
+                print('  File {} exists in target directory. Skipping to next'.format(short_name))
+                continue
 
 
 def read_sums_and_averages(filename, header=20):
@@ -501,6 +505,8 @@ def read_petrel_checkshots(filename, only_these_wells=None):
 
 
 def test_file_path(file_path, working_dir):
+    # Convert backward slashes to forward slashes
+    file_path = file_path.replace("\\", "/")
     if os.path.isfile(file_path):
         return file_path
     elif os.path.isfile(os.path.join(working_dir, file_path)):
@@ -652,7 +658,7 @@ def write_las(filename, wh, lh, data, overwrite=False):
     out += '# Modified on: {}\n'.format(wh['modification_date'].value)
     for key, value in data.items():
         if value.header['modification_history'] is not None:
-            out += '#  Modification: {}: {}\n'.format(key, value.header['modification_history'])
+            out += '#  Modification: {}: {}\n'.format(key, value.header['modification_history'].replace('\n','\n#   '))
 
     out += (
         '#--------------------------------------------------------------------\n'

@@ -160,29 +160,29 @@ class Mineral(object):
         """
         return self.__dict__.keys()
 
-    def calc_k(self, dummy_tvd):
+    def calc_k(self, dummy_bd):
         """
         Dummy function that makes Mineral objects behave same way as Fluid objects
-        :param dummy_tvd:
+        :param dummy_bd:
         :return:
         """
-        return object.__getattribute__(self, 'k')
+        pass
 
-    def calc_mu(self, dummy_tvd):
+    def calc_mu(self, dummy_bd):
         """
         Dummy function that makes Mineral objects behave same way as Fluid objects
-        :param dummy_tvd:
+        :param dummy_bd:
         :return:
         """
-        return object.__getattribute__(self, 'mu')
+        pass
 
-    def calc_rho(self, dummy_tvd):
+    def calc_rho(self, dummy_bd):
         """
         Dummy function that makes Mineral objects behave same way as Fluid objects
-        :param dummy_tvd:
+        :param dummy_bd:
         :return:
         """
-        return object.__getattribute__(self, 'rho')
+        pass
 
     def vp(self):
         """
@@ -235,19 +235,25 @@ class MineralMix(object):
                            "Volume fraction: {}\n".format(self.minerals[w][wi][m].volume_fraction)
         return out
 
+    def print_all_minerals(self):
+        out = ''
+        for w in list(self.minerals.keys()):
+            for wi in list(self.minerals[w].keys()):
+                out += self.print_minerals(w, wi)
+        return out
+
     def print_minerals(self, well_name, wi_name):
         out = 'Mineral mixture: {}, {}, {}\n'.format(well_name, wi_name, self.name)
         this_min = self.minerals[well_name][wi_name]
         for m in list(this_min.keys()):
             out += "    {}\n".format(m)
-            out += "      Status: {}\n".format(this_min[m].status)
             out += "      K: {}, Mu: {}, Rho {}\n".format(this_min[m].k.value,
                                                           this_min[m].mu.value,
                                                           this_min[m].rho.value)
-            if (not isnan(this_min[m].calculation_method)) and \
-                    (this_min[m].calculation_method != 'User specified'):
-                out += "      " \
-                       "Calculation method: {}, cutoff: {}\n".format(this_min[m].calculation_method, this_min[m].cutoffs)
+            out += "      " \
+                       "Calculation method: {}, cutoff: {}\n".format(
+                this_min[m].calculation_method, this_min[m].cutoffs)
+            out += "      Status: {}\n".format(this_min[m].status)
             out += "      " \
                    "Volume fraction: {}\n".format(this_min[m].volume_fraction)
         return out
@@ -265,7 +271,7 @@ class MineralMix(object):
             if isnan(name):
                 continue
             this_min = Mineral(
-                min_table['Calculation method'][i] if 'Calculation method' in list(min_table.keys()) else None,
+                min_table['Calculation method'][i] if 'Calculation method' in list(min_table.keys()) else 'User specified',
                 float(min_table['Bulk moduli [GPa]'][i]),
                 float(min_table['Shear moduli [GPa]'][i]),
                 float(min_table['Density [g/cm3]'][i]),
@@ -297,11 +303,10 @@ class MineralMix(object):
         self.minerals = min_mixes
         self.header['orig_file'] = filename
 
-
     def calc_elastics(self, wells, log_table, wis, block_name=None, calculation_method=None, debug=False):
         """
-        Calculates k, mu, and rho for each well and working interval they are defined in, and where the
-        mineral calculation method is set to interval average
+        Calculates k, mu, and rho for each well and working interval they are defined in, AND where the
+        mineral calculation method is set to interval average. The other minerals are left untouched
         :param wells:
             dict
             {well name: core.wells.Well} key: value pairs
@@ -331,14 +336,13 @@ class MineralMix(object):
             calculation_method = 'Interval average'
         if calculation_method != 'Interval average':
             raise NotImplementedError('{} calculation method not implemented yet')
+        lstyle = {'lw': 0.5, 'color': 'k', 'alpha': 0.2}
 
         # Keep track of number of minerals the elastic properties should be calculated from
-        _l = 0  # number of wells
-        figs = []
-        axes = []
+        figs = {}
+        axes = {}
 
         warn_txt = None
-        ii = 0
         for well_name, well in wells.items():
             # test if this well is listed in the mineral mixture
             if well_name not in list(self.minerals.keys()):
@@ -364,28 +368,23 @@ class MineralMix(object):
                     print('WARNING: {}'.format(warn_txt))
                 continue
 
-            ii += 1
+            figs[well_name] = {}
+            axes[well_name] = {}
             # count number of minerals we should plot and create figures and axes
-            _m = 0  # number of intervals
             _n = 0  # number of minerals
             if debug:
                 for jj, wi_name in enumerate(list(self.minerals[well_name].keys())):
                     for kk, mineral in enumerate(list(self.minerals[well_name][wi_name].keys())):
                         if self.minerals[well_name][wi_name][mineral].calculation_method == calculation_method:
-                            _m = jj + 1
-                            _n = kk + 1
-                # TODO There should be one figure per well and interval. Each figure should have _n rows,
-                # and three columns, one for vp, vs and rho each.
-                #figs.append(plt.figure(ii, figsize=(4*_m, 4*_n)))
-                #axes.append(figs[ii-1].subplots(nrows=_n, ncols=_m))
+                            _n += 1
+                    figs[well_name][wi_name] = plt.figure(figsize=(12, 4*_n))
+                    axes[well_name][wi_name] = figs[well_name][wi_name].subplots(nrows=_n, ncols=3)
 
-            _m = 0  # number of intervals
             _n = 0  # number of minerals
             for jj, wi_name in enumerate(list(self.minerals[well_name].keys())):
                 for kk, mineral in enumerate(list(self.minerals[well_name][wi_name].keys())):
                     if self.minerals[well_name][wi_name][mineral].calculation_method == calculation_method:
-                        _m = jj + 1
-                        _n = kk + 1
+                        _n += 1
                         # Start calculating the interval averages
                         if debug:
                             print('Start calculating the interval average of k, mu and rho for '
@@ -404,12 +403,36 @@ class MineralMix(object):
                         this_k = np.nanmedian(rho[mask] * (vp[mask]**2 - (4./3.) * vs[mask]**2) * 1.E-6)
                         if debug:
                             print(this_k, this_mu, this_rho)
-                        # TODO
-                        # plot input and results, \
+                            this_depth = well.block[block_name].logs['depth'].data[mask]
+                            # TODO the axes indices will only work when plotting one mineral (_n = 1)
+                            axes[well_name][wi_name][0].plot(rho[mask], this_depth)
+                            axes[well_name][wi_name][0].set_xlabel('Density [{}]'.format(
+                                well.block[block_name].logs[log_table['Density']].header.unit))
+                            axes[well_name][wi_name][0].axvline(this_rho, **lstyle)
+                            axes[well_name][wi_name][1].plot(vp[mask], this_depth)
+                            axes[well_name][wi_name][1].plot(vs[mask], this_depth)
+                            axes[well_name][wi_name][1].set_xlabel('Vp & Vs [m/s]')
+                            axes[well_name][wi_name][1].legend(['Vp', 'Vs'])
+                            axes[well_name][wi_name][2].plot(rho[mask]*vs[mask]**2 * 1.E-6, this_depth)
+                            axes[well_name][wi_name][2].plot(rho[mask] * (vp[mask]**2 - (4./3.)*vs[mask]**2) * 1.E-6,
+                                                             this_depth)
+                            axes[well_name][wi_name][2].set_xlabel('$\mu$ & K [GPa]')
+                            axes[well_name][wi_name][2].legend(['$\mu$', 'K'])
+                            axes[well_name][wi_name][2].axvline(this_mu, **lstyle)
+                            axes[well_name][wi_name][2].axvline(this_k, **lstyle)
+                            for an, ax in enumerate(axes[well_name][wi_name]):
+                                if an == 0:
+                                    ax.set_ylabel('MD [m]')
+                                ax.set_ylim(ax.get_ylim()[::-1])
+                            figs[well_name][wi_name].suptitle('{}, {}, {}'.format(well_name, wi_name, mineral))
+
                         # store the calculated elastic properties in the minerals object
-                        self.minerals[well_name][wi_name][mineral].k.value = this_k
-                        self.minerals[well_name][wi_name][mineral].mu.value = this_mu
-                        self.minerals[well_name][wi_name][mineral].rho.value = this_rho
+                        if not np.isnan(this_k):
+                            self.minerals[well_name][wi_name][mineral].k.value = this_k
+                        if not np.isnan(this_mu):
+                            self.minerals[well_name][wi_name][mineral].mu.value = this_mu
+                        if not np.isnan(this_rho):
+                            self.minerals[well_name][wi_name][mineral].rho.value = this_rho
                         # update the status of the mineral
                         self.minerals[well_name][wi_name][mineral].status = 'calculated from interval average'
                     else:

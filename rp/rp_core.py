@@ -778,8 +778,11 @@ def linear_brine_elastics():
     pass
 
 
-def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, block_name=None):
+def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, templates=None, block_name=None):
     """
+    Run fluid substitution using the defined fluids and minerals given in mineral_mix and fluid_mix, and only for the
+    wells where they have been defined.
+
 
     :param wells:
         dict
@@ -814,6 +817,10 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
     :param tag:
         str
         String to tag the resulting logs with
+    :param templates:
+        dict
+        templates that can contain well information such as kelly bushing and sea water depth
+        templates = utils.io.project_tempplates(wp.project_table)
     :param block_name:
         str
         Name of the log block which should contain the logs to fluid substitute
@@ -832,9 +839,18 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
     mm = mineral_mix
     fm = fluid_mix
 
+    # Calculate the elastic properties of the fluids
+    fm.calc_press_ref(wells, templates=templates)
+    fm.calc_elastics(wells, wis, templates=templates, block_name=block_name)
+
+    # and for the minerals
+    mm.calc_elastics(wells, log_table, wis, block_name=block_name)
 
     # Loop over all wells
     for wname, well in wells.items():
+        if wname not in list(fm.fluids['initial'].keys()):
+            print('Well {} not listed in the fluid mixture, skipping'.format(wname))
+            continue
         info_txt = 'Starting Gassmann fluid substitution on well {}'.format(wname)
         print('INFO: {}'.format(info_txt))
         logger.info(info_txt)
@@ -871,10 +887,6 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
 
         # Run the fluid substitution separately in each interval
         for wi in list(rho_f1_dict.keys()):
-            print('WORKING INTERVAL (USING MD INSTEAD OF TVD) {}'.format(wi.upper()))
-            # TODO Make this function extract the tvd, not the MD !!!
-            this_tvd = np.mean(wis[wname][wi])
-
             k_f1 = k_f1_dict[wi]
             rho_f1 = rho_f1_dict[wi]
             k_f2 = k_f2_dict[wi]
@@ -899,9 +911,9 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
                 mod_history = 'Calculated using Gassmann fluid substitution using following\n'
                 mod_history += 'Mineral mixtures: {}\n'.format(mm.print_minerals(wname, wi))
                 mod_history += 'Initial fluids: {}\n'.format(
-                    fm.print_fluids('initial', wname, wi, this_tvd))
+                    fm.print_fluids('initial', wname, wi))
                 mod_history += 'Final fluids: {}\n'.format(
-                    fm.print_fluids('final', wname, wi, this_tvd))
+                    fm.print_fluids('final', wname, wi))
                 new_header.modification_history = mod_history
                 new_data = deepcopy(xx.data)
                 new_data[mask] = yy[mask]
