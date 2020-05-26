@@ -212,8 +212,9 @@ class Fluid(object):
         else:
             out += '      K: {}, Mu: {}, Rho {}\n'.format(
                 self.k.value, self.mu.value, self.rho.value)
-            out += '      Volume fraction: {}\n'.format(self.volume_fraction)
             out += '      Calculation method: {}\n'.format(self.calculation_method.value)
+            out += '      Status: {}\n'.format(self.status.value)
+            out += '      Volume fraction: {}\n'.format(self.volume_fraction)
         return out
 
     def keys(self):
@@ -416,8 +417,9 @@ class FluidMix(object):
                 continue
             vf = mix_table['Volume fraction'][i]
             ftype = mix_table['Fluid type'][i]
-            #this_name = '{}_{}'.format(name.lower(), '' if isnan(ftype) else ftype.lower())
-            this_name = name.lower()
+            # Need to pair fluid name with fluid type to get unique fluid names in fluid mixture
+            this_name = '{}_{}'.format(name.lower(), '' if isnan(ftype) else ftype.lower())
+            #this_name = name.lower()
             if isnan(vf):
                 continue  # Avoid fluids where the volume fraction is not set
             this_subst = mix_table['Substitution order'][i].lower()

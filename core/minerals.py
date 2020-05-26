@@ -247,17 +247,13 @@ class MineralMix(object):
         this_min = self.minerals[well_name][wi_name]
         for m in list(this_min.keys()):
             out += "    {}\n".format(m)
-            out += "      Status: {}\n".format(this_min[m].status)
             out += "      K: {}, Mu: {}, Rho {}\n".format(this_min[m].k.value,
                                                           this_min[m].mu.value,
                                                           this_min[m].rho.value)
-            if (not isnan(this_min[m].calculation_method)) and \
-                    (this_min[m].calculation_method != 'User specified'):
-                out += "      " \
-                       "Calculation method: {}, cutoff: {}\n".format(this_min[m].calculation_method, this_min[m].cutoffs)
-            else:
-                out += "      " \
-                       "Calculation method: {}\n".format(this_min[m].calculation_method)
+            out += "      " \
+                       "Calculation method: {}, cutoff: {}\n".format(
+                this_min[m].calculation_method, this_min[m].cutoffs)
+            out += "      Status: {}\n".format(this_min[m].status)
             out += "      " \
                    "Volume fraction: {}\n".format(this_min[m].volume_fraction)
         return out

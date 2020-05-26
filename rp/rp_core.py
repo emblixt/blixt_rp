@@ -778,7 +778,7 @@ def linear_brine_elastics():
     pass
 
 
-def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, block_name=None):
+def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, templates=None, block_name=None):
     """
 
     :param wells:
@@ -814,6 +814,10 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
     :param tag:
         str
         String to tag the resulting logs with
+    :param templates:
+        dict
+        templates that can contain well information such as kelly bushing and sea water depth
+        templates = utils.io.project_tempplates(wp.project_table)
     :param block_name:
         str
         Name of the log block which should contain the logs to fluid substitute
@@ -832,6 +836,12 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
     mm = mineral_mix
     fm = fluid_mix
 
+    # Calculate the elastic properties of the fluids
+    fm.calc_press_ref(wells, templates=templates)
+    fm.calc_elastics(wells, wis, templates=templates)
+
+    # and for the minerals
+    mm.calc_elastics(wells, log_table, wis)
 
     # Loop over all wells
     for wname, well in wells.items():
