@@ -627,6 +627,7 @@ def softsand(K0, G0, phi, phic=0.4, Cn=8.6, P=10, f=1):
     '''
     Soft-sand (uncemented) model
     written by aadm (2015) from Rock Physics Handbook, p.258
+    page 359 in Rock Physics Handbook (2020)
 
     INPUT
     K0, G0: mineral bulk & shear modulus in GPa
@@ -649,6 +650,7 @@ def stiffsand(K0, G0, phi, phic=0.4, Cn=8.6, P=10, f=1):
     '''
     Stiff-sand model
     written by aadm (2015) from Rock Physics Handbook, p.260
+    page 354 in Rock Physics Handbook (2020)
 
     INPUT
     K0, G0: mineral bulk & shear modulus in GPa
@@ -665,6 +667,93 @@ def stiffsand(K0, G0, phi, phic=0.4, Cn=8.6, P=10, f=1):
     K_DRY  = -4/3*G0 + (((phi/phic)/(K_HM+4/3*G0)) + ((1-phi/phic)/(K0+4/3*G0)))**-1
     tmp    = G0/6*((9*K0+8*G0) / (K0+2*G0))
     G_DRY  = -tmp + ((phi/phic)/(G_HM+tmp) + ((1-phi/phic)/(G0+tmp)))**-1
+    return K_DRY, G_DRY
+
+
+def critpor(K0, G0, phi, phic=0.4):
+    '''
+    Critical porosity, Nur et al. (1991, 1995)
+    written by aadm (2015) from Rock Physics Handbook, p.353
+
+    INPUT
+    K0, G0: mineral bulk & shear modulus in GPa
+    phi: porosity
+    phic: critical porosity (default 0.4)
+    '''
+    K_DRY = K0 * (1 - phi / phic)
+    G_DRY = G0 * (1 - phi / phic)
+    return K_DRY, G_DRY
+
+
+def contactcement(K0, G0, phi, phic=0.4, Cn=8.6, Kc=37, Gc=45, scheme=2):
+    '''
+    Contact cement (cemented sand) model, Dvorkin-Nur (1996)
+    written by aadm (2015) from Rock Physics Handbook, p.255
+
+    INPUT
+    K0, G0: mineral bulk & shear modulus in GPa
+    phi: porosity
+    phic: critical porosity (default 0.4)
+    Cn: coordination nnumber (default 8.6)
+    Kc, Gc: cement bulk & shear modulus in GPa
+            (default 37, 45 i.e. quartz)
+    scheme: 1=cement deposited at grain contacts
+            2=uniform layer around grains (default)
+    '''
+    PR0 = (3 * K0 - 2 * G0) / (6 * K0 + 2 * G0)
+    PRc = (3 * Kc - 2 * Gc) / (6 * Kc + 2 * Gc)
+    if scheme == 1:  # scheme 1: cement deposited at grain contacts
+        alpha = ((phic - phi) / (3 * Cn * (1 - phic))) ** (1 / 4)
+    else:  # scheme 2: cement evenly deposited on grain surface
+        alpha = ((2 * (phic - phi)) / (3 * (1 - phic))) ** (1 / 2)
+    LambdaN = (2 * Gc * (1 - PR0) * (1 - PRc)) / (np.pi * G0 * (1 - 2 * PRc))
+    N1 = -0.024153 * LambdaN ** -1.3646
+    N2 = 0.20405 * LambdaN ** -0.89008
+    N3 = 0.00024649 * LambdaN ** -1.9864
+    Sn = N1 * alpha ** 2 + N2 * alpha + N3
+    LambdaT = Gc / (np.pi * G0)
+    T1 = -10 ** -2 * (2.26 * PR0 ** 2 + 2.07 * PR0 + 2.3) * LambdaT ** (0.079 * PR0 ** 2 + 0.1754 * PR0 - 1.342)
+    T2 = (0.0573 * PR0 ** 2 + 0.0937 * PR0 + 0.202) * LambdaT ** (0.0274 * PR0 ** 2 + 0.0529 * PR0 - 0.8765)
+    T3 = 10 ** -4 * (9.654 * PR0 ** 2 + 4.945 * PR0 + 3.1) * LambdaT ** (0.01867 * PR0 ** 2 + 0.4011 * PR0 - 1.8186)
+    St = T1 * alpha ** 2 + T2 * alpha + T3
+    K_DRY = 1 / 6 * Cn * (1 - phic) * (Kc + (4 / 3) * Gc) * Sn
+    G_DRY = 3 / 5 * K_DRY + 3 / 20 * Cn * (1 - phic) * Gc * St
+    return K_DRY, G_DRY
+
+
+def constantcement(K0, G0, phi, apc=10., phic=0.4, Cn=0.86, Kc=37, Gc=45, scheme=2):
+    """
+    Constant cement model, Avseth et al. 2000.
+    written by emblixt 2019 from Geophysics Today.
+    With a minor change so that we're dealing with percentage of cementation
+
+
+    It should be noted that the 'Absolute Percent Cement' (apc) represents the percentage of
+    cement within the whole volume, not a percentage relative to the critical porosity.
+    Therefore the well-sorted end member phi_b = phi_c - (percent_cement/100).
+
+    NOTE that phi should be smaller than phib = phic - apc/100. (Avseth 2005, p. 58)
+
+    INPUT
+    K0, G0: mineral bulk & shear modulus in GPa
+    phi: porosity
+    apc: absolute percent cement (in %)
+    phic: critical porosity (default 0.4)
+    Cn: coordination nnumber (default 8.6)
+    Kc, Gc: cement bulk & shear modulus in GPa
+            (default 37, 45 i.e. quartz)
+    scheme: 1=cement deposited at grain contacts
+            2=uniform layer around grains (default)
+    """
+    phib = phic - apc / 100.
+    if mymax(phi) > mymin(phib):
+        print('WARNING, phi, {:.2f}, should be smaller than the well sorted end-member porosity, phib, {:.2f}'.format(
+            mymax(phi), mymin(phib)))
+    K_b, G_b = contactcement(K0, G0, phib, phic, Cn, Kc, scheme)
+    Z = G_b * ((9. * K_b + 8. * G_b) / (K_b + 2. * G_b)) / 6.
+    t1 = 4. * G_b / 3.
+    K_DRY = ((phi / phib) / (K_b + t1) + (1. - phi / phib) / (K0 + t1)) ** (-1) - t1
+    G_DRY = ((phi / phib) / (G_b + Z) + (1. - phi / phib) / (G0 + Z)) ** (-1) - Z
     return K_DRY, G_DRY
 
 
