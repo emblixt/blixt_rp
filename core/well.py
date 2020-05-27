@@ -506,12 +506,26 @@ class Well(object):
         if kelly_bushing_keys is None:
             kelly_bushing_keys = def_kelly_bushing_keys
 
+        # First try the templates
+        if templates is not None:
+            if (self.well in list(templates.keys())) and \
+                    ('kb' in list(templates[self.well].keys())) and \
+                    (templates[self.well]['kb'] is not None):
+                info_txt += ' from templates'
+                print('INFO: {}'.format(info_txt))
+                logger.info(info_txt)
+                return templates[self.well]['kb']
+
+        # When above didn't work, try the header
         start_unit = ''
         for _key in list(self.header.keys()):
             if _key in kelly_bushing_keys:
                 if self.header[_key].value is None:
                     continue
                 this_kb = self.header[_key].value
+                if isinstance(this_kb, AttribDict):
+                    # TODO This should not be possible, but it happens! WHY?
+                    this_kb = this_kb.value
                 if isinstance(this_kb, str):
                     # TODO Remove any trailing units in the well reader instead of here
                     this_kb = float(this_kb[:-2])
@@ -537,16 +551,6 @@ class Well(object):
                 print('INFO: {}'.format(info_txt))
                 logger.info(info_txt)
                 return kb
-
-        # When above didn't work, try the templates
-        if templates is not None:
-            if (self.well in list(templates.keys())) and \
-                    ('kb' in list(templates[self.well].keys())) and \
-                    (templates[self.well]['kb'] is not None):
-                info_txt += ' from templates'
-                print('INFO: {}'.format(info_txt))
-                logger.info(info_txt)
-                return templates[self.well]['kb']
 
         info_txt += ' failed. No matching keys in header. Using ZERO'
         print('WARNING: {}'.format(info_txt))
@@ -574,6 +578,17 @@ class Well(object):
         if water_depth_keys is None:
             water_depth_keys = def_water_depth_keys
 
+        # First try the templates
+        if templates is not None:
+            if (self.well in list(templates.keys())) and \
+                    ('water depth' in list(templates[self.well].keys())) and \
+                    (templates[self.well]['water depth'] is not None):
+                info_txt += ' from templates'
+                print('INFO: {}'.format(info_txt))
+                logger.info(info_txt)
+                return templates[self.well]['water depth']
+
+        # When above didn't work, try the well header
         start_unit = ''
         for _key in list(self.header.keys()):
             if _key in water_depth_keys:
@@ -607,22 +622,12 @@ class Well(object):
                 logger.info(info_txt)
                 return wdepth
 
-        # When above didn't work, try the templates
-        if templates is not None:
-            if (self.well in list(templates.keys())) and \
-                    ('water depth' in list(templates[self.well].keys())) and \
-                    (templates[self.well]['water depth'] is not None):
-                info_txt += ' from templates'
-                print('INFO: {}'.format(info_txt))
-                logger.info(info_txt)
-                return templates[self.well]['water depth']
-
         info_txt += ' failed. No matching keys in header.'
         print('WARNING: {}'.format(info_txt))
         logger.warning(info_txt)
         return 0.0
 
-    def get_burial_depth(self, block_name=None, templates=None, tvd_key=None):
+    def get_burial_depth(self, templates=None, block_name=None, tvd_key=None):
         if block_name is None:
             block_name = def_lb_name
 
@@ -636,7 +641,6 @@ class Well(object):
             block_name = def_lb_name
 
         self.block[block_name].sonic_to_vel()
-
 
     def time_to_depth(self, log_name='vp', water_vel=None, repl_vel=None, water_depth=None, block_name=None,
                       sonic=None, feet_unit=None, us_unit=None,
@@ -968,7 +972,7 @@ class Well(object):
         def rename_cutoffs(_cutoffs):
             # When the cutoffs are based on log types, and not the individual log names, we need to
             # associate each log type with it FIRST INSTANCE log name if log_table is not set
-            this_cutoffs = {}
+            _this_cutoffs = {}
             for _key in list(_cutoffs.keys()):
                 if len(self.get_logs_of_type(_key)) < 1:
                     warn_txt = 'No logs of type {} in well {}'.format(_key, self.well)
@@ -976,10 +980,10 @@ class Well(object):
                     logger.warning(warn_txt)
                     continue
                 if log_table is not None:
-                    this_cutoffs[log_table(_key)] = _cutoffs[_key]
+                    _this_cutoffs[log_table[_key]] = _cutoffs[_key]
                 else:
-                    this_cutoffs[self.get_logs_of_type(_key)[0].name] = _cutoffs[_key]
-            return this_cutoffs
+                    _this_cutoffs[self.get_logs_of_type(_key)[0].name] = _cutoffs[_key]
+            return _this_cutoffs
 
         def apply_wis(_cutoffs):
             if (wis is None) or (wi_name is None):
@@ -1692,7 +1696,6 @@ class Block(object):
         else:
             tvd = self.logs[tvd_key].data
         return tvd
-
 
     def keys(self):
         return self.__dict__.keys()

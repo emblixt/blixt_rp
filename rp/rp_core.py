@@ -894,7 +894,7 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
             k0 = k0_dict[wi]
 
             # calculate the mask for the given cut-offs, and for the given working interval
-            well.calc_mask(cutoffs, wis=wis, wi_name=wi, name='this_mask')
+            well.calc_mask(cutoffs, wis=wis, wi_name=wi, name='this_mask', log_table=log_table)
             mask = lb.masks['this_mask'].data
 
             # Do the fluid substitution itself
