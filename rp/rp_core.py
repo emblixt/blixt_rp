@@ -650,7 +650,7 @@ def stiffsand(K0, G0, phi, phic=0.4, Cn=8.6, P=10, f=1):
     '''
     Stiff-sand model
     written by aadm (2015) from Rock Physics Handbook, p.260
-    page 354 in Rock Physics Handbook (2020)
+    page 361 in Rock Physics Handbook (2020)
 
     INPUT
     K0, G0: mineral bulk & shear modulus in GPa
