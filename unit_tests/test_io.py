@@ -46,7 +46,7 @@ class LasTestCase(unittest.TestCase):
             print(len(gen_keys), len(list(well_dict['data'].keys())))
             self.assertEqual(len(gen_keys), len(list(well_dict['data'].keys())))
 
-    def test_headers(self):
+    def test_header_types(self):
         """
         All header keys in the well header, and Block header should be of the AttribDict type
         :return:
@@ -55,10 +55,12 @@ class LasTestCase(unittest.TestCase):
         success = True
         for key in list(w.header.keys()):
             if not isinstance(w.header[key], AttribDict):
+                print(key, w.header[key])
                 success = False
         for lblock in list(w.block.keys()):
             for key in list(w.block[lblock].header.keys()):
                 if not isinstance(w.block[lblock].header[key], AttribDict):
+                    print(key, w.block[lblock].header[key])
                     success = False
         self.assertTrue(success)
 
@@ -80,6 +82,13 @@ class LasTestCase(unittest.TestCase):
             t = np.isnan(data)
             print('Data contains NaN:', any(t))
             self.assertTrue(any(t))
+
+    def test_well_info(self):
+        _las_file = os.path.join(LasTestCase.wp.working_dir, 'test_data/WrongWellInfo.las')
+        null_value, gen_keys, well_dict = read_las(_las_file)
+        for key in list(well_dict['well_info'].keys()):
+            print(well_dict['well_info'][key]['value'], type(well_dict['well_info'][key]['value']))
+
 
 class UtilsTestCase(unittest.TestCase):
     well_table = {'test_data/Well A.las':

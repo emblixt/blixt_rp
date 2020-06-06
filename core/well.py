@@ -526,9 +526,6 @@ class Well(object):
                 if isinstance(this_kb, AttribDict):
                     # TODO This should not be possible, but it happens! WHY?
                     this_kb = this_kb.value
-                if isinstance(this_kb, str):
-                    # TODO Remove any trailing units in the well reader instead of here
-                    this_kb = float(this_kb[:-2])
                 info_txt += ' using key: {:}, with value {:.2f} '.format(_key, this_kb)
                 if self.header[_key].unit.lower() == '':
                     # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
@@ -595,9 +592,6 @@ class Well(object):
                 if self.header[_key].value is None:
                     continue
                 this_wd = self.header[_key].value
-                if isinstance(this_wd, str):
-                    # TODO Remove any trailing units in the well reader instead of here
-                    this_wd = float(this_wd[:-2])
                 info_txt += ' using key: {:}, with value {:} ({}) '.format(_key, this_wd, type(this_wd))
                 if self.header[_key].unit.lower() == '':
                     # We assume it has the same unit as the Start, Stop, Step values, who's units are more often

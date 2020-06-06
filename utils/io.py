@@ -850,6 +850,7 @@ def convert(lines, file_format='las'):
     generated_keys = []
     null_val = None
     section = ""
+    length_units = ['m', 'ft']
     rules = {"version", "well_info", "parameter", "curve"}
     descriptions = []
     curve_names = None
@@ -938,7 +939,16 @@ def convert(lines, file_format='las'):
             # mnem = rename_log_name(mnem)
             unit = line[mnem_end:unit_end].strip()
             data = line[unit_end:colon_end].strip()
+            # in some las files, the unit is given directly behind the data, e.g "30.0 M"
+            # When this is the case, clean the data and try add the unit to the unit
+            if (data[-2:].lower().strip() in length_units) or (data[-3:].lower().strip() in length_units):
+                _tmp = data.split()
+                data = _tmp[0].strip()
+                _unit = _tmp[-1].strip()
+                if len(unit) == 0:
+                    unit = _unit
             desc = line[colon_end + 1:].strip()
+
             # in some las file, the description contains the column number at the start
             # use a regex to find an initial number, and remove it
             test = re.findall(r"^\d+", desc)
