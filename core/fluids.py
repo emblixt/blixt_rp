@@ -487,7 +487,7 @@ class FluidMix(object):
                     for fluid in list(self.fluids[subst_ordr][this_well][wi_name].keys()):
                         if self.fluids[subst_ordr][this_well][wi_name][fluid].pressure_ref.value == 0.0:
                             # try to extract water depth
-                            water_depth = wells[this_well].get_water_depth(templates=templates)
+                            water_depth = wells[this_well].get_from_well_info('water depth', templates=templates)
 
                             self.fluids[subst_ordr][this_well][wi_name][fluid].pressure_ref.value = \
                                 rho_sea * abs(water_depth) * 9.81 * 1.E-3   # MPa
