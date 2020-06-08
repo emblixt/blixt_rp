@@ -488,6 +488,84 @@ class Well(object):
             block_name = def_lb_name
         return self.block[block_name].header.strt.unit.lower()
 
+    def get_from_well_info(self, what, templates=None, block_name=None, search_keys=None):
+        """
+        Tries to return something (e.g. Kelly bushing or water depth) from well info, in unit meters.
+        :param what:
+            str
+            'kb' for kelly bushing
+            'water depth' for water depth
+        :param templates:
+            dict
+            templates that can contain the desired information for wells
+            templates = utils.io.project_tempplates(wp.project_table)
+        :param search_keys:
+            list
+            List of strings that can be the key for the desired information in the well header
+        :return:
+            float
+            value in meters
+        """
+        info_txt = 'Extract {} in well {}'.format(what, self.well)
+        if search_keys is None:
+            if what == 'kb':
+                search_keys = def_kelly_bushing_keys
+            elif what == 'water depth':
+                search_keys = def_water_depth_keys
+            else:
+                search_keys = None
+
+        # First try the templates
+        if templates is not None:
+            if (self.well in list(templates.keys())) and \
+                    (what in list(templates[self.well].keys())) and \
+                    (templates[self.well][what] is not None):
+                info_txt += ' from templates'
+                print('INFO: {}'.format(info_txt))
+                logger.info(info_txt)
+                return templates[self.well][what]
+
+        # When above didn't work, try the well header
+        start_unit = ''
+        if search_keys is None:
+            warn_txt = 'No keys, to search for {} in well info, is provided'.format(what)
+            print('WARNING: {}'.format(warn_txt))
+            logger.warning(warn_txt)
+            return None
+
+        for _key in list(self.header.keys()):
+            if _key in search_keys:
+                if self.header[_key].value is None:
+                    continue
+                this_result = self.header[_key].value
+                info_txt += ' using key: {:}, with value {:} ({}) '.format(_key, this_result, type(this_result))
+                if self.header[_key].unit.lower() == '':
+                    # We assume it has the same unit as the Start, Stop, Step values, who's units are more often set
+                    start_unit = self.depth_unit(block_name=block_name)
+                    if start_unit == 'm':
+                        info_txt += '[m].'
+                        return_value = this_result
+                    else:
+                        # assume it is in feet
+                        info_txt += '[feet].'
+                        return_value = cnvrt(this_result, 'ft', 'm')
+                elif self.header[_key].unit.lower() == 'm':
+                    info_txt += '[m].'
+                    return_value = this_result
+                else:
+                    # assume it is in feet
+                    info_txt += '[feet].'
+                    return_value = cnvrt(this_result, 'ft', 'm')
+
+                print('INFO: {}'.format(info_txt))
+                logger.info(info_txt)
+                return return_value
+
+        info_txt += ' failed. No matching keys in header.'
+        print('WARNING: {}'.format(info_txt))
+        logger.warning(info_txt)
+        return 0.0
+
     def get_kb(self, templates=None, block_name=None, kelly_bushing_keys=None):
         """
         Tries to return the Kelly bushing elevation in meters.
@@ -523,9 +601,9 @@ class Well(object):
                 if self.header[_key].value is None:
                     continue
                 this_kb = self.header[_key].value
-                if isinstance(this_kb, AttribDict):
-                    # TODO This should not be possible, but it happens! WHY?
-                    this_kb = this_kb.value
+                #if isinstance(this_kb, AttribDict):
+                #    # TODO This should not be possible, but it happens! WHY?
+                #    this_kb = this_kb.value
                 info_txt += ' using key: {:}, with value {:.2f} '.format(_key, this_kb)
                 if self.header[_key].unit.lower() == '':
                     # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
@@ -627,8 +705,8 @@ class Well(object):
 
         tvd = self.block[block_name].get_tvd(tvd_key=tvd_key)
 
-        return tvd - np.abs(self.get_water_depth(templates, block_name=block_name)) - \
-               np.abs(self.get_kb(templates, block_name=block_name))
+        return tvd - np.abs(self.get_from_well_info('water depth', templates, block_name=block_name)) - \
+               np.abs(self.get_from_well_info('kb', templates, block_name=block_name))
 
     def sonic_to_vel(self, block_name=None):
         if block_name is None:
@@ -691,9 +769,9 @@ class Well(object):
             repl_vel = 1600.
         if water_depth is None:
             # Tries to extract the water depth from the well header
-            water_depth = self.get_water_depth(templates=templates)
+            water_depth = self.get_from_well_info('water depth', templates=templates)
 
-        kb = self.get_kb(templates=templates)  # m
+        kb = self.get_from_well_info('kb', templates=templates)  # m
         log_start_twt = self.block[block_name].twt_at_logstart(log_name, water_vel, repl_vel, water_depth, kb)
 
         if sonic is None:
