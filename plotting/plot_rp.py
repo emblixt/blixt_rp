@@ -179,7 +179,7 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs, templates=None, legend_item
         elif (plot_type == 'VpVs-bd') or (plot_type == 'VpVs-tvd'):
             x_data = well.block[block_name].logs[log_table['P velocity'].lower()].data / \
                      well.block[block_name].logs[log_table['S velocity'].lower()].data
-            xtempl = {'full_name': 'VpVs', 'unit': '-'}
+            xtempl = {'full_name': 'Vp/Vs', 'unit': '-'}
             if plot_type == 'VpVs-bd':
                 y_data = well.get_burial_depth(templates, block_name)
                 ytempl = {'full_name': 'Burial depth', 'unit': 'm'}
