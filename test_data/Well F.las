@@ -12,7 +12,7 @@ WRAP.            NO                   :ONE LINE PER DEPTH STEP
 ~WELL INFORMATION
 #MNEM .UNIT      DATA                 :DESCRIPTION OF MNEMONIC
 #----------      ------------         -------------------------------
-STRT   .m        295.0                :START DEPTH
+STRT   .M        295.0                :START DEPTH
 STOP   .m        2636.1688            :STOP DEPTH
 STEP   .m        0.1524               :STEP DEPTH
 WELL   .         Well_F               :WELL

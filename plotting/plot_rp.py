@@ -15,7 +15,7 @@ opt1 = {'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
 opt2 = {'ha': 'right', 'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
 
 
-def plot_rp(wells, log_table, wis, wi_name, cutoffs, templates=None, legend_items=None,
+def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend_items=None,
             plot_type=None, ref_val=None, fig=None, ax=None, block_name=None, savefig=None, **kwargs):
 
     """
@@ -133,9 +133,12 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs, templates=None, legend_item
         # apply mask (which also deletes the mask itself)
         well.apply_mask('XXX')
         # create mask based on cutoffs
-        well.calc_mask(cutoffs, name='cmask', log_type_input=True, log_table=log_table)
-        mask = well.block[block_name].masks['cmask'].data
-        desc = well.block[block_name].masks['cmask'].header.desc
+        if cutoffs is not None:
+            well.calc_mask(cutoffs, name='cmask', log_type_input=True, log_table=log_table)
+            mask = well.block[block_name].masks['cmask'].data
+            desc = well.block[block_name].masks['cmask'].header.desc
+        else:
+            mask = None
 
         # collect data for plot
         if plot_type == 'AI-VpVs':

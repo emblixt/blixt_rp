@@ -1338,7 +1338,7 @@ class Well(object):
                 self.header.__setitem__('note', _note)
 
 
-        def add_logs_to_block(_well_dict, _block_name, _only_these_logs):
+        def add_logs_to_block(_well_dict, _block_name, _only_these_logs, _filename):
             """
             Helper function that add logs to the given block name.
 
@@ -1346,8 +1346,6 @@ class Well(object):
             :param _only_these_logs:
             :return:
             """
-            # TODO
-            # add las filename to Block header
 
             # Make sure depth is always read in
             if isinstance(_only_these_logs, dict) and ('depth' not in list(_only_these_logs.keys())):
@@ -1413,8 +1411,6 @@ class Well(object):
                             header=this_header
                         )
                         these_logs[_key].header.orig_filename = filename
-                        # TODO
-                        # test and try why the header.name = _key isn't necessary here!
                     else:
                         logger.warning("Log '{}' in {} is missing\n  [{}]".format(
                                 _key,
@@ -1442,11 +1438,15 @@ class Well(object):
             # Test if Block already exists
             if exists and same:
                 self.block[_block_name].logs.update(these_logs)
+                self.block[_block_name].header.orig_filename.value = '{}, {}'.format(
+                    self.block[_block_name].header.orig_filename.value, _filename
+                )
             else:
                 self.block[_block_name] = Block(
                     name=_block_name,
                     well=_well_dict['well_info']['well']['value'],
                     logs=these_logs,
+                    orig_filename=_filename,
                     header={
                         key: _well_dict['well_info'][key] for key in ['strt', 'stop', 'step']
                     }
@@ -1491,7 +1491,7 @@ class Well(object):
                 'unit': '',
                 'desc': 'Well name'}
             # Add logs to a Block
-            add_logs_to_block(well_dict, block_name, only_these_logs)
+            add_logs_to_block(well_dict, block_name, only_these_logs, filename)
 
         else:  # There is a well loaded already
             if well_dict['well_info']['well']['value'] == self.header.well.value:
@@ -1514,12 +1514,11 @@ class Well(object):
                 else:
                     add_well = False
 
-            # TODO make sure that adding a well with different name actually will work
             if add_well:
                 # Add all well specific headers to well header, except well name
                 add_headers(well_dict['well_info'], ['strt', 'stop', 'step', 'well'], note)
                 # add to existing LogBloc
-                add_logs_to_block(well_dict, block_name, only_these_logs)
+                add_logs_to_block(well_dict, block_name, only_these_logs, filename)
 
     def keys(self):
         return self.__dict__.keys()
@@ -1537,6 +1536,7 @@ class Block(object):
                  well=None,
                  logs=None,
                  masks=None,
+                 orig_filename=None,
                  header=None):
         self.supported_version = supported_version
         self.name = name
@@ -1549,6 +1549,8 @@ class Block(object):
             header['name'] = name
         if 'well' not in list(header.keys()) or header['well'] is None:
             header['well'] = well
+        if 'orig_filename' not in list(header.keys()) or header['orig_filename'] is None:
+            header['orig_filename'] = orig_filename
         self.header = Header(header)
 
         if logs is None:
