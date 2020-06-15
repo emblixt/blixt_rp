@@ -200,7 +200,7 @@ class Mineral(object):
         style = {'lw': 0.5, 'c': 'k'}
         phi = np.arange(0., 1, 0.02)
         for k in [0.01, 0.05, 0.1, 0.3, 0.5]:
-            plt.plot(phi , 1./(1. + phi/k), **style)
+            plt.plot(phi, 1./(1. + phi/k), **style)
 
         plt.plot(phi, 1. -phi, **style)
         plt.plot(phi, 1. -phi/phic, **style)
