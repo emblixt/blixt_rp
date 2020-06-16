@@ -29,6 +29,7 @@ from dataclasses import dataclass
 
 from utils.attribdict import AttribDict
 from utils.utils import info, isnan
+from utils.utils import log_table_in_smallcaps as small_log_table
 import utils.io as uio
 import rp.rp_core as rp
 import core.well as cw

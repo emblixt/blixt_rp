@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import utils.io as uio
 from plotting import crossplot as xp
 from utils.utils import nan_corrcoef
+from utils.utils import log_table_in_smallcaps as small_log_table
 
 logger = logging.getLogger(__name__)
 def_msk_name = 'Mask'  # default mask name
@@ -83,6 +84,7 @@ def calc_stats2_tops(
     :return:
     """
     # some initial setups
+    log_table = small_log_table(log_table)
     suffix, cutoffs_str = fix_strings(suffix, cutoffs)
     log_types = list(log_table.keys())
     logs = [n.lower() for n in list(log_table.values())]
@@ -211,6 +213,7 @@ def calc_stats2(
     :return:
     """
     # some initial setups
+    log_table = small_log_table(log_table)
     suffix, cutoffs_str = fix_strings(suffix, cutoffs)
     log_types = list(log_table.keys())
     logs = [n.lower() for n in list(log_table.values())]
@@ -602,6 +605,7 @@ def plot_histograms(logs, results, wi_name, ncols, well_names, results_per_well,
 
 def save_rokdoc_output_tops(rokdoc_output, results, interval, log_table, cutoffs_str, suffix):
     # Write result to RokDoc compatible excel Sums And Average xls file:
+    log_table = small_log_table(log_table)
     if rokdoc_output is not None:
         uio.write_sums_and_averages(rokdoc_output,
                                     [

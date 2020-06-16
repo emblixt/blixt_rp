@@ -195,3 +195,10 @@ def norm(arr, method='median'):
 
 def handle_sonic(well):
     raise NotImplementedError('Please use native well method, sonic_to_vel ')
+
+
+def log_table_in_smallcaps(log_table):
+    out_table = {}
+    for key in list(log_table.keys()):
+        out_table[key] = log_table.pop(key).lower()
+    return out_table

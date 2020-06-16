@@ -9,6 +9,7 @@ from plotting import crossplot as xp
 import rp.rp_core as rp
 import core.well as cw
 from utils.convert_data import convert as cnvrt
+from utils.utils import log_table_in_smallcaps as small_log_table
 
 logger = logging.getLogger(__name__)
 opt1 = {'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
@@ -82,6 +83,7 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
     """
     #
     # some initial setups
+    log_table = small_log_table(log_table)
     if block_name is None:
         block_name = cw.def_lb_name
 

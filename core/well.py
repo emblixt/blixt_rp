@@ -28,6 +28,7 @@ from utils.attribdict import AttribDict
 from utils.utils import info
 from utils.utils import nan_corrcoef
 from utils.utils import log_header_to_template as l2tmpl
+from utils.utils import log_table_in_smallcaps as small_log_table
 import utils.io as uio
 from utils.io import convert
 import utils.masks as msks
@@ -905,6 +906,8 @@ class Well(object):
                    'Volume': 'vcl'}
         :return:
         """
+        log_table = small_log_table(log_table)
+
         #
         # Helper functions
         #
