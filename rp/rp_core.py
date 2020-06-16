@@ -931,7 +931,7 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
     fm = fluid_mix
 
     # Calculate the elastic properties of the fluids
-    fm.calc_press_ref(wells, templates=templates)
+    fm.calc_press_ref(wells, templates=templates, block_name=block_name)
     fm.calc_elastics(wells, wis, templates=templates, block_name=block_name)
 
     # and for the minerals

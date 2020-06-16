@@ -42,7 +42,7 @@ def plot_multi_interfaces(sums, intfs, fbase=None, templates= None, suffix=None)
         intfs = [['Knurr shales', 'Knurr sands', 'b'],
                  ['Knurr shales', 'Knurr oil sands', 'g'],
                  ['Knurr shales', 'Knurr gas sands', 'r']]
-    :param save_to:
+    :param fbase:
         str
         base of the file names is where the plots are saved
         if None, no plots are saved
