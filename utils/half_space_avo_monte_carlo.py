@@ -26,7 +26,7 @@ def straight_line(x, a, b):
     return a*x + b
 
 
-def plot_multi_interfaces(sums, intfs, fbase=None, templates= None, suffix=None):
+def plot_multi_interfaces(sums, intfs, fbase=None, templates=None, suffix=None):
     """
     :param sums: 
         dict

@@ -198,7 +198,6 @@ def handle_sonic(well):
 
 
 def log_table_in_smallcaps(log_table):
-    out_table = {}
     for key in list(log_table.keys()):
-        out_table[key] = log_table.pop(key).lower()
-    return out_table
+        log_table[key] = log_table[key].lower()
+    return log_table
