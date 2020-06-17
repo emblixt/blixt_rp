@@ -9,13 +9,14 @@ from plotting import crossplot as xp
 import rp.rp_core as rp
 import core.well as cw
 from utils.convert_data import convert as cnvrt
+from utils.utils import log_table_in_smallcaps as small_log_table
 
 logger = logging.getLogger(__name__)
 opt1 = {'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
 opt2 = {'ha': 'right', 'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
 
 
-def plot_rp(wells, log_table, wis, wi_name, cutoffs, templates=None, legend_items=None,
+def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend_items=None,
             plot_type=None, ref_val=None, fig=None, ax=None, block_name=None, savefig=None, **kwargs):
 
     """
@@ -82,6 +83,7 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs, templates=None, legend_item
     """
     #
     # some initial setups
+    log_table = small_log_table(log_table)
     if block_name is None:
         block_name = cw.def_lb_name
 
@@ -133,9 +135,12 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs, templates=None, legend_item
         # apply mask (which also deletes the mask itself)
         well.apply_mask('XXX')
         # create mask based on cutoffs
-        well.calc_mask(cutoffs, name='cmask', log_type_input=True)
-        mask = well.block[block_name].masks['cmask'].data
-        desc = well.block[block_name].masks['cmask'].header.desc
+        if cutoffs is not None:
+            well.calc_mask(cutoffs, name='cmask', log_type_input=True, log_table=log_table)
+            mask = well.block[block_name].masks['cmask'].data
+            desc = well.block[block_name].masks['cmask'].header.desc
+        else:
+            mask = None
 
         # collect data for plot
         if plot_type == 'AI-VpVs':
@@ -159,6 +164,58 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs, templates=None, legend_item
             y_unit = '-'
             xtempl = {'full_name': 'AI', 'unit': x_unit}
             ytempl = {'full_name': 'Vp/Vs', 'unit': y_unit}
+
+        elif (plot_type == 'Vp-bd') or (plot_type == 'Vp-tvd'):
+            if 'P velocity' in list(log_table.keys()):
+                x_data = well.block[block_name].logs[log_table['P velocity'].lower()].data
+                x_unit = '{}'.format(well.block[block_name].logs[log_table['P velocity'].lower()].header.unit)
+                xtempl = {'full_name': log_table['P velocity'], 'unit': x_unit}
+            else:
+                x_data = 1. / well.block[block_name].logs[log_table['Sonic'].lower()].data
+                x_unit = '1/{}'.format(well.block[block_name].logs[log_table['Sonic'].lower()].header.unit)
+                xtempl = {'full_name': '1/Sonic', 'unit': x_unit}
+            if plot_type == 'Vp-bd':
+                y_data = well.get_burial_depth(templates, block_name)
+                ytempl = {'full_name': 'Burial depth', 'unit': 'm'}
+            else:
+                y_data = well.block[block_name].get_tvd()
+                ytempl = {'full_name': 'TVD', 'unit': 'm'}
+
+        elif (plot_type == 'VpVs-bd') or (plot_type == 'VpVs-tvd'):
+            x_data = well.block[block_name].logs[log_table['P velocity'].lower()].data / \
+                     well.block[block_name].logs[log_table['S velocity'].lower()].data
+            xtempl = {'full_name': 'Vp/Vs', 'unit': '-'}
+            if plot_type == 'VpVs-bd':
+                y_data = well.get_burial_depth(templates, block_name)
+                ytempl = {'full_name': 'Burial depth', 'unit': 'm'}
+            else:
+                y_data = well.block[block_name].get_tvd()
+                ytempl = {'full_name': 'TVD', 'unit': 'm'}
+
+        elif (plot_type == 'AI-bd') or (plot_type == 'AI-tvd'):
+            x_data = well.block[block_name].logs[log_table['P velocity'].lower()].data * \
+                     well.block[block_name].logs[log_table['Density'].lower()].data
+            x_unit = '{} {}'.format(well.block[block_name].logs[log_table['P velocity'].lower()].header.unit,
+                                    well.block[block_name].logs[log_table['Density'].lower()].header.unit)
+            xtempl = {'full_name': 'AI', 'unit': x_unit}
+            if plot_type == 'AI-bd':
+                y_data = well.get_burial_depth(templates, block_name)
+                ytempl = {'full_name': 'Burial depth', 'unit': 'm'}
+            else:
+                y_data = well.block[block_name].get_tvd()
+                ytempl = {'full_name': 'TVD', 'unit': 'm'}
+
+        elif (plot_type == 'Rho-bd') or (plot_type == 'Rho-tvd'):
+            x_data = well.block[block_name].logs[log_table['Density'].lower()].data
+            x_unit = '{}'.format(well.block[block_name].logs[log_table['Density'].lower()].header.unit)
+            xtempl = {'full_name': log_table['Density'], 'unit': x_unit}
+            if plot_type == 'Rho-bd':
+                y_data = well.get_burial_depth(templates, block_name)
+                ytempl = {'full_name': 'Burial depth', 'unit': 'm'}
+            else:
+                y_data = well.block[block_name].get_tvd()
+                ytempl = {'full_name': 'TVD', 'unit': 'm'}
+
         elif plot_type == 'Phi-Vp':
             x_data = well.block[block_name].logs[log_table['Porosity'].lower()].data
             x_unit = '{}'.format(well.block[block_name].logs[log_table['Porosity'].lower()].header.unit)
@@ -201,6 +258,8 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs, templates=None, legend_item
             **kwargs
         )
     ax.autoscale(True, axis='both')
+    if ('tvd' in plot_type) or ('bd' in plot_type):
+        ax.set_ylim(ax.get_ylim()[::-1])
     ax.set_title('{}, {}'.format(wi_name, desc))
     #
     if legend_items is None:
@@ -389,7 +448,7 @@ def test():
     _mu_min = np.ones(0)
     for well in wells.values():
         # calculate the mask for the given cut-offs, and for the given working interval
-        well.calc_mask(cutoffs, wis=wis, wi_name=wi_name, name='this_mask')
+        well.calc_mask(cutoffs, wis=wis, wi_name=wi_name, name='this_mask', log_table=log_table)
         mask = well.block['Logs'].masks['this_mask'].data
 
         _rho_min = np.append(_rho_min, well.calc_vrh_bounds(mm, param='rho', wis=wis, method='Voigt')[wi_name][mask])

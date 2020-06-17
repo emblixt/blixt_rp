@@ -6,6 +6,7 @@ from matplotlib.ticker import (AutoMinorLocator, MultipleLocator)
 import core.well as cw
 import utils.io as uio
 import utils.utils as uu
+from utils.utils import log_table_in_smallcaps as small_log_table
 import rp.rp_core as rp
 import tmp.tmp_avo_model as tta
 
@@ -35,6 +36,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         Log is plotted from top of working interval - buffer to base of working interval + buffer
     :return:
     """
+    log_table = small_log_table(log_table)
     if buffer is None:
         buffer = 50.
     if block_name is None:

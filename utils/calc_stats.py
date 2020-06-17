@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import utils.io as uio
 from plotting import crossplot as xp
 from utils.utils import nan_corrcoef
+from utils.utils import log_table_in_smallcaps as small_log_table
 
 logger = logging.getLogger(__name__)
 def_msk_name = 'Mask'  # default mask name
@@ -83,6 +84,7 @@ def calc_stats2_tops(
     :return:
     """
     # some initial setups
+    log_table = small_log_table(log_table)
     suffix, cutoffs_str = fix_strings(suffix, cutoffs)
     log_types = list(log_table.keys())
     logs = [n.lower() for n in list(log_table.values())]
@@ -108,7 +110,7 @@ def calc_stats2_tops(
 
         # collect data
         collect_data_for_this_interval(
-            wells, logs, tops, interval, results, results_per_well, depth_from_top, cutoffs, block_name=block_name)
+            wells, logs, tops, interval, results, results_per_well, depth_from_top, cutoffs, log_table, block_name=block_name)
 
         # create plot of logs vs depth and fill the interval plots
         plot_logs_vs_depth(logs, wells, interval, ncols, well_names, results_per_well, depth_from_top,
@@ -211,6 +213,7 @@ def calc_stats2(
     :return:
     """
     # some initial setups
+    log_table = small_log_table(log_table)
     suffix, cutoffs_str = fix_strings(suffix, cutoffs)
     log_types = list(log_table.keys())
     logs = [n.lower() for n in list(log_table.values())]
@@ -238,7 +241,7 @@ def calc_stats2(
 
         # collect data
         collect_data_for_this_interval(
-            wells, logs, wis, wi_name, results, results_per_well, depth_from_top, cutoffs, block_name=block_name)
+            wells, logs, wis, wi_name, results, results_per_well, depth_from_top, cutoffs, log_table, block_name=block_name)
 
         # create plot of logs vs depth and fill the interval plots
         plot_logs_vs_depth(logs, wells, wi_name, ncols, well_names, results_per_well, depth_from_top,
@@ -362,7 +365,7 @@ def test_top_presence(wis, wi_name, this_well_name, results_per_well, logs, dept
 
 
 def collect_data_for_this_interval_tops(
-        wells, logs, tops, interval, results, results_per_well, depth_from_top, cutoffs, block_name='Logs'
+        wells, logs, tops, interval, results, results_per_well, depth_from_top, cutoffs, log_table, block_name='Logs'
 ):
     # start looping over the well objects
     for this_well_name, well in wells.items():
@@ -377,7 +380,8 @@ def collect_data_for_this_interval_tops(
             name=def_msk_name,
             tops=tops,
             use_tops=interval['tops'],
-            log_type_input=True
+            log_type_input=True,
+            log_table=log_table
         )
 
         # Calculate mask
@@ -396,7 +400,7 @@ def collect_data_for_this_interval_tops(
 
 
 def collect_data_for_this_interval(
-        wells, logs, wis, wi_name, results, results_per_well, depth_from_top, cutoffs, block_name='Logs'
+        wells, logs, wis, wi_name, results, results_per_well, depth_from_top, cutoffs, log_table, block_name='Logs'
     ):
     # start looping over the well objects
     for this_well_name, well in wells.items():
@@ -411,7 +415,8 @@ def collect_data_for_this_interval(
             name=def_msk_name,
             wis=wis,
             wi_name=wi_name,
-            log_type_input=True
+            log_type_input=True,
+            log_table=log_table
         )
 
         # Calculate mask
@@ -600,6 +605,7 @@ def plot_histograms(logs, results, wi_name, ncols, well_names, results_per_well,
 
 def save_rokdoc_output_tops(rokdoc_output, results, interval, log_table, cutoffs_str, suffix):
     # Write result to RokDoc compatible excel Sums And Average xls file:
+    log_table = small_log_table(log_table)
     if rokdoc_output is not None:
         uio.write_sums_and_averages(rokdoc_output,
                                     [

@@ -29,6 +29,7 @@ from dataclasses import dataclass
 
 from utils.attribdict import AttribDict
 from utils.utils import info, isnan
+from utils.utils import log_table_in_smallcaps as small_log_table
 import utils.io as uio
 import rp.rp_core as rp
 import core.well as cw
@@ -195,6 +196,18 @@ class Mineral(object):
         vp = rp.v_p(self.k.value, self.mu.value, self.rho.value)
         return MineralData('vp', vp, 'km/s', 'P-wave velocity')
 
+    def plot(self, phic=0.4):
+        fig, ax = plt.subplots()
+        style = {'lw': 0.5, 'c': 'k'}
+        phi = np.arange(0., 1, 0.02)
+        for k in [0.01, 0.05, 0.1, 0.3, 0.5]:
+            plt.plot(phi, 1./(1. + phi/k), **style)
+
+        plt.plot(phi, 1. -phi, **style)
+        plt.plot(phi, 1. -phi/phic, **style)
+        plt.grid(True)
+
+        ax.set_ylim(0., 1.05)
 
 class MineralMix(object):
     """

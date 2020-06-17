@@ -28,6 +28,7 @@ from utils.attribdict import AttribDict
 from utils.utils import info
 from utils.utils import nan_corrcoef
 from utils.utils import log_header_to_template as l2tmpl
+from utils.utils import log_table_in_smallcaps as small_log_table
 import utils.io as uio
 from utils.io import convert
 import utils.masks as msks
@@ -488,155 +489,98 @@ class Well(object):
             block_name = def_lb_name
         return self.block[block_name].header.strt.unit.lower()
 
-    def get_kb(self, templates=None, block_name=None, kelly_bushing_keys=None):
+    def get_from_well_info(self, what, templates=None, block_name=None, search_keys=None):
         """
-        Tries to return the Kelly bushing elevation in meters.
+        Tries to return something (e.g. Kelly bushing or water depth) from well info, in unit meters.
+        :param what:
+            str
+            'kb' for kelly bushing
+            'water depth' for water depth
         :param templates:
             dict
-            templates that can contain the kelly bushing for wells
+            templates that can contain the desired information for wells
             templates = utils.io.project_tempplates(wp.project_table)
-        :param kelly_bushing_keys:
+        :param search_keys:
             list
-            List of strings that can be the key of the kelley bushing information in the well header
+            List of strings that can be the key for the desired information in the well header
         :return:
             float
-            Kelly bushing elevation in meters
+            value in meters
         """
-        info_txt = 'Extract Kelly bushing in well {}'.format(self.well)
-        if kelly_bushing_keys is None:
-            kelly_bushing_keys = def_kelly_bushing_keys
+        info_txt = 'Extract {} in well {}'.format(what, self.well)
+        if search_keys is None:
+            if what == 'kb':
+                search_keys = def_kelly_bushing_keys
+            elif what == 'water depth':
+                search_keys = def_water_depth_keys
+            else:
+                search_keys = None
 
-        start_unit = ''
-        for _key in list(self.header.keys()):
-            if _key in kelly_bushing_keys:
-                if self.header[_key].value is None:
-                    continue
-                this_kb = self.header[_key].value
-                if isinstance(this_kb, str):
-                    # TODO Remove any trailing units in the well reader instead of here
-                    this_kb = float(this_kb[:-2])
-                info_txt += ' using key: {:}, with value {:.2f} '.format(_key, this_kb)
-                if self.header[_key].unit.lower() == '':
-                    # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
-                    # set than for the Kelley bushing
-                    start_unit = self.depth_unit(block_name=block_name)
-                    if start_unit == 'm':
-                        info_txt += '[m].'
-                        kb = this_kb
-                    else:
-                        # assume it is in feet
-                        info_txt += '[feet].'
-                        kb = cnvrt(this_kb, 'ft', 'm')
-                elif self.header[_key].unit.lower() == 'm':
-                    info_txt += '[m].'
-                    kb = this_kb
-                else:
-                    # assume it is in feet
-                    info_txt += '[feet].'
-                    kb = cnvrt(this_kb, 'ft', 'm')
-                print('INFO: {}'.format(info_txt))
-                logger.info(info_txt)
-                return kb
-
-        # When above didn't work, try the templates
+        # First try the templates
         if templates is not None:
             if (self.well in list(templates.keys())) and \
-                    ('kb' in list(templates[self.well].keys())) and \
-                    (templates[self.well]['kb'] is not None):
+                    (what in list(templates[self.well].keys())) and \
+                    (templates[self.well][what] is not None):
                 info_txt += ' from templates'
                 print('INFO: {}'.format(info_txt))
                 logger.info(info_txt)
-                return templates[self.well]['kb']
+                return templates[self.well][what]
 
-        info_txt += ' failed. No matching keys in header. Using ZERO'
-        print('WARNING: {}'.format(info_txt))
-        logger.warning(info_txt)
-        return 0.0
-
-    def get_water_depth(self, templates=None, block_name=None, water_depth_keys=None):
-        """
-        Tries to return the water depth in meters.
-        :param templates:
-            dict
-            templates that can contain the sea water depth for wells
-            templates = utils.io.project_templates(wp.project_table)
-        :param water_depth_keys:
-            list
-            List of strings that can be the key of the water depth information in the well header
-        :return:
-            float
-            Water depth in meters
-        """
-        # TODO
-        # This function and get_kb are nearly similar
-        # Write a new general function that returns any header value in meters and replace these with the new
-        info_txt = 'Extract water depth in well {}'.format(self.well)
-        if water_depth_keys is None:
-            water_depth_keys = def_water_depth_keys
-
+        # When above didn't work, try the well header
         start_unit = ''
+        if search_keys is None:
+            warn_txt = 'No keys, to search for {} in well info, is provided'.format(what)
+            print('WARNING: {}'.format(warn_txt))
+            logger.warning(warn_txt)
+            return None
+
         for _key in list(self.header.keys()):
-            if _key in water_depth_keys:
+            if _key in search_keys:
                 if self.header[_key].value is None:
                     continue
-                this_wd = self.header[_key].value
-                if isinstance(this_wd, str):
-                    # TODO Remove any trailing units in the well reader instead of here
-                    this_wd = float(this_wd[:-2])
-                info_txt += ' using key: {:}, with value {:} ({}) '.format(_key, this_wd, type(this_wd))
+                this_result = self.header[_key].value
+                info_txt += ' using key: {:}, with value {:} ({}) '.format(_key, this_result, type(this_result))
                 if self.header[_key].unit.lower() == '':
-                    # We assume it has the same unit as the Start, Stop, Step values, who's units are more often
-                    # set than for the water depth
+                    # We assume it has the same unit as the Start, Stop, Step values, who's units are more often set
                     start_unit = self.depth_unit(block_name=block_name)
                     if start_unit == 'm':
                         info_txt += '[m].'
-                        wdepth = this_wd
+                        return_value = this_result
                     else:
                         # assume it is in feet
                         info_txt += '[feet].'
-                        wdepth = cnvrt(this_wd, 'ft', 'm')
-
+                        return_value = cnvrt(this_result, 'ft', 'm')
                 elif self.header[_key].unit.lower() == 'm':
                     info_txt += '[m].'
-                    wdepth = this_wd
+                    return_value = this_result
                 else:
                     # assume it is in feet
                     info_txt += '[feet].'
-                    wdepth = cnvrt(this_wd, 'ft', 'm')
-                print('INFO: {}'.format(info_txt))
-                logger.info(info_txt)
-                return wdepth
+                    return_value = cnvrt(this_result, 'ft', 'm')
 
-        # When above didn't work, try the templates
-        if templates is not None:
-            if (self.well in list(templates.keys())) and \
-                    ('water depth' in list(templates[self.well].keys())) and \
-                    (templates[self.well]['water depth'] is not None):
-                info_txt += ' from templates'
                 print('INFO: {}'.format(info_txt))
                 logger.info(info_txt)
-                return templates[self.well]['water depth']
+                return return_value
 
         info_txt += ' failed. No matching keys in header.'
         print('WARNING: {}'.format(info_txt))
         logger.warning(info_txt)
         return 0.0
 
-    def get_burial_depth(self, block_name=None, templates=None, tvd_key=None):
+    def get_burial_depth(self, templates=None, block_name=None, tvd_key=None):
         if block_name is None:
             block_name = def_lb_name
 
         tvd = self.block[block_name].get_tvd(tvd_key=tvd_key)
 
-        return tvd - np.abs(self.get_water_depth(templates, block_name=block_name)) - \
-               np.abs(self.get_kb(templates, block_name=block_name))
+        return tvd - np.abs(self.get_from_well_info('water depth', templates, block_name=block_name)) - \
+               np.abs(self.get_from_well_info('kb', templates, block_name=block_name))
 
     def sonic_to_vel(self, block_name=None):
         if block_name is None:
             block_name = def_lb_name
 
         self.block[block_name].sonic_to_vel()
-
 
     def time_to_depth(self, log_name='vp', water_vel=None, repl_vel=None, water_depth=None, block_name=None,
                       sonic=None, feet_unit=None, us_unit=None,
@@ -693,9 +637,9 @@ class Well(object):
             repl_vel = 1600.
         if water_depth is None:
             # Tries to extract the water depth from the well header
-            water_depth = self.get_water_depth(templates=templates)
+            water_depth = self.get_from_well_info('water depth', templates=templates)
 
-        kb = self.get_kb(templates=templates)  # m
+        kb = self.get_from_well_info('kb', templates=templates)  # m
         log_start_twt = self.block[block_name].twt_at_logstart(log_name, water_vel, repl_vel, water_depth, kb)
 
         if sonic is None:
@@ -962,13 +906,15 @@ class Well(object):
                    'Volume': 'vcl'}
         :return:
         """
+        log_table = small_log_table(log_table)
+
         #
         # Helper functions
         #
         def rename_cutoffs(_cutoffs):
             # When the cutoffs are based on log types, and not the individual log names, we need to
             # associate each log type with it FIRST INSTANCE log name if log_table is not set
-            this_cutoffs = {}
+            _this_cutoffs = {}
             for _key in list(_cutoffs.keys()):
                 if len(self.get_logs_of_type(_key)) < 1:
                     warn_txt = 'No logs of type {} in well {}'.format(_key, self.well)
@@ -976,10 +922,10 @@ class Well(object):
                     logger.warning(warn_txt)
                     continue
                 if log_table is not None:
-                    this_cutoffs[log_table(_key)] = _cutoffs[_key]
+                    _this_cutoffs[log_table[_key]] = _cutoffs[_key]
                 else:
-                    this_cutoffs[self.get_logs_of_type(_key)[0].name] = _cutoffs[_key]
-            return this_cutoffs
+                    _this_cutoffs[self.get_logs_of_type(_key)[0].name] = _cutoffs[_key]
+            return _this_cutoffs
 
         def apply_wis(_cutoffs):
             if (wis is None) or (wi_name is None):
@@ -1395,7 +1341,7 @@ class Well(object):
                 self.header.__setitem__('note', _note)
 
 
-        def add_logs_to_block(_well_dict, _block_name, _only_these_logs):
+        def add_logs_to_block(_well_dict, _block_name, _only_these_logs, _filename):
             """
             Helper function that add logs to the given block name.
 
@@ -1403,8 +1349,6 @@ class Well(object):
             :param _only_these_logs:
             :return:
             """
-            # TODO
-            # add las filename to Block header
 
             # Make sure depth is always read in
             if isinstance(_only_these_logs, dict) and ('depth' not in list(_only_these_logs.keys())):
@@ -1470,8 +1414,6 @@ class Well(object):
                             header=this_header
                         )
                         these_logs[_key].header.orig_filename = filename
-                        # TODO
-                        # test and try why the header.name = _key isn't necessary here!
                     else:
                         logger.warning("Log '{}' in {} is missing\n  [{}]".format(
                                 _key,
@@ -1499,11 +1441,15 @@ class Well(object):
             # Test if Block already exists
             if exists and same:
                 self.block[_block_name].logs.update(these_logs)
+                self.block[_block_name].header.orig_filename.value = '{}, {}'.format(
+                    self.block[_block_name].header.orig_filename.value, _filename
+                )
             else:
                 self.block[_block_name] = Block(
                     name=_block_name,
                     well=_well_dict['well_info']['well']['value'],
                     logs=these_logs,
+                    orig_filename=_filename,
                     header={
                         key: _well_dict['well_info'][key] for key in ['strt', 'stop', 'step']
                     }
@@ -1548,7 +1494,7 @@ class Well(object):
                 'unit': '',
                 'desc': 'Well name'}
             # Add logs to a Block
-            add_logs_to_block(well_dict, block_name, only_these_logs)
+            add_logs_to_block(well_dict, block_name, only_these_logs, filename)
 
         else:  # There is a well loaded already
             if well_dict['well_info']['well']['value'] == self.header.well.value:
@@ -1571,12 +1517,11 @@ class Well(object):
                 else:
                     add_well = False
 
-            # TODO make sure that adding a well with different name actually will work
             if add_well:
                 # Add all well specific headers to well header, except well name
                 add_headers(well_dict['well_info'], ['strt', 'stop', 'step', 'well'], note)
                 # add to existing LogBloc
-                add_logs_to_block(well_dict, block_name, only_these_logs)
+                add_logs_to_block(well_dict, block_name, only_these_logs, filename)
 
     def keys(self):
         return self.__dict__.keys()
@@ -1594,6 +1539,7 @@ class Block(object):
                  well=None,
                  logs=None,
                  masks=None,
+                 orig_filename=None,
                  header=None):
         self.supported_version = supported_version
         self.name = name
@@ -1606,6 +1552,8 @@ class Block(object):
             header['name'] = name
         if 'well' not in list(header.keys()) or header['well'] is None:
             header['well'] = well
+        if 'orig_filename' not in list(header.keys()) or header['orig_filename'] is None:
+            header['orig_filename'] = orig_filename
         self.header = Header(header)
 
         if logs is None:
@@ -1692,7 +1640,6 @@ class Block(object):
         else:
             tvd = self.logs[tvd_key].data
         return tvd
-
 
     def keys(self):
         return self.__dict__.keys()
