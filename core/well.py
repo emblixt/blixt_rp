@@ -906,7 +906,8 @@ class Well(object):
                    'Volume': 'vcl'}
         :return:
         """
-        log_table = small_log_table(log_table)
+        if log_table is not None:
+            log_table = small_log_table(log_table)
 
         #
         # Helper functions
