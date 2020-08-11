@@ -16,7 +16,7 @@ Take inspiration from obspy and converter to create these objects
     GNU Lesser General Public License, Version 3
     (https://www.gnu.org/copyleft/lesser.html)
 
-    An extra line to test GitHub via Visua
+    An extra line to test GitHub via VisualStudio
 """
 from datetime import datetime
 import numpy as np
