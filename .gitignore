@@ -1,5 +1,9 @@
-/venv/
-/.ipynb_checkpoints/
-/.idea/
-/Fignon notebook.ipynb
-/local_scripts/
+venv/
+.ipynb_checkpoints/
+.idea/
+.pytest_cache/
+.vs/
+**/__pycache__
+*.pyc
+local_scripts/
+
