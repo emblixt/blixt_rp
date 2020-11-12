@@ -27,6 +27,8 @@ from scipy.optimize import least_squares
 import warnings
 import logging
 
+from utils.templates import handle_template
+
 log = logging.getLogger(__name__)
 
 if sys.version_info > (3, 3):
@@ -161,54 +163,6 @@ def plot(
     :return:
     """
 
-    def handle_template(template_dict):
-        """
-        Goes through the given template dictionary and returns values directly useful for the scatter plot
-        :param template_dict:
-            see x[y,c]templ in mother function
-        :return:
-        label, lim, cmap, cnt, bnds, scale
-        """
-        label = ''
-        lim = [None, None]
-        cmap = None
-        cnt = None
-        bnds = None
-        scale = 'lin'
-        if isinstance(template_dict, dict):
-            key_list = list(template_dict.keys())
-
-            label = ''
-            if 'full_name' in key_list:
-                label += template_dict['full_name']
-            if 'unit' in key_list:
-                label += ' [{}]'.format(template_dict['unit'])
-            if 'min' in key_list:
-                try:
-                    lim[0] = float(template_dict['min'])
-                except:
-                    lim[0] = None
-            if 'max' in key_list:
-                try:
-                    lim[1] = float(template_dict['max'])
-                except:
-                    lim[1] = None
-            if 'colormap' in key_list:
-                cmap = template_dict['colormap']
-            if 'center' in key_list:
-                cnt = template_dict['center']
-            if 'bounds' in key_list:
-                bnds = template_dict['bounds']
-            if 'scale' in key_list:
-                scale = template_dict['scale']
-
-        elif template_dict is None:
-            pass
-        else:
-            raise OSError('Template should be a dictionary')
-
-        return label, lim, cmap, cnt, bnds, scale
-
     l_fonts = kwargs.pop('l_fonts', 16)
     t_fonts = kwargs.pop('t_fonts', 13)
     grid = kwargs.pop('grid', True)
@@ -264,7 +218,7 @@ def plot(
 
     if (cdata is not None) and (not isinstance(cdata, str)):
         cdata = cdata[mask][odi]
-    if pdata is not None:
+    if isinstance(pdata, np.ndarray):
         npdata = pdata[~mask][nodi]
         pdata = pdata[mask][odi]
     else:

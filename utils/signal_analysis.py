@@ -20,8 +20,12 @@ def rolling_window(a, window_len):
 def smooth(x, window_len=11, window='hanning', method='convolution', interp_vec=None):
     """smooth the data using a window with requested size.
 
-    This method is based on the convolution of a scaled window with the signal.
-    The signal is prepared by introducing reflected copies of the signal 
+    This method is based on the code given here:
+    https://scipy-cookbook.readthedocs.io/items/SignalSmooth.html
+    Modifed to use not only convolution of a scaled window with the signal, but also include a
+    running median filter and cubic spline interpolation.
+
+    Under convolution, the signal is prepared by introducing reflected copies of the signal 
     (with the window size) in both ends so that transient parts are minimized
     in the begining and end part of the output signal.
 
@@ -95,4 +99,78 @@ def smooth(x, window_len=11, window='hanning', method='convolution', interp_vec=
     return y
 
 
+def ampspec(signal, sr, smoothing=None, window_len=None):
+    '''
+    ampspec (C) aadm 2016
+    Calculates amplitude spectrum of a signal with FFT,  optionally smoothed.
+    
+    Origin:
+    https://nbviewer.jupyter.org/github/aadm/geophysical_notes/blob/master/playing_with_seismic.ipynb
+
+    Slightly modified and upgraded by Erik Mårten Blixt 2020-08-19
+
+    :param signal: 
+        1D numpy array
+
+    :param sr: 
+        float
+        sample rate in s
+
+    :param smoothing: 
+        str
+        'cubic_spline:  smooths the spectrum using cubic interpolation
+        'median'
+
+    OUTPUT
+    freq: frequency
+    amp: amplitude
+    '''
+
+    SIGNAL = np.fft.fft(signal)
+    freq = np.fft.fftfreq(signal.size, d=sr)
+    keep = freq>=0
+    SIGNAL = np.abs(SIGNAL[keep])
+    freq = freq[keep]
+    if smoothing == 'cubic_spline':
+        freq0=np.linspace(freq.min(),freq.max()/2,freq.size*10)
+        #f = interp1d(freq, SIGNAL, kind='cubic')
+        f = smooth(SIGNAL, method='cubic_spline', interp_vec=freq)
+        return freq0, f(freq0)
+
+    elif smoothing == 'median':
+        if window_len is None: 
+            window_len = 11
+        return freq, smooth(SIGNAL, window_len=window_len, method='median')
+        
+    else:
+        return freq, SIGNAL
+
+
+def fullspec(data, sr):
+    '''
+    fullspec (C) aadm 2016-2018
+    Calculates amplitude spectrum of 2D numpy array.
+
+    INPUT
+    data: 2D numpy array, shape=(traces, samples)
+    sr: sample rate in s
+
+    OUTPUT
+    freq: frequency
+    amp: amplitude
+    db: amplitude in dB scale
+    f_peak: average peak frequency
+    '''
+    amps, peaks = [], []
+    for i in range(data.shape[0]):
+        trace = data[i,:]
+        freq, amp = ampspec(trace, sr)
+        peak = freq[np.argmax(amp)]
+        amps.append(amp)
+        peaks.append(peak)
+    amp0 = np.mean(np.dstack(amps), axis=-1)
+    amp0 = np.squeeze(amp0)
+    f_peak = np.mean(peaks)
+    print('freq peak: {:.2f} Hz'.format(f_peak))
+    return freq, amp0, f_peak
 

@@ -1,0 +1,109 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{5f8b9f6c-881d-4d48-93a2-9c964299539b}</ProjectGuid>
+    <ProjectHome />
+    <StartupFile>core\machine_learning.py</StartupFile>
+    <SearchPath>..\blixt_rp</SearchPath>
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <InterpreterId>Global|PythonCore|3.7</InterpreterId>
+    <TestFramework>unittest</TestFramework>
+    <UnitTestPattern>test*.py</UnitTestPattern>
+    <UnitTestRootDirectory>C:\Users\marten\PycharmProjects\blixt_rp\unit_tests\</UnitTestRootDirectory>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <PropertyGroup>
+    <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="FluidSub_log.txt" />
+    <Content Include="images\Annotation 2020-02-11 093608.png" />
+    <Content Include="images\Fluid substitution - fluidmixs.png" />
+    <Content Include="images\Fluid substitution - fluids.png" />
+    <Content Include="images\Fluid substitution - Mineralmixs.png" />
+    <Content Include="images\Fluid substitution - Minerals.png" />
+    <Content Include="images\Fluid substitution - wells.png" />
+    <Content Include="images\LogTemplates.png" />
+    <Content Include="images\ProjectTable.png" />
+    <Content Include="images\ProjectTable_working_intervals.png" />
+    <Content Include="images\WellSettings.png" />
+    <Content Include="local_scripts\fluidmixes.png" />
+    <Content Include="local_scripts\fluids.png" />
+    <Content Include="local_scripts\minerals.png" />
+    <Content Include="local_scripts\wwii_bombs.txt" />
+    <Content Include="MyProject_log.txt" />
+    <Content Include="results_folder\empty_file.txt" />
+    <Content Include="test_log.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="core\converter.py" />
+    <Compile Include="core\fluids.py" />
+    <Compile Include="core\log_curve.py" />
+    <Compile Include="core\machine_learning.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="core\minerals.py" />
+    <Compile Include="core\wavelets.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="core\seismic.py" />
+    <Compile Include="core\well.py" />
+    <Compile Include="introduction_to_blixt_rp.py" />
+    <Compile Include="local_scripts\MidtNorge_python.py" />
+    <Compile Include="local_scripts\run_python_for_fignon.py" />
+    <Compile Include="local_scripts\test_harmonize_logs.py" />
+    <Compile Include="plotting\crossplot.py" />
+    <Compile Include="plotting\plot_logs.py" />
+    <Compile Include="plotting\plot_reflectivity.py" />
+    <Compile Include="plotting\plot_rp.py" />
+    <Compile Include="rp\moduli.py" />
+    <Compile Include="rp\rp_core.py" />
+    <Compile Include="run_fluid_substitution.py" />
+    <Compile Include="tmp\tmp_avo_model.py" />
+    <Compile Include="unit_tests\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="unit_tests\test_gassmann.py" />
+    <Compile Include="unit_tests\test_io.py" />
+    <Compile Include="unit_tests\test_masking.py" />
+    <Compile Include="unit_tests\test_plots.py" />
+    <Compile Include="unit_tests\test_rp.py" />
+    <Compile Include="unit_tests\test_vrh_bounds.py" />
+    <Compile Include="utils\attribdict.py" />
+    <Compile Include="utils\calc_stats.py" />
+    <Compile Include="utils\convert_data.py" />
+    <Compile Include="utils\curve_fitting.py" />
+    <Compile Include="utils\half_space_avo_monte_carlo.py" />
+    <Compile Include="utils\harmonize_logs.py" />
+    <Compile Include="utils\io.py" />
+    <Compile Include="utils\masks.py" />
+    <Compile Include="utils\NPD_factpages.py" />
+    <Compile Include="utils\NPD_wellnames.py" />
+    <Compile Include="utils\signal_analysis.py" />
+    <Compile Include="utils\templates.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="utils\utils.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="core" />
+    <Folder Include="images" />
+    <Folder Include="local_scripts" />
+    <Folder Include="plotting" />
+    <Folder Include="results_folder" />
+    <Folder Include="rp" />
+    <Folder Include="tmp" />
+    <Folder Include="unit_tests" />
+    <Folder Include="utils" />
+  </ItemGroup>
+  <ItemGroup>
+    <InterpreterReference Include="Global|PythonCore|3.7" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+</Project>

@@ -9,5 +9,6 @@ TestResults/
 local_scripts/
 ~$*
 *log.txt
+.sln
 results_folder/*.las
 results_folder/*.png

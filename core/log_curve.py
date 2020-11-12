@@ -12,8 +12,8 @@ from datetime import datetime
 from copy import deepcopy
 import numpy as np
 
-from utils.smoothing import rolling_window
-from utils.smoothing import smooth as _smooth
+from utils.signal_analysis import rolling_window
+from utils.signal_analysis import smooth as _smooth
 
 
 class Header(AttribDict):

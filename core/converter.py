@@ -144,8 +144,8 @@ class Converter():
 
                 if line[:4] == '  No':
                     # parse line of units
-                    #unit_names = [t.strip() for t in line.split('\t')]
-					unit_names = [t.strip() for t in line.split()]
+                    # unit_names = [t.strip() for t in line.split('\t')]
+                    unit_names = [t.strip() for t in line.split()]
                     unit_names = [t.replace('[', '').replace(']', '') for t in unit_names]
 
                     for this_curve_name, this_unit_name , this_description in zip(curve_names, unit_names, descriptions):
