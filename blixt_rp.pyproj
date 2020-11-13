@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{5f8b9f6c-881d-4d48-93a2-9c964299539b}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>core\machine_learning.py</StartupFile>
+    <StartupFile>core\well.py</StartupFile>
     <SearchPath>..\blixt_rp</SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>

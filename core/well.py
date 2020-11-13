@@ -34,7 +34,7 @@ from utils.io import convert
 import utils.masks as msks
 from utils.utils import arrange_logging
 from utils.harmonize_logs import harmonize_logs as fixlogs
-from plotting import crossplot as xp
+from plotting.crossplot import crossplot as xp
 from core.minerals import MineralMix
 from core.log_curve import LogCurve
 import rp.rp_core as rp
@@ -332,6 +332,18 @@ class Project(object):
                 well.block[block_name].logs[key].header.well = wname
 
         return all_wells
+
+    def data_frame(self, block_name=None, rename_logs=None):
+        import pandas as pd
+        all_wells = self.load_all_wells(block_name=block_name, rename_logs=rename_logs)
+
+        log_names = []
+        for well_name in list(all_wells.keys()):
+            for this_log_name in all_wells[well_name].log_names():
+                log_names.append(this_log_name)
+
+        log_names = list(set(log_names))
+        return log_names
 
 
 class Header(AttribDict):
@@ -1904,11 +1916,15 @@ def add_one(instring):
 def test():
     import utils.io as uio
     wp = Project(name='MyProject', log_to_stdout=True)
-    well_table = uio.project_wells(wp.project_table, wp.working_dir)
-    w = Well()
-    las_file = list(well_table.keys())[0]
-    logs = list(well_table[las_file]['logs'].keys())
-    print(logs)
+    
+    print(wp.data_frame)
+
+#    well_table = uio.project_wells(wp.project_table, wp.working_dir)
+#    w = Well()
+#    las_file = list(well_table.keys())[0]
+#    logs = list(well_table[las_file]['logs'].keys())
+#    print(logs)
+
 #    w.read_las(las_file, only_these_logs=well_table[las_file]['logs'])
 #
 #    w.calc_mask({'test': ['>', 10], 'phie': ['><', [0.05, 0.15]]}, name=def_msk_name)
