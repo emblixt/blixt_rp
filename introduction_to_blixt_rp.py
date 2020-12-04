@@ -9,20 +9,16 @@ from plotting import plot_rp as prp
 from plotting import plot_logs as ppl
 
 def main():
-<<<<<<< HEAD
-=======
     # # Introduction
     #
     # ## Project table
     # The Excel sheet *project_table.xlsx*, in the *excels* folder of the install directory, is the important hub for
     # which wells, and well logs, to use.
-
->>>>>>> 837206e0d7dad9619ea04334c9f2f567c2caafac
     # ## Create a wells project
+
     wp = Project(
         name='MyProject',
         project_table='excels/project_table.xlsx',
-<<<<<<< HEAD
         #working_dir='X:/Some/File path/On your/system'
     )
 
@@ -43,8 +39,6 @@ def main():
 
     # To look at the content of this Block, you can start by pointing variable to this Block, so that it is easier to work with it
     this_block = this_well.block['Logs']
-=======
-    )
 
     log_table = {'P velocity': 'vp_dry', 'S velocity': 'vs_dry', 'Density': 'rho_dry', 'Porosity': 'phie', 'Volume': 'vcl'}
 
@@ -66,15 +60,11 @@ def main():
 
     this_block = this_well.block['Logs']
     print('\nThe members of block {}:'.format(this_block.name))
->>>>>>> 837206e0d7dad9619ea04334c9f2f567c2caafac
     print(this_block.keys())
 
 
     # The *header* contain information about the start, stop and step values used
-<<<<<<< HEAD
-=======
     print('\nThe header of block {}:'.format(this_block.name))
->>>>>>> 837206e0d7dad9619ea04334c9f2f567c2caafac
     print(this_block.header)
 
 
@@ -88,24 +78,17 @@ def main():
 
 
     # ## Load working intervals
-<<<<<<< HEAD
     # The working intervals for each well is specified in the *Working intervals* sheet of the project table.
-    wis = uio.project_working_intervals(wp.project_table)
-
-    # ## Define cutoffs
-=======
     wis = uio.project_working_intervals(wp.project_table)
 
 
     # ## Define cutoffs
     # Cut offs that are used to classify the data (e.g. sands or shales).
->>>>>>> 837206e0d7dad9619ea04334c9f2f567c2caafac
     cutoffs_sands = {'Volume': ['<', 0.5], 'Porosity': ['>', 0.1]}
     cutoffs_shales = {'Volume': ['>', 0.5], 'Porosity': ['<', 0.1]}
 
 
     # ## Plotting data
-<<<<<<< HEAD
     log_table = {'P velocity': 'vp_dry', 'S velocity': 'vs_dry', 'Density': 'rho_dry', 'Porosity': 'phie', 'Volume': 'vcl'}
     ppl.overview_plot(wells, log_table, wis, 'SAND E', templates, log_types=list(log_table.keys()))
 
@@ -120,7 +103,6 @@ def main():
     w.calc_mask(cutoffs_sands, 'sands')
     mask = w.block['Logs'].masks['sands'].data
     w.depth_plot('P velocity', wis=wis, mask=mask, show_masked=True)
-=======
     # If you're interested in one specific working interval, the command
     ppl.overview_plot(wells, log_table, wis, 'SAND E', templates, log_types=list(log_table.keys()))
     # gives you an overview whether the specified logs are present in the requested working interval, and what depth the interval is at.
@@ -134,7 +116,6 @@ def main():
     this_well.calc_mask(cutoffs_sands, 'sands')
     mask = this_well.block['Logs'].masks['sands'].data
     this_well.depth_plot('P velocity', wis=wis, mask=mask, show_masked=True)
->>>>>>> 837206e0d7dad9619ea04334c9f2f567c2caafac
 
     prp.plot_rp(
         wells,
@@ -148,13 +129,8 @@ def main():
         edge_color=False
     )
 
-<<<<<<< HEAD
     plt.show()
 
 if __name__ == '__main__':
     main()
-=======
-if __name__ == '__main__':
-    main()
     plt.show()
->>>>>>> 837206e0d7dad9619ea04334c9f2f567c2caafac

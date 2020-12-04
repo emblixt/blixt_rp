@@ -8,6 +8,7 @@ import utils.io as uio
 from plotting import crossplot as xp
 from utils.utils import nan_corrcoef
 from utils.utils import log_table_in_smallcaps as small_log_table
+import utils.definitions as ud
 
 logger = logging.getLogger(__name__)
 def_msk_name = 'Mask'  # default mask name
@@ -22,7 +23,7 @@ def calc_stats2_tops(
         templates=None,
         rokdoc_output=None,
         working_dir=None,
-        block_name='Logs',
+        block_name=ud.def_lb_name,
         suffix=None
 ):
     """
@@ -154,7 +155,7 @@ def calc_stats2(
         templates=None,
         rokdoc_output=None,
         working_dir=None,
-        block_name='Logs',
+        block_name=ud.def_lb_name,
         suffix=None
 ):
     """
@@ -241,7 +242,8 @@ def calc_stats2(
 
         # collect data
         collect_data_for_this_interval(
-            wells, logs, wis, wi_name, results, results_per_well, depth_from_top, cutoffs, log_table, block_name=block_name)
+            wells, logs, wis, wi_name, results, results_per_well,
+            depth_from_top, cutoffs, log_table, block_name=block_name)
 
         # create plot of logs vs depth and fill the interval plots
         plot_logs_vs_depth(logs, wells, wi_name, ncols, well_names, results_per_well, depth_from_top,
@@ -334,7 +336,7 @@ def test_top_presence_tops(tops, interval, this_well_name, results_per_well, log
                                                      tops[this_well_name][interval['tops'][0].upper()]))
         logger.info(' Base: {}: {:.2f} [m] MD'.format(interval['tops'][1],
                                                       tops[this_well_name][interval['tops'][1].upper()]))
-    except:
+    except KeyError:
         logger.info(
             'Tops {} & {} not present in {}'.format(interval['tops'][0], interval['tops'][1], this_well_name))
         depth_from_top[this_well_name] = np.empty(0)
@@ -353,7 +355,7 @@ def test_top_presence(wis, wi_name, this_well_name, results_per_well, logs, dept
         logger.info(' Interval: {}: {:.2f} - {:.2f} [m] MD'.format(wi_name,
                                                                    wis[this_well_name][wi_name.upper()][0],
                                                                    wis[this_well_name][wi_name.upper()][1]))
-    except:
+    except KeyError:
         logger.info(
             'Interval {} not present in {}'.format(wi_name, this_well_name))
         depth_from_top[this_well_name] = np.empty(0)
@@ -364,12 +366,23 @@ def test_top_presence(wis, wi_name, this_well_name, results_per_well, logs, dept
     return _cont
 
 
+def test_log_presence(this_well_name, results_per_well, logs):
+    log_string = 'Well: {}\n'.format(this_well_name)
+    for key in logs:
+        if key.lower() in list(results_per_well[this_well_name].keys()):
+            log_string += '  contains log: {}\n'.format(key)
+        else:
+            results_per_well[this_well_name][key.lower()] = np.empty(0)
+            log_string += '  DOES NOT contains log: {}\n'.format(key)
+    logger.info(log_string)
+
+
 def collect_data_for_this_interval_tops(
-        wells, logs, tops, interval, results, results_per_well, depth_from_top, cutoffs, log_table, block_name='Logs'
+        wells, logs, tops, interval, results, results_per_well,
+        depth_from_top, cutoffs, log_table, block_name=ud.def_lb_name
 ):
     # start looping over the well objects
     for this_well_name, well in wells.items():
-        print(' Well: {}'.format(this_well_name))
         cont = test_top_presence(tops, interval, this_well_name, results_per_well, logs, depth_from_top)
         if cont:
             continue
@@ -400,14 +413,17 @@ def collect_data_for_this_interval_tops(
 
 
 def collect_data_for_this_interval(
-        wells, logs, wis, wi_name, results, results_per_well, depth_from_top, cutoffs, log_table, block_name='Logs'
+        wells, logs, wis, wi_name, results, results_per_well,
+        depth_from_top, cutoffs, log_table, block_name=ud.def_lb_name
     ):
     # start looping over the well objects
     for this_well_name, well in wells.items():
-        print(' Well: {}'.format(this_well_name))
         cont = test_top_presence(wis, wi_name, this_well_name, results_per_well, logs, depth_from_top)
         if cont:
             continue
+
+        # Test if the desired logs are present, if they're not, an empty dataset is insert
+        test_log_presence(this_well_name, results_per_well, logs)
 
         # Create the mask
         well.calc_mask(
@@ -429,6 +445,8 @@ def collect_data_for_this_interval(
         depth_from_top[this_well_name] = this_depth - wis[this_well_name][wi_name.upper()][0]
 
         for key in logs:
+            if key not in well.log_names():
+                continue
             this_data = well.block[block_name].logs[key].data[mask]
             results[key] = np.append(results[key], this_data)
             results_per_well[this_well_name][key] = this_data
@@ -448,7 +466,7 @@ def test_depth_tops(_this_depth, _interval, _this_well_name):
             _this_well_name
         )
     logger.info(_this_string)
-    print('   '.format(_this_string))
+    #print('   '.format(_this_string))
 
 
 def test_depth(_this_depth, _wi_name, _this_well_name):
@@ -465,7 +483,7 @@ def test_depth(_this_depth, _wi_name, _this_well_name):
             _this_well_name
         )
     logger.info(_this_string)
-    print('   '.format(_this_string))
+    #print('   '.format(_this_string))
 
 
 def plot_logs_vs_depth_tops(logs, wells, interval, ncols, well_names, results_per_well, depth_from_top,
@@ -474,7 +492,7 @@ def plot_logs_vs_depth_tops(logs, wells, interval, ncols, well_names, results_pe
     fig, axs = plt.subplots(
         nrows=1,
         ncols=ncols,
-        sharey=True,
+        sharey='all',
         figsize=(ncols * 6, 8))
     for i, key in enumerate(logs):
         key = key.lower()
@@ -502,7 +520,7 @@ def plot_logs_vs_depth(logs, wells, wi_name, ncols, well_names, results_per_well
     fig, axs = plt.subplots(
         nrows=1,
         ncols=ncols,
-        sharey=True,
+        sharey='all',
         figsize=(ncols * 6, 8))
     for i, key in enumerate(logs):
         key = key.lower()

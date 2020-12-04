@@ -7,7 +7,7 @@
 #---------      ---------------------------   --------------------------
  STRT    .M         1999.9452                 : START DEPTH
  STOP    .M         3690.0612                 : STOP DEPTH
- STEP    .M         0.1524                    : STEP VALUE
+ STEP    .M/S         0.1524                    : STEP VALUE
  NULL    .      -999.0000                     : NULL VALUE
  DATE    .      04/29/2020                    : LAS file Creation Date
  WELL   .      6507/5-8                       : Well Name
@@ -22,7 +22,8 @@
  LGMEA  .      DF                             : Log Measured from
  DRMEA  .      DF                             : Drill Measured From
  APDAT  .      30.000000 M                    : Elevation Above Permanent Datum
- KB     .      30.000000 M                    : KB Elevation
+ #KB     .      30.000000 M                   : KB Elevation
+ KB     .FT     100.000000 FT                 : KB Elevation
  DF     .      30.000000 M                    : DF Elevation
  GL     .      0.000000 M                     : GL Elevation
  RWS    .      -999                           : Def_Rw

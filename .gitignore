@@ -1,4 +1,5 @@
 venv/
+TestResults/
 .ipynb_checkpoints/
 .idea/
 .pytest_cache/
@@ -7,3 +8,7 @@ venv/
 *.pyc
 local_scripts/
 ~$*
+*log.txt
+.sln
+results_folder/*.las
+results_folder/*.png
