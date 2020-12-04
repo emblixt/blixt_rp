@@ -26,6 +26,9 @@ def project_wells(filename, working_dir, all=False):
     table = pd.read_excel(filename, header=1, sheet_name='Wells table')
     result = {}
     for i, ans in enumerate(table['Use']):
+        # skip empty rows
+        if not isinstance(ans, str):
+            continue
         if all:
             ans = 'Yes'
         if ans.lower() == 'yes':
