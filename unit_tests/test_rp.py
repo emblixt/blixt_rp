@@ -3,7 +3,7 @@ import os
 import numpy as np
 from core.well import Well
 from core.well import Project
-from utils.convert_data import convert as cnvrt
+from rp_utils.convert_data import convert as cnvrt
 import rp.rp_core as rp
 
 class RpTestCase(unittest.TestCase):

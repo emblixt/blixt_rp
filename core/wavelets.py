@@ -140,7 +140,7 @@ def plot_cwt(freq_or_scale, twt, cwt_coeffs,
     ax.grid(True)
 
 def test():
-    from utils.signal_analysis import ampspec
+    from rp_utils.signal_analysis import ampspec
     from plotting.plot_logs import wiggle_plot
     import pickle
 

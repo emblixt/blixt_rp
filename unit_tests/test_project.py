@@ -1,10 +1,10 @@
 import unittest
 import os
-import utils.io as uio
-from utils.attribdict import AttribDict
+import rp_utils.io as uio
+from rp_utils.attribdict import AttribDict
 from core.well import Well
 from core.well import Project
-from utils.io import convert
+from rp_utils.io import convert
 
 
 import numpy as np

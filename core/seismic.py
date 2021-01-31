@@ -10,7 +10,7 @@ import segyio
 import xarray as xr
 import pywt
 
-import utils.curve_fitting as mycf
+import rp_utils.curve_fitting as mycf
 from core.wavelets import freq2scale
 from plotting.plot_logs import wiggle_plot
 from plotting.crossplot import plot as xp

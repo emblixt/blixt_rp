@@ -25,11 +25,11 @@ from copy import deepcopy
 from datetime import datetime
 from dataclasses import dataclass
 
-from utils.attribdict import AttribDict
-from utils.utils import info, isnan
-import utils.io as uio
+from rp_utils.attribdict import AttribDict
+from rp_utils.utils import info, isnan
+import rp_utils.io as uio
 import rp.rp_core as rp
-import utils.definitions as ud
+import rp_utils.definitions as ud
 
 # data class decorator explained here:
 # https://realpython.com/python-data-classes/
@@ -332,7 +332,7 @@ class MineralMix(object):
         :param wis:
             dict
             dictionary of working intervals,
-            e.g. wis = utils.io.project_working_intervals(project_table)
+            e.g. wis = rp_utils.io.project_working_intervals(project_table)
         :param calculation_method:
             str
             Name of the calculation method.

@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import os
-import utils.io as uio
+import rp_utils.io as uio
 from core.well import Project, Well
 from core.minerals import MineralMix
 from core.fluids import FluidMix

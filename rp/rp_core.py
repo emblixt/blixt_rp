@@ -9,8 +9,8 @@ import logging
 from dataclasses import dataclass
 from copy import deepcopy
 
-import utils.definitions as ud
-from utils.utils import log_table_in_smallcaps as small_log_table
+import rp_utils.definitions as ud
+from rp_utils.utils import log_table_in_smallcaps as small_log_table
 
 logger = logging.getLogger(__name__)
 
@@ -909,7 +909,7 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
     :param working_intervals:
         dict
         E.G.
-        import utils.io as uio
+        import rp_utils.io as uio
         working_intervals = uio.project_working_intervals(wp.project_table)
     :param tag:
         str
@@ -917,7 +917,7 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
     :param templates:
         dict
         templates that can contain well information such as kelly bushing and sea water depth
-        templates = utils.io.project_tempplates(wp.project_table)
+        templates = rp_utils.io.project_tempplates(wp.project_table)
     :param block_name:
         str
         Name of the log block which should contain the logs to fluid substitute

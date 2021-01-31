@@ -18,8 +18,8 @@ import pandas as pd
 import rp.rp_core as rp
 import core.well as cw
 from rp.rp_core import Param
-from utils.attribdict import AttribDict
-from utils.utils import info, isnan
+from rp_utils.attribdict import AttribDict
+from rp_utils.utils import info, isnan
 
 # data class decorator explained here:
 # https://realpython.com/python-data-classes/
@@ -465,7 +465,7 @@ class FluidMix(object):
         :param templates:
             dict
             templates that can contain the sea water depth for wells
-            templates = utils.io.project_templates(wp.project_table)
+            templates = rp_utils.io.project_templates(wp.project_table)
         :param rho_sea:
             float
             Density of sea water in g/cm3
@@ -503,11 +503,11 @@ class FluidMix(object):
         :param wis:
             dict
             dictionary of working intervals,
-            e.g. wis = utils.io.project_working_intervals(project_table)
+            e.g. wis = rp_utils.io.project_working_intervals(project_table)
         :param templates:
             dict
             templates that can contain well information such as kelly bushing and sea water depth
-            templates = utils.io.project_tempplates(wp.project_table)
+            templates = rp_utils.io.project_tempplates(wp.project_table)
         :param debug:
             bool
             if True, generate verbose information and create some plots

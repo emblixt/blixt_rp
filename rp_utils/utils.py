@@ -14,7 +14,7 @@ import socket
 from datetime import datetime
 import numpy as np
 
-import utils.masks as msks
+import rp_utils.masks as msks
 
 
 def log_header_to_template(log_header):
@@ -61,7 +61,7 @@ def arrange_logging(log_to_stdout, log_to_this_file, level=logging.INFO):
 
 
 def gitversion():
-    thisgit =  os.path.realpath(__file__).replace('utils/returnVersion.py','.git')
+    thisgit =  os.path.realpath(__file__).replace('rp_utils/returnVersion.py','.git')
     tagstring = ''
     hashstring = ''
 

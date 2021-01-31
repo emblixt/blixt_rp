@@ -27,7 +27,7 @@ from scipy.optimize import least_squares
 import warnings
 import logging
 
-from utils.templates import handle_template
+from rp_utils.templates import handle_template
 
 log = logging.getLogger(__name__)
 

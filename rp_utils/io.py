@@ -7,7 +7,7 @@ from openpyxl import load_workbook, Workbook
 from copy import deepcopy
 import logging
 
-from utils.utils import isnan, info
+from rp_utils.utils import isnan, info
 
 logger = logging.getLogger(__name__)
 
@@ -279,7 +279,7 @@ def read_tops(filename, top=True, zstick='md', frmt=None, only_these_wells=None)
         list
         list of well names to look for, so that the reading in can be speeded up
         Populate this list by extracting a well_table, and use the well listed there
-        > well_table = utils.io.project_wells(project_table_file)
+        > well_table = rp_utils.io.project_wells(project_table_file)
         > only_these_wells = list(set([x['Given well name'] for x in well_table.values()]))
         NOTE! The naming convention of the wells in the project table file must be the same as the one
         used in tops
@@ -377,7 +377,7 @@ def write_tops(filename, tops, well_names=None, interval_names=None, sheet_name=
 
     :param tops:
         dict
-        As output from utils.io.read_tops()
+        As output from rp_utils.io.read_tops()
         {'well_A name': {'top1 name': top1_depth, 'top2 name': top2_depth, ...},  'well_B name': {...} }
 
     :param well_names:
