@@ -25,9 +25,10 @@ from copy import deepcopy
 from datetime import datetime
 from dataclasses import dataclass
 
-from rp_utils.attribdict import AttribDict
-from rp_utils.utils import info, isnan
-import rp_utils.io as uio
+from blixt_utils.misc.attribdict import AttribDict
+from rp_utils.version import info
+from blixt_utils.utils import isnan
+import blixt_utils.io.io as uio
 import rp.rp_core as rp
 import rp_utils.definitions as ud
 

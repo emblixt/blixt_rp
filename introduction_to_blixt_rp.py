@@ -3,7 +3,7 @@
 
 # Necessary imports
 import matplotlib.pyplot as plt
-import rp_utils.io as uio
+import blixt_utils.io.io as uio
 from core.well import Project
 from plotting import plot_rp as prp
 from plotting import plot_logs as ppl

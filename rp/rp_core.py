@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from copy import deepcopy
 
 import rp_utils.definitions as ud
-from rp_utils.utils import log_table_in_smallcaps as small_log_table
+from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 
 logger = logging.getLogger(__name__)
 

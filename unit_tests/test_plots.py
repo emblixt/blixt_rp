@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-import rp_utils.io as uio
+import blixt_utils.misc.io as uio
 import plotting.plot_logs as ppl
 from core.well import Project
 from core.well import Well

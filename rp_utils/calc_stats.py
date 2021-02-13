@@ -4,10 +4,10 @@ import logging
 import os
 import matplotlib.pyplot as plt
 
-import rp_utils.io as uio
-from plotting import crossplot as xp
-from rp_utils.utils import nan_corrcoef
-from rp_utils.utils import log_table_in_smallcaps as small_log_table
+import blixt_utils.misc.io as uio
+from blixt_utils.plotting import crossplot as xp
+from blixt_utils.utils import nan_corrcoef
+from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 import rp_utils.definitions as ud
 
 logger = logging.getLogger(__name__)

@@ -10,10 +10,10 @@ import segyio
 import xarray as xr
 import pywt
 
-import rp_utils.curve_fitting as mycf
+import blixt_utils.misc.curve_fitting as mycf
 from core.wavelets import freq2scale
 from plotting.plot_logs import wiggle_plot
-from plotting.crossplot import plot as xp
+import blixt_utils.plotting.crossplot as xp
 
 # global variables
 logger = logging.getLogger(__name__)
@@ -226,7 +226,7 @@ def test_ixg_plot():
     print(res.success)
     print(res.fun.shape)
 
-    xp(i, g, cdata=res.fun, 
+    xp.plot(i, g, cdata=res.fun,
        ctempl = {'full_name': 'Residual', 'colormap': 'seismic', 'min': np.min(res.fun), 'max':np.max(res.fun)}, 
        title='IL: 6550, XL: 27009\n{}'.format(trend_line), 
        fig=fig, ax=axes[0])
@@ -254,7 +254,7 @@ def test_ixg_plot():
     print(res.success)
     print(res.fun.shape)
 
-    xp(i[::100], g[::100], cdata=res.fun[::100], 
+    xp.plot(i[::100], g[::100], cdata=res.fun[::100],
        ctempl = {'full_name': 'Residual', 'colormap': 'seismic', 'min': np.min(res.fun), 'max':np.max(res.fun)}, 
        title='IL: 6550\n{}'.format(trend_line), 
        fig=fig, ax=axes[1],
@@ -317,7 +317,7 @@ def test_plot_amp_vs_offset():
 
     i, g, q = avo_ig(amps, angs)
 
-    xp(angs, amps, cdata='b', fig=fig, ax=axes[1])
+    xp.plot(angs, amps, cdata='b', fig=fig, ax=axes[1])
     _angs = np.linspace(1, angs[-1]+10)
     axes[1].plot(_angs, i + g*np.sin(np.radians(_angs))**2)
 

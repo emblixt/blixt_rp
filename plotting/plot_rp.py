@@ -5,11 +5,11 @@ from matplotlib.font_manager import FontProperties
 from copy import deepcopy
 import logging
 
-from plotting import crossplot as xp
+from blixt_utils.plotting import crossplot as xp
 import rp.rp_core as rp
 import core.well as cw
-from rp_utils.convert_data import convert as cnvrt
-from rp_utils.utils import log_table_in_smallcaps as small_log_table
+from blixt_utils.misc.convert_data import convert as cnvrt
+from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 
 logger = logging.getLogger(__name__)
 opt1 = {'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
@@ -421,7 +421,7 @@ def rpt_phi_sw(_phi, _sw, **kwargs):
 
 def test():
     from core.well import Project;
-    import rp_utils.io as uio
+    import blixt_utils.io.io as uio
     from core.minerals import MineralMix
     wi_name = 'SAND E'
 

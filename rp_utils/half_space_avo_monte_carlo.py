@@ -16,8 +16,9 @@ from scipy.optimize import least_squares
 from matplotlib.font_manager import FontProperties
 
 import rp.rp_core as rp
-from plotting import crossplot as myxp, plot_reflectivity as mypr
-from rp_utils import curve_fitting as mycf
+from blixt_utils.plotting import crossplot as myxp
+from plotting import plot_reflectivity as mypr
+from blixt_utils.misc import curve_fitting as mycf
 
 msymbols = np.array(['o','s','v','^','<','>','p','*','h','H','+','x','D','d','|','_','.','1','2','3','4','8'])
 cnames = list(np.roll([str(u) for u in colors.cnames.keys()], 10))  # the first 10 elements have poor colors

@@ -1,10 +1,10 @@
 import unittest
 import os
-import rp_utils.io as uio
-from rp_utils.attribdict import AttribDict
+import blixt_utils.misc.io as uio
+from blixt_utils.misc.attribdict import AttribDict
 from core.well import Well
 from core.well import Project
-from rp_utils.io import convert
+from blixt_utils.misc.io import convert
 
 
 import numpy as np

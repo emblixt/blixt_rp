@@ -25,21 +25,20 @@ import sys
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 
-from rp_utils.attribdict import AttribDict
-from rp_utils.utils import info
-#from rp_utils.utils import nan_corrcoef
-from rp_utils.utils import log_header_to_template as l2tmpl
-from rp_utils.utils import log_table_in_smallcaps as small_log_table
-import rp_utils.io as uio
-from rp_utils.io import convert
-import rp_utils.masks as msks
-from rp_utils.utils import arrange_logging
+from blixt_utils.misc.attribdict import AttribDict
+from rp_utils.version import info
+from blixt_utils.utils import log_header_to_template as l2tmpl
+from blixt_utils.utils import log_table_in_smallcaps as small_log_table
+import blixt_utils.io.io as uio
+from blixt_utils.io.io import convert
+import blixt_utils.misc.masks as msks
+from blixt_utils.utils import arrange_logging
 from rp_utils.harmonize_logs import harmonize_logs as fixlogs
-from plotting import crossplot as xp
+from blixt_utils.plotting import crossplot as xp
 from core.minerals import MineralMix
 from core.log_curve import LogCurve
 import rp.rp_core as rp
-from rp_utils.convert_data import convert as cnvrt
+from blixt_utils.misc.convert_data import convert as cnvrt
 import rp_utils.definitions as ud
 
 # global variables
@@ -1918,7 +1917,7 @@ class Block(object):
         Converts sonic to velocity
         :return:
         """
-        from rp_utils.convert_data import convert
+        from blixt_utils.misc.convert_data import convert
 
         for ss, vv, vtype in zip(
                 ['ac', 'acs'], ['vp', 'vs'], ['P velocity', 'S velocity']
@@ -1974,15 +1973,15 @@ def add_one(instring):
 def test():
     wp = Project(name='MyProject', log_to_stdout=True)
 
-    logs = wp.data_frame()
-    print(logs)
-
-
-#    well_table = uio.project_wells(wp.project_table, wp.working_dir)
-#    w = Well()
-#    las_file = list(well_table.keys())[0]
-#    logs = list(well_table[las_file]['logs'].keys())
+#    logs = wp.data_frame()
 #    print(logs)
+
+
+    well_table = uio.project_wells(wp.project_table, wp.working_dir)
+    w = Well()
+    las_file = list(well_table.keys())[0]
+    logs = list(well_table[las_file]['logs'].keys())
+    print(logs)
 
 #    w.read_las(las_file, only_these_logs=well_table[las_file]['logs'])
 #

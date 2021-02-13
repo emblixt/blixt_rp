@@ -6,14 +6,15 @@ Module for handling LogCurve objects
     GNU Lesser General Public License, Version 3
     (https://www.gnu.org/copyleft/lesser.html)
 """
-from rp_utils.attribdict import AttribDict
-from rp_utils.utils import arrange_logging, info
+from blixt_utils.misc.attribdict import AttribDict
+from rp_utils.version import info
+from blixt_utils.misc.version import arrange_logging
 from datetime import datetime
 from copy import deepcopy
 import numpy as np
 
-from rp_utils.signal_analysis import rolling_window
-from rp_utils.signal_analysis import smooth as _smooth
+from blixt_utils.signal_analysis.signal_analysis import rolling_window
+from blixt_utils.signal_analysis.signal_analysis import smooth as _smooth
 
 
 class Header(AttribDict):

@@ -18,8 +18,9 @@ import pandas as pd
 import rp.rp_core as rp
 import core.well as cw
 from rp.rp_core import Param
-from rp_utils.attribdict import AttribDict
-from rp_utils.utils import info, isnan
+from blixt_utils.misc.attribdict import AttribDict
+from rp_utils.version import info
+from blixt_utils.utils import isnan
 
 # data class decorator explained here:
 # https://realpython.com/python-data-classes/

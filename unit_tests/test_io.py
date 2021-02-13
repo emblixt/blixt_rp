@@ -1,10 +1,10 @@
 import unittest
 import os
-import rp_utils.io as uio
-from rp_utils.attribdict import AttribDict
+import blixt_utils.misc.io as uio
+from blixt_utils.misc.attribdict import AttribDict
 from core.well import Well
 from core.well import Project
-from rp_utils.io import convert
+from blixt_utils.misc.io import convert
 
 
 import numpy as np
@@ -54,11 +54,16 @@ class LasTestCase(unittest.TestCase):
         w, data = create_test_data('phie')
         success = True
         for key in list(w.header.keys()):
+            if key == 'well':
+                # the well name is having a special treatment:-(
+                continue
             if not isinstance(w.header[key], AttribDict):
                 print(key, w.header[key])
                 success = False
         for lblock in list(w.block.keys()):
             for key in list(w.block[lblock].header.keys()):
+                if key == 'well':
+                    continue
                 if not isinstance(w.block[lblock].header[key], AttribDict):
                     print(key, w.block[lblock].header[key])
                     success = False

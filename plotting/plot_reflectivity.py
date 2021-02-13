@@ -16,7 +16,7 @@ from matplotlib.font_manager import FontProperties
 import logging
 
 import rp.rp_core as rp
-from rp_utils.templates import handle_template
+from blixt_utils.misc.templates import handle_template
 
 log = logging.getLogger(__name__)
 
