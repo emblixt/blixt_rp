@@ -9,8 +9,8 @@ import logging
 from dataclasses import dataclass
 from copy import deepcopy
 
-import core.well as cw
-from utils.utils import log_table_in_smallcaps as small_log_table
+import rp_utils.definitions as ud
+from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 
 logger = logging.getLogger(__name__)
 
@@ -746,10 +746,17 @@ def constantcement(K0, G0, phi, apc=10., phic=0.4, Cn=0.86, Kc=37, Gc=45, scheme
     scheme: 1=cement deposited at grain contacts
             2=uniform layer around grains (default)
     """
+    def make_array(x):
+        if isinstance(x, np.ndarray) or isinstance(x, list):
+            return x
+        else:
+            return np.array([x])
+
+
     phib = phic - apc / 100.
-    if mymax(phi) > mymin(phib):
+    if max(make_array(phi)) > min(make_array(phib)):
         print('WARNING, phi, {:.2f}, should be smaller than the well sorted end-member porosity, phib, {:.2f}'.format(
-            mymax(phi), mymin(phib)))
+            max(make_array(phi)), min(make_array(phib))))
     K_b, G_b = contactcement(K0, G0, phib, phic, Cn, Kc, scheme)
     Z = G_b * ((9. * K_b + 8. * G_b) / (K_b + 2. * G_b)) / 6.
     t1 = 4. * G_b / 3.
@@ -902,7 +909,7 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
     :param working_intervals:
         dict
         E.G.
-        import utils.io as uio
+        import rp_utils.io as uio
         working_intervals = uio.project_working_intervals(wp.project_table)
     :param tag:
         str
@@ -910,7 +917,7 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
     :param templates:
         dict
         templates that can contain well information such as kelly bushing and sea water depth
-        templates = utils.io.project_tempplates(wp.project_table)
+        templates = rp_utils.io.project_tempplates(wp.project_table)
     :param block_name:
         str
         Name of the log block which should contain the logs to fluid substitute
@@ -918,7 +925,7 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
     """
     log_table = small_log_table(log_table)
     if block_name is None:
-        block_name = cw.def_lb_name
+        block_name = ud.def_lb_name
     if tag is None:
         tag = ''
     elif tag[0] != '_':

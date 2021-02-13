@@ -1,5 +1,5 @@
 import unittest
-import utils.io as uio
+import blixt_utils.misc.io as uio
 import os
 from core.well import Project
 from core.well import Well
@@ -7,6 +7,7 @@ import numpy as np
 
 def_lb_name = 'Logs'  # default Block name
 def_msk_name = 'Mask'  # default mask name
+
 
 # TODO
 # It might be smarter to first set up a set of test cases in a TestCase class
@@ -45,8 +46,8 @@ class MasksTestCase(unittest.TestCase):
                            'vcl': 'Volume'},
                        'Note': 'Some notes for well A'}}
 
-    #las_file = os.path.join(wp.working_dir, 'test_data', 'Well A.las')
-    #my_logs = None
+    # las_file = os.path.join(wp.working_dir, 'test_data', 'Well A.las')
+    # my_logs = None
     tops = {
         'WELL_A': {'TOP A': 408.0,
                    'TOP B': 1560.0,
@@ -79,7 +80,8 @@ class MasksTestCase(unittest.TestCase):
         #
         # Create the same mask using the create mask function
         #
-        w.calc_mask({'phie': ['<', lmt]}, name=def_msk_name)
+        cutoff = {'phie': ['<', lmt]}
+        w.calc_mask(cutoff, name=def_msk_name, log_type_input=False)
         msk = w.block[def_lb_name].masks[def_msk_name].data
         # Test length
         with self.subTest():
@@ -89,7 +91,7 @@ class MasksTestCase(unittest.TestCase):
         with self.subTest():
             print(np.nanmax(phie[msk]), lmt)
             self.assertLess(np.nanmax(phie[msk]), lmt)
-        del(w.block[def_lb_name].masks[def_msk_name])
+        del (w.block[def_lb_name].masks[def_msk_name])
 
         #
         # Create the same mask using the create mask function with log type
@@ -105,64 +107,115 @@ class MasksTestCase(unittest.TestCase):
         with self.subTest():
             print(np.nanmax(phie[msk]), lmt)
             self.assertLess(np.nanmax(phie[msk]), lmt)
-        del(w.block[def_lb_name].masks[def_msk_name])
+        del (w.block[def_lb_name].masks[def_msk_name])
 
         #
         # Create mask applying tops
         #
         print('Test masking with tops input')
-        w.calc_mask({'Porosity': ['<', lmt]},  name=def_msk_name,
+        w.calc_mask({'Porosity': ['<', lmt]}, name=def_msk_name,
                     tops=MasksTestCase.tops, use_tops=['TOP C', 'BASE F'], log_type_input=True)
         msk = w.block[def_lb_name].masks[def_msk_name].data
         # Test value
         with self.subTest():
             print(np.nanmax(phie[msk]), lmt)
             self.assertLess(np.nanmax(phie[msk]), lmt)
-        del(w.block[def_lb_name].masks[def_msk_name])
+        del (w.block[def_lb_name].masks[def_msk_name])
+
+        #
+        # Create mask from empty cutoffs, allow all data
+        #
+        print('Test mask with empty cutoffs')
+        w.calc_mask({})
+        msk = w.block[def_lb_name].masks[def_msk_name].data
+        with self.subTest():
+            print(len(phie), len(phie[msk]))
+            self.assertEqual(len(phie), len(phie[msk]))
+
+        del (w.block[def_lb_name].masks[def_msk_name])
 
         #
         # Ask for a mask for a log that does not exists
         #
         print('Test mask without any valid logs')
-        ioe_error = False
+        any_error = False
         try:
             w.calc_mask({'Saturation': ['<', lmt]}, name=def_msk_name, log_type_input=True)
-        except IOError as ioe:
-            ioe_error = True
-            print(ioe)
-        # Test that IOError was caught
+        except:
+            any_error = True
+        # Test if error was raised
         with self.subTest():
-            self.assertTrue(ioe_error)
+            self.assertFalse(any_error)
 
         #
         # Create mask applying working intervals
         #
         print('Test masking with working intervals input')
-        w.calc_mask({'Porosity': ['<', lmt]},  name=def_msk_name,
+        w.calc_mask({'Porosity': ['<', lmt]}, name=def_msk_name,
                     wis=MasksTestCase.wis, wi_name='SAND E', log_type_input=True)
         msk = w.block[def_lb_name].masks[def_msk_name].data
         # Test value
         with self.subTest():
             print(np.nanmax(phie[msk]), lmt)
             self.assertLess(np.nanmax(phie[msk]), lmt)
-        del(w.block[def_lb_name].masks[def_msk_name])
+        del (w.block[def_lb_name].masks[def_msk_name])
 
-        #w.calc_mask({'sw': ['<', lmt]}, name=def_msk_name, log_type_input=True)
-        #msk = w.block[def_lb_name].masks[def_msk_name].data
+        #
+        # Create mask using working intervals, but no cutoffs
+        #
+        print('Test masking with working intervals, but no cutoff')
+        w.calc_mask({}, name=def_msk_name,
+                    wis=MasksTestCase.wis, wi_name='SAND E')
+        msk = w.block[def_lb_name].masks[def_msk_name].data
+        print('SAND E MD limits in WELL_A:', MasksTestCase.wis['WELL_A']['SAND E'])
+        depths = w.block[def_lb_name].get_md()[msk]
+        print('Masked MD min and max:', depths.min(), depths.max())
+
+        # w.calc_mask({'sw': ['<', lmt]}, name=def_msk_name, log_type_input=False)
+        # msk = w.block[def_lb_name].masks[def_msk_name].data
         ## Test length
-        #with self.subTest():
+        # with self.subTest():
         #    print(masked_length, len(phie[msk]))
         #    self.assertEqual(masked_length, len(phie[msk]))
 
+    def test_apply_mask(self):
+        lmt = 0.1
+        w, phie = create_test_data('phie')
+        masked_length = len(phie[phie < lmt])
+
+        cutoff = {'phie': ['<', lmt]}
+        w.calc_mask(cutoff, name=def_msk_name, log_type_input=False)
+        msk = w.block[def_lb_name].masks[def_msk_name].data
+        w.apply_mask(def_msk_name)
+        m_phie = w.block[def_lb_name].logs['phie'].data
+
+        # Test length
+        with self.subTest():
+            print(masked_length, len(m_phie))
+            self.assertEqual(masked_length, len(m_phie))
+        # Test value
+        with self.subTest():
+            print(np.nanmax(m_phie), lmt)
+            self.assertLess(np.nanmax(m_phie), lmt)
+
+        w.calc_mask({}, name=def_msk_name,
+                    wis=MasksTestCase.wis, wi_name='Sand F')
+        msk = w.block[def_lb_name].masks[def_msk_name].data
+        w.apply_mask(def_msk_name)
+        print('Sand F MD limits in WELL_A:', MasksTestCase.wis['WELL_A']['SAND F'])
+        depths = w.block[def_lb_name].get_md()
+        print('Masked MD min and max:', depths.min(), depths.max())
 
     def test_append_mask(self):
         w, phie = create_test_data('phie')
 
-        lmt1 = 0.05; lmt2 = 0.1
+        lmt1 = 0.05;
+        lmt2 = 0.1
         masked_length = len(phie[(phie > lmt1) & (phie < lmt2)])
 
         # create first mask
-        w.calc_mask({'phie': ['>', lmt1]}, name=def_msk_name)
+        cutoff_1 = {'phie': ['>', lmt1]}
+        w.calc_mask(cutoff_1, name=def_msk_name, log_type_input=False)
         msk = w.block[def_lb_name].masks[def_msk_name].data
         # Test value
         with self.subTest():
@@ -170,7 +223,8 @@ class MasksTestCase(unittest.TestCase):
             self.assertGreater(np.nanmin(phie[msk]), lmt1)
 
         # append second mask
-        w.calc_mask({'phie': ['<', lmt2]}, name=def_msk_name, append=True)
+        cutoff_2 = {'phie': ['<', lmt2]}
+        w.calc_mask(cutoff_2, name=def_msk_name, append='AND', log_type_input=False)
         msk = w.block[def_lb_name].masks[def_msk_name].data
         # Test value
         with self.subTest():
@@ -181,8 +235,3 @@ class MasksTestCase(unittest.TestCase):
             print(masked_length, len(phie[msk]))
             print(w.block[def_lb_name].masks[def_msk_name].header.desc)
             self.assertEqual(masked_length, len(phie[msk]))
-
-
-
-
-

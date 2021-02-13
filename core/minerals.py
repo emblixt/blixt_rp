@@ -21,18 +21,16 @@ A mineral is defined by its:
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from decorator import decorator
-import inspect
 from copy import deepcopy
 from datetime import datetime
 from dataclasses import dataclass
 
-from utils.attribdict import AttribDict
-from utils.utils import info, isnan
-from utils.utils import log_table_in_smallcaps as small_log_table
-import utils.io as uio
+from blixt_utils.misc.attribdict import AttribDict
+from rp_utils.version import info
+from blixt_utils.utils import isnan
+import blixt_utils.io.io as uio
 import rp.rp_core as rp
-import core.well as cw
+import rp_utils.definitions as ud
 
 # data class decorator explained here:
 # https://realpython.com/python-data-classes/
@@ -209,6 +207,7 @@ class Mineral(object):
 
         ax.set_ylim(0., 1.05)
 
+
 class MineralMix(object):
     """
     Class handling a set of minerals
@@ -334,7 +333,7 @@ class MineralMix(object):
         :param wis:
             dict
             dictionary of working intervals,
-            e.g. wis = utils.io.project_working_intervals(project_table)
+            e.g. wis = rp_utils.io.project_working_intervals(project_table)
         :param calculation_method:
             str
             Name of the calculation method.
@@ -344,7 +343,7 @@ class MineralMix(object):
         :return:
         """
         if block_name is None:
-            block_name = cw.def_lb_name
+            block_name = ud.def_lb_name
         if calculation_method is None:
             calculation_method = 'Interval average'
         if calculation_method != 'Interval average':

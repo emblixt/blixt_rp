@@ -5,11 +5,11 @@ from matplotlib.font_manager import FontProperties
 from copy import deepcopy
 import logging
 
-from plotting import crossplot as xp
+from blixt_utils.plotting import crossplot as xp
 import rp.rp_core as rp
 import core.well as cw
-from utils.convert_data import convert as cnvrt
-from utils.utils import log_table_in_smallcaps as small_log_table
+from blixt_utils.misc.convert_data import convert as cnvrt
+from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 
 logger = logging.getLogger(__name__)
 opt1 = {'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
@@ -41,7 +41,7 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
         working intervals, as defined in the "Working intervals" sheet of the project table, and
         loaded through:
         wp = Project()
-        wis = utils.io.project_working_intervals(wp.project_table)
+        wis = rp_utils.io.project_working_intervals(wp.project_table)
     :param wi_name:
         str
         name of working interval to plot
@@ -52,7 +52,7 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
             {'Volume': ['<', 0.5], 'Porosity': ['>', 0.1]}
     :param templates:
         dict
-        templates dictionary as returned from utils.io.project_templates()
+        templates dictionary as returned from rp_utils.io.project_templates()
     :param legend_items:
         list
         list of Line2D objects that are used in the legends.
@@ -421,7 +421,7 @@ def rpt_phi_sw(_phi, _sw, **kwargs):
 
 def test():
     from core.well import Project;
-    import utils.io as uio
+    import blixt_utils.io.io as uio
     from core.minerals import MineralMix
     wi_name = 'SAND E'
 

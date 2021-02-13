@@ -16,8 +16,9 @@ from scipy.optimize import least_squares
 from matplotlib.font_manager import FontProperties
 
 import rp.rp_core as rp
-from plotting import crossplot as myxp, plot_reflectivity as mypr
-from utils import curve_fitting as mycf
+from blixt_utils.plotting import crossplot as myxp
+from plotting import plot_reflectivity as mypr
+from blixt_utils.misc import curve_fitting as mycf
 
 msymbols = np.array(['o','s','v','^','<','>','p','*','h','H','+','x','D','d','|','_','.','1','2','3','4','8'])
 cnames = list(np.roll([str(u) for u in colors.cnames.keys()], 10))  # the first 10 elements have poor colors
@@ -48,7 +49,7 @@ def plot_multi_interfaces(sums, intfs, fbase=None, templates=None, suffix=None):
         if None, no plots are saved
     :param templates:
         dict
-        templates dictionary as returned from utils.io.project_templates()
+        templates dictionary as returned from rp_utils.io.project_templates()
     :param suffix:
         str
         Suffix added to output plots (png) to ease separating output from eachother

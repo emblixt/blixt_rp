@@ -4,9 +4,8 @@ import logging
 from matplotlib.ticker import (AutoMinorLocator, MultipleLocator)
 
 import core.well as cw
-import utils.io as uio
-import utils.utils as uu
-from utils.utils import log_table_in_smallcaps as small_log_table
+import blixt_utils.utils as uu
+from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 import rp.rp_core as rp
 import tmp.tmp_avo_model as tta
 

@@ -6,25 +6,15 @@ Module for handling LogCurve objects
     GNU Lesser General Public License, Version 3
     (https://www.gnu.org/copyleft/lesser.html)
 """
-from utils.attribdict import AttribDict
-from utils.utils import arrange_logging, info
+from blixt_utils.misc.attribdict import AttribDict
+from rp_utils.version import info
+from blixt_utils.misc.version import arrange_logging
 from datetime import datetime
 from copy import deepcopy
 import numpy as np
 
-
-def rolling_window(a, window):
-    """
-    After
-    https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
-    :param a:
-    :param window:
-    :return:
-    """
-    shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
-    strides = a.strides + (a.strides[-1],)
-    rolled = np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
-    return rolled
+from blixt_utils.signal_analysis.signal_analysis import rolling_window
+from blixt_utils.signal_analysis.signal_analysis import smooth as _smooth
 
 
 class Header(AttribDict):
@@ -132,16 +122,15 @@ class LogCurve(object):
 
     log_type = property(get_log_type)
 
-    def smooth(self, window=None):
-        if window is None:
-            window = 13  # Around 2 meters in most wells
-        _tmp = np.median(rolling_window(self.data, window), -1)
-        out = np.pad(_tmp, int(window/2), mode='edge')
+    def smooth(self, window_len=None, method='median'):
+        out = _smooth(self.data, window_len, method=method)
         print('Max diff between smoothed and original version:', np.nanmax(self.data - out))
         return out
 
-    def despike(self, max_clip, window=None):
-        smooth = self.smooth(window)
+    def despike(self, max_clip, window_len=None):
+        if window_len is None:
+            window_len = 13 # Around 2 meters in most wells
+        smooth = self.smooth(window_len)
         spikes = np.where(self.data - smooth > max_clip)[0]
         spukes = np.where(smooth - self.data > max_clip)[0]
         out = deepcopy(self.data)

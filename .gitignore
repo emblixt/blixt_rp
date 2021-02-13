@@ -1,5 +1,14 @@
-/venv/
-/.ipynb_checkpoints/
-/.idea/
-/Fignon notebook.ipynb
-/local_scripts/
+venv/
+TestResults/
+.ipynb_checkpoints/
+.idea/
+.pytest_cache/
+.vs/
+**/__pycache__
+*.pyc
+local_scripts/
+~$*
+*log.txt
+.sln
+results_folder/*.las
+results_folder/*.png

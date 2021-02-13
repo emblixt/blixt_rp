@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import least_squares
 import os
 
-import utils.curve_fitting as mycf
+import blixt_utils.misc.curve_fitting as mycf
 import rp.rp_core as rp
 import plotting.plot_logs as ppl
 
@@ -186,11 +186,11 @@ def test_synt():
     https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
     :return:
     """
-    import utils.io as uio
+    import blixt_utils.misc.io as uio
     import plotting.plot_logs as ppl
     from core.well import Project
     from core.well import Well
-    import utils.convert_data as ucd
+    import blixt_utils.misc.convert_data as ucd
 
     wp = Project()
     well_table = {os.path.join(wp.working_dir, 'test_data/L-30.las'):
@@ -439,11 +439,11 @@ def test_synt2():
     but using blixt_rp built in functionality instead
     :return:
     """
-    import utils.io as uio
+    import blixt_utils.misc.io as uio
     import plotting.plot_logs as ppl
     from core.well import Project
     from core.well import Well
-    import utils.convert_data as ucd
+    import blixt_utils.misc.convert_data as ucd
 
     wp = Project()
     wells = wp.load_all_wells()
