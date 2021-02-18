@@ -45,6 +45,12 @@ import rp_utils.definitions as ud
 supported_version = {2.0, 3.0}
 logger = logging.getLogger(__name__)
 
+def_lb_name = ud.def_lb_name
+def_msk_name = ud.def_msk_name
+def_water_depth_keys = ud.def_water_depth_keys
+def_kelly_bushing_keys = ud.def_kelly_bushing_keys
+def_sonic_units = ud.def_sonic_units
+
 renamewelllogs = {
     # depth, or MD
     'depth': ['Depth', 'DEPT', 'MD', 'DEPTH'],
@@ -150,6 +156,8 @@ class Project(object):
 
             if project_table is None:
                 self.project_table = os.path.join(self.working_dir, 'excels', 'project_table.xlsx')
+            elif not os.path.isfile(project_table):
+                self.project_table = os.path.join(self.working_dir, project_table)
             else:
                 self.project_table = project_table
 
@@ -359,40 +367,6 @@ class Project(object):
 
         return all_wells
 
-    def data_frame(self, block_name=None, rename_logs=None):
-        import pandas as pd
-        all_wells = self.load_all_wells(block_name=block_name, rename_logs=rename_logs)
-
-        log_names = []
-        well_name_keys = {}
-        for i, well_name in enumerate(list(all_wells.keys())):
-            well_name_keys[well_name] = float(i)
-            for this_log_name in all_wells[well_name].log_names():
-                log_names.append(this_log_name)
-        log_names = list(set(log_names))
-        # Only keep the logs which are present in all wells
-        remove_these_logs = []
-        for well_name in list(all_wells.keys()):
-            for this_log_name in log_names:
-                if this_log_name not in all_wells[well_name].log_names():
-                    remove_these_logs.append(this_log_name)
-        for this_log_name in list(set(remove_these_logs)):
-            log_names.remove(this_log_name)
-
-        log_array_list = [np.empty(0) for i in range(len(log_names) + 1)]
-
-        for well_name in list(all_wells.keys()):
-            length = 0
-            for i, this_log_name in enumerate(log_names):
-                # TODO
-                # below line takes the first block only
-                this_log = all_wells[well_name].get_logs_of_name(this_log_name)[0].data
-                log_array_list[i] = np.append(log_array_list[i], this_log)
-                length = len(this_log)
-            log_array_list[-1] = np.append(log_array_list[-1], np.repeat(well_name_keys[well_name], length))
-
-        log_names.append('Well')
-        return pd.DataFrame(data=np.array(log_array_list).T, columns=log_names), well_name_keys
 
     def load_all_wis(self):
         return uio.project_working_intervals(self.project_table)
@@ -1968,6 +1942,41 @@ def add_one(instring):
     else:
         instring = instring + ' 1'
     return instring
+
+def convert_to_dataframe(all_wells, block_name=None, rename_logs=None):
+    import pandas as pd
+
+    log_names = []
+    well_name_keys = {}
+    for i, well_name in enumerate(list(all_wells.keys())):
+        well_name_keys[well_name] = float(i)
+        for this_log_name in all_wells[well_name].log_names():
+            log_names.append(this_log_name)
+    log_names = list(set(log_names))
+    # Only keep the logs which are present in all wells
+    remove_these_logs = []
+    for well_name in list(all_wells.keys()):
+        for this_log_name in log_names:
+            if this_log_name not in all_wells[well_name].log_names():
+                print('We are removing', this_log_name)
+                remove_these_logs.append(this_log_name)
+    for this_log_name in list(set(remove_these_logs)):
+        log_names.remove(this_log_name)
+
+    log_array_list = [np.empty(0) for i in range(len(log_names) + 1)]
+
+    for well_name in list(all_wells.keys()):
+        length = 0
+        for i, this_log_name in enumerate(log_names):
+            # TODO
+            # below line takes the first block only
+            this_log = all_wells[well_name].get_logs_of_name(this_log_name)[0].data
+            log_array_list[i] = np.append(log_array_list[i], this_log)
+            length = len(this_log)
+        log_array_list[-1] = np.append(log_array_list[-1], np.repeat(well_name_keys[well_name], length))
+
+    log_names.append('Well')
+    return pd.DataFrame(data=np.array(log_array_list).T, columns=log_names), well_name_keys
 
 
 def test():
