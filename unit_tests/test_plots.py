@@ -3,8 +3,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-import blixt_utils.misc.io as uio
+import blixt_utils.io.io as uio
 import plotting.plot_logs as ppl
+from blixt_utils.plotting.helpers import header_plot, axis_plot
 from core.well import Project
 from core.well import Well
 
@@ -50,7 +51,7 @@ class PlotTestCase(unittest.TestCase):
         styles = [{'lw': templ[x]['line width'],
                    'color': templ[x]['line color'],
                    'ls': templ[x]['line style']} for x in log_types]
-        ppl.header_plot(ax, limits, legends, styles)
+        header_plot(ax, limits, legends, styles)
         plt.show()
         with self.subTest():
             self.assertTrue(True)
@@ -66,16 +67,18 @@ class PlotTestCase(unittest.TestCase):
         styles = [{'lw': templ[x]['line width'],
                    'color': templ[x]['line color'],
                    'ls': templ[x]['line style']} for x in log_types]
-        ppl.axis_plot(ax, y, data, limits, styles, nxt=2)
+        axis_plot(ax, y, data, limits, styles, nxt=2)
 
         plt.show()
 
 
     def test_plot_logs(self):
+        from blixt_utils.io.io import invert_well_table
         w = PlotTestCase.w
         templates = uio.project_templates(PlotTestCase.wp.project_table)
-        ppl.plot_logs(w, PlotTestCase.well_table, PlotTestCase.wis, "SAND E", templates, buffer=50.,
-                      savefig='C:/users/mblixt/PycharmProjects/blixt_rp/results_folder/test.png')
+        ppl.plot_logs(w, invert_well_table(PlotTestCase.well_table, 'WELL_D', rename=False),
+                      PlotTestCase.wis, "SAND E", templates, buffer=50. )
+                      #savefig='C:/users/mblixt/PycharmProjects/blixt_rp/results_folder/test.png')
                       #savefig='C:/Users/marten/PycharmProjects/blixt_rp/results_folder/test.png')
         with self.subTest():
             self.assertTrue(True)

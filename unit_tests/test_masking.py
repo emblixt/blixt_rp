@@ -1,5 +1,5 @@
 import unittest
-import blixt_utils.misc.io as uio
+import blixt_utils.io.io as uio
 import os
 from core.well import Project
 from core.well import Well

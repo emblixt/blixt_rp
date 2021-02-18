@@ -186,7 +186,7 @@ def test_synt():
     https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
     :return:
     """
-    import blixt_utils.misc.io as uio
+    import blixt_utils.io.io as uio
     import plotting.plot_logs as ppl
     from core.well import Project
     from core.well import Well
@@ -439,7 +439,7 @@ def test_synt2():
     but using blixt_rp built in functionality instead
     :return:
     """
-    import blixt_utils.misc.io as uio
+    import blixt_utils.io.io as uio
     import plotting.plot_logs as ppl
     from core.well import Project
     from core.well import Well

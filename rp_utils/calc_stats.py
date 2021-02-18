@@ -4,7 +4,7 @@ import logging
 import os
 import matplotlib.pyplot as plt
 
-import blixt_utils.misc.io as uio
+import blixt_utils.io.io as uio
 from blixt_utils.plotting import crossplot as xp
 from blixt_utils.utils import nan_corrcoef
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table

@@ -8,7 +8,7 @@ Module for handling LogCurve objects
 """
 from blixt_utils.misc.attribdict import AttribDict
 from rp_utils.version import info
-from blixt_utils.misc.version import arrange_logging
+from blixt_utils.utils import arrange_logging
 from datetime import datetime
 from copy import deepcopy
 import numpy as np
