@@ -21,29 +21,35 @@ import numpy as np
 import logging
 import re
 import os
+import sys
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 
-from utils.attribdict import AttribDict
-from utils.utils import info
-#from utils.utils import nan_corrcoef
-from utils.utils import log_header_to_template as l2tmpl
-from utils.utils import log_table_in_smallcaps as small_log_table
-import utils.io as uio
-from utils.io import convert
-import utils.masks as msks
-from utils.utils import arrange_logging
-from utils.harmonize_logs import harmonize_logs as fixlogs
-from plotting import crossplot as xp
+from blixt_utils.misc.attribdict import AttribDict
+from rp_utils.version import info
+from blixt_utils.utils import log_header_to_template as l2tmpl
+from blixt_utils.utils import log_table_in_smallcaps as small_log_table
+import blixt_utils.io.io as uio
+from blixt_utils.io.io import convert
+import blixt_utils.misc.masks as msks
+from blixt_utils.utils import arrange_logging
+from rp_utils.harmonize_logs import harmonize_logs as fixlogs
+from blixt_utils.plotting import crossplot as xp
 from core.minerals import MineralMix
 from core.log_curve import LogCurve
 import rp.rp_core as rp
-from utils.convert_data import convert as cnvrt
-import utils.definitions as ud
+from blixt_utils.misc.convert_data import convert as cnvrt
+import rp_utils.definitions as ud
 
 # global variables
 supported_version = {2.0, 3.0}
 logger = logging.getLogger(__name__)
+
+def_lb_name = ud.def_lb_name
+def_msk_name = ud.def_msk_name
+def_water_depth_keys = ud.def_water_depth_keys
+def_kelly_bushing_keys = ud.def_kelly_bushing_keys
+def_sonic_units = ud.def_sonic_units
 
 renamewelllogs = {
     # depth, or MD
@@ -150,6 +156,8 @@ class Project(object):
 
             if project_table is None:
                 self.project_table = os.path.join(self.working_dir, 'excels', 'project_table.xlsx')
+            elif not os.path.isfile(project_table):
+                self.project_table = os.path.join(self.working_dir, project_table)
             else:
                 self.project_table = project_table
 
@@ -359,40 +367,6 @@ class Project(object):
 
         return all_wells
 
-    def data_frame(self, block_name=None, rename_logs=None):
-        import pandas as pd
-        all_wells = self.load_all_wells(block_name=block_name, rename_logs=rename_logs)
-
-        log_names = []
-        well_name_keys = {}
-        for i, well_name in enumerate(list(all_wells.keys())):
-            well_name_keys[well_name] = float(i)
-            for this_log_name in all_wells[well_name].log_names():
-                log_names.append(this_log_name)
-        log_names = list(set(log_names))
-        # Only keep the logs which are present in all wells
-        remove_these_logs = []
-        for well_name in list(all_wells.keys()):
-            for this_log_name in log_names:
-                if this_log_name not in all_wells[well_name].log_names():
-                    remove_these_logs.append(this_log_name)
-        for this_log_name in list(set(remove_these_logs)):
-            log_names.remove(this_log_name)
-
-        log_array_list = [np.empty(0) for i in range(len(log_names) + 1)]
-
-        for well_name in list(all_wells.keys()):
-            length = 0
-            for i, this_log_name in enumerate(log_names):
-                # TODO
-                # below line takes the first block only
-                this_log = all_wells[well_name].get_logs_of_name(this_log_name)[0].data
-                log_array_list[i] = np.append(log_array_list[i], this_log)
-                length = len(this_log)
-            log_array_list[-1] = np.append(log_array_list[-1], np.repeat(well_name_keys[well_name], length))
-
-        log_names.append('Well')
-        return pd.DataFrame(data=np.array(log_array_list).T, columns=log_names), well_name_keys
 
     def load_all_wis(self):
         return uio.project_working_intervals(self.project_table)
@@ -566,7 +540,7 @@ class Well(object):
         :param templates:
             dict
             templates that can contain the desired information for wells
-            templates = utils.io.project_tempplates(wp.project_table)
+            templates = rp_utils.io.project_tempplates(wp.project_table)
         :param search_keys:
             list
             List of strings that can be the key for the desired information in the well header
@@ -768,7 +742,7 @@ class Well(object):
             dict
             Dictionary of working intervals
             E.G.
-            wis = utils.io.project_working_intervals(project_table.xlsx)
+            wis = rp_utils.io.project_working_intervals(project_table.xlsx)
         :param method:
             str
             'Voigt' for the upper bound or Voigt average
@@ -933,7 +907,7 @@ class Well(object):
             name of the mask
         :param tops:
             dict
-            as returned from utils.io.read_tops() function
+            as returned from rp_utils.io.read_tops() function
         :param use_tops:
             list
             List of top names inside the tops dictionary that will be used to mask the data
@@ -944,7 +918,7 @@ class Well(object):
             working intervals, as defined in the "Working intervals" sheet of the project table, and
             loaded through:
             wp = Project()
-            wis = utils.io.project_working_intervals(wp.project_table)
+            wis = rp_utils.io.project_working_intervals(wp.project_table)
 
         :param wi_name:
             str
@@ -1186,7 +1160,7 @@ class Well(object):
             boolean numpy array of same length as xdata
         :param tops:
             dict
-            as returned from utils.io.read_tops() function
+            as returned from rp_utils.io.read_tops() function
         :param wis:
             dict
             dictionary of working intervals
@@ -1196,7 +1170,7 @@ class Well(object):
             matplotlib.axes._subplots.AxesSubplot object
         :param templates:
             dict
-            templates dictionary as returned from utils.io.project_templates()
+            templates dictionary as returned from rp_utils.io.project_templates()
         :param savefig:
             str
             full path name of file to save plot to
@@ -1301,7 +1275,7 @@ class Well(object):
             E.G.
             > from well_project import Project
             > wp = Project()
-            > import utils.io as uio
+            > import rp_utils.io as uio
             > well_table = uio.project_wells(wp.project_table, wp.working_dir)
         :param index:
             int
@@ -1917,7 +1891,7 @@ class Block(object):
         Converts sonic to velocity
         :return:
         """
-        from utils.convert_data import convert
+        from blixt_utils.misc.convert_data import convert
 
         for ss, vv, vtype in zip(
                 ['ac', 'acs'], ['vp', 'vs'], ['P velocity', 'S velocity']
@@ -1969,19 +1943,54 @@ def add_one(instring):
         instring = instring + ' 1'
     return instring
 
+def convert_to_dataframe(all_wells, block_name=None, rename_logs=None):
+    import pandas as pd
+
+    log_names = []
+    well_name_keys = {}
+    for i, well_name in enumerate(list(all_wells.keys())):
+        well_name_keys[well_name] = float(i)
+        for this_log_name in all_wells[well_name].log_names():
+            log_names.append(this_log_name)
+    log_names = list(set(log_names))
+    # Only keep the logs which are present in all wells
+    remove_these_logs = []
+    for well_name in list(all_wells.keys()):
+        for this_log_name in log_names:
+            if this_log_name not in all_wells[well_name].log_names():
+                print('We are removing', this_log_name)
+                remove_these_logs.append(this_log_name)
+    for this_log_name in list(set(remove_these_logs)):
+        log_names.remove(this_log_name)
+
+    log_array_list = [np.empty(0) for i in range(len(log_names) + 1)]
+
+    for well_name in list(all_wells.keys()):
+        length = 0
+        for i, this_log_name in enumerate(log_names):
+            # TODO
+            # below line takes the first block only
+            this_log = all_wells[well_name].get_logs_of_name(this_log_name)[0].data
+            log_array_list[i] = np.append(log_array_list[i], this_log)
+            length = len(this_log)
+        log_array_list[-1] = np.append(log_array_list[-1], np.repeat(well_name_keys[well_name], length))
+
+    log_names.append('Well')
+    return pd.DataFrame(data=np.array(log_array_list).T, columns=log_names), well_name_keys
+
 
 def test():
     wp = Project(name='MyProject', log_to_stdout=True)
 
-    logs = wp.data_frame()
-    print(logs)
-
-
-#    well_table = uio.project_wells(wp.project_table, wp.working_dir)
-#    w = Well()
-#    las_file = list(well_table.keys())[0]
-#    logs = list(well_table[las_file]['logs'].keys())
+#    logs = wp.data_frame()
 #    print(logs)
+
+
+    well_table = uio.project_wells(wp.project_table, wp.working_dir)
+    w = Well()
+    las_file = list(well_table.keys())[0]
+    logs = list(well_table[las_file]['logs'].keys())
+    print(logs)
 
 #    w.read_las(las_file, only_these_logs=well_table[las_file]['logs'])
 #

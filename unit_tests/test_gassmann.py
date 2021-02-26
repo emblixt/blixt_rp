@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 import matplotlib.pyplot as plt
 
-from utils.attribdict import AttribDict
+from blixt_utils.misc.attribdict import AttribDict
 import rp.rp_core as rp
 import rp.moduli as moduli
 import core.well as cw
