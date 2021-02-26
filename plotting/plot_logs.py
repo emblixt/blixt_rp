@@ -77,8 +77,11 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     # Gamma ray and Caliper
     try_these_log_types = ['Gamma ray', 'Caliper', 'Inclination']
     log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
+    print(log_types)
     lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
+    print(lognames)
     limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
+    print(limits)
     styles = [{'lw': templates[x]['line width'],
                'color': templates[x]['line color'],
                'ls': templates[x]['line style']} for x in log_types]
@@ -350,15 +353,29 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
             #    y_max = np.nanmax(tb.logs[depth_key].data[mask])
 
             # plot the desired logs
+            missing_logs_txt = ''
             for ltype in log_types:
                 lname = log_table[ltype]
                 if lname not in well.log_names():  # skip this log
-                    #print('skipping {}'.format(lname))
+                    missing_logs_txt += '{}\n'.format(lname)
                     continue
+                if np.isnan(np.sum(tb.logs[lname].data[mask])): # all nan's
+                    missing_logs_txt += '{}\n'.format(lname)
                 x = uu.norm(tb.logs[lname].data[mask], method='median')
                 styles = {'lw': templates[ltype]['line width'],
                           'color': templates[ltype]['line color'], 'ls': templates[ltype]['line style']}
                 ax.plot(i + x*pw, tb.logs[depth_key].data[mask], **styles)
+            if len(missing_logs_txt) > 1:
+                ax.text(i, min(tb.logs[depth_key].data[mask]), 'Missing logs: \n'+missing_logs_txt[:-1],
+                    bbox = {'boxstyle': 'round', 'facecolor': 'orangered', 'alpha': 0.5},
+                    verticalalignment = 'bottom',
+                    horizontalalignment = 'center')
+            else:
+                ax.text(i, min(tb.logs[depth_key].data[mask]), 'No missing logs',
+                        bbox={'boxstyle': 'round', 'facecolor': 'lightgreen', 'alpha': 0.5},
+                        verticalalignment='bottom',
+                        horizontalalignment='center')
+
 
         # TODO
         # Use the wells function get_kb() and get_water_depth() to decide if to plot these or not
