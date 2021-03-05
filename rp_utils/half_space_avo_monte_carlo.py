@@ -14,6 +14,8 @@ import matplotlib.colors as colors
 import scipy.stats
 from scipy.optimize import least_squares
 from matplotlib.font_manager import FontProperties
+from matplotlib.lines import Line2D
+
 
 import rp.rp_core as rp
 from blixt_utils.plotting import crossplot as myxp
@@ -64,6 +66,10 @@ def plot_multi_interfaces(sums, intfs, fbase=None, templates=None, suffix=None):
     fig2, ax2 = plt.subplots(figsize=(8,6))  # for plotting reflectivity
 
     legends = ['{} on {}'.format(x[0], x[1]) for x in intfs]
+    legend_labels = []
+    for i, intf in enumerate(intfs):
+        legend_labels.append(Line2D([0], [0], marker='o', color=intf[2], label=legends[i],
+                          markerfacecolor=intf[2], lw=0, markersize=10))
 
     if (templates is not None) and ('Intercept' in list(templates.keys())):
         xmin = templates['Intercept']['min']
@@ -84,12 +90,13 @@ def plot_multi_interfaces(sums, intfs, fbase=None, templates=None, suffix=None):
 
     ax1.plot([0, 0], [ymin, ymax], 'k--', lw=0.5, label='_nolegend_')
     ax1.plot([xmin, xmax], [0, 0], 'k--', lw=0.5, label='_nolegend_')
-    
+
     this_legend = ax1.legend(
-        legends,
+        handles=legend_labels,
+        #legends,
         prop=FontProperties(size='smaller'),
-        scatterpoints = 1,
-        markerscale=1.5,
+        #scatterpoints = 1,
+        #markerscale=1.5,
         loc=1
     )
 
