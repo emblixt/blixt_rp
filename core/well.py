@@ -1943,6 +1943,7 @@ def add_one(instring):
         instring = instring + ' 1'
     return instring
 
+
 def convert_to_dataframe(all_wells, block_name=None, rename_logs=None):
     import pandas as pd
 
