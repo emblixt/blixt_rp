@@ -2,8 +2,8 @@ import unittest
 import os
 import blixt_utils.io.io as uio
 from blixt_utils.misc.attribdict import AttribDict
-from core.well import Well
-from core.well import Project
+from blixt_rp.core.well import Well
+from blixt_rp.core.well import Project
 from blixt_utils.misc.io import convert
 
 

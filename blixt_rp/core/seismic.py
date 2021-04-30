@@ -6,13 +6,9 @@ import logging
 from itertools import cycle
 from scipy.optimize import least_squares
 
-import xarray as xr
-import pywt
-
 import blixt_utils.misc.curve_fitting as mycf
 import blixt_utils.io as uio
-from core.wavelets import freq2scale
-from plotting.plot_logs import wiggle_plot
+from blixt_rp.plotting import wiggle_plot
 import blixt_utils.plotting.crossplot as xp
 
 # global variables

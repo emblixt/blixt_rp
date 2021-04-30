@@ -6,8 +6,8 @@ from copy import deepcopy
 import logging
 
 from blixt_utils.plotting import crossplot as xp
-import rp.rp_core as rp
-import core.well as cw
+from blixt_rp import rp as rp
+import blixt_rp.core.well as cw
 from blixt_utils.misc.convert_data import convert as cnvrt
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 
@@ -420,9 +420,9 @@ def rpt_phi_sw(_phi, _sw, **kwargs):
     return xx, yy
 
 def test():
-    from core.well import Project;
+    from blixt_rp.core.well import Project;
     import blixt_utils.io.io as uio
-    from core.minerals import MineralMix
+    from blixt_rp.core.minerals import MineralMix
     wi_name = 'SAND E'
 
     plot_type = 'AI-VpVs'

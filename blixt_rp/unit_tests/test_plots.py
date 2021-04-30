@@ -1,13 +1,12 @@
 import unittest
 import matplotlib.pyplot as plt
-import numpy as np
 import os
 
 import blixt_utils.io.io as uio
-import plotting.plot_logs as ppl
+from blixt_rp import plotting as ppl
 from blixt_utils.plotting.helpers import header_plot, axis_plot
-from core.well import Project
-from core.well import Well
+from blixt_rp.core.well import Project
+from blixt_rp.core.well import Well
 
 
 class PlotTestCase(unittest.TestCase):

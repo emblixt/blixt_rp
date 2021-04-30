@@ -12,15 +12,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import scipy.stats
-from scipy.optimize import least_squares
 from matplotlib.font_manager import FontProperties
 from matplotlib.lines import Line2D
 
-
-import rp.rp_core as rp
+from blixt_rp import rp as rp
 from blixt_utils.plotting import crossplot as myxp
-from plotting import plot_reflectivity as mypr
-from blixt_utils.misc import curve_fitting as mycf
+from blixt_rp.plotting import plot_reflectivity as mypr
 
 msymbols = np.array(['o','s','v','^','<','>','p','*','h','H','+','x','D','d','|','_','.','1','2','3','4','8'])
 cnames = list(np.roll([str(u) for u in colors.cnames.keys()], 10))  # the first 10 elements have poor colors

@@ -1,13 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import logging
-from matplotlib.ticker import (AutoMinorLocator, MultipleLocator)
 
-import core.well as cw
+import blixt_rp.core.well as cw
 import blixt_utils.utils as uu
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
-import rp.rp_core as rp
+from blixt_rp import rp as rp
 import tmp.tmp_avo_model as tta
 
 logger = logging.getLogger(__name__)

@@ -11,8 +11,7 @@ from scipy.optimize import least_squares
 import os
 
 import blixt_utils.misc.curve_fitting as mycf
-import rp.rp_core as rp
-import plotting.plot_logs as ppl
+from blixt_rp import rp as rp
 
 
 def straight_line(x, a, b):
@@ -22,7 +21,7 @@ def straight_line(x, a, b):
 def twolayer(vp0, vs0, rho0, vp1, vs1, rho1, angels=None):
     #from bruges.reflection import shuey2
     #from bruges.filters import ricker
-    from rp.rp_core import reflectivity, intercept, gradient
+    from blixt_rp.rp import reflectivity, intercept, gradient
     if angels is None:
         angels = [5, 15, 30]
 
@@ -187,9 +186,9 @@ def test_synt():
     :return:
     """
     import blixt_utils.io.io as uio
-    import plotting.plot_logs as ppl
-    from core.well import Project
-    from core.well import Well
+    from blixt_rp import plotting as ppl
+    from blixt_rp.core.well import Project
+    from blixt_rp.core.well import Well
     import blixt_utils.misc.convert_data as ucd
 
     wp = Project()
@@ -440,10 +439,7 @@ def test_synt2():
     :return:
     """
     import blixt_utils.io.io as uio
-    import plotting.plot_logs as ppl
-    from core.well import Project
-    from core.well import Well
-    import blixt_utils.misc.convert_data as ucd
+    from blixt_rp.core.well import Project
 
     wp = Project()
     wells = wp.load_all_wells()

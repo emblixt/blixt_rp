@@ -15,11 +15,11 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-import rp.rp_core as rp
-import core.well as cw
-from rp.rp_core import Param
+from blixt_rp import rp as rp
+import blixt_rp.core.well as cw
+from blixt_rp.rp import Param
 from blixt_utils.misc.attribdict import AttribDict
-from rp_utils.version import info
+from blixt_rp.rp_utils.version import info
 from blixt_utils.utils import isnan
 
 # data class decorator explained here:
@@ -584,9 +584,9 @@ class FluidMix(object):
 def test_fluidsub():
     from importlib import reload
     import matplotlib.pyplot as plt
-    import rp.rp_core as rp
+    import blixt_rp.rp.rp_core as rp
     reload(rp)
-    from core.well import Well
+    from blixt_rp.core.well import Well
 
     w = Well()
     # Create a well table without using the excel sheet

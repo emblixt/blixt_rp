@@ -26,11 +26,11 @@ from datetime import datetime
 from dataclasses import dataclass
 
 from blixt_utils.misc.attribdict import AttribDict
-from rp_utils.version import info
+from blixt_rp.rp_utils.version import info
 from blixt_utils.utils import isnan
 import blixt_utils.io.io as uio
-import rp.rp_core as rp
-import rp_utils.definitions as ud
+from blixt_rp import rp as rp
+import blixt_rp.rp_utils.definitions as ud
 
 # data class decorator explained here:
 # https://realpython.com/python-data-classes/

@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 
-import rp.rp_core as rp
+from blixt_rp import rp as rp
 
 
 def create_test_data(length, constant_fractions):

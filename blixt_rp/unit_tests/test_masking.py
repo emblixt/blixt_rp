@@ -1,8 +1,7 @@
 import unittest
-import blixt_utils.io.io as uio
 import os
-from core.well import Project
-from core.well import Well
+from blixt_rp.core.well import Project
+from blixt_rp.core.well import Well
 import numpy as np
 
 def_lb_name = 'Logs'  # default Block name

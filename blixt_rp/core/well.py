@@ -21,25 +21,24 @@ import numpy as np
 import logging
 import re
 import os
-import sys
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 
 from blixt_utils.misc.attribdict import AttribDict
-from rp_utils.version import info
+from blixt_rp.rp_utils.version import info
 from blixt_utils.utils import log_header_to_template as l2tmpl
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 import blixt_utils.io.io as uio
 from blixt_utils.io.io import convert
 import blixt_utils.misc.masks as msks
 from blixt_utils.utils import arrange_logging
-from rp_utils.harmonize_logs import harmonize_logs as fixlogs
+from blixt_rp.rp_utils.harmonize_logs import harmonize_logs as fixlogs
 from blixt_utils.plotting import crossplot as xp
-from core.minerals import MineralMix
-from core.log_curve import LogCurve
-import rp.rp_core as rp
+from blixt_rp.core.minerals import MineralMix
+from blixt_rp.core.log_curve import LogCurve
+from blixt_rp import rp as rp
 from blixt_utils.misc.convert_data import convert as cnvrt
-import rp_utils.definitions as ud
+import blixt_rp.rp_utils.definitions as ud
 
 # global variables
 supported_version = {2.0, 3.0}

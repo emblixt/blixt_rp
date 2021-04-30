@@ -1,10 +1,11 @@
 import unittest
 import os
 import numpy as np
-from core.well import Well
-from core.well import Project
+from blixt_rp.core.well import Well
+from blixt_rp.core.well import Project
 from blixt_utils.misc.convert_data import convert as cnvrt
-import rp.rp_core as rp
+from blixt_rp import rp as rp
+
 
 class RpTestCase(unittest.TestCase):
     wp = Project()

@@ -8,7 +8,7 @@ import blixt_utils.io.io as uio
 from blixt_utils.plotting import crossplot as xp
 from blixt_utils.utils import nan_corrcoef
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
-import rp_utils.definitions as ud
+import blixt_rp.rp_utils.definitions as ud
 
 logger = logging.getLogger(__name__)
 def_msk_name = 'Mask'  # default mask name
