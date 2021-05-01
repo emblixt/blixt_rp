@@ -208,7 +208,7 @@ class MasksTestCase(unittest.TestCase):
     def test_append_mask(self):
         w, phie = create_test_data('phie')
 
-        lmt1 = 0.05;
+        lmt1 = 0.05
         lmt2 = 0.1
         masked_length = len(phie[(phie > lmt1) & (phie < lmt2)])
 

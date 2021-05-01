@@ -22,7 +22,7 @@ def straight_line(x, a, b):
 def twolayer(vp0, vs0, rho0, vp1, vs1, rho1, angels=None):
     #from bruges.reflection import shuey2
     #from bruges.filters import ricker
-    from blixt_rp.rp import reflectivity, intercept, gradient
+    from blixt_rp.rp.rp_core import reflectivity, intercept, gradient
     if angels is None:
         angels = [5, 15, 30]
 

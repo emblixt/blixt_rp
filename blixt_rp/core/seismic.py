@@ -7,8 +7,8 @@ from itertools import cycle
 from scipy.optimize import least_squares
 
 import blixt_utils.misc.curve_fitting as mycf
-import blixt_utils.io as uio
-from blixt_rp.plotting import wiggle_plot
+import blixt_utils.io.io as uio
+from blixt_utils.plotting.helpers import wiggle_plot
 import blixt_utils.plotting.crossplot as xp
 
 # global variables
@@ -196,6 +196,7 @@ def test_plot_line():
     plt.show()
 
 def test_amp_spectra():
+    from blixt_rp.core.wavelets import plot_cwt
     filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\Test_angle_stacks\KPSDM-NEAR_10deg_cropped.sgy"
     data, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
 

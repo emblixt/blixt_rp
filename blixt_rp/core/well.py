@@ -29,7 +29,7 @@ from blixt_rp.rp_utils.version import info
 from blixt_utils.utils import log_header_to_template as l2tmpl
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 import blixt_utils.io.io as uio
-from blixt_utils.io.io import convert
+from blixt_utils.io.io import well_reader
 import blixt_utils.misc.masks as msks
 from blixt_utils.utils import arrange_logging
 from blixt_rp.rp_utils.harmonize_logs import harmonize_logs as fixlogs
@@ -1930,7 +1930,7 @@ def _read_las(file):
 
     with open(file, "r") as f:
         lines = f.readlines()
-    return convert(lines, file_format=file_format)  # read all lines from data
+    return well_reader(lines, file_format=file_format)  # read all lines from data
 
 
 def add_one(instring):

@@ -420,7 +420,7 @@ def rpt_phi_sw(_phi, _sw, **kwargs):
     return xx, yy
 
 def test():
-    from blixt_rp.core.well import Project;
+    from blixt_rp.core.well import Project
     import blixt_utils.io.io as uio
     from blixt_rp.core.minerals import MineralMix
     wi_name = 'SAND E'

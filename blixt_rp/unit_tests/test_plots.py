@@ -18,7 +18,6 @@ class PlotTestCase(unittest.TestCase):
                            'acs': 'Shear sonic',
                            'cali': 'Caliper',
                            'den': 'Density',
-                           'neu': 'Neutron density',
                            'gr': 'Gamma ray',
                            'rdep': 'Resistivity',
                            'rmed': 'Resistivity',
