@@ -1,6 +1,7 @@
 """
 https://github.com/seg/tutorials-2017/blob/master/1706_Seismic_rock_physics/seismic_rock_physics.ipynb
 
+
 ricker from bruges.wavelets
 https://github.com/agile-geoscience/bruges/blob/master/bruges/filters/wavelets.py
 """

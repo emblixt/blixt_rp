@@ -7,7 +7,7 @@ import blixt_utils.utils as uu
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
 from blixt_rp import rp as rp
-import tmp.tmp_avo_model as tta
+from bruges.filters import ricker
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     """
     Attempts to draw a plot similar to the "CPI plots", for one working interval with some buffer.
     :param well:
+        well object
     :param log_table:
         dict
         Dictionary of log type: log name key: value pairs which decides which log to use when selecting which
@@ -29,6 +30,10 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
                'P velocity': 'vp',
                'S velocity': 'vs',
                'Density': 'rhob'}
+    :param wis:
+        dict
+        Dictionary of working intervals, keys are working interval names, and the values are a two
+        items list with top & bottom
     :param buffer:
         float
         distance in meters
@@ -253,7 +258,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     if reff is not None:
         #print(len(reff(10)))
         #tw, w = ricker(_f=c_f, _length=duration, _dt=time_step)
-        w = tta.ricker(duration, time_step, c_f)
+        w = ricker(duration, time_step, c_f)
         #print(len(w))
 
         # Compute the depth-time relation
