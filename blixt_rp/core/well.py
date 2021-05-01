@@ -36,7 +36,7 @@ from blixt_rp.rp_utils.harmonize_logs import harmonize_logs as fixlogs
 from blixt_utils.plotting import crossplot as xp
 from blixt_rp.core.minerals import MineralMix
 from blixt_rp.core.log_curve import LogCurve
-from blixt_rp import rp as rp
+import blixt_rp.rp.rp_core as rp
 from blixt_utils.misc.convert_data import convert as cnvrt
 import blixt_rp.rp_utils.definitions as ud
 
