@@ -21,7 +21,7 @@ setup(
         'blixt_rp.core',
         'blixt_rp.plotting',
         'blixt_rp.rp',
-        'blixt_rp.rp_utils'
+        'blixt_rp.rp_utils',
         'blixt_rp.unit_tests'
     ],
     url='https://github.com/emblixt/blixt_rp',
