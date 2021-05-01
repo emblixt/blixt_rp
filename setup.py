@@ -36,10 +36,6 @@ setup(
         'numpy>=1.16.0',
         'matplotlib>=3.0.2',
         'scipy>=1.4.1',
-        'json>=2.0.9',
-        'logging>=0.5.1.2',
-        'pandas>=1.1.0',
-        'pywt>=1.1.1',
         'setuptools>=47.1.0',
         'blixt_utils>=0.1.0'
 
