@@ -143,8 +143,6 @@ class Project(object):
                 working_dir = os.path.dirname(os.path.realpath(__file__))
                 dir_list = working_dir.split(os.path.sep)
                 working_dir = os.path.sep.join(dir_list[:-2])
-                print(working_dir)
-                #working_dir = working_dir.rstrip('core')
 
             logging_file = os.path.join(
                 working_dir,
@@ -1114,7 +1112,6 @@ class Well(object):
                     pass
             else:
                 continue
-
 
     def apply_mask(self,
                    name=None):

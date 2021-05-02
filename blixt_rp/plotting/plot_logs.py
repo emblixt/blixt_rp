@@ -363,7 +363,7 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
                 if lname not in well.log_names():  # skip this log
                     missing_logs_txt += '{}\n'.format(lname)
                     continue
-                if np.isnan(np.sum(tb.logs[lname].data[mask])): # all nan's
+                if np.isnan(tb.logs[lname].data[mask]).all(): # all nan's
                     missing_logs_txt += '{}\n'.format(lname)
                 x = uu.norm(tb.logs[lname].data[mask], method='median')
                 styles = {'lw': templates[ltype]['line width'],
