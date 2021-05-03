@@ -526,10 +526,17 @@ def plot_logs_vs_depth(logs, wells, wi_name, ncols, well_names, results_per_well
         key = key.lower()
         for k, well in enumerate(wells.values()):
             this_well_name = uio.fix_well_name(well.well)
-            axs[i].plot(
-                results_per_well[this_well_name][key],
-                depth_from_top[this_well_name],
-                c=xp.cnames[k])
+            try:
+                axs[i].plot(
+                    results_per_well[this_well_name][key],
+                    depth_from_top[this_well_name],
+                    c=xp.cnames[k])
+            except ValueError:
+                warn_txt = 'Log {}, is lacking in working interval {} in well {}'.format(
+                    key, wi_name, this_well_name)
+                logger.warning(warn_txt)
+                print('WARNING: {}'.format(warn_txt))
+                continue
 
         axs[i].set_xlabel(key)
         axs[i].set_ylim(axs[i].get_ylim()[1], axs[i].get_ylim()[0])
