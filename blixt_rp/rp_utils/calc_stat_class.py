@@ -200,7 +200,7 @@ class SetUpCalculation:
         :param suffix:
             str or list of strings
             A combination of the working interval and the suffix is used to tag each line in the output excel sheet
-            If this is a single dictionary, it will be used in all above given working intervals.
+            If this is a single string, it will be used in all above given working intervals.
             If it is a list, it must have the same length as wi_names
 
         :param wis:
@@ -254,6 +254,7 @@ class SetUpCalculation:
             if isinstance(log_table, dict):
                 self.log_table = [log_table] * len(wi_names)
             elif isinstance(log_table, list):
+                self.log_table = log_table
                 if len(wi_names) != len(log_table):
                     raise ValueError(
                         'The number of log_tables, {}, must be same as number of working intervals, {}'.format(
@@ -261,6 +262,7 @@ class SetUpCalculation:
             if isinstance(cutoffs, dict):
                 self.cutoffs = [cutoffs] * len(wi_names)
             elif isinstance(cutoffs, list):
+                self.cutoffs = cutoffs
                 if len(wi_names) != len(cutoffs):
                     raise ValueError(
                         'The number of cutoffs, {}, must be same as number of working intervals, {}'.format(
@@ -268,6 +270,7 @@ class SetUpCalculation:
             if isinstance(suffix, str):
                 self.suffix = [suffix] * len(wi_names)
             elif isinstance(suffix, list):
+                self.suffix = suffix
                 if len(wi_names) != len(suffix):
                     raise ValueError(
                         'The number of suffixes, {}, must be same as number of working intervals, {}'.format(
@@ -339,19 +342,27 @@ class CalculateStats:
                 depth_from_top, calc_setup.cutoffs[j], calc_setup.log_table[j], block_name=calc_setup.block_name)
 
             # create plot of logs vs depth and fill the interval plots
+            if len(calc_setup.wi_names) == 1:
+                this_axis = calc_setup.axes_logs[:]
+            else:
+                this_axis = calc_setup.axes_logs[j][:]
             plot_logs_vs_depth(logs, log_types, calc_setup.wells, wi_name, results_per_well, depth_from_top,
                                cutoffs_str, calc_setup.suffix[j], templates=calc_setup.templates,
-                               axs=calc_setup.axes_logs[j][:], first_row=j == 0)
+                               axs=this_axis, first_row=j == 0)
 
             # Create plots of average values within each working interval, with one plot per log
             plot_averages(j, logs, log_types, calc_setup.wells, results, results_per_well,
-                               cutoffs_str, calc_setup.suffix[j], calc_setup.templates,
-                               calc_setup.avg_plots_axes)
+                          cutoffs_str, calc_setup.suffix[j], calc_setup.templates,
+                          calc_setup.avg_plots_axes)
 
             if calc_setup.rokdoc_output is not None:  # Try saving output excel sheeta
                 if test_types(log_types):  # Test if necessary log types are present
                     save_rokdoc_output(calc_setup.rokdoc_output, results, wi_name, calc_setup.log_table[j],
                                        cutoffs_str, this_suffix)
+                    # Add each individual well to the output excel sheet
+                    for well_name in list(results_per_well.keys()):
+                        save_rokdoc_output(calc_setup.rokdoc_output, results_per_well[well_name], wi_name,
+                                           calc_setup.log_table[j], cutoffs_str, '_{}{}'.format(well_name, this_suffix))
 
         # Add y tick labels of the working intervals
         for i in range(len(calc_setup.avg_plots_axes)):
@@ -393,8 +404,8 @@ def test_calc_stat():
     log_table = {'P velocity': 'vp_dry', 'S velocity': 'vs_dry', 'Density': 'rho_dry', 'Porosity': 'phie', 'Volume': 'vcl'}
 
     # Determine which excel sheet that should contain the results
-    #rd_file = os.path.join(wp.working_dir, 'results_folder/test_statistics.xlsx')
-    rd_file = None
+    rd_file = os.path.join(wp.working_dir, 'results_folder/test_statistics.xlsx')
+    #rd_file = None
 
     stats_set_up = SetUpCalculation(wells, wi_sands, cutoffs_sands, log_table, 'TEST', wis, templates, rd_file,
                                     working_dir=os.path.join(wp.working_dir, 'results_folder'))

@@ -78,11 +78,10 @@ def test_ixg_plot():
 	far_trace.data.flatten()]), [10., 18., 26.])
 
     res = least_squares(
-            mycf.residuals,
-            [1.,1.],
-            args=(i, g),
-            kwargs={'target_function': straight_line}
-    )
+        mycf.residuals,
+        [1.,1.],
+        args=(i, g),
+        kwargs={'target_function': straight_line})
     trend_line = 'WS = {:.4f}*I {:.4f} - G'.format(*res.x)
     print(res.status)
     print(res.message)

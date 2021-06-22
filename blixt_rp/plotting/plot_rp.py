@@ -3,10 +3,11 @@ import numpy as np
 from matplotlib.lines import Line2D
 from matplotlib.font_manager import FontProperties
 from copy import deepcopy
+import bruges.rockphysics.anisotropy as bra
 import logging
 
 from blixt_utils.plotting import crossplot as xp
-from blixt_rp import rp as rp
+import blixt_rp.rp.rp_core as rp
 import blixt_rp.core.well as cw
 from blixt_utils.misc.convert_data import convert as cnvrt
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
@@ -17,7 +18,8 @@ opt2 = {'ha': 'right', 'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': '
 
 
 def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend_items=None,
-            plot_type=None, ref_val=None, fig=None, ax=None, block_name=None, savefig=None, **kwargs):
+            plot_type=None, ref_val=None, fig=None, ax=None, block_name=None, color_by=None, savefig=None,
+            backus=False, **kwargs):
 
     """
     Plots some standard rock physics crossplots for the given wells
@@ -64,8 +66,9 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
             'Phi-Vp': Porosity versus Vp plot
             'I-G': Intercept versus Gradient plot
     :param ref_val:
-        list
-        List of reference Vp [m/s], Vs [m/s], and rho [g/cm3] that are used
+        dict
+        dictionary with wellnames as keys. Each value is a list of reference
+        Vp [m/s], Vs [m/s], and rho [g/cm3] that are used
         when calculating the Intercept and gradient
     :param fig:
 
@@ -74,15 +77,27 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
     :param block_name:
         str
         Name of the log block from where the logs are picked
+    :param color_by:
+        str
+        If None, data are colored according to each individual wells template, else set it to
+        a log type, and it tries to color the points based on that data
     :param savefig
         str
         full pathname of file to save the plot to
+    :param backus:
+        bool
+        If true, Vp, Vs and Rho are Backus averaged before plotting
     :param **kwargs:
         keyword arguments passed on to crossplot.plot()
     :return:
+        colorbar, legend
     """
     #
     # some initial setups
+    backus_length = 15.
+    if ref_val is not None:
+        if not isinstance(ref_val, dict):
+            raise ValueError('ref_val must be a dictionary with reference Vp, Vs and rho for each well')
     log_table = small_log_table(log_table)
     if block_name is None:
         block_name = cw.def_lb_name
@@ -91,7 +106,7 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
     if plot_type is None:
         plot_type = 'AI-VpVs'
     elif plot_type == 'I-G' and ref_val is None:
-        ref_val = [3500., 1700., 2.6]
+        raise ValueError('Reference values for each well is needed for creating Intercept vs. Gradient plot')
     logs = [n.lower() for n in list(log_table.values())]
     if savefig is not None:
         _savefig = True
@@ -110,7 +125,11 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
     # load
     well_names = []
     desc = ''
+    n_wells = len(wells)
+    counter = 0
+    cbar = None
     for wname, _well in wells.items():
+        counter += 1
         print('Plotting well {}'.format(wname))
         # create a deep copy of the well so that the original is not altered
         well = deepcopy(_well)
@@ -142,38 +161,45 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
         else:
             mask = None
 
-        # collect data for plot
-        if plot_type == 'AI-VpVs':
-            if 'P velocity' in list(log_table.keys()):
-                # Calculating Vp / Vs using vp and vs
-                x_data = well.block[block_name].logs[log_table['P velocity'].lower()].data * \
-                         well.block[block_name].logs[log_table['Density'].lower()].data
-                x_unit = '{} {}'.format(well.block[block_name].logs[log_table['P velocity'].lower()].header.unit,
-                                        well.block[block_name].logs[log_table['Density'].lower()].header.unit)
-                y_data = well.block[block_name].logs[log_table['P velocity'].lower()].data / \
-                         well.block[block_name].logs[log_table['S velocity'].lower()].data
-            else:
-                # Assume we are calculating Vp / Vs using sonic logs
-                x_data = well.block[block_name].logs[log_table['Density'].lower()].data / \
-                         well.block[block_name].logs[log_table['Sonic'].lower()].data
-                x_unit = '{}/{}'.format(well.block[block_name].logs[log_table['Density'].lower()].header.unit,
-                                        well.block[block_name].logs[log_table['Sonic'].lower()].header.unit)
-                y_data = well.block[block_name].logs[log_table['Shear sonic'].lower()].data / \
-                         well.block[block_name].logs[log_table['Sonic'].lower()].data
+        # Collect data for plot, start with Vp, Vs and Rho
+        # TODO check the units, and convert if necessary
+        rho = well.block[block_name].logs[log_table['Density'].lower()].data
+        rho_unit = well.block[block_name].logs[log_table['Density'].lower()].header.unit
+        if 'P velocity' in list(log_table.keys()):
+            vp = well.block[block_name].logs[log_table['P velocity'].lower()].data
+            vp_unit = well.block[block_name].logs[log_table['P velocity'].lower()].header.unit
+            vs = well.block[block_name].logs[log_table['S velocity'].lower()].data
+            vs_unit = well.block[block_name].logs[log_table['S velocity'].lower()].header.unit
+        else:  # Assume we can use the sonic logs instead.
+            vp_unit = 'm/s'
+            vp = cnvrt(well.block[block_name].logs[log_table['Sonic'].lower()].data,  # convert this data
+                       well.block[block_name].logs[log_table['Sonic'].lower()].header.unit,  # from this unit
+                       vp_unit)  # to this unit
+            vs_unit = 'm/s'
+            vs = cnvrt(well.block[block_name].logs[log_table['Shear sonic'].lower()].data,
+                       well.block[block_name].logs[log_table['Shear sonic'].lower()].header.unit,
+                       vs_unit)
 
+        # Apply Backus average if requested
+        if backus is True:
+            ba = bra.backus(vp, vs, rho, backus_length, well.block[block_name].step.value)
+            vp = ba[0]
+            vs = ba[1]
+            rho = ba[2]
+
+        if plot_type == 'AI-VpVs':
+            # Calculating Vp / Vs using vp and vs
+            x_data = vp * rho
+            x_unit = '{} {}'.format(vp_unit, rho_unit)
+            y_data = vp / vs
             y_unit = '-'
             xtempl = {'full_name': 'AI', 'unit': x_unit}
             ytempl = {'full_name': 'Vp/Vs', 'unit': y_unit}
 
         elif (plot_type == 'Vp-bd') or (plot_type == 'Vp-tvd'):
-            if 'P velocity' in list(log_table.keys()):
-                x_data = well.block[block_name].logs[log_table['P velocity'].lower()].data
-                x_unit = '{}'.format(well.block[block_name].logs[log_table['P velocity'].lower()].header.unit)
-                xtempl = {'full_name': log_table['P velocity'], 'unit': x_unit}
-            else:
-                x_data = 1. / well.block[block_name].logs[log_table['Sonic'].lower()].data
-                x_unit = '1/{}'.format(well.block[block_name].logs[log_table['Sonic'].lower()].header.unit)
-                xtempl = {'full_name': '1/Sonic', 'unit': x_unit}
+            x_data = vp
+            x_unit = vp_unit
+            xtempl = {'full_name': log_table['P velocity'], 'unit': x_unit}
             if plot_type == 'Vp-bd':
                 y_data = well.get_burial_depth(templates, block_name)
                 ytempl = {'full_name': 'Burial depth', 'unit': 'm'}
@@ -182,8 +208,7 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
                 ytempl = {'full_name': 'TVD', 'unit': 'm'}
 
         elif (plot_type == 'VpVs-bd') or (plot_type == 'VpVs-tvd'):
-            x_data = well.block[block_name].logs[log_table['P velocity'].lower()].data / \
-                     well.block[block_name].logs[log_table['S velocity'].lower()].data
+            x_data = vp / vs
             xtempl = {'full_name': 'Vp/Vs', 'unit': '-'}
             if plot_type == 'VpVs-bd':
                 y_data = well.get_burial_depth(templates, block_name)
@@ -193,10 +218,8 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
                 ytempl = {'full_name': 'TVD', 'unit': 'm'}
 
         elif (plot_type == 'AI-bd') or (plot_type == 'AI-tvd'):
-            x_data = well.block[block_name].logs[log_table['P velocity'].lower()].data * \
-                     well.block[block_name].logs[log_table['Density'].lower()].data
-            x_unit = '{} {}'.format(well.block[block_name].logs[log_table['P velocity'].lower()].header.unit,
-                                    well.block[block_name].logs[log_table['Density'].lower()].header.unit)
+            x_data = vp * rho
+            x_unit = '{} {}'.format(vp_unit, rho_unit)
             xtempl = {'full_name': 'AI', 'unit': x_unit}
             if plot_type == 'AI-bd':
                 y_data = well.get_burial_depth(templates, block_name)
@@ -206,8 +229,8 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
                 ytempl = {'full_name': 'TVD', 'unit': 'm'}
 
         elif (plot_type == 'Rho-bd') or (plot_type == 'Rho-tvd'):
-            x_data = well.block[block_name].logs[log_table['Density'].lower()].data
-            x_unit = '{}'.format(well.block[block_name].logs[log_table['Density'].lower()].header.unit)
+            x_data = rho
+            x_unit = '{}'.format(rho_unit)
             xtempl = {'full_name': log_table['Density'], 'unit': x_unit}
             if plot_type == 'Rho-bd':
                 y_data = well.get_burial_depth(templates, block_name)
@@ -219,23 +242,35 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
         elif plot_type == 'Phi-Vp':
             x_data = well.block[block_name].logs[log_table['Porosity'].lower()].data
             x_unit = '{}'.format(well.block[block_name].logs[log_table['Porosity'].lower()].header.unit)
-            if 'P velocity' in list(log_table.keys()):
-                # Calculating Vp using vp
-                y_data = well.block[block_name].logs[log_table['P velocity'].lower()].data
-                y_unit = '{}'.format(well.block[block_name].logs[log_table['P velocity'].lower()].header.unit)
-            else:
-                # Assume we are calculating Vp using sonic logs
-                y_data = cnvrt(well.block[block_name].logs[log_table['P velocity'].lower()].data, 'us/ft', 'm/s')
-                y_unit = 'm/s'
+            y_data = vp
+            y_unit = '{}'.format(vp_unit)
             xtempl = {'full_name': 'Porosity', 'unit': x_unit}
             ytempl = {'full_name': 'Vp', 'unit': y_unit}
+        elif plot_type in ['Phi-%AI', 'Phi-I', 'Phi-G']:
+            if ref_val is None:
+                raise ValueError('Reference values for each well is needed')
+            x_data = well.block[block_name].logs[log_table['Porosity'].lower()].data
+            x_unit = '{}'.format(well.block[block_name].logs[log_table['Porosity'].lower()].header.unit)
+            xtempl = {'full_name': 'Porosity', 'unit': x_unit}
+            if plot_type == 'Phi-%AI':
+                y2_data = vp * rho
+                y1_data = ref_val[wname][0] * ref_val[wname][2]
+                y_data = 100 * (y2_data - y1_data) / y1_data
+                y_unit = '%'
+                ytempl = {'full_name': 'rel. AI', 'unit': y_unit}
+            elif plot_type == 'Phi-I':
+                y_data = rp.intercept(ref_val[wname][0], vp, ref_val[wname][2], rho)
+                y_unit = '-'
+                ytempl = {'full_name': 'Intercept', 'unit': y_unit}
+            else:
+                y_data = rp.gradient(ref_val[wname][0], vp, ref_val[wname][1], vs, ref_val[wname][2], rho)
+                y_unit = '-'
+                ytempl = {'full_name': 'Gradient', 'unit': y_unit}
         elif plot_type == 'I-G':
-            x_data = rp.intercept(ref_val[0], well.block[block_name].logs[log_table['P velocity'].lower()].data,
-                                  ref_val[2], well.block[block_name].logs[log_table['Density'].lower()].data)
+            x_data = rp.intercept(ref_val[wname][0], vp,
+                                  ref_val[wname][2], rho)
             x_unit = '-'
-            y_data = rp.gradient(ref_val[0], well.block[block_name].logs[log_table['P velocity'].lower()].data,
-                                  ref_val[1], well.block[block_name].logs[log_table['S velocity'].lower()].data,
-                                  ref_val[2], well.block[block_name].logs[log_table['Density'].lower()].data)
+            y_data = rp.gradient(ref_val[wname][0], vp, ref_val[wname][1], vs, ref_val[wname][2], rho)
             y_unit = '-'
             xtempl = {'full_name': 'Intercept', 'unit': x_unit}
             ytempl = {'full_name': 'Gradient', 'unit': y_unit}
@@ -243,12 +278,25 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
             raise IOError('No known plot type selected')
 
         well_names.append(wname)
+        
+        # arrange coloring
+        this_color = templates[wname]['color']
+        draw_color_bar = False
+        if isinstance(color_by, str):
+            _color_logs = well.block[block_name].get_logs_of_type(color_by)
+            if len(_color_logs) > 0:
+                this_color = _color_logs[0].data
+                # only draw colorbar for last well
+                if counter == n_wells:
+                    draw_color_bar = None
+
         # start plotting
 
-        xp.plot(
+        cbar = xp.plot(
             x_data,
             y_data,
-            cdata=templates[wname]['color'],
+            cdata=this_color,
+            cbar=draw_color_bar,
             mdata=templates[wname]['symbol'],
             xtempl=xtempl,
             ytempl=ytempl,
@@ -282,6 +330,8 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
 
     if _savefig:
         fig.savefig(savefig)
+
+    return cbar, this_legend
 
 
 def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, **kwargs):
@@ -376,40 +426,83 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
 
     return all_x, all_y
 
+
 def rpt_phi_sw(_phi, _sw, **kwargs):
     plot_type = kwargs.pop('plot_type', 'AI-VpVs')
     ref_val = kwargs.pop('ref_val', [3500., 1700., 2.6])  # ref values of Vp, Vs and rho for calculating I x G
     model = kwargs.pop('model', 'stiff')
-    phic = kwargs.pop('phic', 0.4)  # critical porosity
-    cn = kwargs.pop('cn', 8)  # coordination number, average number of contacts per grain
-    p = kwargs.pop('p', 10)  # Confining pressure in MPa (effective pressure?)
-    f = kwargs.pop('f', 0.3)  # shear modulus correction factor  (1=dry pack with perfect adhesion, 0=dry frictionless pack)
-    rho_b = kwargs.pop('rho_b', 1.1)  # Brine density  g/cm3
-    k_b = kwargs.pop('k_b', 2.8)   # Brine bulk modulus  GPa
-    rho_hc = kwargs.pop('rho_hc', 0.2)  # HC density
-    k_hc = kwargs.pop('k_hc', 0.06)  # HC bulk modulus
-    rho_min = kwargs.pop('rho_min', 2.7)  # Density [g/cm3] of mineral mix
-    k_min = kwargs.pop('k_min', 30.)  # Bulk modulus GPa of mineral mix
-    mu_min = kwargs.pop('mu_min', 20.)  # Shear modulus of mineral mix
+    phi_c = kwargs.pop('phi_c', None)  # critical porosity
+    p_conf = kwargs.pop('p_conf', None)  # Confining pressure in MPa (effective pressure?)
+    smcf = kwargs.pop('smcf', None)  # shear modulus correction factor  (1=dry pack with perfect adhesion, 0=dry frictionless pack)
+    rho_b = kwargs.pop('rho_b', None)  # Brine density  g/cm3
+    k_b = kwargs.pop('k_b', None)   # Brine bulk modulus  GPa
+    rho_hc = kwargs.pop('rho_hc', None)  # HC density
+    k_hc = kwargs.pop('k_hc', None)  # HC bulk modulus
+    rho_min = kwargs.pop('rho_min', None)  # Density [g/cm3] of mineral mix
+    k_min = kwargs.pop('k_min', None)  # Bulk modulus GPa of mineral mix
+    mu_min = kwargs.pop('mu_min', None)  # Shear modulus of mineral mix
+    rho_qz = kwargs.pop('rho_qz', None)  # Density [g/cm3] of quartz
+    k_qz = kwargs.pop('k_qz', None)  # Bulk modulus GPa of quartz
+    mu_qz = kwargs.pop('mu_qz', None)  # Shear modulus of quartz
+    vsh = kwargs.pop('vsh', None)  # Volume fraction of shale
+    rho_sh = kwargs.pop('rho_sh', None)  # Density [g/cm3] of shale
+    k_sh = kwargs.pop('k_sh', None)  # Bulk modulus GPa of shale
+    mu_sh = kwargs.pop('mu_sh', None)  # Shear modulus of shale
+    ntg = kwargs.pop('ntg', 1)  # Net to Gross, use the shale properties above in the non-Net
+    c_n = kwargs.pop('c_n', None)  # Coordination number in the contact cement model
+    k_cem = kwargs.pop('k_cem', None)  # Cement bulk modulus in GPa
+    mu_cem = kwargs.pop('mu_cem', None)  # Cement shear modulus in GPa
+    scheme = kwargs.pop('scheme', None)  # scheme for calculating cement deposition
+    apc = kwargs.pop('apc', None)  # absolute percent cement (in %)
+    calc_phi_eff = kwargs.pop('calc_phi_eff', False)  # set this to True to calculate effective porosity and use it
+
+    # Check if we need to calculate the average mineral properties, or if they are given
+    if (rho_min is None) or (mu_min is None) or (k_min is None):
+        k_min = rp.vrh_bounds([vsh, 1 - vsh], [k_sh, k_qz])[2]  # Mineral bulk modulus
+        mu_min = rp.vrh_bounds([vsh, 1 - vsh], [mu_sh, mu_qz])[2]  # Mineral shear modulus
+        rho_min = rp.vrh_bounds([vsh, 1 - vsh], [rho_sh, rho_qz])[0]  # Density of minerals
+
+    if calc_phi_eff:
+        #phi = _phi - vsh * ((rho_min - rho_sh) / (rho_min - rho_b))  # eq. 2 in https://link.springer.com/article/10.1007/s13202-020-01073-2#Fig8
+        phi = _phi * (1. - vsh)  # eq. 1.4 in https://www.informit.com/articles/article.aspx?p=1626870&seqNum=2
+    else:
+        phi = 1. * _phi
 
     # Apply the rock physics model to modify the mineral properties
     if model == 'stiff':
-        k_dry, mu_dry = rp.stiffsand(k_min, mu_min, _phi, phic, cn, p, f)
+        k_dry, mu_dry = rp.stiffsand(k_min, mu_min, phi, phi_c, c_n, p_conf, smcf)
+    elif model == 'contactcement':
+        k_dry, mu_dry = rp.contactcement(k_min, mu_min, phi, phi_c, c_n, k_cem, mu_cem, scheme)
+    elif model == 'constantcement':
+        k_dry, mu_dry = rp.constantcement(k_min, mu_min, phi, phi_c, apc, c_n, k_cem, mu_cem, scheme, smcf=smcf)
     else:
-        k_dry, mu_dry = rp.softsand(k_min, mu_min, _phi, phic, cn, p, f)
+        model = 'soft'
+        k_dry, mu_dry = rp.softsand(k_min, mu_min, phi, phi_c, c_n, p_conf, smcf)
+    info_txt = 'Using {} rock physics template'.format(model)
+    print(info_txt)
+    logger.info(info_txt)
 
     # Calculate the final fluid properties for the given water saturation
     k_f2 = rp.vrh_bounds([_sw, 1.-_sw], [k_b, k_hc])[1]  # K_f
     rho_f2 = rp.vrh_bounds([_sw, 1.-_sw],  [rho_b, rho_hc])[0]  #RHO_f
 
     # Use Gassman to calculate the final elastic properties
-    vp_2, vs_2, rho_2, k_2 = rp.vels(k_dry, mu_dry, k_min, rho_min, k_f2, rho_f2, _phi)
+    vp_2, vs_2, rho_2, k_2 = rp.vels(k_dry, mu_dry, k_min, rho_min, k_f2, rho_f2, phi)
+
+    # if ntg is not 1, the final values are modified with the harmonic mean of the Net to Gross properties
+    if ntg != 1:
+        vp_2 = rp.vrh_bounds([ntg, 1.-ntg], [vp_2, 1000. * rp.v_p(k_sh, mu_sh, rho_sh)])[1]
+        vs_2 = rp.vrh_bounds([ntg, 1.-ntg], [vs_2, 1000. * rp.v_s(mu_sh, rho_sh)])[1]
+        rho_2 = rp.vrh_bounds([ntg, 1.-ntg], [rho_2, rho_sh])[1]
+        k_2 = rp.vrh_bounds([ntg, 1.-ntg], [k_2, k_sh])[1]
+
+
 
     if plot_type == 'AI-VpVs':
         xx = rho_2*vp_2
         yy = vp_2/vs_2
     elif plot_type == 'Phi-Vp':
-        xx = _phi
+        xx = phi
         yy = vp_2
     elif plot_type == 'I-G':
         xx = rp.intercept(ref_val[0], vp_2, ref_val[2], rho_2)

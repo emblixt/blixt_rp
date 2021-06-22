@@ -6,7 +6,7 @@ import blixt_rp.core.well as cw
 import blixt_utils.utils as uu
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
-from blixt_rp import rp as rp
+import blixt_rp.rp.rp_core as rp
 from bruges.filters import ricker
 
 logger = logging.getLogger(__name__)
@@ -50,9 +50,18 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     c_f = kwargs.pop('center_frequency', 30.)
     duration = kwargs.pop('duration', 0.512)
     scaling = kwargs.pop('scaling', 30.0)
+    suffix = kwargs.pop('suffix', '')
+    wiggle_fill_style = kwargs.pop('wiggle_fill_style', 'default')
+
+    if wiggle_fill_style == 'opposite':
+        fill_pos_style = 'pos-blue'
+        fill_neg_style = 'neg-red'
+    else:
+        fill_pos_style = 'default'
+        fill_neg_style = 'default'
 
     fig = plt.figure(figsize=(20, 10))
-    fig.suptitle('{} interval in well {}'.format(wi_name, well.well))
+    fig.suptitle('{} interval in well {} {}'.format(wi_name, well.well, suffix))
     n_cols = 22  # subdivide plot in this number of equally wide columns
     l = 0.05; w = (1-l)/float(n_cols+1); b = 0.05; h = 0.8
     #l = 0.05; w = 0; b = 0.1; h = 0.8
@@ -79,7 +88,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
 
     #
     # Gamma ray and Caliper
-    try_these_log_types = ['Gamma ray', 'Caliper', 'Inclination']
+    try_these_log_types = ['Gamma ray', 'Caliper', 'Bit size', 'Inclination']
     log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
     print(log_types)
     lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
@@ -272,15 +281,16 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
                     title='Incidence angle\nRicker f={:.0f} Hz, l={:.3f} s'.format(c_f, duration))
         for inc_a in range(0, 35, 5):
             wig = np.convolve(w, np.nan_to_num(reff(inc_a)), mode='same')
-            wiggle_plot(axes['synt_ax'], dtr[:-1][t_mask], wig[t_mask], inc_a, scaling=scaling)
+            wiggle_plot(axes['synt_ax'], dtr[:-1][t_mask], wig[t_mask], inc_a, scaling=scaling,
+                        fill_pos_style=fill_pos_style, fill_neg_style=fill_neg_style)
     else:
         header_plot(header_axes['synt_ax'], None, None, None, title='Refl. coeff. lacking')
         wiggle_plot(axes['synt_ax'], None, None, None)
 
     if savefig is not None:
         fig.savefig(savefig)
-    #fig.tight_layout()
-    plt.show()
+    else:
+        plt.show()
 
 
 def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, block_name=None, savefig=None):

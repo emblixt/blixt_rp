@@ -22,6 +22,7 @@ import logging
 import re
 import os
 import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
 
 from blixt_utils.misc.attribdict import AttribDict
@@ -883,6 +884,28 @@ class Well(object):
                 result[wi] = tmp[2]
         return result
 
+    def calc_well_path(self, survey_points, survey_file=None, verbose=True):
+        """
+        calculates (interpolates) the TVD (relative to KB) based on the input survey points for each MD value in this well
+
+        :param survey_points:
+            dict
+            Dictionary with required keywords 'MD' and 'TVD'
+            the associated items for 'MD' and 'TVD' keys are lists of measured depth and True vertical depth in meters
+            relative to KB.
+            If key 'INC' exists, it assumes it is the inclination in degrees
+            Because there are so many flavors of how the survey points are stored in a file, you need to write specific
+            readers for each files that spits out the result in a dictionary with 'MD' and 'TVD' keys
+
+        :param survey_file:
+            str
+            Name of file survey points are calculated from.
+            Used in history of objects
+        :return:
+        """
+        for lblock in list(self.block.keys()):
+            self.block[lblock].calc_well_path(survey_points, survey_file, verbose)
+
     def calc_mask(self,
                   cutoffs,
                   name=ud.def_msk_name,
@@ -1023,6 +1046,8 @@ class Well(object):
                     isinstance(_cutoffs[key][1], list) else \
                     '{}: {} {}, '.format(
                         key, _cutoffs[key][0], _cutoffs[key][1])
+            if (len(msk_str) > 2) and (msk_str[-2:] == ', '):
+                msk_str = msk_str.rstrip(', ')
             if wi_name is not None:
                 msk_str += ' Working interval: {}'.format(wi_name)
             return msk_str
@@ -1913,6 +1938,71 @@ class Block(object):
                 }
             )
 
+    def calc_well_path(self, survey_points, survey_file=None, verbose=True):
+        """
+        calculates (interpolates) the TVD (relative to KB) based on the input survey points for each MD value in this well
+
+        :param survey_points:
+            dict
+            Dictionary with required keywords 'MD' and 'TVD'
+            the associated items for 'MD' and 'TVD' keys are lists of measured depth and True vertical depth in meters
+            relative to KB.
+            If key 'INC' exists, it assumes it is the inclination in degrees
+            Because there are so many flavors of how the survey points are stored in a file, you need to write specific
+            readers for each files that spits out the result in a dictionary with 'MD' and 'TVD' keys
+
+        :param survey_file:
+            str
+            Name of file survey points are calculated from.
+            Used in history of objects
+        :return:
+
+        """
+        if isinstance(survey_file, str):
+            fname = survey_file
+        else:
+            fname = 'unknown file'
+
+        md = self.logs['depth'].data
+        fig, axes = plt.subplots(1, 2)
+
+        # Calculate and write TVD to well
+        new_tvd = interp1d(survey_points['MD'], survey_points['TVD'],
+                           kind='linear',
+                           bounds_error=False,
+                           fill_value='extrapolate')(md)
+        if verbose:
+            axes[0].plot(survey_points['MD'], survey_points['TVD'], '-or', lw=0)
+            axes[0].plot(md, new_tvd)
+
+        self.add_log(
+            new_tvd,
+            'tvd',
+            'Depth',
+            header={
+                'unit': 'm',
+                'desc': 'True vertical depth',
+                'modification_history': 'calculated from {}'.format(fname)})
+
+        # Try the same for inclination
+        if 'INC' in list(survey_points.keys()):
+            new_inc = interp1d(survey_points['MD'], survey_points['INC'],
+                               kind='linear',
+                               bounds_error=False)(md)
+            if verbose:
+                axes[1].plot(survey_points['MD'], survey_points['INC'], '-or', lw=0)
+                axes[1].plot(md, new_inc)
+            self.add_log(
+                new_inc,
+                'inc',
+                'Inclination',
+                header={
+                    'unit': 'deg',
+                    'desc': 'Inclination',
+                    'modification_history': 'calculated from {}'.format(fname)})
+
+        if verbose:
+            plt.show()
 
 def _read_las(file):
     """Convert file and Return `self`. """
