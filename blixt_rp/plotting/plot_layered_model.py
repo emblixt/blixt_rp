@@ -49,7 +49,7 @@ def plot_model(ax, header_ax, vps, vss, rhos, boundaries, buffer=None):
     text_style = {'fontsize': 'x-small', 'bbox': {'facecolor': 'w', 'alpha': 0.5}}
 
     if buffer is None:
-        buffer = 200.
+        buffer = 100.
     bwb = [boundaries[0] - buffer] + boundaries +  [boundaries[-1] + buffer]  #  boundaries with buffer
     y = np.linspace(bwb[0], bwb[-1],  100)
     ais = [_vp * _rho for _vp, _rho in zip(vps, rhos)]  # Acoustic impedance in m/s g/cm3
@@ -78,6 +78,9 @@ def plot_model(ax, header_ax, vps, vss, rhos, boundaries, buffer=None):
 
 if __name__ == '__main__':
 
+    #vps = [3500., 3500., 3500.]  # Vp [m/s] in the different layers
+    #vss = [1800., 1900., 1800.]
+    #rhos = [2.6, 2.5, 2.6]
     vps = [3500., 3600., 3500.]  # Vp [m/s] in the different layers
     vss = [1800., 2100., 1800.]
     rhos = [2.6, 2.3, 2.6]
@@ -90,7 +93,7 @@ if __name__ == '__main__':
     my_linestyle = {'lw': 1, 'color': 'k', 'ls': '-'}
 
     fig = plt.figure(figsize=(5, 10))
-    fig.suptitle('Simple model test')
+    fig.suptitle('Simple model')
     n_cols = 10  # subdivide plot in this number of equally wide columns
     l = 0.05; w = (1-l)/float(n_cols+1); b = 0.05; h = 0.8
     rel_pos = [1, 4, 5]  # Column number (starting with one) of subplot

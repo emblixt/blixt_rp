@@ -429,7 +429,7 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
 
 def rpt_phi_sw(_phi, _sw, **kwargs):
     plot_type = kwargs.pop('plot_type', 'AI-VpVs')
-    ref_val = kwargs.pop('ref_val', [3500., 1700., 2.6])  # ref values of Vp, Vs and rho for calculating I x G
+    ref_val = kwargs.pop('ref_val', None)  # ref values of Vp, Vs and rho for calculating I x G [Vp, Vs, rho]
     model = kwargs.pop('model', 'stiff')
     phi_c = kwargs.pop('phi_c', None)  # critical porosity
     p_conf = kwargs.pop('p_conf', None)  # Confining pressure in MPa (effective pressure?)
@@ -496,15 +496,18 @@ def rpt_phi_sw(_phi, _sw, **kwargs):
         rho_2 = rp.vrh_bounds([ntg, 1.-ntg], [rho_2, rho_sh])[1]
         k_2 = rp.vrh_bounds([ntg, 1.-ntg], [k_2, k_sh])[1]
 
-
-
     if plot_type == 'AI-VpVs':
         xx = rho_2*vp_2
         yy = vp_2/vs_2
+    elif plot_type == 'AI-Vp':
+        xx = rho_2 * vp_2
+        yy = vp_2
     elif plot_type == 'Phi-Vp':
         xx = phi
         yy = vp_2
     elif plot_type == 'I-G':
+        if ref_val is None:
+            raise IOError('List of Vp, Vs, and density must be provided to calculate I and G')
         xx = rp.intercept(ref_val[0], vp_2, ref_val[2], rho_2)
         yy = rp.gradient(ref_val[0], vp_2, ref_val[1], vs_2, ref_val[2], rho_2)
     else:

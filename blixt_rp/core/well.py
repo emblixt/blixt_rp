@@ -368,7 +368,6 @@ class Project(object):
 
         return all_wells
 
-
     def load_all_wis(self):
         return uio.project_working_intervals(self.project_table)
 
@@ -1950,6 +1949,8 @@ class Block(object):
             If key 'INC' exists, it assumes it is the inclination in degrees
             Because there are so many flavors of how the survey points are stored in a file, you need to write specific
             readers for each files that spits out the result in a dictionary with 'MD' and 'TVD' keys
+
+            The function read_wellpath() in the blixt_utils library tries to read many variants of survey data files
 
         :param survey_file:
             str
