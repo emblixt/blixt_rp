@@ -34,6 +34,12 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         dict
         Dictionary of working intervals, keys are working interval names, and the values are a two
         items list with top & bottom
+    :param wi_name:
+        str
+        Name of working interval to use in this plot
+    :param templates:
+        dict
+        Dictionary of different templates as returned from Project().load_all_templates()
     :param buffer:
         float
         distance in meters
@@ -84,6 +90,11 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     #
     tb = well.block[block_name]  # this log block
     depth = tb.logs['depth'].data
+    if 'twt' in tb.log_names():
+        twt = tb.logs['twt'].data
+        print('Using real twt data')
+    else:
+        twt = None
     mask = np.ma.masked_inside(depth, wis[well.well][wi_name][0]-buffer, wis[well.well][wi_name][1]+buffer).mask
 
     #
@@ -117,28 +128,30 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
 
     #
     # TWT
-    # Get the time-depth relation (time as a function of md)
-    _x = None
-    tdr = None
-    if 'P velocity' in list(log_table.keys()):
-        _x = log_table['P velocity']
-    elif 'Sonic' in list(log_table.keys()):
-        _x = log_table['Sonic']
-    if _x is not None:
-        tdr = well.time_to_depth(_x, templates=templates)
-        if tdr is None:
+    if twt is None:
+        # Get the time-depth relation (two way time as a function of md) by calculating it from vp or sonic
+        _x = None
+        if 'P velocity' in list(log_table.keys()):
+            _x = log_table['P velocity']
+        elif 'Sonic' in list(log_table.keys()):
+            _x = log_table['Sonic']
+        if _x is not None:
+            twt = well.time_to_depth(_x, templates=templates)
+            if twt is None:
+                header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]\nLacking info')
+                annotate_plot(axes['twt_ax'], None)
+            else:
+                header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]')
+                annotate_plot(axes['twt_ax'], twt[mask])
+        else:
             header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]\nLacking info')
             annotate_plot(axes['twt_ax'], None)
-        else:
-            header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]')
-            annotate_plot(axes['twt_ax'], tdr[mask])
     else:
-        header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]\nLacking info')
-        annotate_plot(axes['twt_ax'], None)
+        header_plot(header_axes['twt_ax'], None, None, None, title='TWT [ms]')
+        annotate_plot(axes['twt_ax'], twt[mask])
 
-
-    if tdr is not None:
-        tops_twt = [tdr[find_nearest(depth, y)] for y in wis[well.well][wi_name]]
+    if twt is not None:
+        tops_twt = [twt[find_nearest(depth, y)] for y in wis[well.well][wi_name]]
         #print(tops_twt)
         #for ax in [axes[x] for x in ['twt_ax', 'synt_ax']]:
         for ax in [axes[x] for x in ['twt_ax']]:
@@ -238,24 +251,24 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
 
     #
     # Wiggles
-    #t = np.arange(tdr[mask][0], tdr[mask][-1], 0.004)  # A uniformly sampled array of time steps, from A to B
-    t = np.arange(0., np.nanmax(tdr), time_step)  # A uniformly sampled array of time steps, from 0 to 3
+    #t = np.arange(twt[mask][0], twt[mask][-1], 0.004)  # A uniformly sampled array of time steps, from A to B
+    t = np.arange(0., np.nanmax(twt), time_step)  # A uniformly sampled array of time steps, from 0 to 3
     #print(len(t))
     if 'P velocity' in list(log_table.keys()):
-        vp_t = np.interp(x=t, xp=tdr, fp=tb.logs[log_table['P velocity']].data)
+        vp_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['P velocity']].data)
     elif 'Sonic' in list(log_table.keys()):
-        vp_t = np.interp(x=t, xp=tdr, fp=1./tb.logs[log_table['Sonic']].data)
+        vp_t = np.interp(x=t, xp=twt, fp=1./tb.logs[log_table['Sonic']].data)
     else:
         vp_t = None
     #print(len(vp_t))
     if 'S velocity' in list(log_table.keys()):
-        vs_t = np.interp(x=t, xp=tdr, fp=tb.logs[log_table['S velocity']].data)
+        vs_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['S velocity']].data)
     elif 'Shear sonic' in list(log_table.keys()):
-        vs_t = np.interp(x=t, xp=tdr, fp=1./tb.logs[log_table['Shear sonic']].data)
+        vs_t = np.interp(x=t, xp=twt, fp=1./tb.logs[log_table['Shear sonic']].data)
     else:
         vs_t = None
     if 'Density' in list(log_table.keys()):
-        rho_t = np.interp(x=t, xp=tdr, fp=tb.logs[log_table['Density']].data)
+        rho_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['Density']].data)
     else:
         rho_t = None
 
@@ -271,10 +284,10 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         #print(len(w))
 
         # Compute the depth-time relation
-        dtr = np.array([depth[find_nearest(tdr, tt)] for tt in t])
+        dtr = np.array([depth[find_nearest(twt, tt)] for tt in t])
         #print(np.nanmin(dtr), np.nanmax(dtr))
         # Translate the mask to the time variable
-        t_mask = np.ma.masked_inside(t[:-1], np.nanmin(tdr[mask]), np.nanmax(tdr[mask])).mask
+        t_mask = np.ma.masked_inside(t[:-1], np.nanmin(twt[mask]), np.nanmax(twt[mask])).mask
         #wiggle_plot(axes['synt_ax'], t[:-1][t_mask], wig[t_mask], 10)
 
         header_plot(header_axes['synt_ax'], None, None, None,
