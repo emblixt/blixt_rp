@@ -99,9 +99,9 @@ if __name__ == '__main__':
     ax.plot(np.arange(len(losses)), losses, 'b-', label='loss')
     xlab, ylab = ax.set_xlabel('epoch'), ax.set_ylabel('loss') 
 
-    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+    _, ax = plt.subplots(1, 1, figsize=(12, 8))
     ax.plot(np.arange(len(acces)), acces, 'b-', label='accuracy')
-    xlab, ylab = ax.set_xlabel('epoch'), ax.set_ylabel('accuracy')
+    _, _ = ax.set_xlabel('epoch'), ax.set_ylabel('accuracy')
     print("Weights:", w)
 
     plt.show()

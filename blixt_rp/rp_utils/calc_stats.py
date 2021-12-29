@@ -8,7 +8,7 @@ import blixt_utils.io.io as uio
 from blixt_utils.plotting import crossplot as xp
 from blixt_utils.utils import nan_corrcoef
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
-import rp_utils.definitions as ud
+import blixt_rp.rp_utils.definitions as ud
 
 logger = logging.getLogger(__name__)
 def_msk_name = 'Mask'  # default mask name
@@ -187,8 +187,11 @@ def calc_stats2(
         wis = rp_utils.io.project_working_intervals(wp.project_table)
 
     :param wi_names:
-        list of working interval names
+        str or list
+        of working interval names
         E.G.
+            'Hekkingen sands'
+            or
             [ 'Hekkingen sands',  'Kolmule sands', ... ]
     :param cutoffs:
         dict
@@ -211,6 +214,7 @@ def calc_stats2(
     :param suffix:
         str
         Suffix added to output plots (png) to ease separating output from eachother
+        A combination of the working interval and the suffix is used to tag each line in the output excel sheet
     :return:
     """
     # some initial setups
@@ -526,10 +530,17 @@ def plot_logs_vs_depth(logs, wells, wi_name, ncols, well_names, results_per_well
         key = key.lower()
         for k, well in enumerate(wells.values()):
             this_well_name = uio.fix_well_name(well.well)
-            axs[i].plot(
-                results_per_well[this_well_name][key],
-                depth_from_top[this_well_name],
-                c=xp.cnames[k])
+            try:
+                axs[i].plot(
+                    results_per_well[this_well_name][key],
+                    depth_from_top[this_well_name],
+                    c=xp.cnames[k])
+            except ValueError:
+                warn_txt = 'Log {}, is lacking in working interval {} in well {}'.format(
+                    key, wi_name, this_well_name)
+                logger.warning(warn_txt)
+                print('WARNING: {}'.format(warn_txt))
+                continue
 
         axs[i].set_xlabel(key)
         axs[i].set_ylim(axs[i].get_ylim()[1], axs[i].get_ylim()[0])
@@ -594,6 +605,7 @@ def plot_histograms_tops(logs, results, interval, ncols, well_names, results_per
     if working_dir is not None:
         fig.savefig(os.path.join(working_dir, '{}_logs_hist{}.png'.format(interval['name'], suffix)))
 
+
 def plot_histograms(logs, results, wi_name, ncols, well_names, results_per_well,
                     working_dir, cutoffs_str, suffix):
     fig, axs = plt.subplots(nrows=ncols, ncols=1, figsize=(9, 8 * ncols))
@@ -620,6 +632,7 @@ def plot_histograms(logs, results, wi_name, ncols, well_names, results_per_well,
     fig.tight_layout()
     if working_dir is not None:
         fig.savefig(os.path.join(working_dir, '{}_logs_hist{}.png'.format(wi_name, suffix)))
+
 
 def save_rokdoc_output_tops(rokdoc_output, results, interval, log_table, cutoffs_str, suffix):
     # Write result to RokDoc compatible excel Sums And Average xls file:
@@ -687,6 +700,7 @@ def save_rokdoc_output_tops(rokdoc_output, results, interval, log_table, cutoffs
                                         'None',
                                         0.0,
                                         cutoffs_str,
+                                        '-',
                                         datetime.now()
                                     ]
                                     )
@@ -694,6 +708,11 @@ def save_rokdoc_output_tops(rokdoc_output, results, interval, log_table, cutoffs
 
 def save_rokdoc_output(rokdoc_output, results, wi_name, log_table, cutoffs_str, suffix):
     # Write result to RokDoc compatible excel Sums And Average xls file:
+    log_table_str = ''
+    for key in log_table:
+        log_table_str += '{}: {}, '.format(key, log_table[key])
+    log_table_str = log_table_str.rstrip(', ')
+
     if rokdoc_output is not None:
         uio.write_sums_and_averages(rokdoc_output,
                                     [
@@ -757,6 +776,9 @@ def save_rokdoc_output(rokdoc_output, results, wi_name, log_table, cutoffs_str, 
                                         'None',
                                         0.0,
                                         cutoffs_str,
+                                        log_table_str,
                                         datetime.now()
                                     ]
                                     )
+
+

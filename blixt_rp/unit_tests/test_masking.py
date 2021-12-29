@@ -1,8 +1,7 @@
 import unittest
-import blixt_utils.io.io as uio
 import os
-from core.well import Project
-from core.well import Well
+from blixt_rp.core.well import Project
+from blixt_rp.core.well import Well
 import numpy as np
 
 def_lb_name = 'Logs'  # default Block name
@@ -209,7 +208,7 @@ class MasksTestCase(unittest.TestCase):
     def test_append_mask(self):
         w, phie = create_test_data('phie')
 
-        lmt1 = 0.05;
+        lmt1 = 0.05
         lmt2 = 0.1
         masked_length = len(phie[(phie > lmt1) & (phie < lmt2)])
 

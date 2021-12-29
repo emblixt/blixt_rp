@@ -1,8 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pywt
-from scipy import signal
-import obspy
+
 
 def binary_search_scale(f, wavelet_name, dt, start_at_scale=10., freq_tolerance=1., last_scale=None):
     """Returns the nearest scale for a given central frequency using binary search
@@ -140,8 +139,6 @@ def plot_cwt(freq_or_scale, twt, cwt_coeffs,
     ax.grid(True)
 
 def test():
-    from blixt_utils.signal_analysis.signal_analysis import ampspec
-    from plotting.plot_logs import wiggle_plot
     import pickle
 
     c0 = 0.849 # Center frequency

@@ -8,14 +8,13 @@
 # --------------------------------------------------------------------
 """
 """
-import sys
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.font_manager import FontProperties
 import logging
 
-import rp.rp_core as rp
+import blixt_rp.rp.rp_core as rp
 from blixt_utils.misc.templates import handle_template
 
 log = logging.getLogger(__name__)
@@ -174,7 +173,6 @@ def plot(
             xdata[~mask],
             ydata[~mask],
             c='0.4',
-            s=npdata,
             edgecolors='none',
             alpha=0.5
         )

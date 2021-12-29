@@ -1,13 +1,6 @@
 import unittest
-import os
-import blixt_utils.io.io as uio
-from blixt_utils.misc.attribdict import AttribDict
-from core.well import Well
-from core.well import Project
-from blixt_utils.io.io import convert
-
-
-import numpy as np
+from blixt_rp.core.well import Well
+from blixt_rp.core.well import Project
 
 def_lb_name = 'Logs'  # default Block name
 def_msk_name = 'Mask'  # default mask name

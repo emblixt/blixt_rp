@@ -2,9 +2,9 @@ import unittest
 import os
 import blixt_utils.io.io as uio
 from blixt_utils.misc.attribdict import AttribDict
-from core.well import Well
-from core.well import Project
-from blixt_utils.misc.io import convert
+from blixt_rp.core.well import Well
+from blixt_rp.core.well import Project
+from blixt_utils.io.io import well_reader
 
 
 import numpy as np
@@ -28,7 +28,7 @@ def create_test_data(var_name):
 def read_las(lfile):
     with open(lfile, 'r') as f:
         lines = f.readlines()
-    null_value, gen_keys, well_dict = convert(lines)
+    null_value, gen_keys, well_dict = well_reader(lines)
     return null_value, gen_keys, well_dict
 
 

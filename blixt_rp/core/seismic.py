@@ -6,13 +6,9 @@ import logging
 from itertools import cycle
 from scipy.optimize import least_squares
 
-import segyio
-import xarray as xr
-import pywt
-
 import blixt_utils.misc.curve_fitting as mycf
-from core.wavelets import freq2scale
-from plotting.plot_logs import wiggle_plot
+import blixt_utils.io.io as uio
+from blixt_utils.plotting.helpers import wiggle_plot
 import blixt_utils.plotting.crossplot as xp
 
 # global variables
@@ -27,140 +23,7 @@ def next_color():
 def straight_line(x, a, b):
     return a*x + b
 
-def read_segy(f, lag=0, twod=False, byte_il=189, byte_xl=193):
-    '''
-    read_segy (C) aadm 2018 // using Statoil's segyio
-    https://nbviewer.jupyter.org/github/aadm/geophysical_notes/blob/master/playing_with_seismic.ipynb
-
-    Slightly modified and upgraded by Erik Mårten Blixt 2020-08-19
-    '''
-    if twod:
-        with segyio.open(filename, 'r', ignore_geometry=True) as segyfile:
-            sr = segyio.tools.dt(segyfile)/1e3
-            nsamples = segyfile.samples.size
-            twt = segyfile.samples
-            ntraces = segyfile.tracecount
-            data = segyfile.trace.raw[:]
-            header = segyio.tools.wrap(segyfile.text[0])      
-    else:
-        with segyio.open(f, iline=byte_il, xline=byte_xl) as segyfile:
-            sr = segyio.tools.dt(segyfile)/1e3
-            nsamples = segyfile.samples.size
-            twt = segyfile.samples
-            ntraces = segyfile.tracecount
-            data = segyio.tools.cube(segyfile)
-            header = segyio.tools.wrap(segyfile.text[0])  
-            inlines = segyfile.ilines
-            crosslines = segyfile.xlines
-    size_mb= data.nbytes/1024**2
-    info_txt = '[read_segy] reading {}\n'.format(f)
-    info_txt += '[read_segy] number of traces: {0}, samples: {1}, sample rate: {2} s\n'.format(ntraces ,nsamples, sr)
-    info_txt += '[read_segy] first, last sample twt: {0}, {1} s\n'.format(twt[0],twt[-1])
-    info_txt += '[read_segy] size: {:.2f} Mb ({:.2f} Gb)'.format(size_mb, size_mb/1024)
-    print(info_txt)
-    logger.info(info_txt)
-    if not twod:
-        info_txt = '[read_segy] inlines: {:.0f}, min={:.0f}, max={:.0f}\n'.format(inlines.size,inlines.min(),inlines.max())
-        info_txt += '[read_segy] crosslines: {:.0f}, min={:.0f}, max={:.0f}'.format(crosslines.size,crosslines.min(),crosslines.max())
-        print(info_txt)
-        logger.info(info_txt)
-        return xr.DataArray(data, dims= ['INLINE', 'XLINE', 'TWT'], coords=[inlines, crosslines, twt]), \
-            nsamples, sr, twt, ntraces, header, inlines, crosslines
-    else:
-        return xr.DataArray(data, dims= ['TRACES', 'TWT'], coords=[np.arange(ntraces), twt]), \
-            nsamples, sr, twt, ntraces, header, None, None
-
-
-def plot_ampspec(freq,amp,f_peak,name=None):
-    '''
-    plot_ampspec (C) aadm 2016-2018
-    Plots amplitude spectrum calculated with fullspec (aageofisica.py).
-
-    INPUT
-    freq: frequency
-    amp: amplitude
-    f_peak: average peak frequency
-    '''
-    db = 20 * np.log10(amp)
-    db = db - np.amax(db)
-    f, ax = plt.subplots(nrows=1,ncols=2,figsize=(12,5),facecolor='w')
-    ax[0].plot(freq, amp, '-k', lw=2)
-    ax[0].set_ylabel('Power')
-    ax[1].plot(freq, db, '-k', lw=2)
-    ax[1].set_ylabel('Power (dB)')
-    for aa in ax:
-        aa.set_xlabel('Frequency (Hz)')
-        aa.set_xlim([0,np.amax(freq)/1.5])
-        aa.grid()
-        aa.axvline(f_peak, color='r', ls='-')
-        if name!=None:
-            aa.set_title(name, fontsize=16)
-
-
-def plot_ampspecs(freq_amp_list, names=None):
-    '''Plots overlay of multiple amplitude spectras.
- 
-    A variation of:
-    plot_ampspec2 (C) aadm 2016-2018
-    https://nbviewer.jupyter.org/github/aadm/geophysical_notes/blob/master/playing_with_seismic.ipynb
-    which takes a list of multiple freqency-amplitude pairs (with an optional "average peak frequency") 
-
-    INPUT
-        freq_amp_list: list of 
-        [frequency (np.ndarray), amplitude spectra (np.ndarray), optional average peak frequency (float)] lists 
-        
-        names: list of strings, same length as freq_amp_list
-
-    '''
-    dbs = []  # list to hold dB values of the amplitude spectra
-    for _item in freq_amp_list:
-        _db = 20 * np.log10(_item[1])
-        dbs.append(_db - np.amax(_db))
-
-    fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(12,5), facecolor='w')
-    
-    labels = None
-    if names is not None:
-        if len(freq_amp_list) != len(names):
-            raise ValueError('Both input lists must have same length')
-
-        labels = []
-        for i, _name in enumerate(names):
-            _label = '{}'.format(_name)
-            if len(freq_amp_list[i]) > 2:
-                if (freq_amp_list[i][2] is not None):
-                    _label += ' Fp={:.0f} Hz'.format(freq_amp_list[i][2])
-            labels.append(_label)
-    if labels is None:
-        labels = [''] * len(freq_amp_list)
-
-    saved_colors = []
-    for i, _item in enumerate(freq_amp_list):
-        tc = next_color()
-        saved_colors.append(tc)
-        ax[0].plot(_item[0], _item[1], '-{}'.format(tc), lw=2, label=labels[i])
-        ax[0].fill_between(_item[0], 0, _item[1], lw=0, facecolor=tc, alpha=0.25)
-        ax[1].plot(_item[0], dbs[i], '-{}'.format(tc), lw=2, label=labels[i])
-
-    lower_limit=np.min(ax[1].get_ylim())
-    for i, _item in enumerate(freq_amp_list):
-        ax[1].fill_between(_item[0], dbs[i], lower_limit, lw=0, facecolor=saved_colors[i], alpha=0.25)
-
-    ax[0].set_ylabel('Power')
-    ax[1].set_ylabel('Power (dB)')
-    for aa in ax:
-        aa.set_xlabel('Frequency (Hz)')
-        #aa.set_xlim([0,np.amax(freq)/1.5])
-        aa.grid()
-        for i, _item in enumerate(freq_amp_list):
-            if len(freq_amp_list[i]) > 2:
-                if (freq_amp_list[i][2] is not None):
-                    aa.axvline(freq_amp_list[i][2], color=saved_colors[i], ls='-')
-
-        aa.legend(fontsize='small')
-
-
-def avo_ig(amp, ang):   
+def avo_ig(amp, ang):
     """Calculates the Intercept and Gradient.
     
     Based on avo_IGn in
@@ -181,11 +44,11 @@ def avo_ig(amp, ang):
 
 def pickle_test_data():
     filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\SEISMIC DATA\KPSDM-NEAR_10deg_cropped.sgy"
-    near, nsamples, sr, twt, ntraces, header, ilines, xlines = read_segy(filename, byte_il=189, byte_xl=193)
+    near, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
     filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\SEISMIC DATA\KPSDM-MID_18deg_cropped.sgy"
-    mid, nsamples, sr, twt, ntraces, header, ilines, xlines = read_segy(filename, byte_il=189, byte_xl=193)
+    mid, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
     filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\SEISMIC DATA\KPSDM-FAR_26deg_cropped.sgy"
-    far, nsamples, sr, twt, ntraces, header, ilines, xlines = read_segy(filename, byte_il=189, byte_xl=193)
+    far, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
 
     inline = 6550
     xline = 27009
@@ -215,11 +78,10 @@ def test_ixg_plot():
 	far_trace.data.flatten()]), [10., 18., 26.])
 
     res = least_squares(
-            mycf.residuals,
-            [1.,1.],
-            args=(i, g),
-            kwargs={'target_function': straight_line}
-    )
+        mycf.residuals,
+        [1.,1.],
+        args=(i, g),
+        kwargs={'target_function': straight_line})
     trend_line = 'WS = {:.4f}*I {:.4f} - G'.format(*res.x)
     print(res.status)
     print(res.message)
@@ -287,11 +149,11 @@ def test_ixg_plot():
 
 def test_plot_amp_vs_offset():
     filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\Test_angle_stacks\KPSDM-NEAR_10deg_cropped.sgy"
-    near, nsamples, sr, twt, ntraces, header, ilines, xlines = read_segy(filename, byte_il=189, byte_xl=193)
+    near, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
     filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\Test_angle_stacks\KPSDM-MID_18deg_cropped.sgy"
-    mid, nsamples, sr, twt, ntraces, header, ilines, xlines = read_segy(filename, byte_il=189, byte_xl=193)
+    mid, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
     filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\Test_angle_stacks\KPSDM-FAR_26deg_cropped.sgy"
-    far, nsamples, sr, twt, ntraces, header, ilines, xlines = read_segy(filename, byte_il=189, byte_xl=193)
+    far, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
 
     inline = 6550
     xline = 27009
@@ -325,7 +187,7 @@ def test_plot_amp_vs_offset():
 
 def test_plot_line():
     filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\Test_angle_stacks\KPSDM-NEAR_10deg_cropped.sgy"
-    data, nsamples, sr, twt, ntraces, header, ilines, xlines = read_segy(filename, byte_il=189, byte_xl=193)
+    data, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
     print(header)
     uu={'add_colorbar':False,'robust':True,'interpolation':'spline16'}
     fig, ax = plt.subplots()
@@ -333,8 +195,9 @@ def test_plot_line():
     plt.show()
 
 def test_amp_spectra():
+    from blixt_rp.core.wavelets import plot_cwt
     filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\Test_angle_stacks\KPSDM-NEAR_10deg_cropped.sgy"
-    data, nsamples, sr, twt, ntraces, header, ilines, xlines = read_segy(filename, byte_il=189, byte_xl=193)
+    data, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
 
     inline = 6550
     xline = 27009

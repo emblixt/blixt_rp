@@ -5,11 +5,14 @@ Created on Tue Oct  1 15:25:40 2019
 @author: mblixt
 """
 import numpy as np
+import matplotlib.pyplot as plt
 import logging
 from dataclasses import dataclass
 from copy import deepcopy
 
-import rp_utils.definitions as ud
+import bruges.rockphysics.rockphysicsmodels as brr
+
+import blixt_rp.rp_utils.definitions as ud
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 
 logger = logging.getLogger(__name__)
@@ -23,6 +26,7 @@ class Param:
     value: float
     unit: str
     desc: str
+
 
 def test_value(val, unit):
     """
@@ -74,11 +78,11 @@ def sqrd_avg(x):
     return 0.25 * (x[1:] + x[:-1])**2
 
 
-def poissons_ratio(Vp, Vs):
-    return 0.5 * (Vp ** 2 - 2 * Vs ** 2) / (Vp ** 2 - Vs ** 2)
+def poissons_ratio(vp, vs):
+    return 0.5 * (vp ** 2 - 2 * vs ** 2) / (vp ** 2 - vs ** 2)
 
 
-def intercept(Vp_1, Vp_2, rho_1, rho_2, along_wiggle=False):
+def intercept(vp_1, vp_2, rho_1, rho_2, along_wiggle=None):
     """
     Returns the AVO intercept, or normal incidence reflectivity
     From eq. 2 in Castagna et al. "Framework for AVO gradient and intercept interpretation"
@@ -87,13 +91,14 @@ def intercept(Vp_1, Vp_2, rho_1, rho_2, along_wiggle=False):
     For the 'along_wiggle' case we calculate the difference in acoustic impedence along  one track without any layer,
     and the '_2' input variables are not used
     """
-    if along_wiggle and isinstance(Vp_1, np.ndarray) and isinstance(rho_1, np.ndarray):
-        return (Vp_1[1:]*rho_1[1:] - Vp_1[:-1]*rho_1[:-1])/(Vp_1[1:]*rho_1[1:] + Vp_1[:-1]*rho_1[:-1])
+    if along_wiggle is None: along_wiggle = False
+    if along_wiggle and isinstance(vp_1, np.ndarray) and isinstance(rho_1, np.ndarray):
+        return (vp_1[1:]*rho_1[1:] - vp_1[:-1]*rho_1[:-1])/(vp_1[1:]*rho_1[1:] + vp_1[:-1]*rho_1[:-1])
     else:
-        return 0.5 * (step(Vp_1, Vp_2) + step(rho_1, rho_2))
+        return 0.5 * (step(vp_1, vp_2) + step(rho_1, rho_2))
 
 
-def gradient(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, along_wiggle=False):
+def gradient(vp_1, vp_2, vs_1, vs_2, rho_1, rho_2, along_wiggle=None):
     """
     Returns the AVO gradient
     From eq. 3 in Castagna et al. "Framework for AVO gradient and intercept interpretation"
@@ -102,17 +107,18 @@ def gradient(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, along_wiggle=False):
     For the 'along_wiggle' case we calculate the difference in acoustic impedence along  one track without any layer,
     and the '_2' input variables are not used
     """
-    if along_wiggle and isinstance(Vp_1, np.ndarray) and isinstance(Vs_1, np.ndarray) and isinstance(rho_1, np.ndarray):
-        out = 0.5 * step(Vp_1, None,  along_wiggle=along_wiggle) - 2.*(sqrd_avg(Vs_1)/sqrd_avg(Vp_1)) * \
-            (step(rho_1, None, along_wiggle=along_wiggle) + 2.*step(Vs_1, None, along_wiggle=along_wiggle))
+    if along_wiggle is None: along_wiggle = False
+    if along_wiggle and isinstance(vp_1, np.ndarray) and isinstance(vs_1, np.ndarray) and isinstance(rho_1, np.ndarray):
+        out = 0.5 * step(vp_1, None,  along_wiggle=along_wiggle) - 2.*(sqrd_avg(vs_1)/sqrd_avg(vp_1)) * \
+            (step(rho_1, None, along_wiggle=along_wiggle) + 2.*step(vs_1, None, along_wiggle=along_wiggle))
         return out
 
     else:
-        return 0.5 * step(Vp_1, Vp_2) - 2. * ((Vs_1 + Vs_2) / (Vp_1 + Vp_2)) ** 2 * \
-               (2. * step(Vs_1, Vs_2) + step(rho_1, rho_2))
+        return 0.5 * step(vp_1, vp_2) - 2. * ((vs_1 + vs_2) / (vp_1 + vp_2)) ** 2 * \
+               (2. * step(vs_1, vs_2) + step(rho_1, rho_2))
 
 
-def reflectivity(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, version='WigginsAkiRich', along_wiggle=False):
+def reflectivity(vp_1, vp_2, vs_1, vs_2, rho_1, rho_2, version='WigginsAkiRich', along_wiggle=None):
     """
     returns function which returns the reflectivity as function of theta
     theta is in degrees
@@ -123,10 +129,14 @@ def reflectivity(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, version='WigginsAkiRich',
         'AkiRich' Aki Richards formulation according to Avseth 2011 (eq. 4.6)
 
     """
+    def func(_):
+        raise NotImplementedError
+    if along_wiggle is None: along_wiggle = False
+    if version is None: version = 'WigginsAkiRich'
     if (version == 'WigginsAkiRich') or (version == 'ShueyAkiRich'):
-        a = intercept(Vp_1, Vp_2, rho_1, rho_2, along_wiggle=along_wiggle)
-        b = gradient(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, along_wiggle=along_wiggle)
-        c = 0.5 * step(Vp_1, Vp_2, along_wiggle=along_wiggle)
+        a = intercept(vp_1, vp_2, rho_1, rho_2, along_wiggle=along_wiggle)
+        b = gradient(vp_1, vp_2, vs_1, vs_2, rho_1, rho_2, along_wiggle=along_wiggle)
+        c = 0.5 * step(vp_1, vp_2, along_wiggle=along_wiggle)
         if version == 'WigginsAkiRich':
             def func(theta):
                 return a + b * (np.sin(theta * np.pi / 180.)) ** 2 + \
@@ -137,12 +147,12 @@ def reflectivity(Vp_1, Vp_2, Vs_1, Vs_2, rho_1, rho_2, version='WigginsAkiRich',
                        c * ((np.tan(theta * np.pi / 180.)) ** 2 - (np.sin(theta * np.pi / 180.)) ** 2)
         return func
     elif version == 'AkiRich':
-        a = (Vs_1 + Vs_2) ** 2 / Vp_1 ** 2  # = 4 * p**2 * Vs**2/sin(theta)**2 in eq. 4.6
+        a = (vs_1 + vs_2) ** 2 / vp_1 ** 2  # = 4 * p**2 * vs**2/sin(theta)**2 in eq. 4.6
 
         def func(theta):
             return 0.5 * (1. - a * (np.sin(theta * np.pi / 180.)) ** 2) * step(rho_1, rho_2) + \
-                   0.5 * step(Vp_1, Vp_2) / (np.cos(theta * np.pi / 180.)) ** 2 - \
-                   a * (np.sin(theta * np.pi / 180.)) ** 2 * step(Vs_1, Vs_2)
+                   0.5 * step(vp_1, vp_2) / (np.cos(theta * np.pi / 180.)) ** 2 - \
+                   a * (np.sin(theta * np.pi / 180.)) ** 2 * step(vs_1, vs_2)
 
         return func
     else:
@@ -156,6 +166,14 @@ def v_p(k, mu, rho):
 
 def v_s(mu, rho):
     return np.sqrt(mu / rho)
+
+
+def k_from_v(v_p, v_s, rho):
+    return rho * (v_p**2 - 4. * v_s**2 / 3.)
+
+
+def mu_from_v(v_s, rho):
+    return rho * v_s**2
 
 
 def han_castagna(v_p, method=None):
@@ -467,7 +485,7 @@ def v_p_w(p, t):
     )
 
 
-def v_p_b(s, p, t, giib=0.):
+def v_p_b(s, p, t, giib=None):
     """
     Calculates the velocity in brine as a function of salinity, pressure and temperature according to eq. 29 & 31 in
     Batzle & Wang 1992.
@@ -488,6 +506,7 @@ def v_p_b(s, p, t, giib=0.):
         Param
         Velocity in m/s
     """
+    if giib is None: giib = 0.
 
     s = test_value(s, 'ppm')
     p = test_value(p, 'MPa')
@@ -560,55 +579,6 @@ def vrh_bounds(f, m):
     return [M_Voigt, M_Reuss, M_VRH]
 
 
-def hertz_mindlin(k0, mu0, phic=0.4, cn=8.6, p=None, f=1):
-    """
-    Hertz-Mindlin model
-    The elastic moduli of a dry well-sorted end member at critical porosity
-    Rock Physics Handbook, p.246
-    Eq. 2.3 and 2.4 in Avseth 2011
-
-    :param k0:
-        Param
-        Mineral bulk modulus in GPa
-    :param mu0:
-        Param
-        Mineral shear modulus in GPa
-    :param phic:
-        float
-        critical porosity
-    :param cn:
-        float
-       coordination number (default 8.6), average number of contacts per grain
-    :param p:
-        Param
-        Confining pressure, default 10/1E3 GPa
-    :param f:
-        int
-        shear modulus correction factor
-        1=dry pack with perfect adhesion
-        0=dry frictionless pack
-    """
-    if p is None:
-        p = Param(
-            name='Pressure',
-            value=10./1e3,
-            unit='GPa',
-            desc='Confining pressure'
-        )
-    k0 = test_value(k0, 'GPa')
-    mu0 = test_value(mu0, 'GPa')
-    p = test_value(p, 'GPa')
-
-    k0 = k0.value
-    mu0 = mu0.value
-    p = p.value
-
-    pr0 = (3*k0-2*mu0)/(6*k0+2*mu0) # poisson's ratio of mineral mixture
-    k_HM = (p*(cn**2*(1-phic)**2*mu0**2) / (18*np.pi**2*(1-pr0)**2))**(1/3)
-    mu_HM = ((2+3*f-pr0*(1+3*f))/(5*(2-pr0))) * (p*(3*cn**2*(1-phic)**2*mu0**2)/(2*np.pi**2*(1-pr0)**2))**(1/3)
-    return k_HM, mu_HM
-
-
 def por_from_mass_balance(rho, rho_m, rho_f):
     """
     Calculates porosity from mass balance equation.
@@ -624,105 +594,210 @@ def por_from_mass_balance(rho, rho_m, rho_f):
     return (rho_m - rho)/(rho_m - rho_f)
 
 
-def softsand(K0, G0, phi, phic=0.4, Cn=8.6, P=10, f=1):
+def critpor(k0, g0, phi, phi_c=None):
+    '''
+    Critical porosity, Nur et al. (1991, 1995)
+    written by aadm (2015) from Rock Physics Handbook, p.353
+    Eg. 7.1.2 and 7.1.3 in Rock Physics Handbook, 3rd ed. 2020
+
+    INPUT
+    k0, g0: mineral bulk & shear modulus in GPa
+    phi: porosity
+    phi_c: critical porosity (default 0.4)
+
+    :returns
+        dry rock bulk and shear moduli in GPa
+    '''
+    if phi_c is None: phi_c = 0.4
+    k_dry = k0 * (1 - phi / phi_c)
+    g_dry = g0 * (1 - phi / phi_c)
+    return k_dry, g_dry
+
+
+def hertz_mindlin(k0, mu0, phi_c=None, c_n=None, p_conf=None, smcf=None):
+    """
+    Hertz-Mindlin model
+    The elastic moduli of a dry well-sorted end member
+    Rock Physics Handbook 3rd ed. 2020, p.344
+    Eq. 2.3 and 2.4 in Avseth 2011
+
+    :param k0:
+        Param
+        Mineral bulk modulus in GPa
+    :param mu0:
+        Param
+        Mineral shear modulus in GPa
+    :param phi_c:
+        float
+        critical porosity
+    :param c_n:
+        float
+       coordination number (default 8.6), average number of contacts per grain
+    :param p_conf:
+        Param
+        Confining pressure, default 10/1E3 GPa
+    :param smcf:
+        float
+        shear modulus correction factor
+        1=dry pack with perfect adhesion
+        0=dry frictionless pack
+    :returns
+        Effective bulk and shear modulus in GPa
+    """
+    if phi_c is None: phi_c = 0.4
+    if c_n is None: c_n = 8.6
+    if smcf is None: smcf = 1
+    if p_conf is None:
+        p_conf = Param(
+            name='Pressure',
+            value=10./1e3,
+            unit='GPa',
+            desc='Confining pressure'
+        )
+    k0 = test_value(k0, 'GPa')
+    mu0 = test_value(mu0, 'GPa')
+    p_conf = test_value(p_conf, 'GPa')
+
+    k0 = k0.value
+    mu0 = mu0.value
+    p_conf = p_conf.value
+
+    pr0 = (3*k0-2*mu0)/(6*k0+2*mu0)  # poisson's ratio of mineral mixture
+    k_HM = (p_conf * (c_n ** 2 * (1 - phi_c) ** 2 * mu0 ** 2) / (18 * np.pi ** 2 * (1 - pr0) ** 2)) ** (1 / 3)
+    mu_HM = ((2+3*smcf-pr0*(1+3*smcf))/(5*(2-pr0))) * (p_conf * (3 * c_n ** 2 * (1 - phi_c) ** 2 * mu0 ** 2) / (2 * np.pi ** 2 * (1 - pr0) ** 2)) ** (1 / 3)
+    return k_HM, mu_HM
+
+
+def softsand(k0, g0, phi, phi_c=None, c_n=None, p_conf=None, smcf=None):
     '''
     Soft-sand (uncemented) model
+    or
+    Friable sand
     written by aadm (2015) from Rock Physics Handbook, p.258
     page 359 in Rock Physics Handbook (2020)
 
     INPUT
-    K0, G0: mineral bulk & shear modulus in GPa
+    k0, g0: mineral bulk & shear modulus in GPa
     phi: porosity
-    phic: critical porosity (default 0.4)
-    Cn: coordination nnumber (default 8.6)
-    P: confining pressure in MPa (default 10)
-    f: shear modulus correction factor
+    phi_c: critical porosity (default 0.4)
+    c_n: coordination number (default 8.6)
+    p_conf: confining pressure in MPa (default 10)
+    smcf: shear modulus correction factor
        1=dry pack with perfect adhesion
        0=dry frictionless pack
+
+    :returns
+        Effective bulk and shear modulus in GPa
     '''
-    K_HM, G_HM = hertz_mindlin(K0, G0, phic, Cn, P/1.E3, f)
-    K_DRY =-4/3*G_HM + (((phi/phic)/(K_HM+4/3*G_HM)) + ((1-phi/phic)/(K0+4/3*G_HM)))**-1
-    tmp   = G_HM/6*((9*K_HM+8*G_HM) / (K_HM+2*G_HM))
-    G_DRY = -tmp + ((phi/phic)/(G_HM+tmp) + ((1-phi/phic)/(G0+tmp)))**-1
-    return K_DRY, G_DRY
+    if phi_c is None: phi_c = 0.4
+    if c_n is None: c_n = 8.6
+    if p_conf is None: p_conf = 10
+    if smcf is None: smcf = 1
+    k_hm, g_hm = hertz_mindlin(k0, g0, phi_c, c_n, p_conf / 1.E3, smcf)
+    k_eff = -4 / 3 * g_hm + (((phi / phi_c) / (k_hm + 4 / 3 * g_hm)) + ((1 - phi / phi_c) / (k0 + 4 / 3 * g_hm))) ** -1
+    tmp = g_hm / 6 * ((9 * k_hm + 8 * g_hm) / (k_hm + 2 * g_hm))
+    g_eff = -tmp + ((phi / phi_c) / (g_hm + tmp) + ((1 - phi / phi_c) / (g0 + tmp))) ** -1
+    return k_eff, g_eff
 
 
-def stiffsand(K0, G0, phi, phic=0.4, Cn=8.6, P=10, f=1):
+def stiffsand(k0, g0, phi, phi_c=None, c_n=None, p_conf=None, smcf=None):
     '''
     Stiff-sand model
     written by aadm (2015) from Rock Physics Handbook, p.260
     page 361 in Rock Physics Handbook (2020)
 
     INPUT
-    K0, G0: mineral bulk & shear modulus in GPa
+    k0, g0: mineral bulk & shear modulus in GPa
     phi: porosity
-    phic: critical porosity (default 0.4)
-    Cn: coordination nnumber (default 8.6)
-    P: confining pressure in MPa (default 10)
-    f: shear modulus correction factor
+    phi_c: critical porosity (default 0.4)
+    c_n: coordination number (default 8.6)
+    p_conf: confining pressure in MPa (default 10)
+    smcf: shear modulus correction factor
        1=dry pack with perfect adhesion
        0=dry frictionless pack
+
+    :returns
+        Effective bulk and shear modulus in GPa
     '''
-    K_HM, G_HM = hertz_mindlin(K0, G0, phic, Cn, P/1.E3, f)
-    print('K_HM: {}, G_HM: {}'.format(K_HM, G_HM))
-    K_DRY  = -4/3*G0 + (((phi/phic)/(K_HM+4/3*G0)) + ((1-phi/phic)/(K0+4/3*G0)))**-1
-    tmp    = G0/6*((9*K0+8*G0) / (K0+2*G0))
-    G_DRY  = -tmp + ((phi/phic)/(G_HM+tmp) + ((1-phi/phic)/(G0+tmp)))**-1
-    return K_DRY, G_DRY
+    if phi_c is None: phi_c = 0.4
+    if c_n is None: c_n = 8.6
+    if p_conf is None: p_conf = 10
+    if smcf is None: smcf = 1
+    k_hm, g_hm = hertz_mindlin(k0, g0, phi_c, c_n, p_conf / 1.E3, smcf)
+    print('K_HM: {}, G_HM: {}'.format(k_hm, g_hm))
+    k_eff = -4 / 3 * g0 + (((phi / phi_c) / (k_hm + 4 / 3 * g0)) + ((1 - phi / phi_c) / (k0 + 4 / 3 * g0))) ** -1
+    tmp = g0 / 6 * ((9 * k0 + 8 * g0) / (k0 + 2 * g0))
+    g_eff = -tmp + ((phi / phi_c) / (g_hm + tmp) + ((1 - phi / phi_c) / (g0 + tmp))) ** -1
+    return k_eff, g_eff
 
 
-def critpor(K0, G0, phi, phic=0.4):
-    '''
-    Critical porosity, Nur et al. (1991, 1995)
-    written by aadm (2015) from Rock Physics Handbook, p.353
-
-    INPUT
-    K0, G0: mineral bulk & shear modulus in GPa
-    phi: porosity
-    phic: critical porosity (default 0.4)
-    '''
-    K_DRY = K0 * (1 - phi / phic)
-    G_DRY = G0 * (1 - phi / phic)
-    return K_DRY, G_DRY
-
-
-def contactcement(K0, G0, phi, phic=0.4, Cn=8.6, Kc=37, Gc=45, scheme=2):
+def contactcement(k0, g0, phi, phi_c=None, c_n=None, k_c=None, g_c=None, scheme=None):
     '''
     Contact cement (cemented sand) model, Dvorkin-Nur (1996)
-    written by aadm (2015) from Rock Physics Handbook, p.255
+    written by aadm (2015) from Rock Physics Handbook, p.354
 
     INPUT
-    K0, G0: mineral bulk & shear modulus in GPa
+    k0, g0: mineral bulk & shear modulus in GPa
     phi: porosity
-    phic: critical porosity (default 0.4)
-    Cn: coordination nnumber (default 8.6)
-    Kc, Gc: cement bulk & shear modulus in GPa
+    phi_c: critical porosity (default 0.4)
+    c_n: coordination nnumber (default 8.6)
+    k_c, g_c: cement bulk & shear modulus in GPa
             (default 37, 45 i.e. quartz)
     scheme: 1=cement deposited at grain contacts
             2=uniform layer around grains (default)
+
+    :returns
+        Effective bulk and shear modulus in GPa
     '''
-    PR0 = (3 * K0 - 2 * G0) / (6 * K0 + 2 * G0)
-    PRc = (3 * Kc - 2 * Gc) / (6 * Kc + 2 * Gc)
+    if phi_c is None: phi_c = 0.4
+    if c_n is None: c_n = 8.6
+    if k_c is None: k_c = 37
+    if g_c is None: g_c = 45  # eq. 5.5.109
+
+    if scheme is None: scheme = 2
+
+    p_r0 = (3 * k0 - 2 * g0) / (6 * k0 + 2 * g0)
+    p_rc = (3 * k_c - 2 * g_c) / (6 * k_c + 2 * g_c)
     if scheme == 1:  # scheme 1: cement deposited at grain contacts
-        alpha = ((phic - phi) / (3 * Cn * (1 - phic))) ** (1 / 4)
+        alpha = ((phi_c - phi) / (3 * c_n * (1 - phi_c))) ** (1 / 4)
     else:  # scheme 2: cement evenly deposited on grain surface
-        alpha = ((2 * (phic - phi)) / (3 * (1 - phic))) ** (1 / 2)
-    LambdaN = (2 * Gc * (1 - PR0) * (1 - PRc)) / (np.pi * G0 * (1 - 2 * PRc))
-    N1 = -0.024153 * LambdaN ** -1.3646
-    N2 = 0.20405 * LambdaN ** -0.89008
-    N3 = 0.00024649 * LambdaN ** -1.9864
-    Sn = N1 * alpha ** 2 + N2 * alpha + N3
-    LambdaT = Gc / (np.pi * G0)
-    T1 = -10 ** -2 * (2.26 * PR0 ** 2 + 2.07 * PR0 + 2.3) * LambdaT ** (0.079 * PR0 ** 2 + 0.1754 * PR0 - 1.342)
-    T2 = (0.0573 * PR0 ** 2 + 0.0937 * PR0 + 0.202) * LambdaT ** (0.0274 * PR0 ** 2 + 0.0529 * PR0 - 0.8765)
-    T3 = 10 ** -4 * (9.654 * PR0 ** 2 + 4.945 * PR0 + 3.1) * LambdaT ** (0.01867 * PR0 ** 2 + 0.4011 * PR0 - 1.8186)
-    St = T1 * alpha ** 2 + T2 * alpha + T3
-    K_DRY = 1 / 6 * Cn * (1 - phic) * (Kc + (4 / 3) * Gc) * Sn
-    G_DRY = 3 / 5 * K_DRY + 3 / 20 * Cn * (1 - phic) * Gc * St
-    return K_DRY, G_DRY
+        alpha = ((2 * (phi_c - phi)) / (3 * (1 - phi_c))) ** (1 / 2)
+    lambda_n = (2 * g_c * (1 - p_r0) * (1 - p_rc)) / (np.pi * g0 * (1 - 2 * p_rc))
+    n1 = -0.024153 * lambda_n ** -1.3646
+    n2 = 0.20405 * lambda_n ** -0.89008
+    n3 = 0.00024649 * lambda_n ** -1.9864
+    s_n = n1 * alpha ** 2 + n2 * alpha + n3
+    lambda_t = g_c / (np.pi * g0)
+    t1 = -10 ** -2 * (2.26 * p_r0 ** 2 + 2.07 * p_r0 + 2.3) * lambda_t ** (0.079 * p_r0 ** 2 + 0.1754 * p_r0 - 1.342)
+    t2 = (0.0573 * p_r0 ** 2 + 0.0937 * p_r0 + 0.202) * lambda_t ** (0.0274 * p_r0 ** 2 + 0.0529 * p_r0 - 0.8765)
+    t3 = 10 ** -4 * (9.654 * p_r0 ** 2 + 4.945 * p_r0 + 3.1) * lambda_t ** (0.01867 * p_r0 ** 2 + 0.4011 * p_r0 - 1.8186)
+    s_t = t1 * alpha ** 2 + t2 * alpha + t3
+    m_c = k_c + (4 / 3) * g_c  # rho_cement * v_p_cement**2, eq. 5.5.108
+    k_eff = 1 / 6 * c_n * (1 - phi_c) * m_c * s_n  # eq. 5.5.106
+    #k_eff = 1 / 6 * c_n * (1 - phi_c) * (k_c + (4 / 3) * g_c) * s_n
+    g_eff = 3 / 5 * k_eff + 3 / 20 * c_n * (1 - phi_c) * g_c * s_t  # eq. 5.5.107
+    return k_eff, g_eff
 
 
-def constantcement(K0, G0, phi, apc=10., phic=0.4, Cn=0.86, Kc=37, Gc=45, scheme=2):
+def constantcement(k0, g0, phi, phi_c=None, apc=None, c_n=None, k_c=None, g_c=None, scheme=None, smcf=None):
+    """
+    Constant cement model, Avseth et al. 2000 as implemented by agile geoscience in the
+    bruges library
+
+    smcf: shear modulus correction factor
+        similar to what rokdoc has implemented
+        smcf = 1 -> no correction
+        smcf = 0 -> zero shear modulus
+
+    """
+    if smcf is None:
+        smcf = 1.
+    phi_cem = phi_c - apc / 100.
+    k_eff, mu_eff = brr.constant_cement(k0, g0, phi, phi_cem=phi_cem, phi_c=phi_c, Cn=c_n, Kc=k_c, Gc=g_c, scheme=scheme)
+    return k_eff, smcf * mu_eff
+
+
+def constantcement_hidden(k0, g0, phi, phi_c=None, apc=None, c_n=None, k_c=None, g_c=None, scheme=None):
     """
     Constant cement model, Avseth et al. 2000.
     written by emblixt 2019 from Geophysics Today.
@@ -733,19 +808,26 @@ def constantcement(K0, G0, phi, apc=10., phic=0.4, Cn=0.86, Kc=37, Gc=45, scheme
     cement within the whole volume, not a percentage relative to the critical porosity.
     Therefore the well-sorted end member phi_b = phi_c - (percent_cement/100).
 
-    NOTE that phi should be smaller than phib = phic - apc/100. (Avseth 2005, p. 58)
+    NOTE that phi should be smaller than phib = phi_c - apc/100. (Avseth 2005, p. 58)
 
     INPUT
-    K0, G0: mineral bulk & shear modulus in GPa
+    k0, g0: mineral bulk & shear modulus in GPa
     phi: porosity
+    phi_c: critical porosity (default 0.4)
     apc: absolute percent cement (in %)
-    phic: critical porosity (default 0.4)
-    Cn: coordination nnumber (default 8.6)
-    Kc, Gc: cement bulk & shear modulus in GPa
+    c_n: coordination number (default 8.6)
+    k_c, g_c: cement bulk & shear modulus in GPa
             (default 37, 45 i.e. quartz)
     scheme: 1=cement deposited at grain contacts
             2=uniform layer around grains (default)
     """
+    if apc is None: apc = 10.
+    if phi_c is None: phi_c = 0.4
+    if c_n is None: c_n = 8.6
+    if k_c is None: k_c = 37
+    if g_c is None: g_c = 45
+    if scheme is None: scheme = 2
+
     def make_array(x):
         if isinstance(x, np.ndarray) or isinstance(x, list):
             return x
@@ -753,16 +835,16 @@ def constantcement(K0, G0, phi, apc=10., phic=0.4, Cn=0.86, Kc=37, Gc=45, scheme
             return np.array([x])
 
 
-    phib = phic - apc / 100.
+    phib = phi_c - apc / 100.
     if max(make_array(phi)) > min(make_array(phib)):
         print('WARNING, phi, {:.2f}, should be smaller than the well sorted end-member porosity, phib, {:.2f}'.format(
             max(make_array(phi)), min(make_array(phib))))
-    K_b, G_b = contactcement(K0, G0, phib, phic, Cn, Kc, scheme)
-    Z = G_b * ((9. * K_b + 8. * G_b) / (K_b + 2. * G_b)) / 6.
-    t1 = 4. * G_b / 3.
-    K_DRY = ((phi / phib) / (K_b + t1) + (1. - phi / phib) / (K0 + t1)) ** (-1) - t1
-    G_DRY = ((phi / phib) / (G_b + Z) + (1. - phi / phib) / (G0 + Z)) ** (-1) - Z
-    return K_DRY, G_DRY
+    k_b, g_b = contactcement(k0, g0, phib, phi_c, c_n, k_c, g_c, scheme)
+    z = g_b * ((9. * k_b + 8. * g_b) / (k_b + 2. * g_b)) / 6.
+    t1 = 4. * g_b / 3.
+    k_eff = ((phi / phib) / (k_b + t1) + (1. - phi / phib) / (k0 + t1)) ** (-1) - t1
+    g_eff = ((phi / phib) / (g_b + z) + (1. - phi / phib) / (g0 + z)) ** (-1) - z
+    return k_eff, g_eff
 
 
 def gassmann_vel(v_p_1, v_s_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
@@ -778,7 +860,7 @@ def gassmann_vel(v_p_1, v_s_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
         Rock v_s with initial fluid [m/s]
     :param rho_1:
         np.array
-        Rock density with initial fluid [m/s]
+        Rock density with initial fluid [g/cm3]
     :param k_f1 [k_f2]
         float
         Bulk modulus of fluid 1 [2]  in [GPa]
@@ -842,21 +924,21 @@ def gassmann_a(_k1, _k0, _k_f1, _k_f2, _por):
     return _k1/(_k0 - _k1) + (_k_f2/(_k0 - _k_f2) - _k_f1/(_k0-_k_f1))/_por
 
 
-def vels(K_DRY, G_DRY, K0, D0, Kf, Df, phi):
+def vels(k_dry, g_dry, k_min, rho_min, k_f, rho_f, phi):
     '''
     Calculates velocities and densities of saturated rock via Gassmann equation, (C) aadm 2015
 
     INPUT
-    K_DRY,G_DRY: dry rock bulk & shear modulus in GPa
-    K0, D0: mineral bulk modulus and density in GPa
-    Kf, Df: fluid bulk modulus and density in GPa
+    k_dry,g_dry: dry rock bulk & shear modulus in GPa
+    k_min, rho_min: mineral bulk modulus and density in GPa
+    k_f, rho_f: fluid bulk modulus and density in GPa
     phi: porosity
     '''
-    rho  = D0*(1-phi)+Df*phi
-    K    = K_DRY + (1-K_DRY/K0)**2 / ( (phi/Kf) + ((1-phi)/K0) - (K_DRY/K0**2) )
-    vp   = np.sqrt((K+4./3*G_DRY)/rho)*1e3
-    vs   = np.sqrt(G_DRY/rho)*1e3
-    return vp, vs, rho, K
+    rho = rho_min * (1 - phi) + rho_f * phi
+    k = k_dry + (1 - k_dry / k_min) ** 2 / ((phi / k_f) + ((1 - phi) / k_min) - (k_dry / k_min ** 2))
+    vp = np.sqrt((k + 4. / 3 * g_dry) / rho) * 1e3
+    vs = np.sqrt(g_dry / rho) * 1e3
+    return vp, vs, rho, k
 
 
 def linear_gassmann(_phi, _phi_r, _delta_k_fl):
@@ -1038,3 +1120,48 @@ def test_mineral_existance(well_name, wi_name, mineral_mix, gc_coeffs):
         )
     if warn_txt is not None:
         raise IOError(warn_txt)
+
+
+def plot_model(model, k0, g0, _phi, rho, _ax, **kwargs):
+    """
+    Plots the selected model in the given axis
+    :param model:
+        One of the models defined in this file
+    :param k0:
+        float
+        k0 mineral bulk modulus in GPa
+    :param g0:
+        float
+        shear modulus in GPa
+    :param _phi:
+        np.ndarray
+        porosity
+    :param rho:
+        float
+        Density in g/cm3 for which the p velocity is calculated
+    :param _ax:
+        matplotlib.axes object
+    :param kwargs:
+        keyword arguments passed on to the model
+    :return:
+    """
+    k_eff, g_eff = model(k0, g0, _phi, **kwargs)
+    vp = v_p(k_eff,g_eff, rho)
+    _ax.plot(_phi, vp)
+    _ax.set_xlabel('Porosity')
+    _ax.set_ylabel('P velocity [km/s]')
+    _ax.legend(['k0: {:.1f}, mu0: {:.1f}, rho: {:.1f}'.format(k0, g0, rho)])
+
+
+if __name__ == '__main__':
+    # 'rho_b': 1.02, 'k_b': 2.8,
+    # 'rho_qz': 2.6, 'k_qz': 37, 'mu_qz': 45,
+    # 'rho_sh': 2.6, 'k_sh': 15, 'mu_sh': 6,
+    fig, ax = plt.subplots()
+    phi = np.linspace(0.2, 0.4, 6)
+    plot_model(contactcement, 37, 45, phi, 2.6, ax)
+    plot_model(constantcement, 37, 45, phi, 2.6, ax, apc=2)
+    plot_model(hertz_mindlin, 37, 45, phi, 2.6, ax)
+    plt.show()
+
+

@@ -7,13 +7,11 @@ Module for handling LogCurve objects
     (https://www.gnu.org/copyleft/lesser.html)
 """
 from blixt_utils.misc.attribdict import AttribDict
-from rp_utils.version import info
-from blixt_utils.utils import arrange_logging
+from blixt_rp.rp_utils.version import info
 from datetime import datetime
 from copy import deepcopy
 import numpy as np
 
-from blixt_utils.signal_analysis.signal_analysis import rolling_window
 from blixt_utils.signal_analysis.signal_analysis import smooth as _smooth
 
 

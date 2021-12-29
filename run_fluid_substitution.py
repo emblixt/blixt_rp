@@ -1,11 +1,11 @@
 import matplotlib.pyplot as plt
 import os
 import blixt_utils.io.io as uio
-from core.well import Project, Well
-from core.minerals import MineralMix
-from core.fluids import FluidMix
-import rp.rp_core as rp
-import plotting.plot_rp as prp
+from blixt_rp.core.well import Project
+from blixt_rp.core.minerals import MineralMix
+from blixt_rp.core.fluids import FluidMix
+from blixt_rp import rp as rp
+import blixt_rp.plotting.plot_rp as prp
 
 def main():
     # Create a project

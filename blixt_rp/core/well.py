@@ -18,28 +18,30 @@ Take inspiration from obspy and converter to create these objects
 """
 from datetime import datetime
 import numpy as np
+import pandas as pd
 import logging
 import re
 import os
-import sys
 import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
 
 from blixt_utils.misc.attribdict import AttribDict
-from rp_utils.version import info
-from blixt_utils.utils import log_header_to_template as l2tmpl
+from blixt_rp.rp_utils.version import info
+from blixt_utils.misc.templates import log_header_to_template as l2tmpl
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 import blixt_utils.io.io as uio
-from blixt_utils.io.io import convert
+from blixt_utils.io.io import well_reader
 import blixt_utils.misc.masks as msks
 from blixt_utils.utils import arrange_logging
-from rp_utils.harmonize_logs import harmonize_logs as fixlogs
+from blixt_rp.rp_utils.harmonize_logs import harmonize_logs as fixlogs
 from blixt_utils.plotting import crossplot as xp
-from core.minerals import MineralMix
-from core.log_curve import LogCurve
-import rp.rp_core as rp
+from blixt_rp.core.minerals import MineralMix
+from blixt_rp.core.log_curve import LogCurve
+import blixt_rp.rp.rp_core as rp
 from blixt_utils.misc.convert_data import convert as cnvrt
-import rp_utils.definitions as ud
+import blixt_rp.rp_utils.definitions as ud
+from blixt_utils.utils import isnan
 
 # global variables
 supported_version = {2.0, 3.0}
@@ -142,7 +144,8 @@ class Project(object):
 
             if (working_dir is None) or (not os.path.isdir(working_dir)):
                 working_dir = os.path.dirname(os.path.realpath(__file__))
-                working_dir = working_dir.rstrip('core')
+                dir_list = working_dir.split(os.path.sep)
+                working_dir = os.path.sep.join(dir_list[:-2])
 
             logging_file = os.path.join(
                 working_dir,
@@ -309,6 +312,8 @@ class Project(object):
             Else, only load the part of the logs who are contained inside the listed intervals
 
         :return:
+            dict
+            Dictionary with well names as keys, and corresponding well object as value
         """
         wis = None
         if block_name is None:
@@ -366,7 +371,6 @@ class Project(object):
                 well.block[block_name].logs[key].header.well = wname
 
         return all_wells
-
 
     def load_all_wis(self):
         return uio.project_working_intervals(self.project_table)
@@ -883,6 +887,79 @@ class Well(object):
                 result[wi] = tmp[2]
         return result
 
+    def add_well_path(self, project_table, verbose=True):
+        """
+        calculates (interpolates) the TVD (relative to KB) based on the input survey points for each MD value in this well
+
+        :param project_table:
+            str
+            filename of project excel file
+
+        :param verbose:
+            bool
+            If True, QC plots are created
+        :return:
+        """
+        survey_points_info = uio.project_wellpath_info(project_table)
+        survey_points = uio.read_wellpath(**survey_points_info[self.well])
+        for lblock in list(self.block.keys()):
+            self.block[lblock].add_well_path(survey_points, survey_points_info[self.well]['well path file'], verbose)
+
+    def add_twt(self, project_table, verbose=True):
+        """
+        calculates (interpolates) the Two way time based on the input time-depth relations specified in the 
+        project table
+
+        :param project_table:
+            str
+            filename of project excel file
+
+        :param verbose:
+            bool
+            If True, QC plots are created
+        :return:
+        """
+        result = {}
+        table = None
+        try:
+            table = pd.read_excel(project_table, header=1, sheet_name='Checkshots')
+        except ValueError:
+            raise
+        except Exception as e:
+            print(e)
+        for i, ans in enumerate(table['Use this file']):
+            if not isinstance(ans, str):
+                continue
+            if ans.lower() == 'yes':
+                temp_dict = {}
+                for key in list(table.keys()):
+                    if (key.lower() == 'use this file') or (key.lower() == 'given well name'):
+                        continue
+                    if isnan(table[key][i]):
+                        temp_dict[key.lower()] = None  # avoid NaN
+                    else:
+                        value = table[key][i]
+                        temp_dict[key.lower()] = value
+                result[table['Given well name'][i]] = temp_dict
+        if self.well not in list(result.keys()):
+            raise ValueError('Well {} not listed in Checkshot sheet of {}'.format(
+                self.well,
+                project_table
+            ))
+        # TODO
+        # Petrel checkshots are typically given in ms, but we are not checking this, we simply assume
+        checkshots = uio.read_petrel_checkshots(result[self.well]['checkshot file'])
+
+        for lblock in list(self.block.keys()):
+            self.block[lblock].add_twt(
+                {
+                  'MD': checkshots[self.well]['MD'],
+                   # TODO We assume checkshots are in ms
+                  'TWT': np.array(checkshots[self.well]['TWT picked'])/1000.
+                },
+                twt_file=result[self.well]['checkshot file'],
+                verbose=verbose)
+
     def calc_mask(self,
                   cutoffs,
                   name=ud.def_msk_name,
@@ -1023,6 +1100,8 @@ class Well(object):
                     isinstance(_cutoffs[key][1], list) else \
                     '{}: {} {}, '.format(
                         key, _cutoffs[key][0], _cutoffs[key][1])
+            if (len(msk_str) > 2) and (msk_str[-2:] == ', '):
+                msk_str = msk_str.rstrip(', ')
             if wi_name is not None:
                 msk_str += ' Working interval: {}'.format(wi_name)
             return msk_str
@@ -1113,7 +1192,6 @@ class Well(object):
             else:
                 continue
 
-
     def apply_mask(self,
                    name=None):
         """
@@ -1175,6 +1253,7 @@ class Well(object):
             str
             full path name of file to save plot to
         :param kwargs:
+         y_log_name: str, default value 'depth'. Set it to 'twt' to plot against time
         :return:
         """
         _savefig = False
@@ -1191,6 +1270,7 @@ class Well(object):
         elif ax is None:
             ax = fig.subplots()
 
+        y_log_name = kwargs.pop('y_log_name', 'depth')
         show_masked = kwargs.pop('show_masked', False)
 
         if log_name is not None:
@@ -1214,7 +1294,7 @@ class Well(object):
                 x_templ = l2tmpl(logcurve.header)
             # print(cnt, logcurve.name, xp.cnames[cnt], mask)
             xdata = logcurve.data
-            ydata = self.block[logcurve.block].logs['depth'].data
+            ydata = self.block[logcurve.block].logs[y_log_name].data
             legends.append(logcurve.name)
             xp.plot(
                 xdata,
@@ -1222,7 +1302,7 @@ class Well(object):
                 cdata=xp.cnames[cnt],
                 title='{}: {}'.format(self.well, ttl),
                 xtempl=x_templ,
-                ytempl=l2tmpl(self.block[logcurve.block].logs['depth'].header),
+                ytempl=l2tmpl(self.block[logcurve.block].logs[y_log_name].header),
                 mask=mask,
                 show_masked=show_masked,
                 fig=fig,
@@ -1745,6 +1825,8 @@ class Block(object):
             header = {}
         if 'name' not in list(header.keys()):
             header['name'] = name
+        if 'full_name' not in list(header.keys()):
+            header['full_name'] = name
         if 'well' not in list(header.keys()):
             header['well'] = self.well
         if 'log_type' not in list(header.keys()):
@@ -1914,6 +1996,137 @@ class Block(object):
                 }
             )
 
+    def add_well_path(self, survey_points, survey_file=None, verbose=True):
+        """
+        adds (interpolates) the TVD (relative to KB) based on the input survey points for each MD value in this well
+
+        :param survey_points:
+            dict
+            Dictionary with required keywords 'MD' and 'TVD'
+            the associated items for 'MD' and 'TVD' keys are lists of measured depth and True vertical depth in meters
+            relative to KB.
+            If key 'INC' exists, it assumes it is the inclination in degrees
+            Because there are so many flavors of how the survey points are stored in a file, you need to write specific
+            readers for each files that spits out the result in a dictionary with 'MD' and 'TVD' keys
+
+            The function read_wellpath() in the blixt_utils library tries to read many variants of survey data files
+
+        :param survey_file:
+            str
+            Name of file survey points are calculated from.
+            Used in history of objects
+        :return:
+
+        """
+        if isinstance(survey_file, str):
+            fname = survey_file
+        else:
+            fname = 'unknown file'
+
+        md = self.logs['depth'].data
+
+        # Calculate and write TVD to well
+        new_tvd = interp1d(survey_points['MD'], survey_points['TVD'],
+                           kind='linear',
+                           bounds_error=False,
+                           fill_value='extrapolate')(md)
+        if verbose:
+            fig, axes = plt.subplots(1, 2, figsize=(10, 8))
+            axes[0].plot(survey_points['MD'], survey_points['TVD'], '-or', lw=0)
+            axes[0].plot(md, new_tvd)
+            axes[0].set_xlabel('MD [m]')
+            axes[0].set_ylabel('TVD [m]')
+            axes[0].legend(['Survey points', 'Interpolated well data'])
+
+        self.add_log(
+            new_tvd,
+            'tvd',
+            'Depth',
+            header={
+                'unit': 'm',
+                'desc': 'True vertical depth',
+                'modification_history': 'calculated from {}'.format(fname)})
+
+        # Try the same for inclination
+        if 'INC' in list(survey_points.keys()):
+            new_inc = interp1d(survey_points['MD'], survey_points['INC'],
+                               kind='linear',
+                               bounds_error=False)(md)
+            if verbose:
+                axes[1].plot(survey_points['MD'], survey_points['INC'], '-or', lw=0)
+                axes[1].plot(md, new_inc)
+                axes[1].set_xlabel('MD [m]')
+                axes[1].set_ylabel('Inclination [deg]')
+                axes[1].legend(['Survey points', 'Interpolated well data'])
+            self.add_log(
+                new_inc,
+                'inc',
+                'Inclination',
+                header={
+                    'unit': 'deg',
+                    'desc': 'Inclination',
+                    'modification_history': 'calculated from {}'.format(fname)})
+
+        if verbose:
+            fig.suptitle('Well: {}'.format(self.well))
+            plt.show()
+
+    def add_twt(self, twt_points, twt_file=None, verbose=True):
+        """
+       adds (through interpolation) the two-way-time (TWT) in seconds [s] to the well based on the input twt points
+
+        :param twt_points:
+            dict
+            Dictionary with required keywords 'MD' and 'TWT'
+            the associated items for 'MD' and 'TWT' keys are lists of measured depth [m] and two-way-time [s]
+            NOTE: If TWT is negative, and increasingly negative with depth, this function changes its sign so
+            that it is increasingly positive with depth
+
+            The function read_petrel_checkshots() in the blixt_utils is useful to calculate the input data
+            based on a checkshots file exported from Petrel
+
+        :param twt_file:
+            str
+            Name of file the twt points are calculated from.
+            Used in history of objects
+        :return:
+
+        """
+        if isinstance(twt_file, str):
+            fname = twt_file
+        else:
+            fname = 'unknown file'
+
+        md = self.logs['depth'].data
+
+        # Calculate and write TWT to well
+        sign = 1.0
+        if sum(twt_points['TWT'][-10:]) < 0:
+            sign = -1.0
+        new_twt = interp1d(twt_points['MD'], sign * np.array(twt_points['TWT']),
+                           kind='linear',
+                           bounds_error=False,
+                           fill_value='extrapolate')(md)
+        if verbose:
+            fig, axes = plt.subplots(1, 1, figsize=(5, 8))
+            axes.plot(twt_points['MD'], sign * np.array(twt_points['TWT']), '-or', lw=0)
+            axes.plot(md, new_twt)
+            axes.set_xlabel('MD [m]')
+            axes.set_ylabel('TWT [ms]')
+            axes.legend(['TDR points', 'Interpolated well data'])
+
+        self.add_log(
+            new_twt,
+            'twt',
+            'Time',
+            header={
+                'unit': 's',
+                'desc': 'Two way time, positive downwards',
+                'modification_history': 'calculated from {}'.format(fname)})
+
+        if verbose:
+            fig.suptitle('Well: {}'.format(self.well))
+            plt.show()
 
 def _read_las(file):
     """Convert file and Return `self`. """
@@ -1931,7 +2144,7 @@ def _read_las(file):
 
     with open(file, "r") as f:
         lines = f.readlines()
-    return convert(lines, file_format=file_format)  # read all lines from data
+    return well_reader(lines, file_format=file_format)  # read all lines from data
 
 
 def add_one(instring):
@@ -1942,6 +2155,7 @@ def add_one(instring):
     else:
         instring = instring + ' 1'
     return instring
+
 
 def convert_to_dataframe(all_wells, block_name=None, rename_logs=None):
     import pandas as pd
