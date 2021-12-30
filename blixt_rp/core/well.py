@@ -2011,6 +2011,8 @@ class Block(object):
 
             The function read_wellpath() in the blixt_utils library tries to read many variants of survey data files
 
+            if survey_points is None, the well is assumed vertical and MD is used as TVD
+
         :param survey_file:
             str
             Name of file survey points are calculated from.
@@ -2026,17 +2028,26 @@ class Block(object):
         md = self.logs['depth'].data
 
         # Calculate and write TVD to well
-        new_tvd = interp1d(survey_points['MD'], survey_points['TVD'],
-                           kind='linear',
-                           bounds_error=False,
-                           fill_value='extrapolate')(md)
+        if survey_points is None:
+            new_tvd = self.get_tvd()
+        else:
+            new_tvd = interp1d(survey_points['MD'], survey_points['TVD'],
+                               kind='linear',
+                               bounds_error=False,
+                               fill_value='extrapolate')(md)
         if verbose:
             fig, axes = plt.subplots(1, 2, figsize=(10, 8))
-            axes[0].plot(survey_points['MD'], survey_points['TVD'], '-or', lw=0)
+            if survey_points is not None:
+                axes[0].plot(survey_points['MD'], survey_points['TVD'], '-or', lw=0)
             axes[0].plot(md, new_tvd)
             axes[0].set_xlabel('MD [m]')
             axes[0].set_ylabel('TVD [m]')
             axes[0].legend(['Survey points', 'Interpolated well data'])
+
+        if survey_points is None:
+            mod_history = 'Assuming well is vertical, TVD calculated from MD directly'
+        else:
+            mod_history = 'TVD calculated from {}'.format(wname)
 
         self.add_log(
             new_tvd,
@@ -2045,10 +2056,10 @@ class Block(object):
             header={
                 'unit': 'm',
                 'desc': 'True vertical depth',
-                'modification_history': 'calculated from {}'.format(fname)})
+                'modification_history': mod_history})
 
         # Try the same for inclination
-        if 'INC' in list(survey_points.keys()):
+        if (survey_points is not None) and ('INC' in list(survey_points.keys())):
             new_inc = interp1d(survey_points['MD'], survey_points['INC'],
                                kind='linear',
                                bounds_error=False)(md)
