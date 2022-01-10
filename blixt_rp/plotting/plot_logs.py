@@ -44,6 +44,11 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         float
         distance in meters
         Log is plotted from top of working interval - buffer to base of working interval + buffer
+        Default is 50 m
+    :param savefig:
+        str
+        Full path name to file (.png or .pdf) to which the plot is exported
+        if None, the plot is displayed instead
     :return:
     """
     log_table = small_log_table(log_table)
@@ -147,7 +152,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
             header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]\nLacking info')
             annotate_plot(axes['twt_ax'], None)
     else:
-        header_plot(header_axes['twt_ax'], None, None, None, title='TWT [ms]')
+        header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]')
         annotate_plot(axes['twt_ax'], twt[mask])
 
     if twt is not None:
@@ -309,6 +314,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
 def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, block_name=None, savefig=None):
     """
     Overview plot designed to show data coverage in given working interval together with sea water depth
+    Wells with no TVD data are plotted as dashed lines, with TVD the well is drawn with a solid line
     :param wells:
     :param log_table:
         dict
@@ -351,10 +357,9 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
 
     wnames = []
     c_styles = {}  # style of line that defines the center of each well.
-                   # Thin dashed if TVD present, thicker solid if not
     for i, well in enumerate(wells.values()):
         wnames.append(well.well)
-        c_styles[well.well] = {'color': 'k', 'ls': '-', 'lw': 1}
+        c_styles[well.well] = {'color': 'k', 'ls': '--', 'lw': 1}
         # extract the relevant log block
         tb = well.block[block_name]
 
@@ -370,7 +375,7 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
 
         if int_exists:
             if 'tvd' in well.log_names():
-                c_styles[well.well] = {'color': 'k', 'ls': '--', 'lw': 0.5}
+                c_styles[well.well] = {'color': 'k', 'ls': '-', 'lw': 1}
                 depth_key = 'tvd'
             else:
                 depth_key = 'depth'
@@ -403,28 +408,25 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
                         verticalalignment='bottom',
                         horizontalalignment='center')
 
-
-        # TODO
-        # Use the wells function get_kb() and get_water_depth() to decide if to plot these or not
-        # MAYBE let above two *get* functions take *template* as input
-        if (templates[well.well]['water depth'] is not None) and (templates[well.well]['kb'] is not None):
-            ax.plot([i, i], [0.,  # this is not exact, because the linewidth makes the lines look longer than what they are
-                            templates[well.well]['water depth']+templates[well.well]['kb']], label='_nolegend_', **sea_style)
-            ax.plot([i, i], [0., templates[well.well]['kb']], label='_nolegend_', **kb_style)
-        else:
-            warn_txt = 'Kelly bushing and/or water depth not specified for well {}'.format(well.well)
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
+        water_depth = well.get_from_well_info('water depth', templates=templates)
+        kb = well.get_from_well_info('kb', templates=templates)
+        ax.plot([i, i],
+                [0.,  # this is not exact, because the linewidth makes the lines look longer than what they are
+                np.abs(water_depth) + kb], label='_nolegend_',
+                **sea_style)
+        ax.plot([i, i], [0., templates[well.well]['kb']], label='_nolegend_', **kb_style)
         ax.axvline(i, label='_nolegend_', **c_styles[well.well])
 
     ax.set_ylim(y_max, 0)
     ax.set_ylabel('TVD [m]')
     ax.get_xaxis().set_ticks(range(len(wnames)))
     ax.get_xaxis().set_ticklabels(wnames)
-    ax.legend(log_types)
+    ax.legend(['{}: {}'.format(xx, log_table[xx]) for xx in list(log_table.keys())])
     fig.tight_layout()
 
     if _savefig:
         fig.savefig(savefig)
+    else:
+        plt.show()
 
 

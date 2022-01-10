@@ -254,7 +254,7 @@ class Project(object):
 
         :return:
         """
-        _well_table = uio.project_wells(self.project_table, self.working_dir, all=True)
+        _well_table = uio.project_wells(self.project_table, self.working_dir)
         for lfile in list(_well_table.keys()):
             wname = _well_table[lfile]['Given well name']
             print('Checking {}: {}'.format(wname, os.path.split(lfile)[-1]))
@@ -301,7 +301,7 @@ class Project(object):
             across the whole project.
             E.G. in las file for Well_A, the shale volume is called VCL, while in Well_E it is called VSH.
             To to rename the VSH log to VCL upon import (not in the las files) the rename_logs dict should be set to
-                {'VCL': ['VSH']}
+                {<Well E las file name path>: 'VCL': ['VSH']}}
         :param include_these_wells:
             string, or list of strings
             If None, all wells where "Use" = "Yes" in the project table are loaded
@@ -829,7 +829,7 @@ class Well(object):
                     val[m].k.value, val[m].mu.value, val[m].rho.value)
                 info_txt += "    Volume fraction: {}\n".format(val[m].volume_fraction)
             logger.info(info_txt)
-            print(info_txt)
+            print('INFO: {}'.format(info_txt))
 
             if len(list(val.keys())) > 2:
                 warn_txt = 'The bounds calculation has only been tested for two-components mixtures\n'
@@ -853,7 +853,7 @@ class Well(object):
                         warn_txt = 'The volume fraction {} is lacking in Block {} of well {}'.format(
                             _name, block_name, self.well
                         )
-                        print(warn_txt)
+                        print('WARNING: {}'.format(warn_txt))
                         logger.warning(warn_txt)
                         continue
                     this_fraction = self.block[block_name].logs[_name].data
@@ -950,15 +950,21 @@ class Well(object):
         # Petrel checkshots are typically given in ms, but we are not checking this, we simply assume
         checkshots = uio.read_petrel_checkshots(result[self.well]['checkshot file'])
 
-        for lblock in list(self.block.keys()):
-            self.block[lblock].add_twt(
-                {
-                  'MD': checkshots[self.well]['MD'],
-                   # TODO We assume checkshots are in ms
-                  'TWT': np.array(checkshots[self.well]['TWT picked'])/1000.
-                },
-                twt_file=result[self.well]['checkshot file'],
-                verbose=verbose)
+        if checkshots is None:
+            info_txt = 'No check shots available for {}. No TWT added'.format(self.well)
+            print('WARNING: {}'.format(info_txt))
+            logger.warning(info_txt)
+
+        if checkshots is not None:
+            for lblock in list(self.block.keys()):
+                self.block[lblock].add_twt(
+                    {
+                      'MD': checkshots[self.well]['MD'],
+                       # TODO We assume checkshots are in ms
+                      'TWT': np.array(checkshots[self.well]['TWT picked'])/1000.
+                    },
+                    twt_file=result[self.well]['checkshot file'],
+                    verbose=verbose)
 
     def calc_mask(self,
                   cutoffs,
@@ -1273,6 +1279,12 @@ class Well(object):
         y_log_name = kwargs.pop('y_log_name', 'depth')
         show_masked = kwargs.pop('show_masked', False)
 
+        if y_log_name not in self.log_names():
+            info_txt = 'No log named {} in {}, plotting data against depth instead'.format(y_log_name, self.well)
+            print('WARNING: {}'.format(info_txt))
+            logger.warning(info_txt)
+            y_log_name = 'depth'
+
         if log_name is not None:
             list_of_logs = self.get_logs_of_name(log_name)
             ttl = ''
@@ -1363,7 +1375,7 @@ class Well(object):
         :param rename_well_logs:
             dict
             E.G.
-            {'depth': ['DEPT', 'MD']}
+            {<las file name> : 'depth': ['DEPT', 'MD']}
             where the key is the wanted well log name, and the value list is a list of well log names to translate from
         :param use_this_well_name:
             str
@@ -1381,7 +1393,7 @@ class Well(object):
         self.read_las(lfile,
                       only_these_logs=well_table[lfile]['logs'],
                       block_name=block_name,
-                      rename_well_logs=rename_well_logs,
+                      rename_well_logs=rename_well_logs[lfile],
                       use_this_well_name=use_this_well_name,
                       note=note)
 
@@ -1593,8 +1605,10 @@ class Well(object):
             rename_well_logs['depth'] = ['Depth', 'DEPT', 'MD', 'DEPTH']
 
         for key in list(well_dict['curve'].keys()):
+            well_dict['curve'][key]['orig_name'] = ''
             for rname, value in rename_well_logs.items():
                 if key.lower() in [x.lower() for x in value]:
+                    well_dict['curve'][key]['orig_name'] = '{}'.format(', '.join(value))
                     info_txt = 'Renaming log from {} to {}'.format(key, rname)
                     # print('INFO: {}'.format(info_txt))
                     logger.info(info_txt)
@@ -2047,7 +2061,7 @@ class Block(object):
         if survey_points is None:
             mod_history = 'Assuming well is vertical, TVD calculated from MD directly'
         else:
-            mod_history = 'TVD calculated from {}'.format(wname)
+            mod_history = 'TVD calculated from {}'.format(fname)
 
         self.add_log(
             new_tvd,
@@ -2093,7 +2107,7 @@ class Block(object):
             NOTE: If TWT is negative, and increasingly negative with depth, this function changes its sign so
             that it is increasingly positive with depth
 
-            The function read_petrel_checkshots() in the blixt_utils is useful to calculate the input data
+            The function read_petrel_checkshots() in the blixt_utils is useful to calculate the input twt_points data
             based on a checkshots file exported from Petrel
 
         :param twt_file:
@@ -2103,6 +2117,9 @@ class Block(object):
         :return:
 
         """
+        if twt_points is None:
+            return None
+
         if isinstance(twt_file, str):
             fname = twt_file
         else:
@@ -2204,11 +2221,39 @@ def convert_to_dataframe(all_wells, block_name=None, rename_logs=None):
     return pd.DataFrame(data=np.array(log_array_list).T, columns=log_names), well_name_keys
 
 
+def overview(all_wells):
+    """
+    Creates a overview table in a pandas DataFrame style, which can be easily printed
+    :param all_wells:
+        dict
+        Dictionary with well names as keys, and corresponding well object as value
+        As returned from Project.load_all_wells() 
+    :return
+        DataFrame
+    """
+    import pandas as pd
+    columns = ['Well', 'Log type', 'Log name', 'Orig log name', 'las file']
+    content = []
+    for wname in list(all_wells.keys()):
+        content.append([wname] + ['' for ii in range(len(columns) - 1)])
+        for log_type in all_wells[wname].log_types():
+            content.append(['', log_type] + ['' for ii in range(len(columns) - 2)])
+            for wlog in all_wells[wname].get_logs_of_type(log_type):
+                content.append([
+                    '',
+                    '',
+                    wlog.name,
+                    wlog.header['orig_name'],
+                    os.path.basename(wlog.header['orig_filename'])
+                ])
+    return pd.DataFrame(data=content, columns=columns)
+
+
 def test():
     wp = Project(name='MyProject', log_to_stdout=True)
 
-#    logs = wp.data_frame()
-#    print(logs)
+    #    logs = wp.data_frame()
+    #    print(logs)
 
 
     well_table = uio.project_wells(wp.project_table, wp.working_dir)
