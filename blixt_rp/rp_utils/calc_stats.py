@@ -3,6 +3,10 @@ import numpy as np
 import logging
 import os
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.font_manager import FontProperties
+import seaborn as sns
+import pandas as pd
 
 import blixt_utils.io.io as uio
 from blixt_utils.plotting import crossplot as xp
@@ -249,15 +253,166 @@ def calc_stats2(
             wells, logs, wis, wi_name, results, results_per_well,
             depth_from_top, cutoffs, log_table, block_name=block_name)
 
-        # create plot of logs vs depth and fill the interval plots
-        plot_logs_vs_depth(logs, wells, wi_name, ncols, well_names, results_per_well, depth_from_top,
-                           working_dir, cutoffs_str, suffix)
+        ## create plot of logs vs depth and fill the interval plots
+        #plot_logs_vs_depth(logs, wells, wi_name, ncols, well_names, results_per_well, depth_from_top,
+        #                   working_dir, cutoffs_str, suffix)
 
         # plot averages and standard deviations for each well
         plot_averages(j, logs, wells, results, results_per_well, figs_and_axes)
 
-        # create histogram plot
-        plot_histograms(logs, results, wi_name, ncols, well_names, results_per_well, working_dir, cutoffs_str, suffix)
+        ## create histogram plot
+        #plot_histograms(logs, results, wi_name, ncols, well_names, results_per_well, working_dir, cutoffs_str, suffix)
+
+        # Test the new crossplotting functionality
+        plot_crossplots(log_table, results, wi_name, well_names, results_per_well,
+                        templates, working_dir, cutoffs_str, suffix)
+
+
+        ## Write result to RokDoc compatible excel Sums And Average xls file:
+        #save_rokdoc_output(rokdoc_output, results, wi_name, log_table, cutoffs_str, suffix)
+
+    # arrange the interval plots
+    #well_names.append('All')
+    #for i, fax in enumerate(figs_and_axes):
+    #    fax[1].legend(well_names, prop={'size': 10})
+    #    fax[1].grid(True)
+    #    if templates is not None:
+    #        fax[1].set_xlim(templates[log_types[i]]['min'], templates[log_types[i]]['max'])
+    #    fax[1].set_title(cutoffs_str)
+    #    fax[1].set_yticklabels(interval_ticks)
+    #    fax[0].tight_layout()
+    #    if working_dir is not None:
+    #        fax[0].savefig(os.path.join(
+    #            working_dir,
+    #            '{}_{}_intervals{}.png'.format(logs[i],
+    #                                           cutoffs_str.replace('>', '_gt_').replace('<', '_lt_').replace('=',
+    #                                                                                                         '_eq_'),
+    #                                           suffix)))
+    #        plt.close('all')
+
+
+def calc_stats3(
+        wells,
+        log_tables,
+        wi_names,
+        cutoffs,
+        suffixes,
+        wis,
+        templates=None,
+        rokdoc_output=None,
+        working_dir=None,
+        block_name=ud.def_lb_name
+):
+    """
+    Calculates the statistics for a set of wells, for the given well logs (log_table) in the given working intervals
+    (wi_names) using the given cutoffs
+
+    :param wells:
+        dict
+        Dictionary of wells containing core.well.Well objects
+        eg.
+            wp = Project(...)
+            wells = wp.load_all_wells
+    :param log_tables:
+        list
+        List with N number of dictionaries, where each dictionary contain log type: log name key-value pairs to
+        specify which logs to create statistics on
+        The Vp, Vs, Rho and Phi logs are necessary for output to RokDoc compatible Sums & Average excel file
+        E.G.
+            log_tables = [{
+               'P velocity': 'vp',
+               'S velocity': 'vs',
+               'Density': 'rhob',
+               'Porosity': 'phie',
+               'Volume': 'vcl'}, {...}, ...]
+    :param wi_names:
+        list
+        List of length N of working interval names
+        E.G.
+            [ 'Hekkingen sands',  'Kolmule sands', ... ]
+        typically a single working interval is repeated several times so that the statistics can be calculated using
+        diffferent logs and/or cutoffs
+    :param cutoffs:
+        list
+        List with N number of dictionaries, where each dictionary contain the log cutoffs to use
+        E.G.
+            [{'Volume': ['<', 0.4], 'Porosity': ['>', 0.1]},
+            {'Volume': ['>', 0.5], 'Porosity': ['<', 0.1]}, ...]
+    :param suffixes:
+        list
+        List of length N with strings used as suffixes added to output plots (png) to ease
+        separating output from eachother
+        A combination of the working interval and the suffix is used to tag each line in the output excel sheet
+    :param wis:
+        dict
+        working intervals, as defined in the "Working intervals" sheet of the project table, and
+        loaded through:
+        wp = Project()
+        wis = rp_utils.io.project_working_intervals(wp.project_table)
+    :param templates:
+        dict
+        templates dictionary as returned from rp_utils.io.project_templates()
+    :param rokdoc_output:
+        str
+        full path name of excel file which should contain the averages (RokDoc format)
+        This requires that the log files include P- and S velocity, density, porosity and volume (Vsh)
+    :param working_dir:
+        str
+        name of folder where results should be saved
+    :param block_name:
+        str
+        Name of the log block from where the logs are picked
+    :return:
+    """
+    if not (len(log_tables) == len(wi_names) == len(cutoffs) == len(suffixes)):
+        warn_txt = 'Input lists are not of same length'
+        print('WARNING: {}'.format(warn_txt))
+        logger.warning(warn_txt)
+        raise IOError
+
+    n_logs = len(log_tables[0])
+    if not all([len(xx) == n_logs for xx in log_tables]):
+        warn_txt = 'Not the same number of logs in all log tables'
+        print('WARNING: {}'.format(warn_txt))
+        logger.warning(warn_txt)
+        raise IOError
+
+    # TODO
+    # Now we assume all log_tables contain the same keys (log types)
+    # we should test this!
+
+    well_names = list(wells.keys())
+
+    # Test if necessary log types for creating a RokDoc compatible output are present
+    rokdoc_output = test_types(list(log_tables[0].keys()), rokdoc_output)
+
+    # open a figure for each log that is being analyzed
+    figs_and_axes = [plt.subplots(figsize=(10, 6)) for xx in range(n_logs)]
+    interval_axis = []
+    file_names = []
+    interval_ticks = []
+
+    # Start looping of all intervals
+    for i, wi_name in enumerate(wi_names):
+        print('Interval: {}'.format(wi_name))
+        log_table = small_log_table(log_tables[i])
+        suffix, cutoffs_str = fix_strings(suffixes[i], cutoffs[i])
+        log_types = list(log_table.keys())
+        logs = [n.lower() for n in list(log_table.values())]
+        interval_ticks.append('{}{}'.format(wi_name, suffix))
+
+        # create container for results
+        results, results_per_well, depth_from_top = create_containers(logs)
+
+        # collect data
+        collect_data_for_this_interval(
+            wells, logs, wis, wi_name, results, results_per_well,
+            depth_from_top, cutoffs[i], log_table, block_name=block_name)
+
+        plot_averages(i, logs, wells, results, results_per_well, figs_and_axes, templates=templates)
+
+        plot_crossplots(log_table, results, wi_name, well_names, results_per_well,
+                        templates, working_dir, cutoffs_str, suffix)
 
         # Write result to RokDoc compatible excel Sums And Average xls file:
         save_rokdoc_output(rokdoc_output, results, wi_name, log_table, cutoffs_str, suffix)
@@ -268,18 +423,15 @@ def calc_stats2(
         fax[1].legend(well_names, prop={'size': 10})
         fax[1].grid(True)
         if templates is not None:
-            fax[1].set_xlim(templates[log_types[i]]['min'], templates[log_types[i]]['max'])
-        fax[1].set_title(cutoffs_str)
-        fax[1].set_yticklabels(interval_ticks)
+            fax[1].set_xlim(templates[list(log_tables[0].keys())[i]]['min'],
+                            templates[list(log_tables[0].keys())[i]]['max'])
+        fax[1].set_xlabel(list(log_tables[0].keys())[i])
+        fax[1].set_yticklabels([''] + interval_ticks + [''])
         fax[0].tight_layout()
         if working_dir is not None:
-            fax[0].savefig(os.path.join(
-                working_dir,
-                '{}_{}_intervals{}.png'.format(logs[i],
-                                               cutoffs_str.replace('>', '_gt_').replace('<', '_lt_').replace('=',
-                                                                                                             '_eq_'),
-                                               suffix)))
-            plt.close('all')
+            fax[0].savefig(os.path.join(working_dir, 'Intervals_{}.png'.format(list(log_tables[0].keys())[i])))
+
+    plt.close('all')
 
 
 def fix_strings(_suffix, _cutoffs):
@@ -553,20 +705,25 @@ def plot_logs_vs_depth(logs, wells, wi_name, ncols, well_names, results_per_well
         fig.savefig(os.path.join(working_dir, '{}_logs_depth{}.png'.format(wi_name, suffix)))
 
 
-def plot_averages(j, logs, wells, results, results_per_well, figs_and_axes):
+def plot_averages(j, logs, wells, results, results_per_well, figs_and_axes, templates=None):
     for i, key in enumerate(logs):
         for k, well in enumerate(wells.values()):
             this_well_name = uio.fix_well_name(well.well)
+            this_color = xp.cnames[k]
+            this_symbol = xp.cnames[k]
+            if templates is not None:
+                this_color = templates[this_well_name]['color']
+                this_symbol = templates[this_well_name]['symbol']
 
             mn = np.nanmean(results_per_well[this_well_name][key])
             std = np.nanstd(results_per_well[this_well_name][key])
             figs_and_axes[i][1].errorbar(
                 mn, j, xerr=std, fmt='none', capsize=10,
-                capthick=1, elinewidth=1, ecolor=xp.cnames[k])
+                capthick=1, elinewidth=1, ecolor=this_color)
             figs_and_axes[i][1].scatter(
                 mn, j,
-                marker=xp.msymbols[k],
-                c=xp.cnames[k],
+                marker=this_symbol,
+                c=this_color,
                 s=90)
 
         mn = np.nanmean(results[key])
@@ -632,6 +789,62 @@ def plot_histograms(logs, results, wi_name, ncols, well_names, results_per_well,
     fig.tight_layout()
     if working_dir is not None:
         fig.savefig(os.path.join(working_dir, '{}_logs_hist{}.png'.format(wi_name, suffix)))
+
+
+def plot_crossplots(log_table, results, wi_name, well_names, results_per_well,
+                    templates, working_dir, cutoffs_str, suffix):
+
+    # Create a Panda DataFrame with the elastic logs
+    df_content = []
+    df_columns = []
+    for i, key in enumerate(['P velocity', 'S velocity', 'Density']):
+        if key not in list(log_table.keys()):
+            warn_txt = 'No logs of type {} in requested dataset'.format(key)
+            print('WARNING: {}'.format(warn_txt))
+            logger.warning(warn_txt)
+            raise IOError
+        df_content.append(results[log_table[key]])
+        df_columns.append(log_table[key])
+    df = pd.DataFrame(data=np.array(df_content).T, columns=df_columns)
+    pair_grid = sns.pairplot(df)
+    pair_grid.fig.suptitle('{}, {}, {}'.format(wi_name, cutoffs_str, suffix))
+    pair_grid.savefig(os.path.join(working_dir, '{}_grid_plot{}.png'.format(wi_name, suffix)))
+
+    fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(9 * 3, 8))
+    log_types = ['P velocity', 'P velocity', 'S velocity']
+    _log_types = ['S velocity', 'Density', 'Density']
+    legend_items = []
+    for wname in well_names:
+        legend_items.append(
+            Line2D([0], [0],
+                   color=templates[wname]['color'],
+                   lw=0, marker=templates[wname]['symbol'],
+                   label=wname))
+        for i, key in enumerate(log_types):
+            y_key = _log_types[i]
+            xp.plot(
+                results_per_well[wname][log_table[key]],
+                results_per_well[wname][log_table[y_key]],
+                cdata=templates[wname]['color'],
+                mdata=templates[wname]['symbol'],
+                xtempl=templates[key],
+                ytempl=templates[y_key],
+                fig=fig,
+                ax=axs[i],
+                edge_color=False,
+                pointsize=80
+            )
+
+    legend_names = [x._label for x in legend_items]
+    this_legend = axs[0].legend(
+        legend_items,
+        legend_names,
+        prop=FontProperties(size='smaller'),
+        scatterpoints=1,
+        markerscale=2,
+        loc=1)
+    fig.suptitle('{}, {}, {}'.format(wi_name, cutoffs_str, suffix))
+    fig.savefig(os.path.join(working_dir, '{}_crossplots{}.png'.format(wi_name, suffix)))
 
 
 def save_rokdoc_output_tops(rokdoc_output, results, interval, log_table, cutoffs_str, suffix):
