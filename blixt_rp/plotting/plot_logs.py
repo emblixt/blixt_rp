@@ -95,12 +95,19 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     #
     tb = well.block[block_name]  # this log block
     depth = tb.logs['depth'].data
+    mask = np.ma.masked_inside(depth, wis[well.well][wi_name][0]-buffer, wis[well.well][wi_name][1]+buffer).mask
+    md_min = np.min(depth[mask])
+    md_max = np.max(depth[mask])
+
     if 'twt' in tb.log_names():
         twt = tb.logs['twt'].data
+        twt_min = np.min(twt[mask])
+        twt_max = np.max(twt[mask])
         print('Using real twt data')
     else:
         twt = None
-    mask = np.ma.masked_inside(depth, wis[well.well][wi_name][0]-buffer, wis[well.well][wi_name][1]+buffer).mask
+        twt_min = None
+        twt_max = None
 
     #
     # Gamma ray and Caliper
@@ -118,7 +125,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
 
     xlims = axis_plot(axes['gr_ax'], depth[mask],
               [tb.logs[lognames[xx]].data[mask] for xx in log_types],
-              limits, styles)
+              limits, styles, ylim=[md_min, md_max])
     header_plot(header_axes['gr_ax'], xlims, legends, styles)
 
     #for ax in [axes[x] for x in ax_names if x not in ['twt_ax', 'synt_ax']]:
@@ -129,7 +136,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     #
     # MD
     header_plot(header_axes['md_ax'], None, None, None, title='MD [m]')
-    annotate_plot(axes['md_ax'], depth[mask])
+    annotate_plot(axes['md_ax'], depth[mask], ylim=[md_min, md_max])
 
     #
     # TWT
@@ -146,14 +153,16 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
                 header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]\nLacking info')
                 annotate_plot(axes['twt_ax'], None)
             else:
+                twt_min = np.min(twt[mask])
+                twt_max = np.max(twt[mask])
                 header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]')
-                annotate_plot(axes['twt_ax'], twt[mask])
+                annotate_plot(axes['twt_ax'], twt[mask], ylim=[twt_min, twt_max])
         else:
             header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]\nLacking info')
             annotate_plot(axes['twt_ax'], None)
     else:
         header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]')
-        annotate_plot(axes['twt_ax'], twt[mask])
+        annotate_plot(axes['twt_ax'], twt[mask], ylim=[twt_min, twt_max])
 
     if twt is not None:
         tops_twt = [twt[find_nearest(depth, y)] for y in wis[well.well][wi_name]]
@@ -175,7 +184,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     legends = ['{} [{}]'.format(x, templates['Resistivity']['unit']) for x in lognames['Resistivity']]
 
     xlims = axis_log_plot(axes['res_ax'], depth[mask], [tb.logs[x].data[mask] for x in lognames['Resistivity']],
-                  limits, styles, yticks=False)
+                  limits, styles, yticks=False, ylim=[md_min, md_max])
     header_plot(header_axes['res_ax'], xlims*len(legends), legends, styles)
 
     #
@@ -196,7 +205,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
 
     xlims = axis_plot(axes['rho_ax'], depth[mask],
               [tb.logs[lognames[xx]].data[mask] for xx in log_types],
-              limits, styles, yticks=False)
+              limits, styles, yticks=False, ylim=[md_min, md_max])
     header_plot(header_axes['rho_ax'], xlims, legends, styles)
 
     #
@@ -212,11 +221,11 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
 
     if len(log_types) == 0:
         header_plot(header_axes['cpi_ax'], None, None, None, title='CPI is lacking')
-        axis_plot(axes['cpi_ax'], None, None, None, None)
+        axis_plot(axes['cpi_ax'], None, None, None, None, ylim=[md_min, md_max])
     else:
         xlims = axis_plot(axes['cpi_ax'], depth[mask],
                   [tb.logs[lognames[xx]].data[mask] for xx in log_types],
-                  limits, styles, yticks=False)
+                  limits, styles, yticks=False, ylim=[md_min, md_max])
     header_plot(header_axes['cpi_ax'], xlims, legends, styles)
 
     #
@@ -246,12 +255,12 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         # TODO
         # Now we blindly assumes AI is in m/s g/cm3 Make this more robust
         xlims = axis_plot(axes['ai_ax'], depth[mask], [ai[mask]/1000.], limits, styles,
-                  yticks=False)
+                  yticks=False, ylim=[md_min, md_max])
         #header_plot(header_axes['ai_ax'], xlims, ['AI ({})'.format(tt)], styles)
         header_plot(header_axes['ai_ax'], xlims, legends, styles)
     else:
         header_plot(header_axes['ai_ax'], None, None, None, title='AI is lacking')
-        axis_plot(axes['ai_ax'], None, None, None, None)
+        axis_plot(axes['ai_ax'], None, None, None, None, ylim=[md_min, md_max])
 
 
     #
@@ -283,6 +292,10 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         reff = None
 
     if reff is not None:
+        # TODO
+        # TODO XXX
+        # The dtr I have introduced here is confusing. Data is plotted in MD after calculating the twt from check shots
+
         #print(len(reff(10)))
         #tw, w = ricker(_f=c_f, _length=duration, _dt=time_step)
         w = ricker(duration, time_step, c_f)
@@ -300,7 +313,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         for inc_a in range(0, 35, 5):
             wig = np.convolve(w, np.nan_to_num(reff(inc_a)), mode='same')
             wiggle_plot(axes['synt_ax'], dtr[:-1][t_mask], wig[t_mask], inc_a, scaling=scaling,
-                        fill_pos_style=fill_pos_style, fill_neg_style=fill_neg_style)
+                        fill_pos_style=fill_pos_style, fill_neg_style=fill_neg_style)  #, ylim=[twt_min, twt_max])
     else:
         header_plot(header_axes['synt_ax'], None, None, None, title='Refl. coeff. lacking')
         wiggle_plot(axes['synt_ax'], None, None, None)
@@ -365,6 +378,8 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
 
         # Try finding the depth interval of the desired working interval 'wi_name'
         well.calc_mask({}, name='XXX', wis=wis, wi_name=wi_name)
+        # TODO This try - except case is not functioning when calling overview_plot with "missing" working intervals
+        # from jupyter-lab
         try:
             mask = tb.masks['XXX'].data
             int_exists = True
