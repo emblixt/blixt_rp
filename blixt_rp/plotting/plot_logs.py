@@ -34,10 +34,21 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         dict
         Dictionary of working intervals, keys are working interval names, and the values are a two
         items list with top & bottom
+    :param wi_name:
+        str
+        Name of working interval to use in this plot
+    :param templates:
+        dict
+        Dictionary of different templates as returned from Project().load_all_templates()
     :param buffer:
         float
         distance in meters
         Log is plotted from top of working interval - buffer to base of working interval + buffer
+        Default is 50 m
+    :param savefig:
+        str
+        Full path name to file (.png or .pdf) to which the plot is exported
+        if None, the plot is displayed instead
     :return:
     """
     log_table = small_log_table(log_table)
@@ -85,6 +96,18 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     tb = well.block[block_name]  # this log block
     depth = tb.logs['depth'].data
     mask = np.ma.masked_inside(depth, wis[well.well][wi_name][0]-buffer, wis[well.well][wi_name][1]+buffer).mask
+    md_min = np.min(depth[mask])
+    md_max = np.max(depth[mask])
+
+    if 'twt' in tb.log_names():
+        twt = tb.logs['twt'].data
+        twt_min = np.min(twt[mask])
+        twt_max = np.max(twt[mask])
+        print('Using real twt data')
+    else:
+        twt = None
+        twt_min = None
+        twt_max = None
 
     #
     # Gamma ray and Caliper
@@ -102,7 +125,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
 
     xlims = axis_plot(axes['gr_ax'], depth[mask],
               [tb.logs[lognames[xx]].data[mask] for xx in log_types],
-              limits, styles)
+              limits, styles, ylim=[md_min, md_max])
     header_plot(header_axes['gr_ax'], xlims, legends, styles)
 
     #for ax in [axes[x] for x in ax_names if x not in ['twt_ax', 'synt_ax']]:
@@ -113,32 +136,36 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     #
     # MD
     header_plot(header_axes['md_ax'], None, None, None, title='MD [m]')
-    annotate_plot(axes['md_ax'], depth[mask])
+    annotate_plot(axes['md_ax'], depth[mask], ylim=[md_min, md_max])
 
     #
     # TWT
-    # Get the time-depth relation (time as a function of md)
-    _x = None
-    tdr = None
-    if 'P velocity' in list(log_table.keys()):
-        _x = log_table['P velocity']
-    elif 'Sonic' in list(log_table.keys()):
-        _x = log_table['Sonic']
-    if _x is not None:
-        tdr = well.time_to_depth(_x, templates=templates)
-        if tdr is None:
+    if twt is None:
+        # Get the time-depth relation (two way time as a function of md) by calculating it from vp or sonic
+        _x = None
+        if 'P velocity' in list(log_table.keys()):
+            _x = log_table['P velocity']
+        elif 'Sonic' in list(log_table.keys()):
+            _x = log_table['Sonic']
+        if _x is not None:
+            twt = well.time_to_depth(_x, templates=templates)
+            if twt is None:
+                header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]\nLacking info')
+                annotate_plot(axes['twt_ax'], None)
+            else:
+                twt_min = np.min(twt[mask])
+                twt_max = np.max(twt[mask])
+                header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]')
+                annotate_plot(axes['twt_ax'], twt[mask], ylim=[twt_min, twt_max])
+        else:
             header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]\nLacking info')
             annotate_plot(axes['twt_ax'], None)
-        else:
-            header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]')
-            annotate_plot(axes['twt_ax'], tdr[mask])
     else:
-        header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]\nLacking info')
-        annotate_plot(axes['twt_ax'], None)
+        header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]')
+        annotate_plot(axes['twt_ax'], twt[mask], ylim=[twt_min, twt_max])
 
-
-    if tdr is not None:
-        tops_twt = [tdr[find_nearest(depth, y)] for y in wis[well.well][wi_name]]
+    if twt is not None:
+        tops_twt = [twt[find_nearest(depth, y)] for y in wis[well.well][wi_name]]
         #print(tops_twt)
         #for ax in [axes[x] for x in ['twt_ax', 'synt_ax']]:
         for ax in [axes[x] for x in ['twt_ax']]:
@@ -157,7 +184,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     legends = ['{} [{}]'.format(x, templates['Resistivity']['unit']) for x in lognames['Resistivity']]
 
     xlims = axis_log_plot(axes['res_ax'], depth[mask], [tb.logs[x].data[mask] for x in lognames['Resistivity']],
-                  limits, styles, yticks=False)
+                  limits, styles, yticks=False, ylim=[md_min, md_max])
     header_plot(header_axes['res_ax'], xlims*len(legends), legends, styles)
 
     #
@@ -178,7 +205,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
 
     xlims = axis_plot(axes['rho_ax'], depth[mask],
               [tb.logs[lognames[xx]].data[mask] for xx in log_types],
-              limits, styles, yticks=False)
+              limits, styles, yticks=False, ylim=[md_min, md_max])
     header_plot(header_axes['rho_ax'], xlims, legends, styles)
 
     #
@@ -194,11 +221,11 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
 
     if len(log_types) == 0:
         header_plot(header_axes['cpi_ax'], None, None, None, title='CPI is lacking')
-        axis_plot(axes['cpi_ax'], None, None, None, None)
+        axis_plot(axes['cpi_ax'], None, None, None, None, ylim=[md_min, md_max])
     else:
         xlims = axis_plot(axes['cpi_ax'], depth[mask],
                   [tb.logs[lognames[xx]].data[mask] for xx in log_types],
-                  limits, styles, yticks=False)
+                  limits, styles, yticks=False, ylim=[md_min, md_max])
     header_plot(header_axes['cpi_ax'], xlims, legends, styles)
 
     #
@@ -228,34 +255,34 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         # TODO
         # Now we blindly assumes AI is in m/s g/cm3 Make this more robust
         xlims = axis_plot(axes['ai_ax'], depth[mask], [ai[mask]/1000.], limits, styles,
-                  yticks=False)
+                  yticks=False, ylim=[md_min, md_max])
         #header_plot(header_axes['ai_ax'], xlims, ['AI ({})'.format(tt)], styles)
         header_plot(header_axes['ai_ax'], xlims, legends, styles)
     else:
         header_plot(header_axes['ai_ax'], None, None, None, title='AI is lacking')
-        axis_plot(axes['ai_ax'], None, None, None, None)
+        axis_plot(axes['ai_ax'], None, None, None, None, ylim=[md_min, md_max])
 
 
     #
     # Wiggles
-    #t = np.arange(tdr[mask][0], tdr[mask][-1], 0.004)  # A uniformly sampled array of time steps, from A to B
-    t = np.arange(0., np.nanmax(tdr), time_step)  # A uniformly sampled array of time steps, from 0 to 3
+    #t = np.arange(twt[mask][0], twt[mask][-1], 0.004)  # A uniformly sampled array of time steps, from A to B
+    t = np.arange(0., np.nanmax(twt), time_step)  # A uniformly sampled array of time steps, from 0 to 3
     #print(len(t))
     if 'P velocity' in list(log_table.keys()):
-        vp_t = np.interp(x=t, xp=tdr, fp=tb.logs[log_table['P velocity']].data)
+        vp_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['P velocity']].data)
     elif 'Sonic' in list(log_table.keys()):
-        vp_t = np.interp(x=t, xp=tdr, fp=1./tb.logs[log_table['Sonic']].data)
+        vp_t = np.interp(x=t, xp=twt, fp=1./tb.logs[log_table['Sonic']].data)
     else:
         vp_t = None
     #print(len(vp_t))
     if 'S velocity' in list(log_table.keys()):
-        vs_t = np.interp(x=t, xp=tdr, fp=tb.logs[log_table['S velocity']].data)
+        vs_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['S velocity']].data)
     elif 'Shear sonic' in list(log_table.keys()):
-        vs_t = np.interp(x=t, xp=tdr, fp=1./tb.logs[log_table['Shear sonic']].data)
+        vs_t = np.interp(x=t, xp=twt, fp=1./tb.logs[log_table['Shear sonic']].data)
     else:
         vs_t = None
     if 'Density' in list(log_table.keys()):
-        rho_t = np.interp(x=t, xp=tdr, fp=tb.logs[log_table['Density']].data)
+        rho_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['Density']].data)
     else:
         rho_t = None
 
@@ -265,16 +292,20 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         reff = None
 
     if reff is not None:
+        # TODO
+        # TODO XXX
+        # The dtr I have introduced here is confusing. Data is plotted in MD after calculating the twt from check shots
+
         #print(len(reff(10)))
         #tw, w = ricker(_f=c_f, _length=duration, _dt=time_step)
         w = ricker(duration, time_step, c_f)
         #print(len(w))
 
         # Compute the depth-time relation
-        dtr = np.array([depth[find_nearest(tdr, tt)] for tt in t])
+        dtr = np.array([depth[find_nearest(twt, tt)] for tt in t])
         #print(np.nanmin(dtr), np.nanmax(dtr))
         # Translate the mask to the time variable
-        t_mask = np.ma.masked_inside(t[:-1], np.nanmin(tdr[mask]), np.nanmax(tdr[mask])).mask
+        t_mask = np.ma.masked_inside(t[:-1], np.nanmin(twt[mask]), np.nanmax(twt[mask])).mask
         #wiggle_plot(axes['synt_ax'], t[:-1][t_mask], wig[t_mask], 10)
 
         header_plot(header_axes['synt_ax'], None, None, None,
@@ -282,7 +313,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         for inc_a in range(0, 35, 5):
             wig = np.convolve(w, np.nan_to_num(reff(inc_a)), mode='same')
             wiggle_plot(axes['synt_ax'], dtr[:-1][t_mask], wig[t_mask], inc_a, scaling=scaling,
-                        fill_pos_style=fill_pos_style, fill_neg_style=fill_neg_style)
+                        fill_pos_style=fill_pos_style, fill_neg_style=fill_neg_style)  #, ylim=[twt_min, twt_max])
     else:
         header_plot(header_axes['synt_ax'], None, None, None, title='Refl. coeff. lacking')
         wiggle_plot(axes['synt_ax'], None, None, None)
@@ -296,6 +327,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
 def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, block_name=None, savefig=None):
     """
     Overview plot designed to show data coverage in given working interval together with sea water depth
+    Wells with no TVD data are plotted as dashed lines, with TVD the well is drawn with a solid line
     :param wells:
     :param log_table:
         dict
@@ -338,15 +370,16 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
 
     wnames = []
     c_styles = {}  # style of line that defines the center of each well.
-                   # Thin dashed if TVD present, thicker solid if not
     for i, well in enumerate(wells.values()):
         wnames.append(well.well)
-        c_styles[well.well] = {'color': 'k', 'ls': '-', 'lw': 1}
+        c_styles[well.well] = {'color': 'k', 'ls': '--', 'lw': 1}
         # extract the relevant log block
         tb = well.block[block_name]
 
         # Try finding the depth interval of the desired working interval 'wi_name'
         well.calc_mask({}, name='XXX', wis=wis, wi_name=wi_name)
+        # TODO This try - except case is not functioning when calling overview_plot with "missing" working intervals
+        # from jupyter-lab
         try:
             mask = tb.masks['XXX'].data
             int_exists = True
@@ -357,7 +390,7 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
 
         if int_exists:
             if 'tvd' in well.log_names():
-                c_styles[well.well] = {'color': 'k', 'ls': '--', 'lw': 0.5}
+                c_styles[well.well] = {'color': 'k', 'ls': '-', 'lw': 1}
                 depth_key = 'tvd'
             else:
                 depth_key = 'depth'
@@ -390,28 +423,25 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
                         verticalalignment='bottom',
                         horizontalalignment='center')
 
-
-        # TODO
-        # Use the wells function get_kb() and get_water_depth() to decide if to plot these or not
-        # MAYBE let above two *get* functions take *template* as input
-        if (templates[well.well]['water depth'] is not None) and (templates[well.well]['kb'] is not None):
-            ax.plot([i, i], [0.,  # this is not exact, because the linewidth makes the lines look longer than what they are
-                            templates[well.well]['water depth']+templates[well.well]['kb']], label='_nolegend_', **sea_style)
-            ax.plot([i, i], [0., templates[well.well]['kb']], label='_nolegend_', **kb_style)
-        else:
-            warn_txt = 'Kelly bushing and/or water depth not specified for well {}'.format(well.well)
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
+        water_depth = well.get_from_well_info('water depth', templates=templates)
+        kb = well.get_from_well_info('kb', templates=templates)
+        ax.plot([i, i],
+                [0.,  # this is not exact, because the linewidth makes the lines look longer than what they are
+                np.abs(water_depth) + kb], label='_nolegend_',
+                **sea_style)
+        ax.plot([i, i], [0., templates[well.well]['kb']], label='_nolegend_', **kb_style)
         ax.axvline(i, label='_nolegend_', **c_styles[well.well])
 
     ax.set_ylim(y_max, 0)
     ax.set_ylabel('TVD [m]')
     ax.get_xaxis().set_ticks(range(len(wnames)))
     ax.get_xaxis().set_ticklabels(wnames)
-    ax.legend(log_types)
+    ax.legend(['{}: {}'.format(xx, log_table[xx]) for xx in list(log_table.keys())])
     fig.tight_layout()
 
     if _savefig:
         fig.savefig(savefig)
+    else:
+        plt.show()
 
 
