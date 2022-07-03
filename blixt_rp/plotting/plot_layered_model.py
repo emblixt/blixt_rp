@@ -11,12 +11,13 @@ import blixt_utils.utils as uu
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
 import blixt_rp.rp.rp_core as rp
+from blixt_rp.core.seismic_modelling import one_d_model
 from bruges.filters import ricker
 
 logger = logging.getLogger(__name__)
 
 
-def plot_model(ax, header_ax, vps, vss, rhos, boundaries, buffer=None):
+def plot_model(ax, header_ax, vps, vss, rhos, layer_thicknesses, t0):
     """
     Plot a 1D model in TWT with N layers
     :param ax:
@@ -30,27 +31,31 @@ def plot_model(ax, header_ax, vps, vss, rhos, boundaries, buffer=None):
     :param rhos:
         list
         List of length N of densities in g/cm3
-    :param boundaries:
+    :param layer_thicknesses:
         list
-        List of length N-1 of TWT values in ms who define the boundaries between the different layers
-        From top to bottom (increasing TWT)
-    :param buffer:
+        List of length N of TWT values in s which define the thickness of each layer
+    :param t0:
         float
-        buffer in ms TWT that determines how much to show of the top and bottom layers
+        TWT time in seconds to where the model top is
 
     return
-        Acoustic impedance [m/s g/cm3] and the TWT data [ms] used to define the model
+        Acoustic impedance [m/s g/cm3] and the TWT data [s] used to define the model
     """
+
     # check data
-    if not len(boundaries) == len(vps) - 1:
-        raise ValueError(vps)
+    if not(len(vps) == len(vss) == len(rhos) == len(layer_thicknesses)):
+        warn_txt = 'Input lists in plot_model() are not of same length'
+        print('WARNING: {}'.format(warn_txt))
+        logger.warning(warn_txt)
+        raise IOError
 
     my_linestyle = {'lw': 1, 'color': 'k', 'ls': '-'}
     text_style = {'fontsize': 'x-small', 'bbox': {'facecolor': 'w', 'alpha': 0.5}}
 
-    if buffer is None:
-        buffer = 100.
-    bwb = [boundaries[0] - buffer] + boundaries +  [boundaries[-1] + buffer]  #  boundaries with buffer
+    # the boundaries (bwb) need to add up the respective thicknesses
+    bwb = [t0]
+    for i in range(len(layer_thicknesses)):
+        bwb.append(t0 + sum(layer_thicknesses[:i+1]))
     y = np.linspace(bwb[0], bwb[-1],  100)
     ais = [_vp * _rho for _vp, _rho in zip(vps, rhos)]  # Acoustic impedance in m/s g/cm3
     max_ai = max(ais)
@@ -62,7 +67,8 @@ def plot_model(ax, header_ax, vps, vss, rhos, boundaries, buffer=None):
         data[(y >= bwb[i-1]) & (y <= bwb[i])] = ais[i-1]/max_ai
 
     axis_plot(ax, y, [data], [[0., 1.1]], [my_linestyle], nxt=0)
-    for i, _y in enumerate(boundaries):
+    #for i, _y in enumerate([t0 + thick for thick in layer_thicknesses[:-1]]):
+    for i, _y in enumerate(bwb[1:-1]):
         ax.plot([0., ais[i+1]/max_ai], [_y, _y], **my_linestyle)
 
     i = 0
@@ -81,10 +87,11 @@ if __name__ == '__main__':
     #vps = [3500., 3500., 3500.]  # Vp [m/s] in the different layers
     #vss = [1800., 1900., 1800.]
     #rhos = [2.6, 2.5, 2.6]
-    vps = [3500., 3600., 3500.]  # Vp [m/s] in the different layers
-    vss = [1800., 2100., 1800.]
-    rhos = [2.6, 2.3, 2.6]
-    boundaries = [4000., 4060.]
+    _vps = [3500., 3600., 3500.]  # Vp [m/s] in the different layers
+    _vss = [1800., 2100., 1800.]
+    _rhos = [2.6, 2.3, 2.6]
+    thicknesses = [0.1, 0.06, 0.1]  # in seconds
+    _t0 = 2.
     time_step = 0.001  # s
     center_f = 12.
     duration = 0.128
@@ -108,33 +115,12 @@ if __name__ == '__main__':
         axes[ax_names[i]] = fig.add_subplot(2, n_cols, n_cols + rel_pos[i],
                                             position=[l+(rel_pos[i]-1)*w, b, rel_widths[i]*w, h])
 
-    ais, twt = plot_model(axes['model_ax'], header_axes['model_ax'], vps, vss, rhos, boundaries)
+    ais, twt = plot_model(axes['model_ax'], header_axes['model_ax'], _vps, _vss, _rhos, thicknesses, _t0)
 
     annotate_plot(axes['twt_ax'], twt)
     header_plot(header_axes['twt_ax'], None, None, None, title='TWT\n[ms]')
 
-    # Start calculating wiggles
-    # time
-    t = np.arange(twt[0], twt[-1], time_step * 1000.) # NB, time in ms
-    # arrays of Vp, Vs and Rho
-    vp_arr = np.zeros(len(t))
-    vs_arr= np.zeros(len(t))
-    rho_arr= np.zeros(len(t))
-    i = 0
-    for _vp, _vs, _rho in zip(vps, vss, rhos):
-        if i == 0:
-            vp_arr[t <= boundaries[i]] = _vp
-            vs_arr[t <= boundaries[i]] = _vs
-            rho_arr[t <= boundaries[i]] = _rho
-        elif i < len(vps) - 1:
-            vp_arr[(t > boundaries[i - 1]) & (t <= boundaries[i])] = _vp
-            vs_arr[(t > boundaries[i - 1]) & (t <= boundaries[i])] = _vs
-            rho_arr[(t > boundaries[i - 1]) & (t <= boundaries[i])] = _rho
-        else:
-            vp_arr[t > boundaries[i-1]] = _vp
-            vs_arr[t > boundaries[i-1]] = _vs
-            rho_arr[t > boundaries[i-1]] = _rho
-        i += 1
+    t, vp_arr, vs_arr, rho_arr = one_d_model(_vps, _vss, _rhos, thicknesses, _t0, time_step)
     reff = rp.reflectivity(vp_arr, None, vs_arr, None, rho_arr, None, along_wiggle=True)
     w = ricker(duration, time_step, center_f)
 
@@ -147,7 +133,7 @@ if __name__ == '__main__':
                     fill_pos_style='pos-blue', fill_neg_style='neg-red')
 
     axes["synt_ax"].get_yaxis().set_ticklabels([])
-    axes["synt_ax"].axhline(y=boundaries[0], color='k', ls='--')
-    axes["synt_ax"].axhline(y=boundaries[1], color='k', ls='--')
+    axes["synt_ax"].axhline(y=_t0 + thicknesses[0], color='k', ls='--')
+    axes["synt_ax"].axhline(y=_t0 + thicknesses[0] + thicknesses[1], color='k', ls='--')
 
     plt.show()

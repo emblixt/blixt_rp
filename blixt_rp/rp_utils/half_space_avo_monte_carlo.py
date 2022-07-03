@@ -31,7 +31,7 @@ def plot_multi_interfaces(sums, intfs, fbase=None, templates=None, suffix=None):
     """
     :param sums: 
         dict
-        dictionary of sums and averages information containg the statistics from
+        dictionary of sums and averages information containing the statistics from
         multiple layers
         
     :param intfs:

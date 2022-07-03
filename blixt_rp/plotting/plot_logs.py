@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import logging
+from copy import deepcopy
 
 import blixt_rp.core.well as cw
 import blixt_utils.utils as uu
@@ -8,6 +9,7 @@ from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
 import blixt_rp.rp.rp_core as rp
 from bruges.filters import ricker
+import bruges.rockphysics.anisotropy as bra
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +51,9 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         str
         Full path name to file (.png or .pdf) to which the plot is exported
         if None, the plot is displayed instead
+    :kwargs
+        keyword arguments
+        backus_length: The Backus averaging length in m
     :return:
     """
     log_table = small_log_table(log_table)
@@ -63,6 +68,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     scaling = kwargs.pop('scaling', 30.0)
     suffix = kwargs.pop('suffix', '')
     wiggle_fill_style = kwargs.pop('wiggle_fill_style', 'default')
+    backus_length = kwargs.pop('backus_length', 5.0)
 
     if wiggle_fill_style == 'opposite':
         fill_pos_style = 'pos-blue'
@@ -231,9 +237,18 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     #
     # AI
     tt = ''
+    ba = None
     if 'Density' in list(log_table.keys()):
         tt += log_table['Density']
         if 'P velocity' in list(log_table.keys()):
+            try:
+                _vp = tb.logs[log_table['P velocity']].data
+                _vs = tb.logs[log_table['S velocity']].data
+                _rho = tb.logs[log_table['Density']].data
+                if backus_length is not None:
+                    ba = bra.backus(_vp, _vs, _rho, backus_length, tb.step)
+            except:
+                ba = None
             ai = tb.logs[log_table['Density']].data * tb.logs[log_table['P velocity']].data
             tt += '*{}'.format(log_table['P velocity'])
         elif 'Sonic' in list(log_table.keys()):
@@ -257,6 +272,17 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         xlims = axis_plot(axes['ai_ax'], depth[mask], [ai[mask]/1000.], limits, styles,
                   yticks=False, ylim=[md_min, md_max])
         #header_plot(header_axes['ai_ax'], xlims, ['AI ({})'.format(tt)], styles)
+        if ba is not None: # Backus averaged data exists
+            styles_ba = deepcopy(styles)
+            styles_ba[0]['lw'] = styles[0]['lw'] * 3
+            ai = ba[2] * ba[0]
+            _ = axis_plot(axes['ai_ax'], depth[mask], [ai[mask]/1000.], limits, styles_ba,
+                          yticks=False, ylim=[md_min, md_max])
+            # modify the settings to accommodate the backus averaged data
+            limits.append(limits[0])
+            styles.append(styles_ba[0])
+            legends.append('AI backus {:.1f}m'.format(backus_length))
+            xlims.append(xlims[0])
         header_plot(header_axes['ai_ax'], xlims, legends, styles)
     else:
         header_plot(header_axes['ai_ax'], None, None, None, title='AI is lacking')
@@ -377,16 +403,22 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
         tb = well.block[block_name]
 
         # Try finding the depth interval of the desired working interval 'wi_name'
-        well.calc_mask({}, name='XXX', wis=wis, wi_name=wi_name)
-        # TODO This try - except case is not functioning when calling overview_plot with "missing" working intervals
-        # from jupyter-lab
+        # TODO missing working intervals are tricky to capture, sometimes they cause a TypeError, sometimes not
+        # So I need to handle both cases
         try:
+            well.calc_mask({}, name='XXX', wis=wis, wi_name=wi_name)
             mask = tb.masks['XXX'].data
             int_exists = True
         except TypeError:
             print('{} not present in well {}. Continue'.format(wi_name, well.well))
             mask = None
             int_exists = False
+        if int_exists:
+            if mask.all():
+                # All values in mask is True, meaning that all data in well is masked out
+                print('{} not present in well {}. Continue'.format(wi_name, well.well))
+                mask = None
+                int_exists = False
 
         if int_exists:
             if 'tvd' in well.log_names():
@@ -408,6 +440,7 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
                     continue
                 if np.isnan(tb.logs[lname].data[mask]).all(): # all nan's
                     missing_logs_txt += '{}\n'.format(lname)
+                    continue
                 x = uu.norm(tb.logs[lname].data[mask], method='median')
                 styles = {'lw': templates[ltype]['line width'],
                           'color': templates[ltype]['line color'], 'ls': templates[ltype]['line style']}

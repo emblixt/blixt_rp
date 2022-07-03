@@ -980,6 +980,7 @@ class Well(object):
                   ):
         """
         Based on the different cutoffs in the 'cutoffs' dictionary, each Block in well is masked accordingly.
+        In the resulting mask, a True value indicates that the data is masked out
 
         :param cutoffs:
             dict
@@ -2155,6 +2156,7 @@ class Block(object):
         if verbose:
             fig.suptitle('Well: {}'.format(self.well))
             plt.show()
+
 
 def _read_las(file):
     """Convert file and Return `self`. """
