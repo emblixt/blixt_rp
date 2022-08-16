@@ -4,7 +4,8 @@ import logging
 
 # TODO remove this two lines, only used in testing
 import sys
-sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
+#sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
+sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
 
 import blixt_rp.core.well as cw
 import blixt_utils.utils as uu
