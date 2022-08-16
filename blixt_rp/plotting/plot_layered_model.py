@@ -50,7 +50,8 @@ def plot_model(ax, header_ax, vps, vss, rhos, layer_thicknesses, t0):
         logger.warning(warn_txt)
         raise IOError
 
-    my_linestyle = {'lw': 1, 'color': 'k', 'ls': '-'}
+    linestyle_ai = {'lw': 1, 'color': 'k', 'ls': '-'}
+    linestyle_vpvs = {'lw': 1, 'color': 'k', 'ls': '--'}
     text_style = {'fontsize': 'x-small', 'bbox': {'facecolor': 'w', 'alpha': 0.5}}
 
     # the boundaries (bwb) need to add up the respective thicknesses
@@ -59,18 +60,23 @@ def plot_model(ax, header_ax, vps, vss, rhos, layer_thicknesses, t0):
         bwb.append(t0 + sum(layer_thicknesses[:i+1]))
     y = np.linspace(bwb[0], bwb[-1],  100)
     ais = [_vp * _rho for _vp, _rho in zip(vps, rhos)]  # Acoustic impedance in m/s g/cm3
+    vpvss = [_vp / _vs for _vp, _vs in zip(vps, vss)]  # vp / vs
     max_ai = max(ais)
+    max_vpvs = max(vpvss)
     data = np.ones(100)  # fake data
-    # normalize the data according to AI
+    data_vpvs = np.ones(100)  # fake data
+    # normalize the data according to max values
     for i in range(len(bwb)):
         if i == 0:
             continue
         data[(y >= bwb[i-1]) & (y <= bwb[i])] = ais[i-1]/max_ai
+        data_vpvs[(y >= bwb[i-1]) & (y <= bwb[i])] = vpvss[i-1] * 0.9 / max_vpvs
 
-    axis_plot(ax, y, [data], [[0., 1.1]], [my_linestyle], nxt=0)
+    axis_plot(ax, y, [data], [[0., 1.1]], [linestyle_ai], nxt=0)
+    axis_plot(ax, y, [data_vpvs], [[0., 1.1]], [linestyle_vpvs], nxt=0)
     #for i, _y in enumerate([t0 + thick for thick in layer_thicknesses[:-1]]):
     for i, _y in enumerate(bwb[1:-1]):
-        ax.plot([0., ais[i+1]/max_ai], [_y, _y], **my_linestyle)
+        ax.plot([0., ais[i+1]/max_ai], [_y, _y], **linestyle_ai)
 
     i = 0
     for _vp, _vs, _rho in zip(vps, vss, rhos):
