@@ -2,11 +2,12 @@ import matplotlib.pyplot as plt
 import numpy
 import numpy as np
 import logging
+from matplotlib.font_manager import FontProperties
 
 # TODO remove this two lines, only used in testing
 import sys
-sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
-#sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
+#sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
+sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
 
 import blixt_rp.core.well as cw
 import blixt_utils.utils as uu
@@ -112,6 +113,8 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
     if number_of_traces is None:
         number_of_traces = 100
 
+    text_style = {'fontsize': 'x-small', 'bbox': {'facecolor': 'w', 'alpha': 0.7}}
+
     #fig, ax = plt.subplots()
     fig = plt.figure(figsize=(12, 8))
     # divide figure into a 3 by 6 grid
@@ -156,6 +159,9 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
 
     ax_wedge.plot(range(number_of_traces), top, 'r--')
     ax_wedge.plot(range(number_of_traces), base, 'b--')
+    info_txt = '10ms = {:.1f}m'.format(0.01 * vps[1])
+    print(t0 + 0.5 * (twt.max() - twt.min()))
+    ax_wedge.text(0.8 * number_of_traces, t0 +  0.5 * (twt.max() - twt.min()), info_txt, **text_style)
     ax_wedge.set_ylim(ax_wedge.get_ylim()[::-1])
     labels = ax_wedge.get_xticks()
     new_labels = []
@@ -165,19 +171,21 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
     ax_wedge.set_xlabel('Wedge thickness [ms]')
     ax_wedge.set_ylabel('TWT [s]')
 
-    ax_thickness.plot(range(number_of_traces), np.array(wedge_thickness) * 1000.)
-    ax_thickness.plot(range(number_of_traces), np.array(apparent_thickness) * 1000.)
+    ax_thickness.plot(range(number_of_traces), np.array(wedge_thickness) * 1000., label='True thickness')
+    ax_thickness.plot(range(number_of_traces), np.array(apparent_thickness) * 1000., label='App. thickness')
     ax_thickness.set_xticklabels(new_labels)
     ax_thickness.set_ylabel('Wedge thickness [ms]')
+    ax_thickness.legend(prop=FontProperties(size='smaller'), loc=4)
 
     ax_amplitude = ax_thickness.twinx()
     if top_is_negative:
-        ax_amplitude.plot(range(number_of_traces), minimum_amp, 'r--')
-        ax_amplitude.plot(range(number_of_traces), maximum_amp, 'b--')
+        ax_amplitude.plot(range(number_of_traces), minimum_amp, 'r--', label='Trough amp.')
+        ax_amplitude.plot(range(number_of_traces), maximum_amp, 'b--', label='Peak amp.')
     else:
-        ax_amplitude.plot(range(number_of_traces), minimum_amp, 'b--')
-        ax_amplitude.plot(range(number_of_traces), maximum_amp, 'r--')
-    ax_amplitude.set_ylabel('Top & base amplitude')
+        ax_amplitude.plot(range(number_of_traces), minimum_amp, 'b--', label='Trough amp.')
+        ax_amplitude.plot(range(number_of_traces), maximum_amp, 'r--', label='Peak amp.')
+    ax_amplitude.set_ylabel('Peak & trough amplitudes')
+    ax_amplitude.legend(prop=FontProperties(size='smaller'), loc=7)
 
     _, _ = model_plot.plot_model(ax_model, None, vps, vss, rhos,
                       [buffer, up_to_thickness, buffer], t0)
@@ -188,7 +196,6 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
     extended_wavelet = np.zeros(len(twt))
     top_index = int(0.5 * (len(extended_wavelet) - len(wavelet)))
     extended_wavelet[top_index:(top_index+len(wavelet))] = wavelet
-    #ax_wavelet = ax_model.twiny()
     ax_wavelet.plot(extended_wavelet, twt)
     ax_wavelet.set_ylim(ax_wavelet.get_ylim()[::-1])
     ax_wavelet.tick_params(labelleft=False, labelbottom=False, labelright=True)
@@ -211,6 +218,6 @@ if __name__ == '__main__':
     _buffer = 0.05
     _incident_angle = 15.
     w = ricker(_duration, _time_step, _center_f)
-    _title = 'Wedge model at {:.0f}$^\circ$ inc. using a Ricker wavelet at {:.0f}Hz'.format(_incident_angle, _center_f)
+    _title = 'Wedge model at {:.0f}$^\circ$ incidence, using a Ricker wavelet at {:.0f}Hz'.format(_incident_angle, _center_f)
     wedge_modelling(_vps, _vss, _rhos, _up_to_thickness, _incident_angle, w,
                     time_step=_time_step, buffer=_buffer, number_of_traces=30, title=_title)
