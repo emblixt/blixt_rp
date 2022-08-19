@@ -3,7 +3,8 @@ import numpy as np
 import sys
 import logging
 
-sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
+#sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
+sys.path.append('C:\\Users\\MårtenBlixt\\PycharmProjects\\blixt_utils')
 
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
 
@@ -21,7 +22,7 @@ def plot(model, ax=None):
     show = False
     if ax is None:
         fig, ax = plt.subplots()
-        show=True
+        show = True
 
     # extract the elastic properties from the model
     vps, vss, rhos = [], [], []
@@ -41,7 +42,7 @@ def plot(model, ax=None):
         bwb.append(last_top + model.layers[i].thickness)
 
     # Create data containers
-    y = np.linspace(bwb[0], bwb[-1],  100) # fake depth parameter
+    y = np.linspace(bwb[0], bwb[-1],  100)  # fake depth parameter
     data_ai = np.ones(100)
     data_vpvs = np.ones(100)
 
@@ -100,14 +101,22 @@ class Model:
         """
 
         # set the required parameters
-        for name, param, def_val in zip(
-                ['model_type', 'depth_to_top', 'layers', 'domain'],
-                [model_type, depth_to_top, layers, domain],
-                ['1D', 2.0, [], 'TWT']):
-            if param is None:
-                super(Model, self).__setattr__(name, def_val)
-            else:
-                super(Model, self).__setattr__(name, param)
+        if model_type is None:
+            self.model_type = '1D'
+        else:
+            self.model_type = model_type
+        if depth_to_top is None:
+            self.depth_to_top = 2.0
+        else:
+            self.depth_to_top = depth_to_top
+        if layers is None:
+            self.layers = []
+        else:
+            self.layers = layers
+        if domain is None:
+            self.domain = 'TWT'
+        else:
+            self.domain = domain
 
     def __str__(self):
         return '{} model in {} domain with {} layers'.format(self.model_type, self.domain, len(self.layers))
@@ -170,44 +179,68 @@ class Layer:
             If 1, the net portion is taken up by one homogeneous layer
         """
         # get the required parameters
-        for name, param, def_val in zip(
-                ['thickness', 'target', 'vp', 'vs', 'rho', 'ntg'],
-                [thickness, target, vp, vs, rho, ntg],
-                [0.1, False, 3600, 1800, 2.3, 1.]):
-            if param is None:
-                super(Layer, self).__setattr__(name, def_val)
-            else:
-                super(Layer, self).__setattr__(name, param)
+        if thickness is None:
+            self.thickness = 0.1
+        else:
+            self.thickness = thickness
+        if target is None:
+            self.target = False
+        else:
+            self.target = target
+        if vp is None:
+            self.vp = 3600.
+        else:
+            self.vp = vp
+        if vs is None:
+            self.vs = 1800.
+        else:
+            self.vs = vs
+        if rho is None:
+            self.rho = 2.3
+        else:
+            self.rho = rho
+        if ntg is None:
+            self.ntg = 1.
+        else:
+            self.ntg = ntg
+
         if not (0 <= self.ntg <= 1):
             raise ValueError('NTG must be between 0 and 1')
 
         # Get the net-to-gross related keyword arguments
-        if self.ntg < 1:
-            for name, param, def_val in zip(
-                    ['gross_vp', 'gross_vs', 'gross_rho', 'thin_bed_factor'],
-                    [gross_vp, gross_vs, gross_rho, thin_bed_factor],
-                    [3400, 1000, 2.0, 1]):
-                param = kwargs.pop(name, def_val)
-                super(Layer, self).__setattr__(name, param)
+        self.xx = None
+        if self.ntg < 1 and self.target:
+            self.gross_vp = kwargs.pop('gross_vp', 3400.)
+            self.gross_vs = kwargs.pop('gross_vs', 1000.)
+            self.gross_rho = kwargs.pop('gross_rho', 2.)
+            self.thin_bed_factor = kwargs.pop('thin_bed_factor', 1)
+
             # Divide the layer into n sub layers
-            if self.ntg >= 0.5
+            if self.ntg >= 0.5:
                 n = self.thin_bed_factor / (1. - self.ntg)
             else:
-                n = self.thin_bed_factor /  self.ntg
+                n = self.thin_bed_factor / self.ntg
+            # number of cells in a group to subdivide the net part in to "thin_bed_factor" number of sub layers
+            ng = int(np.round(self.ntg / (1. - self.ntg)))
+            if self.ntg >= 0.5:
+                self.xx = [self.gross_vp]
+                while len(self.xx) <= n:
+                    self.xx += [self.vp] * ng
+                    self.xx += [self.gross_vp]
 
-
+    def get_xx(self):
+        return self.xx
 
 
 def test():
     first_layer = Layer(thickness=0.1, vp=3300, vs=1500, rho=2.1)
     second_layer = Layer(thickness=0.2, vp=3500, vs=1600, rho=2.3)
+    ntg_layer = Layer(target=True, thickness=0.2, vp=3000., ntg=0.9, thin_bed_factor=2)
 
-    m = Model(layers=[first_layer, second_layer])
-    print(m)
-    m.append(first_layer)
-    print(m)
+    m = Model(layers=[ntg_layer])
 
-    m.plot()
+    print(m.layers[0].get_xx())
+
 
 
 if __name__ == '__main__':
