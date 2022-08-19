@@ -60,13 +60,13 @@ def twolayer(vp0, vs0, rho0, vp1, vs1, rho1, angels=None):
     opz4 = {'color': 'tab:blue', 'linewidth': 0, 'markersize': 8, 'marker': 'o'}
 
     f = plt.subplots(figsize=(12, 10))
-    ax0 = plt.subplot2grid((2, 12), (0, 0), colspan=3)  # ip
-    ax1 = plt.subplot2grid((2, 12), (0, 3), colspan=3)  # vp/vs
-    ax2 = plt.subplot2grid((2, 12), (0, 6), colspan=2)  # synthetic @ 0 deg
-    ax3 = plt.subplot2grid((2, 12), (0, 8), colspan=2)  # synthetic @ 30 deg
-    ax35 = plt.subplot2grid((2, 12), (0, 10), colspan=2)  # synthetic @ 30 deg
-    ax4 = plt.subplot2grid((2, 12), (1, 0), colspan=5)  # avo curve
-    ax6 = plt.subplot2grid((2, 12), (1, 7), colspan=5)  # avo curve
+    ax0 = plt  # ip
+    ax1 = plt  # vp/vs
+    ax2 = plt  # synthetic @ 0 deg
+    ax3 = plt  # synthetic @ 30 deg
+    ax35 = plt  # synthetic @ 30 deg
+    ax4 = plt  # avo curve
+    ax6 = plt  # avo curve
 
 
     ax0.plot(model_ip, model_z, **opz0)
@@ -103,7 +103,7 @@ def twolayer(vp0, vs0, rho0, vp1, vs1, rho1, angels=None):
     ax4.set_xlabel('angle of incidence')
     ax4.tick_params(which='major', labelsize=8)
 
-    ax5 = ax4.twinx()
+    ax5 = ax4
     color = 'tab:red'
     ax5.plot(angels, [s[interface] for s in [synt0, synt1, synt2]], **opz3)
     ax5.set_ylabel('Seismic amplitude')
@@ -380,7 +380,7 @@ def test_synt():
     if plot:
         f2 = plt.figure(figsize=[10, 12])
 
-        ax1 = f2.add_axes([0.05, 0.1, 0.2, 0.9])
+        ax1 = f2
         ax1.plot(ai, depth, 'k', alpha=0.75)
         ax1.set_title('impedance')
         ax1.set_ylabel('measured depth ' + '$[m]$', fontsize='12')
@@ -396,7 +396,7 @@ def test_synt():
         ax2.invert_yaxis()
         ax2.grid()
 
-        ax3 = f2.add_axes([0.675, 0.1, 0.1, 0.9])
+        ax3 = f2
         ax3.plot(ai_t, t, 'k', alpha=0.75)
         ax3.set_title('impedance')
         ax3.set_ylabel('two-way time ' + '$[s]$', fontsize='12')

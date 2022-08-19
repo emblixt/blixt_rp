@@ -191,7 +191,7 @@ def test_plot_line():
     print(header)
     uu={'add_colorbar':False,'robust':True,'interpolation':'spline16'}
     fig, ax = plt.subplots()
-    data.sel(INLINE=6550).plot.imshow(x='XLINE',y='TWT', yincrease=False, ax=ax, **uu)
+    data.plot.imshow(x='XLINE', y='TWT', yincrease=False, ax=ax, **uu)
     plt.show()
 
 def test_amp_spectra():

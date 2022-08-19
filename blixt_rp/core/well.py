@@ -1977,7 +1977,7 @@ class Block(object):
         if debug:
             fig, ax = plt.subplots()
             ax.plot(self.logs['depth'].data, scaled_dt, 'b', lw=1)
-            ax2 = ax.twinx()
+            ax2 = ax
             ax2.plot(self.logs['depth'].data, tdr, 'k', lw=1)
             plt.show()
 

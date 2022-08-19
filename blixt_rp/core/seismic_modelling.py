@@ -119,10 +119,10 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
     fig = plt.figure(figsize=(12, 8))
     # divide figure into a 3 by 6 grid
     spec = fig.add_gridspec(3, 6)
-    ax_thickness = fig.add_subplot(spec[0, 0:4])  # row 0, column 0 to 5
-    ax_wedge = fig.add_subplot(spec[1:3, 0:4])  # row 1 to 2, column 0 to 5
+    ax_thickness = fig  # row 0, column 0 to 5
+    ax_wedge = fig  # row 1 to 2, column 0 to 5
     ax_model = fig.add_subplot(spec[1:3, 4])  # row 1 to 2, column 5
-    ax_wavelet = fig.add_subplot(spec[1:3, 5])  # row 1 to 2, column 6
+    ax_wavelet = fig  # row 1 to 2, column 6
 
     top = []
     base = []
@@ -177,7 +177,7 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
     ax_thickness.set_ylabel('Wedge thickness [ms]')
     ax_thickness.legend(prop=FontProperties(size='smaller'), loc=4)
 
-    ax_amplitude = ax_thickness.twinx()
+    ax_amplitude = ax_thickness
     if top_is_negative:
         ax_amplitude.plot(range(number_of_traces), minimum_amp, 'r--', label='Trough amp.')
         ax_amplitude.plot(range(number_of_traces), maximum_amp, 'b--', label='Peak amp.')
