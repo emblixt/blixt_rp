@@ -235,11 +235,19 @@ class Layer:
 def test():
     first_layer = Layer(thickness=0.1, vp=3300, vs=1500, rho=2.1)
     second_layer = Layer(thickness=0.2, vp=3500, vs=1600, rho=2.3)
-    ntg_layer = Layer(target=True, thickness=0.2, vp=3000., ntg=0.9, thin_bed_factor=2)
+
+    ntg = 0.9
+    thin_bed_factor = 1
+    net_vp = 3000.
+    ntg_layer = Layer(target=True, thickness=0.2, vp=net_vp, ntg=ntg, thin_bed_factor=thin_bed_factor)
 
     m = Model(layers=[ntg_layer])
 
-    print(m.layers[0].get_xx())
+    x = m.layers[0].get_xx()
+    x = np.array(x)
+    net = len(x[x==net_vp])
+
+    print('For NTG={}, and tbf={}, the observed NTG is {}'.format(ntg, thin_bed_factor, net/len(x)))
 
 
 
