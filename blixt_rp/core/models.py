@@ -4,7 +4,7 @@ import sys
 import logging
 
 #sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
-sys.path.append('C:\\Users\\MårtenBlixt\\PycharmProjects\\blixt_utils')
+sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
 
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
 
@@ -215,18 +215,29 @@ class Layer:
             self.gross_rho = kwargs.pop('gross_rho', 2.)
             self.thin_bed_factor = kwargs.pop('thin_bed_factor', 1)
 
-            # Divide the layer into n sub layers
-            if self.ntg >= 0.5:
-                n = self.thin_bed_factor / (1. - self.ntg)
+            if self.ntg == 0:
+                self.xx = np.ones(10) * self.gross_vp
             else:
-                n = self.thin_bed_factor / self.ntg
-            # number of cells in a group to subdivide the net part in to "thin_bed_factor" number of sub layers
-            ng = int(np.round(self.ntg / (1. - self.ntg)))
-            if self.ntg >= 0.5:
-                self.xx = [self.gross_vp]
-                while len(self.xx) <= n:
-                    self.xx += [self.vp] * ng
-                    self.xx += [self.gross_vp]
+                # Divide the layer into n sub layers
+                if self.ntg >= 0.5:
+                    n = 10 * self.thin_bed_factor / (1. - self.ntg)
+                    # number of cells in a group to subdivide the net part in to "thin_bed_factor" number of sub layers
+                    ng = int(np.round(self.ntg / (1. - self.ntg)))
+                else:
+                    n = 10 * self.thin_bed_factor / self.ntg
+                    # number of cells in a group to subdivide the net part in to "thin_bed_factor" number of sub layers
+                    ng = 1
+                print(n, ng)
+                if self.ntg >= 0.5:
+                    self.xx = [self.gross_vp]
+                    while len(self.xx) <= n:
+                        self.xx += [self.vp] * ng * 10
+                        self.xx += [self.gross_vp] * 10
+                else:
+                    self.xx = [self.vp]
+                    while len(self.xx) <= n:
+                        self.xx += [self.gross_vp] * ng * 10
+                        self.xx += [self.vp] * 10
 
     def get_xx(self):
         return self.xx
@@ -237,18 +248,20 @@ def test():
     second_layer = Layer(thickness=0.2, vp=3500, vs=1600, rho=2.3)
 
     ntg = 0.9
-    thin_bed_factor = 1
+    thin_bed_factor = 2
     net_vp = 3000.
-    ntg_layer = Layer(target=True, thickness=0.2, vp=net_vp, ntg=ntg, thin_bed_factor=thin_bed_factor)
+    for i in range(11):
+        ntg = i/10.
 
-    m = Model(layers=[ntg_layer])
+        ntg_layer = Layer(target=True, thickness=0.2, vp=net_vp, ntg=ntg, thin_bed_factor=thin_bed_factor)
 
-    x = m.layers[0].get_xx()
-    x = np.array(x)
-    net = len(x[x==net_vp])
+        m = Model(layers=[ntg_layer])
 
-    print('For NTG={}, and tbf={}, the observed NTG is {}'.format(ntg, thin_bed_factor, net/len(x)))
+        x = m.layers[0].get_xx()
+        x = np.array(x)
+        net = len(x[x == net_vp])
 
+        print('For NTG={}, and tbf={}, the observed NTG is {}'.format(ntg, thin_bed_factor, net/len(x)))
 
 
 if __name__ == '__main__':
