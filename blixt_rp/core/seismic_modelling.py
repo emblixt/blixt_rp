@@ -9,7 +9,7 @@ import sys
 #sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
 sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
 
-import blixt_rp.core.well as cw
+from blixt_rp.core.models import Model, Layer
 import blixt_utils.utils as uu
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
@@ -119,10 +119,12 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
     fig = plt.figure(figsize=(12, 8))
     # divide figure into a 3 by 6 grid
     spec = fig.add_gridspec(3, 6)
-    ax_thickness = fig  # row 0, column 0 to 5
-    ax_wedge = fig  # row 1 to 2, column 0 to 5
+    # TODO
+    # XXX the subplot distribution has been screwed up
+    ax_thickness = fig.add_subplot(spec[1:3, 4])  # row 0, column 0 to 5
+    ax_wedge = fig.add_subplot(spec[1:3, 4])  # row 1 to 2, column 0 to 5
     ax_model = fig.add_subplot(spec[1:3, 4])  # row 1 to 2, column 5
-    ax_wavelet = fig  # row 1 to 2, column 6
+    ax_wavelet = fig.add_subplot(spec[1:3, 4])  # row 1 to 2, column 6
 
     top = []
     base = []
@@ -131,11 +133,17 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
     maximum_amp = []
     apparent_thickness = []
     top_is_negative = False
+    # create top layer, which is constant
+    top_layer = Layer(vp=vps[0], vs=vss[0], rho=rhos[0], thickness=buffer)
     # loop over wedge thickness
     for i in range(number_of_traces):
         this_wedge_thickness = i * up_to_thickness / (number_of_traces - 1)
-        twt, vp, vs, rho = one_d_model(vps, vss, rhos,
-                                       [buffer, this_wedge_thickness, buffer + (up_to_thickness - this_wedge_thickness)], t0, time_step)
+        wedge_layer = Layer(vp=vps[1], vs=vss[1], rho=rhos[1], thickness=this_wedge_thickness, target=True)
+        base_layer = Layer(vp=vps[2], vs=vss[2], rho=rhos[2], thickness=buffer + (up_to_thickness - this_wedge_thickness))
+        #twt, vp, vs, rho = one_d_model(vps, vss, rhos,
+        #                               [buffer, this_wedge_thickness, buffer + (up_to_thickness - this_wedge_thickness)], t0, time_step)
+        m = Model(layers=[top_layer, wedge_layer, base_layer])
+        twt, vp, vs, rho = m.realize_model(time_step)
         top.append(t0 + buffer)
         base.append(t0 + buffer + this_wedge_thickness)
         wedge_thickness.append(this_wedge_thickness)

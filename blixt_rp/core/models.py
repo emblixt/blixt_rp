@@ -3,8 +3,8 @@ import numpy as np
 import sys
 import logging
 
-#sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
-sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
+sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
+#sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
 
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
 
@@ -134,6 +134,16 @@ class Model:
             raise IOError('Layer must be a Layer object')
         self.layers.insert(index, layer)
 
+    def realize_model(self, resolution):
+        this_vp, this_vs, this_rho = np.zeros(0), np.zeros(0), np.zeros(0)
+        for layer in self.layers:
+            _vp, _vs, _rho = layer.realize_layer(resolution)
+            this_vp = np.append(this_vp, _vp)
+            this_vs = np.append(this_vs, _vs)
+            this_rho = np.append(this_rho, _rho)
+        z = self.depth_to_top + np.arange(len(this_vp)) * resolution
+        return z, this_vp, this_vs, this_rho
+
     def plot(self, ax=None):
         plot(self, ax)
 
@@ -179,6 +189,7 @@ class Layer:
             If 1, the net portion is taken up by one homogeneous layer
         """
         # get the required parameters
+        self.resolution = None
         if thickness is None:
             self.thickness = 0.1
         else:
@@ -208,62 +219,86 @@ class Layer:
             raise ValueError('NTG must be between 0 and 1')
 
         # Get the net-to-gross related keyword arguments
-        self.xx = None
         if self.ntg < 1 and self.target:
             self.gross_vp = kwargs.pop('gross_vp', 3400.)
             self.gross_vs = kwargs.pop('gross_vs', 1000.)
             self.gross_rho = kwargs.pop('gross_rho', 2.)
             self.thin_bed_factor = kwargs.pop('thin_bed_factor', 1)
 
-            extra_factor = 100
-            if self.ntg == 0:
-                self.xx = np.ones(10) * self.gross_vp
-            else:
-                # Divide the layer into n sub layers
-                if self.ntg >= 0.5:
-                    n = extra_factor * self.thin_bed_factor / (1. - self.ntg)
-                    # number of cells in a group to subdivide the net part in to "thin_bed_factor" number of sub layers
-                    ng = int(np.round(extra_factor * self.ntg / (1. - self.ntg)))
-                else:
-                    n = extra_factor * self.thin_bed_factor / self.ntg
-                    # number of cells in a group to subdivide the net part in to "thin_bed_factor" number of sub layers
-                    ng = int(np.round(extra_factor * (1. - self.ntg) / self.ntg))
-                print(n, ng)
-                if self.ntg >= 0.5:
-                    self.xx = [self.gross_vp]
-                    while len(self.xx) <= n:
-                        self.xx += [self.vp] * ng
-                        self.xx += [self.gross_vp] * extra_factor
-                else:
-                    self.xx = [self.vp]
-                    while len(self.xx) <= n:
-                        self.xx += [self.gross_vp] * ng
-                        self.xx += [self.vp] * extra_factor
+    def realize_layer(self, resolution):
+        """
+        Realize the current layer by returning arrays of the elastic properties with the given resolution
+        :param resolution:
+            float
+            resolution in TWT [s] or depth [m]
+        """
+        self.resolution = resolution
+        n = int(self.thickness / resolution)
+        if self.ntg < 1. and self.target:
+            net_group_size = int(self.ntg * self.thickness / (self.thin_bed_factor * resolution))
+            gross_group_size = int((1. - self.ntg) * self.thickness / (self.thin_bed_factor * resolution))
+            this_vp = []
+            this_vs = []
+            this_rho = []
+            while len(this_vp) <= n:
+                this_vp += [self.vp] * net_group_size
+                this_vp += [self.gross_vp] * gross_group_size
+                this_vs += [self.vs] * net_group_size
+                this_vs += [self.gross_vs] * gross_group_size
+                this_rho += [self.rho] * net_group_size
+                this_rho += [self.gross_rho] * gross_group_size
+            this_vp = np.array(this_vp)
+            this_vs = np.array(this_vs)
+            this_rho = np.array(this_rho)
+        else:
+            this_vp = np.ones(n) * self.vp
+            this_vs = np.ones(n) * self.vs
+            this_rho = np.ones(n) * self.rho
 
-    def get_xx(self):
-        return self.xx
+        return this_vp[:n], this_vs[:n], this_rho[:n]
 
 
-def test():
+def test_plot():
     first_layer = Layer(thickness=0.1, vp=3300, vs=1500, rho=2.1)
     second_layer = Layer(thickness=0.2, vp=3500, vs=1600, rho=2.3)
+    m = Model(layers=[first_layer, second_layer])
+    m.append(first_layer)
+    m.plot()
 
-    ntg = 0.9
+
+def test_ntg():
+
     thin_bed_factor = 2
     net_vp = 3000.
+    resolution = 0.001
+    fig, axs = plt.subplots(nrows=11)
     for i in range(11):
         ntg = i/10.
 
-        ntg_layer = Layer(target=True, thickness=0.2, vp=net_vp, ntg=ntg, thin_bed_factor=thin_bed_factor)
+        ntg_layer = Layer(target=True, thickness=0.1, vp=net_vp, ntg=ntg, thin_bed_factor=thin_bed_factor)
 
         m = Model(layers=[ntg_layer])
 
-        x = m.layers[0].get_xx()
-        x = np.array(x)
+        x, _, _ = m.layers[0].realize_layer(resolution)
         net = len(x[x == net_vp])
 
-        print('For NTG={}, and tbf={}, the observed NTG is {}'.format(ntg, thin_bed_factor, net/len(x)))
+        print('Requested len: {}, returned len: {}'.format(int(m.layers[0].thickness / resolution), len(x)))
+        axs[i].set_title('NTG={}, tbf={}. Observed NTG {:.2f}'.format(ntg, thin_bed_factor, net/len(x)))
+        axs[i].plot(x)
+
+    plt.show()
+
+
+def test_realization():
+    first_layer = Layer(thickness=0.1, vp=3300, vs=1500, rho=2.1)
+    second_layer = Layer(thickness=0.1, vp=3500, vs=1600, rho=2.3)
+    m = Model(layers=[first_layer, second_layer])
+    m.append(first_layer)
+    vp, _, _ = m.realize_model(0.01)
+    print(len(vp))
+    plt.plot(vp)
+    plt.show()
 
 
 if __name__ == '__main__':
-    test()
+    test_realization()
