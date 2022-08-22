@@ -215,29 +215,30 @@ class Layer:
             self.gross_rho = kwargs.pop('gross_rho', 2.)
             self.thin_bed_factor = kwargs.pop('thin_bed_factor', 1)
 
+            extra_factor = 100
             if self.ntg == 0:
                 self.xx = np.ones(10) * self.gross_vp
             else:
                 # Divide the layer into n sub layers
                 if self.ntg >= 0.5:
-                    n = 10 * self.thin_bed_factor / (1. - self.ntg)
+                    n = extra_factor * self.thin_bed_factor / (1. - self.ntg)
                     # number of cells in a group to subdivide the net part in to "thin_bed_factor" number of sub layers
-                    ng = int(np.round(self.ntg / (1. - self.ntg)))
+                    ng = int(np.round(extra_factor * self.ntg / (1. - self.ntg)))
                 else:
-                    n = 10 * self.thin_bed_factor / self.ntg
+                    n = extra_factor * self.thin_bed_factor / self.ntg
                     # number of cells in a group to subdivide the net part in to "thin_bed_factor" number of sub layers
-                    ng = 1
+                    ng = int(np.round(extra_factor * (1. - self.ntg) / self.ntg))
                 print(n, ng)
                 if self.ntg >= 0.5:
                     self.xx = [self.gross_vp]
                     while len(self.xx) <= n:
-                        self.xx += [self.vp] * ng * 10
-                        self.xx += [self.gross_vp] * 10
+                        self.xx += [self.vp] * ng
+                        self.xx += [self.gross_vp] * extra_factor
                 else:
                     self.xx = [self.vp]
                     while len(self.xx) <= n:
-                        self.xx += [self.gross_vp] * ng * 10
-                        self.xx += [self.vp] * 10
+                        self.xx += [self.gross_vp] * ng
+                        self.xx += [self.vp] * extra_factor
 
     def get_xx(self):
         return self.xx
