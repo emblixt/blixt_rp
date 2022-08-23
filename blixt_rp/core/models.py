@@ -25,11 +25,17 @@ def plot(model, ax=None):
         show = True
 
     # extract the elastic properties from the model
-    vps, vss, rhos = [], [], []
+    vps, vss, rhos, target, ntg, gross_vp = [], [], [], [], [], []
     for layer in model.layers:
         vps.append(layer.vp)
         vss.append(layer.vs)
         rhos.append(layer.rho)
+        target.append(layer.target)
+        ntg.append(layer.ntg)
+        if layer.ntg < 1:
+            gross_vp.append(layer.gross_vp)
+        else:
+            gross_vp.append(0.)
 
     linestyle_ai = {'lw': 1, 'color': 'k', 'ls': '-'}
     linestyle_vpvs = {'lw': 1, 'color': 'k', 'ls': '--'}
@@ -41,32 +47,44 @@ def plot(model, ax=None):
         last_top = bwb[i]
         bwb.append(last_top + model.layers[i].thickness)
 
-    # Create data containers
-    y = np.linspace(bwb[0], bwb[-1],  100)  # fake depth parameter
-    data_ai = np.ones(100)
-    data_vpvs = np.ones(100)
+    ## Create data containers
+    #n = 100
+    #y = np.linspace(bwb[0], bwb[-1],  n)  # fake depth parameter
+    #data_ai = np.ones(n)
+    #data_vpvs = np.ones(n)
 
-    ais = [_vp * _rho for _vp, _rho in zip(vps, rhos)]  # Acoustic impedance in m/s g/cm3
-    vpvss = [_vp / _vs for _vp, _vs in zip(vps, vss)]  # vp / vs
-    max_ai = max(ais)
-    max_vpvs = max(vpvss)
+    #ais = [_vp * _rho for _vp, _rho in zip(vps, rhos)]  # Acoustic impedance in m/s g/cm3
+    #vpvss = [_vp / _vs for _vp, _vs in zip(vps, vss)]  # vp / vs
+    #max_ai = max(ais)
+    #max_vpvs = max(vpvss)
 
-    # normalize the data according to max values
-    for i in range(len(bwb)):
-        if i == 0:
-            continue
-        data_ai[(y >= bwb[i-1]) & (y <= bwb[i])] = ais[i-1]/max_ai
-        data_vpvs[(y >= bwb[i-1]) & (y <= bwb[i])] = vpvss[i-1] * 0.9 / max_vpvs
+    ## normalize the data according to max values
+    #for i in range(len(bwb)):
+    #    if i == 0:
+    #        continue
+    #    data_ai[(y >= bwb[i-1]) & (y <= bwb[i])] = ais[i-1]/max_ai
+    #    data_vpvs[(y >= bwb[i-1]) & (y <= bwb[i])] = vpvss[i-1] * 0.9 / max_vpvs
+
+    y, vp, vs, rho = model.realize_model(0.001)
+    fig2, ax2 = plt.subplots()
+    ax2.plot(y, vp, y, vs, y, rho)
+    data_ai = vp * rho
+    max_ai = max(data_ai)
+    data_ai = data_ai / max_ai
+    data_vpvs = vp / vs
+    max_vpvs = max(data_vpvs)
+    data_vpvs = 0.9 * data_vpvs / max_vpvs
 
     axis_plot(ax, y, [data_ai], [[0., 1.1]], [linestyle_ai], nxt=0)
     axis_plot(ax, y, [data_vpvs], [[0., 1.1]], [linestyle_vpvs], nxt=0)
     for i, _y in enumerate(bwb[1:-1]):
-        ax.plot([0., ais[i+1]/max_ai], [_y, _y], **linestyle_ai)
+        #ax.plot([0., ais[i+1]/max_ai], [_y, _y], **linestyle_ai)
+        ax.plot([0., vps[i+1] * rhos[i+1]/max_ai], [_y, _y], **linestyle_ai)
 
     i = 0
     for _vp, _vs, _rho in zip(vps, vss, rhos):
         info_txt = '{}.\nVp: {:.1f}\nVs: {:.1f}\nRho: {:.1f}'.format(i+1, _vp/1000., _vs/1000., _rho)
-        ax.text(0.5*ais[i]/max_ai, 0.5*(bwb[i] + bwb[i+1]), info_txt, ha='center', va='center', **text_style)
+        ax.text(0.5*_vp * _rho/max_ai, 0.5*(bwb[i] + bwb[i+1]), info_txt, ha='center', va='center', **text_style)
         i += 1
 
     ax.set_ylim(ax.get_ylim()[::-1])
@@ -223,7 +241,7 @@ class Layer:
             self.gross_vp = kwargs.pop('gross_vp', 3400.)
             self.gross_vs = kwargs.pop('gross_vs', 1000.)
             self.gross_rho = kwargs.pop('gross_rho', 2.)
-            self.thin_bed_factor = kwargs.pop('thin_bed_factor', 1)
+            self.thin_bed_factor = kwargs.pop('thin_bed_factor', 3)
 
     def realize_layer(self, resolution):
         """
@@ -240,27 +258,39 @@ class Layer:
             this_vp = []
             this_vs = []
             this_rho = []
+            i = 0
             while len(this_vp) <= n:
-                this_vp += [self.vp] * net_group_size
-                this_vp += [self.gross_vp] * gross_group_size
-                this_vs += [self.vs] * net_group_size
-                this_vs += [self.gross_vs] * gross_group_size
-                this_rho += [self.rho] * net_group_size
-                this_rho += [self.gross_rho] * gross_group_size
-            this_vp = np.array(this_vp)
-            this_vs = np.array(this_vs)
-            this_rho = np.array(this_rho)
+                print(i, net_group_size + gross_group_size)
+                if i <= self.thin_bed_factor - 1:
+                    this_vp += [self.vp] * net_group_size
+                    this_vp += [self.gross_vp] * gross_group_size
+                    this_vs += [self.vs] * net_group_size
+                    this_vs += [self.gross_vs] * gross_group_size
+                    this_rho += [self.rho] * net_group_size
+                    this_rho += [self.gross_rho] * gross_group_size
+                else:  # only add gross values towards the end. This may make the final NTG wrong, but ensures # layers
+                    this_vp += [self.gross_vp] * gross_group_size
+                    this_vs += [self.gross_vs] * gross_group_size
+                    this_rho += [self.gross_rho] * gross_group_size
+                i += 1
+            # Cut, convert and remove unnecessary single values at the edge
+            this_vp = np.array(this_vp)[:n]
+            this_vp[-1] = this_vp[-2]
+            this_vs = np.array(this_vs)[:n]
+            this_vs[-1] = this_vs[-2]
+            this_rho = np.array(this_rho)[:n]
+            this_rho[-1] = this_rho[-2]
         else:
             this_vp = np.ones(n) * self.vp
             this_vs = np.ones(n) * self.vs
             this_rho = np.ones(n) * self.rho
 
-        return this_vp[:n], this_vs[:n], this_rho[:n]
+        return this_vp, this_vs, this_rho
 
 
 def test_plot():
     first_layer = Layer(thickness=0.1, vp=3300, vs=1500, rho=2.1)
-    second_layer = Layer(thickness=0.2, vp=3500, vs=1600, rho=2.3)
+    second_layer = Layer(thickness=0.2, vp=3500, vs=1600, rho=2.3, target=True, ntg=0.8)
     m = Model(layers=[first_layer, second_layer])
     m.append(first_layer)
     m.plot()
@@ -268,7 +298,7 @@ def test_plot():
 
 def test_ntg():
 
-    thin_bed_factor = 2
+    thin_bed_factor = 3
     net_vp = 3000.
     resolution = 0.001
     fig, axs = plt.subplots(nrows=11)
@@ -291,14 +321,16 @@ def test_ntg():
 
 def test_realization():
     first_layer = Layer(thickness=0.1, vp=3300, vs=1500, rho=2.1)
-    second_layer = Layer(thickness=0.1, vp=3500, vs=1600, rho=2.3)
+    second_layer = Layer(thickness=0.1, vp=3500, vs=1600, rho=2.3, target=True, ntg=0.8)
     m = Model(layers=[first_layer, second_layer])
     m.append(first_layer)
-    vp, _, _ = m.realize_model(0.01)
+    twt, vp, _, _ = m.realize_model(0.001)
     print(len(vp))
     plt.plot(vp)
     plt.show()
 
 
 if __name__ == '__main__':
-    test_realization()
+    #test_realization()
+    #test_plot()
+    test_ntg()
