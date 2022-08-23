@@ -17,6 +17,9 @@ from bruges.filters import ricker
 
 logger = logging.getLogger(__name__)
 
+# TODO
+# This script and the plot_model() function can be removed, as it is being replaced by the plot method built in
+# in the Model object
 
 def plot_model(ax, header_ax, vps, vss, rhos, layer_thicknesses, t0):
     """

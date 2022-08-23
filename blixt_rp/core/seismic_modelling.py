@@ -6,8 +6,8 @@ from matplotlib.font_manager import FontProperties
 
 # TODO remove this two lines, only used in testing
 import sys
-#sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
-sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
+sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
+#sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
 
 from blixt_rp.core.models import Model, Layer
 import blixt_utils.utils as uu
@@ -119,12 +119,10 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
     fig = plt.figure(figsize=(12, 8))
     # divide figure into a 3 by 6 grid
     spec = fig.add_gridspec(3, 6)
-    # TODO
-    # XXX the subplot distribution has been screwed up
-    ax_thickness = fig.add_subplot(spec[1:3, 4])  # row 0, column 0 to 5
-    ax_wedge = fig.add_subplot(spec[1:3, 4])  # row 1 to 2, column 0 to 5
+    ax_thickness = fig.add_subplot(spec[0, 0:4])  # row 0, column 0 to 4
+    ax_wedge = fig.add_subplot(spec[1:3, 0:4])  # row 1 to 2, column 0 to 4
     ax_model = fig.add_subplot(spec[1:3, 4])  # row 1 to 2, column 5
-    ax_wavelet = fig.add_subplot(spec[1:3, 4])  # row 1 to 2, column 6
+    ax_wavelet = fig.add_subplot(spec[1:3, 5])  # row 1 to 2, column 6
 
     top = []
     base = []
@@ -185,7 +183,7 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
     ax_thickness.set_ylabel('Wedge thickness [ms]')
     ax_thickness.legend(prop=FontProperties(size='smaller'), loc=4)
 
-    ax_amplitude = ax_thickness
+    ax_amplitude = ax_thickness.twinx()
     if top_is_negative:
         ax_amplitude.plot(range(number_of_traces), minimum_amp, 'r--', label='Trough amp.')
         ax_amplitude.plot(range(number_of_traces), maximum_amp, 'b--', label='Peak amp.')
@@ -195,8 +193,9 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
     ax_amplitude.set_ylabel('Peak & trough amplitudes')
     ax_amplitude.legend(prop=FontProperties(size='smaller'), loc=7)
 
-    _, _ = model_plot.plot_model(ax_model, None, vps, vss, rhos,
-                      [buffer, up_to_thickness, buffer], t0)
+    #_, _ = model_plot.plot_model(ax_model, None, vps, vss, rhos,
+    #                  [buffer, up_to_thickness, buffer], t0)
+    m.plot(ax=ax_model)
     ax_model.set_ylim(ax_model.get_ylim()[::-1])
     ax_model.tick_params(labelleft=False)
     ax_model.set_title('Model')
