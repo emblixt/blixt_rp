@@ -253,14 +253,14 @@ class Layer:
         self.resolution = resolution
         n = int(self.thickness / resolution)
         if self.ntg < 1. and self.target:
-            net_group_size = int(self.ntg * self.thickness / (self.thin_bed_factor * resolution))
-            gross_group_size = int((1. - self.ntg) * self.thickness / (self.thin_bed_factor * resolution))
+            net_group_size = int(np.ceil(self.ntg * self.thickness / (self.thin_bed_factor * resolution)))
+            gross_group_size = int(np.ceil((1. - self.ntg) * self.thickness / (self.thin_bed_factor * resolution)))
             this_vp = []
             this_vs = []
             this_rho = []
             i = 0
             while len(this_vp) <= n:
-                print(i, net_group_size + gross_group_size)
+                print(n, len(this_vp), net_group_size, gross_group_size)
                 if i <= self.thin_bed_factor - 1:
                     this_vp += [self.vp] * net_group_size
                     this_vp += [self.gross_vp] * gross_group_size
@@ -273,6 +273,7 @@ class Layer:
                     this_vs += [self.gross_vs] * gross_group_size
                     this_rho += [self.gross_rho] * gross_group_size
                 i += 1
+                if i > 6: break
             # Cut, convert and remove unnecessary single values at the edge
             this_vp = np.array(this_vp)[:n]
             this_vp[-1] = this_vp[-2]

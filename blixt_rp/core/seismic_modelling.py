@@ -20,45 +20,6 @@ from bruges.filters import ricker
 logger = logging.getLogger(__name__)
 
 
-def one_d_model(vp, vs, rho, layer_thicknesses, t0, dt):
-    """
-    Builds a 1D model of vp, vs, and rho, where the thickness of layer is specified by layer_thicknesses [s]
-    All times are in seconds
-
-    """
-    if not(len(vp) == len(vs) == len(rho) == len(layer_thicknesses)):
-        warn_txt = 'Input lists in one_d_model() are not of same length'
-        print('WARNING: {}'.format(warn_txt))
-        logger.warning(warn_txt)
-        raise IOError
-
-    # time goes from t0 to the last time given in end_times
-    twt = np.arange(t0, t0 + sum(layer_thicknesses), dt)  # TWT in seconds
-
-    vp_arr = np.zeros(len(twt))
-    vs_arr = np.zeros(len(twt))
-    rho_arr = np.zeros(len(twt))
-    twt_boundaries = []
-    for i in range(len(layer_thicknesses)):
-        twt_boundaries.append(t0 + sum(layer_thicknesses[:i+1]))
-    i = 0
-    for _vp, _vs, _rho in zip(vp, vs, rho):
-        if i == 0:
-            vp_arr[twt <= twt_boundaries[i]] = _vp
-            vs_arr[twt <= twt_boundaries[i]] = _vs
-            rho_arr[twt <= twt_boundaries[i]] = _rho
-        elif i < len(vp) - 1:
-            vp_arr[(twt > twt_boundaries[i - 1]) & (twt <= twt_boundaries[i])] = _vp
-            vs_arr[(twt > twt_boundaries[i - 1]) & (twt <= twt_boundaries[i])] = _vs
-            rho_arr[(twt > twt_boundaries[i - 1]) & (twt <= twt_boundaries[i])] = _rho
-        else:
-            vp_arr[twt > twt_boundaries[i-1]] = _vp
-            vs_arr[twt > twt_boundaries[i-1]] = _vs
-            rho_arr[twt > twt_boundaries[i-1]] = _rho
-        i += 1
-    return twt, vp_arr, vs_arr, rho_arr
-
-
 def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, incident_angle: float,
                     wavelet: numpy.ndarray,
                     time_step=None,
@@ -115,7 +76,6 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
 
     text_style = {'fontsize': 'x-small', 'bbox': {'facecolor': 'w', 'alpha': 0.7}}
 
-    #fig, ax = plt.subplots()
     fig = plt.figure(figsize=(12, 8))
     # divide figure into a 3 by 6 grid
     spec = fig.add_gridspec(3, 6)
@@ -138,8 +98,6 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
         this_wedge_thickness = i * up_to_thickness / (number_of_traces - 1)
         wedge_layer = Layer(vp=vps[1], vs=vss[1], rho=rhos[1], thickness=this_wedge_thickness, target=True)
         base_layer = Layer(vp=vps[2], vs=vss[2], rho=rhos[2], thickness=buffer + (up_to_thickness - this_wedge_thickness))
-        #twt, vp, vs, rho = one_d_model(vps, vss, rhos,
-        #                               [buffer, this_wedge_thickness, buffer + (up_to_thickness - this_wedge_thickness)], t0, time_step)
         m = Model(layers=[top_layer, wedge_layer, base_layer])
         twt, vp, vs, rho = m.realize_model(time_step)
         top.append(t0 + buffer)
@@ -193,8 +151,6 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
     ax_amplitude.set_ylabel('Peak & trough amplitudes')
     ax_amplitude.legend(prop=FontProperties(size='smaller'), loc=7)
 
-    #_, _ = model_plot.plot_model(ax_model, None, vps, vss, rhos,
-    #                  [buffer, up_to_thickness, buffer], t0)
     m.plot(ax=ax_model)
     ax_model.set_ylim(ax_model.get_ylim()[::-1])
     ax_model.tick_params(labelleft=False)
