@@ -7,6 +7,7 @@ sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
 #sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
 
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
+import blixt_rp.rp.rp_core as rp
 
 logger = logging.getLogger(__name__)
 
@@ -152,10 +153,10 @@ class Model:
             raise IOError('Layer must be a Layer object')
         self.layers.insert(index, layer)
 
-    def realize_model(self, resolution):
+    def realize_model(self, resolution, voigt_reuss_hill=False):
         this_vp, this_vs, this_rho = np.zeros(0), np.zeros(0), np.zeros(0)
         for layer in self.layers:
-            _vp, _vs, _rho = layer.realize_layer(resolution)
+            _vp, _vs, _rho = layer.realize_layer(resolution, voigt_reuss_hill=voigt_reuss_hill)
             this_vp = np.append(this_vp, _vp)
             this_vs = np.append(this_vs, _vs)
             this_rho = np.append(this_rho, _rho)
@@ -243,16 +244,20 @@ class Layer:
             self.gross_rho = kwargs.pop('gross_rho', 2.)
             self.thin_bed_factor = kwargs.pop('thin_bed_factor', 3)
 
-    def realize_layer(self, resolution):
+    def realize_layer(self, resolution, voigt_reuss_hill=False):
         """
         Realize the current layer by returning arrays of the elastic properties with the given resolution
         :param resolution:
             float
             resolution in TWT [s] or depth [m]
+        :param voigt_reuss_hill:
+            bool
+            If true, the Voigt Reuss Hill average for the given NTG is used when returning the elastic parameters
+
         """
         self.resolution = resolution
         n = int(self.thickness / resolution)
-        if self.ntg < 1. and self.target:
+        if self.ntg < 1. and self.target and not voigt_reuss_hill:
             net_group_size = int(np.ceil(self.ntg * self.thickness / (self.thin_bed_factor * resolution)))
             gross_group_size = int(np.ceil((1. - self.ntg) * self.thickness / (self.thin_bed_factor * resolution)))
             this_vp = []
@@ -260,7 +265,7 @@ class Layer:
             this_rho = []
             i = 0
             while len(this_vp) <= n:
-                print(n, len(this_vp), net_group_size, gross_group_size)
+                #print(n, len(this_vp), net_group_size, gross_group_size)
                 if i <= self.thin_bed_factor - 1:
                     this_vp += [self.vp] * net_group_size
                     this_vp += [self.gross_vp] * gross_group_size
@@ -281,6 +286,13 @@ class Layer:
             this_vs[-1] = this_vs[-2]
             this_rho = np.array(this_rho)[:n]
             this_rho[-1] = this_rho[-2]
+        elif self.ntg < 1. and self.target and voigt_reuss_hill:
+            _, _, vp_vrh = rp.vrh_bounds([self.ntg, 1. - self.ntg], [self.vp, self.gross_vp])
+            _, _, vs_vrh = rp.vrh_bounds([self.ntg, 1. - self.ntg], [self.vs, self.gross_vs])
+            _, _, rho_vrh = rp.vrh_bounds([self.ntg, 1. - self.ntg], [self.rho, self.gross_rho])
+            this_vp = np.ones(n) * vp_vrh
+            this_vs = np.ones(n) * vs_vrh
+            this_rho = np.ones(n) * rho_vrh
         else:
             this_vp = np.ones(n) * self.vp
             this_vs = np.ones(n) * self.vs
