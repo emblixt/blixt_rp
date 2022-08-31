@@ -254,7 +254,10 @@ class Project(object):
 
         :return:
         """
-        _well_table = uio.project_wells(self.project_table, self.working_dir)
+        try:
+            _well_table = uio.project_wells(self.project_table, self.working_dir)
+        except OSError:
+            _well_table = uio.project_wells_new(self.project_table, self.working_dir)
         for lfile in list(_well_table.keys()):
             wname = _well_table[lfile]['Given well name']
             print('Checking {}: {}'.format(wname, os.path.split(lfile)[-1]))
@@ -285,7 +288,10 @@ class Project(object):
 
     def active_wells(self):
         active_wells = []
-        well_table = uio.project_wells(self.project_table, self.working_dir)
+        try:
+            well_table = uio.project_wells(self.project_table, self.working_dir)
+        except OSError:
+            well_table = uio.project_wells_new(self.project_table, self.working_dir)
         for _key, _value in well_table.items():
             active_wells.append(_value['Given well name'])
 
@@ -318,7 +324,10 @@ class Project(object):
         wis = None
         if block_name is None:
             block_name = ud.def_lb_name
-        well_table = uio.project_wells(self.project_table, self.working_dir)
+        try:
+            well_table = uio.project_wells(self.project_table, self.working_dir)
+        except OSError:
+            well_table = uio.project_wells_new(self.project_table, self.working_dir)
         if rename_logs is None:
             # Try reading the renaming out from the well table
             rename_logs = uio.get_rename_logs_dict(well_table)
@@ -1227,7 +1236,7 @@ class Well(object):
                    mask=None,
                    tops=None,
                    wis=None,
-                   fig=None,
+                   #fig=None,
                    ax=None,
                    templates=None,
                    savefig=None,
@@ -1268,14 +1277,19 @@ class Well(object):
             _savefig = True
 
         # set up plotting environment
-        if fig is None:
-            if ax is None:
-                fig = plt.figure(figsize=(8, 10))
-                ax = fig.subplots()
-            else:
-                _savefig = False
-        elif ax is None:
-            ax = fig.subplots()
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 10))
+        else:
+            fig = ax.get_figure()
+
+        #if fig is None:
+        #    if ax is None:
+        #        fig = plt.figure(figsize=(8, 10))
+        #        ax = fig.subplots()
+        #    else:
+        #        _savefig = False
+        #elif ax is None:
+        #    ax = fig.subplots()
 
         y_log_name = kwargs.pop('y_log_name', 'depth')
         show_masked = kwargs.pop('show_masked', False)
@@ -1318,7 +1332,7 @@ class Well(object):
                 ytempl=l2tmpl(self.block[logcurve.block].logs[y_log_name].header),
                 mask=mask,
                 show_masked=show_masked,
-                fig=fig,
+                #fig=fig,
                 ax=ax,
                 pointsize=10,
                 edge_color=False,
@@ -2172,7 +2186,7 @@ def _read_las(file):
     else:
         raise Exception("File format '{}'. not supported!".format(ext))
 
-    with open(file, "r") as f:
+    with open(file, "r", encoding='UTF8') as f:
         lines = f.readlines()
     return well_reader(lines, file_format=file_format)  # read all lines from data
 
@@ -2257,8 +2271,10 @@ def test():
     #    logs = wp.data_frame()
     #    print(logs)
 
-
-    well_table = uio.project_wells(wp.project_table, wp.working_dir)
+    try:
+        well_table = uio.project_wells(wp.project_table, wp.working_dir)
+    except OSError:
+        well_table = uio.project_wells_new(wp.project_table, wp.working_dir)
     w = Well()
     las_file = list(well_table.keys())[0]
     logs = list(well_table[las_file]['logs'].keys())
