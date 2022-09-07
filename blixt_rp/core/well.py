@@ -909,10 +909,9 @@ class Well(object):
             If True, QC plots are created
         :return:
         """
-        survey_points_info = uio.project_wellpath_info(project_table)
-        survey_points = uio.read_wellpath(**survey_points_info[self.well])
+        survey_points, survey_points_info = uio.read_checkshot_or_wellpath(project_table, self.well, "Well paths")
         for lblock in list(self.block.keys()):
-            self.block[lblock].add_well_path(survey_points, survey_points_info[self.well]['well path file'], verbose)
+            self.block[lblock].add_well_path(survey_points, survey_points_info['filename'], verbose)
 
     def add_twt(self, project_table, verbose=True):
         """
@@ -928,52 +927,16 @@ class Well(object):
             If True, QC plots are created
         :return:
         """
-        result = {}
-        table = None
-        try:
-            table = pd.read_excel(project_table, header=1, sheet_name='Checkshots')
-        except ValueError:
-            raise
-        except Exception as e:
-            print(e)
-        for i, ans in enumerate(table['Use this file']):
-            if not isinstance(ans, str):
-                continue
-            if ans.lower() == 'yes':
-                temp_dict = {}
-                for key in list(table.keys()):
-                    if (key.lower() == 'use this file') or (key.lower() == 'given well name'):
-                        continue
-                    if isnan(table[key][i]):
-                        temp_dict[key.lower()] = None  # avoid NaN
-                    else:
-                        value = table[key][i]
-                        temp_dict[key.lower()] = value
-                result[table['Given well name'][i]] = temp_dict
-        if self.well not in list(result.keys()):
-            raise ValueError('Well {} not listed in Checkshot sheet of {}'.format(
-                self.well,
-                project_table
-            ))
-        # TODO
-        # Petrel checkshots are typically given in ms, but we are not checking this, we simply assume
-        checkshots = uio.read_petrel_checkshots(result[self.well]['checkshot file'])
+        checkshots, checkshot_info = uio.read_checkshot_or_wellpath(project_table, self.well, "Checkshots")
 
-        if checkshots is None:
-            info_txt = 'No check shots available for {}. No TWT added'.format(self.well)
-            print('WARNING: {}'.format(info_txt))
-            logger.warning(info_txt)
-
-        if checkshots is not None:
-            for lblock in list(self.block.keys()):
-                self.block[lblock].add_twt(
-                    {
-                      'MD': checkshots[self.well]['MD'],
-                       # TODO We assume checkshots are in ms
-                      'TWT': np.array(checkshots[self.well]['TWT picked'])/1000.
-                    },
-                    twt_file=result[self.well]['checkshot file'],
-                    verbose=verbose)
+        for lblock in list(self.block.keys()):
+            self.block[lblock].add_twt(
+                {
+                  'MD': checkshots['MD'],
+                  'TWT': np.array(checkshots['TWT'])
+                },
+                twt_file=checkshot_info['filename'],
+                verbose=verbose)
 
     def calc_mask(self,
                   cutoffs,
@@ -2152,8 +2115,8 @@ class Block(object):
                            fill_value='extrapolate')(md)
         if verbose:
             fig, axes = plt.subplots(1, 1, figsize=(5, 8))
-            axes.plot(twt_points['MD'], sign * np.array(twt_points['TWT']), '-or', lw=0)
-            axes.plot(md, new_twt)
+            axes.plot(twt_points['MD'], sign * 1000. * np.array(twt_points['TWT']), '-or', lw=0)
+            axes.plot(md, 1000. * new_twt)
             axes.set_xlabel('MD [m]')
             axes.set_ylabel('TWT [ms]')
             axes.legend(['TDR points', 'Interpolated well data'])
