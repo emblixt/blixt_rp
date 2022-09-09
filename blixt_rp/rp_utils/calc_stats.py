@@ -19,6 +19,10 @@ import blixt_rp.rp_utils.definitions as ud
 logger = logging.getLogger(__name__)
 def_msk_name = 'Mask'  # default mask name
 
+# TODO
+# There is a confusion about which  "calc_stat" to use. This calc_stats3() or calc_stats_class.py.
+# This need to be resolved
+# Now I have added a plot_depth_trends() function here which is used in calc_stats_class
 
 def calc_stats2_tops(
         wells,

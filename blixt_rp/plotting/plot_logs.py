@@ -478,3 +478,35 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
         plt.show()
 
 
+def plot_depth_trends(wells, log_table, wis, wi_name, templates, block_name=None, savefig=None, **kwargs):
+    """
+    Plots the depth trends for each individual log within the given working interval, for all wells
+
+    :param wells:
+    :param log_table:
+    :param wis:
+    :param wi_name:
+    :param templates:
+    :param block_name:
+    :param savefig:
+    :param kwargs:
+    :return:
+    """
+    y_log_name = kwargs.pop('y_log_name', 'tvd')
+    if block_name is None:
+        block_name = cw.def_lb_name
+
+    for log_type in log_table:
+        log_name = log_table[log_type]
+        fig, ax = plt.subplots(figsize=(10, 10))
+
+        # Start looping over wells and plot the
+        legend_items = []
+        for well in wells:
+
+
+
+        if savefig:
+            fig.savefig(savefig)
+        else:
+            plt.show()

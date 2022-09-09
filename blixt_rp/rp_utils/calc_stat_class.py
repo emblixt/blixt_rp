@@ -10,6 +10,10 @@ from blixt_utils.misc.templates import handle_template
 
 logger = logging.getLogger(__name__)
 
+# TODO
+# There is a confusion about which  "calc_stat" to use. This one or calc_stats3() in calc_stats.py.
+# This need to be resolved
+
 
 def fix_strings(_suffix, _cutoffs, _log_table):
     """
@@ -299,7 +303,7 @@ class SetUpCalculation:
         self.fig_logs, self.axes_logs = plt.subplots(nrows=self.n_intervals,
                                            ncols=self.n_logs,
                                            figsize=(2 * self.n_logs, 3 * self.n_intervals))
-        self.avg_plots_axes = [plt.subplots(figsize=(9, 8)) for kk in  range(self.n_logs)]
+        self.avg_plots_axes = [plt.subplots(figsize=(9, 8)) for kk in range(self.n_logs)]
 
         self.wells = wells
         self.wis = wis
@@ -355,7 +359,7 @@ class CalculateStats:
                           cutoffs_str, calc_setup.suffix[j], calc_setup.templates,
                           calc_setup.avg_plots_axes)
 
-            if calc_setup.rokdoc_output is not None:  # Try saving output excel sheeta
+            if calc_setup.rokdoc_output is not None:  # Try saving output excel sheet
                 if test_types(log_types):  # Test if necessary log types are present
                     save_rokdoc_output(calc_setup.rokdoc_output, results, wi_name, calc_setup.log_table[j],
                                        cutoffs_str, this_suffix)
