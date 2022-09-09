@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import numpy as np
 import logging
 from copy import deepcopy
@@ -8,6 +9,7 @@ import blixt_utils.utils as uu
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
 import blixt_rp.rp.rp_core as rp
+from blixt_utils.plotting import crossplot as xp
 from bruges.filters import ricker
 import bruges.rockphysics.anisotropy as bra
 
@@ -462,7 +464,7 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
 
 def plot_depth_trends(wells, log_table, wis, wi_name, templates, block_name=None, savefig=None, **kwargs):
     """
-    Plots the depth trends for each individual log within the given working interval, for all wells
+    Plots the depth trends (TVD) for each individual log within the given working interval, for all wells
 
     :param wells:
     :param log_table:
@@ -474,6 +476,7 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, block_name=None
     :param kwargs:
     :return:
     """
+    buffer = 0.
     y_log_name = kwargs.pop('y_log_name', 'tvd')
     if block_name is None:
         block_name = cw.def_lb_name
@@ -485,8 +488,24 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, block_name=None
         # Start looping over wells and plot the
         legend_items = []
         for well in wells:
-
-
+            depth = wells[well].block[block_name].logs['depth'].data
+            mask = np.ma.masked_inside(depth, wis[well][wi_name][0] - buffer,
+                                       wis[well][wi_name][1] + buffer).mask
+            legend_items.append(
+                Line2D([0], [0],
+                   color=templates[well]['color'],
+                   lw=0, marker=templates[well]['symbol'],
+                   label=well))
+            xdata = wells[well].block[block_name].logs[log_name].data[mask]
+            ydata = wells[well].block[block_name].logs['tvd'].data[mask]
+            xp.plot(
+                xdata,
+                ydata,
+                cdata=templates[well]['color'],
+                mdata=templates[well]['symbol'],
+                xtempl=templates[log_type],
+                ax=ax
+            )
 
         if savefig:
             fig.savefig(savefig)
