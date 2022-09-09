@@ -54,6 +54,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     :kwargs
         keyword arguments
         backus_length: The Backus averaging length in m
+        suffix: string. Added to the default title
     :return:
     """
     log_table = small_log_table(log_table)
@@ -77,24 +78,23 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         fill_pos_style = 'default'
         fill_neg_style = 'default'
 
+    # Set up plot window
     fig = plt.figure(figsize=(20, 10))
     fig.suptitle('{} interval in well {} {}'.format(wi_name, well.well, suffix))
-    n_cols = 22  # subdivide plot in this number of equally wide columns
-    l = 0.05; w = (1-l)/float(n_cols+1); b = 0.05; h = 0.8
-    #l = 0.05; w = 0; b = 0.1; h = 0.8
-    rel_pos = [1, 4, 5, 6, 9, 12, 15, 18]  # Column number (starting with one) of subplot
-    rel_widths = [_x - _y for _x, _y in zip(np.roll(rel_pos + [n_cols], -1)[:-1], rel_pos)]
     ax_names = ['gr_ax', 'md_ax', 'twt_ax', 'res_ax', 'rho_ax', 'cpi_ax', 'ai_ax', 'synt_ax']
+    n_cols = 8
+    n_rows = 2
+    width_ratios = [1, 0.3, 0.3, 1, 1, 1, 1, 2]
+    height_ratios = [1, 5]
+    spec = fig.add_gridspec(nrows=n_rows, ncols=n_cols,
+                            height_ratios=height_ratios, width_ratios=width_ratios,
+                            hspace=0., wspace=0.,
+                            left=0.05, bottom=0.03, right=0.98, top=0.96)
     header_axes = {}
-    for i in range(len(ax_names)):
-        header_axes[ax_names[i]] = fig.add_subplot(2, n_cols, rel_pos[i],
-                                               position=[l+(rel_pos[i]-1)*w, h+0.05, rel_widths[i]*w, 1-h-0.1]) #,
-                                               #figure=fig)
     axes = {}
     for i in range(len(ax_names)):
-        axes[ax_names[i]] = fig.add_subplot(2, n_cols, n_cols + rel_pos[i],
-                                            position=[l+(rel_pos[i]-1)*w, b, rel_widths[i]*w, h]) #,
-                                            #figure=fig)
+        header_axes[ax_names[i]] = fig.add_subplot(spec[0, i])
+        axes[ax_names[i]] = fig.add_subplot(spec[1, i])
 
     #
     # Start plotting data
@@ -119,11 +119,8 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     # Gamma ray and Caliper
     try_these_log_types = ['Gamma ray', 'Caliper', 'Bit size', 'Inclination']
     log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
-    print(log_types)
     lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
-    print(lognames)
     limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
-    print(limits)
     styles = [{'lw': templates[x]['line width'],
                'color': templates[x]['line color'],
                'ls': templates[x]['line style']} for x in log_types]
@@ -172,9 +169,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
 
     if twt is not None:
         tops_twt = [twt[find_nearest(depth, y)] for y in wis[well.well][wi_name]]
-        #print(tops_twt)
-        #for ax in [axes[x] for x in ['twt_ax', 'synt_ax']]:
-        for ax in [axes[x] for x in ['twt_ax']]:
+        for ax in [axes[x] for x in ['twt_ax', 'synt_ax']]:
             ax.axhline(y=tops_twt[0], color='k', ls='--')
             ax.axhline(y=tops_twt[1], color='k', ls='--')
 
@@ -269,14 +264,15 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
         # TODO
         # Now we blindly assumes AI is in m/s g/cm3 Make this more robust
-        xlims = axis_plot(axes['ai_ax'], depth[mask], [ai[mask]/1000.], limits, styles,
+        # print(tb.logs[log_table['P velocity']].header['unit'])
+        xlims = axis_plot(axes['ai_ax'], depth[mask], [ai[mask]], limits, styles,
                   yticks=False, ylim=[md_min, md_max])
         #header_plot(header_axes['ai_ax'], xlims, ['AI ({})'.format(tt)], styles)
         if ba is not None: # Backus averaged data exists
             styles_ba = deepcopy(styles)
             styles_ba[0]['lw'] = styles[0]['lw'] * 3
             ai = ba[2] * ba[0]
-            _ = axis_plot(axes['ai_ax'], depth[mask], [ai[mask]/1000.], limits, styles_ba,
+            _ = axis_plot(axes['ai_ax'], depth[mask], [ai[mask]], limits, styles_ba,
                           yticks=False, ylim=[md_min, md_max])
             # modify the settings to accommodate the backus averaged data
             limits.append(limits[0])
@@ -291,16 +287,13 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
 
     #
     # Wiggles
-    #t = np.arange(twt[mask][0], twt[mask][-1], 0.004)  # A uniformly sampled array of time steps, from A to B
-    t = np.arange(0., np.nanmax(twt), time_step)  # A uniformly sampled array of time steps, from 0 to 3
-    #print(len(t))
+    t = np.arange(np.nanmin(twt), np.nanmax(twt), time_step)  # A uniformly sampled array of time steps, from A to B
     if 'P velocity' in list(log_table.keys()):
         vp_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['P velocity']].data)
     elif 'Sonic' in list(log_table.keys()):
         vp_t = np.interp(x=t, xp=twt, fp=1./tb.logs[log_table['Sonic']].data)
     else:
         vp_t = None
-    #print(len(vp_t))
     if 'S velocity' in list(log_table.keys()):
         vs_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['S velocity']].data)
     elif 'Shear sonic' in list(log_table.keys()):
@@ -318,28 +311,17 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         reff = None
 
     if reff is not None:
-        # TODO
-        # TODO XXX
-        # The dtr I have introduced here is confusing. Data is plotted in MD after calculating the twt from check shots
-
-        #print(len(reff(10)))
-        #tw, w = ricker(_f=c_f, _length=duration, _dt=time_step)
         w = ricker(duration, time_step, c_f)
-        #print(len(w))
 
-        # Compute the depth-time relation
-        dtr = np.array([depth[find_nearest(twt, tt)] for tt in t])
-        #print(np.nanmin(dtr), np.nanmax(dtr))
         # Translate the mask to the time variable
         t_mask = np.ma.masked_inside(t[:-1], np.nanmin(twt[mask]), np.nanmax(twt[mask])).mask
-        #wiggle_plot(axes['synt_ax'], t[:-1][t_mask], wig[t_mask], 10)
 
         header_plot(header_axes['synt_ax'], None, None, None,
                     title='Incidence angle\nRicker f={:.0f} Hz, l={:.3f} s'.format(c_f, duration))
         for inc_a in range(0, 35, 5):
             wig = np.convolve(w, np.nan_to_num(reff(inc_a)), mode='same')
-            wiggle_plot(axes['synt_ax'], dtr[:-1][t_mask], wig[t_mask], inc_a, scaling=scaling,
-                        fill_pos_style=fill_pos_style, fill_neg_style=fill_neg_style)  #, ylim=[twt_min, twt_max])
+            wiggle_plot(axes['synt_ax'], t[:-1][t_mask], wig[t_mask], inc_a, scaling=scaling,
+                        fill_pos_style=fill_pos_style, fill_neg_style=fill_neg_style, ylim=[twt_min, twt_max])
     else:
         header_plot(header_axes['synt_ax'], None, None, None, title='Refl. coeff. lacking')
         wiggle_plot(axes['synt_ax'], None, None, None)

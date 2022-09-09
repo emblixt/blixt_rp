@@ -7,6 +7,7 @@ sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
 #sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
 
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
+import blixt_rp.rp.rp_core as rp
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,8 @@ def plot(model, ax=None):
         show = True
 
     # extract the elastic properties from the model
-    vps, vss, rhos, target, ntg, gross_vp = [], [], [], [], [], []
+    vps, vss, rhos = [], [], []
+    target, ntg, gross_vp, gross_vs, gross_rho = [], [], [], [], []
     for layer in model.layers:
         vps.append(layer.vp)
         vss.append(layer.vs)
@@ -34,8 +36,12 @@ def plot(model, ax=None):
         ntg.append(layer.ntg)
         if layer.ntg < 1:
             gross_vp.append(layer.gross_vp)
+            gross_vs.append(layer.gross_vs)
+            gross_rho.append(layer.gross_rho)
         else:
             gross_vp.append(0.)
+            gross_vs.append(0.)
+            gross_rho.append(0.)
 
     linestyle_ai = {'lw': 1, 'color': 'k', 'ls': '-'}
     linestyle_vpvs = {'lw': 1, 'color': 'k', 'ls': '--'}
@@ -47,27 +53,8 @@ def plot(model, ax=None):
         last_top = bwb[i]
         bwb.append(last_top + model.layers[i].thickness)
 
-    ## Create data containers
-    #n = 100
-    #y = np.linspace(bwb[0], bwb[-1],  n)  # fake depth parameter
-    #data_ai = np.ones(n)
-    #data_vpvs = np.ones(n)
-
-    #ais = [_vp * _rho for _vp, _rho in zip(vps, rhos)]  # Acoustic impedance in m/s g/cm3
-    #vpvss = [_vp / _vs for _vp, _vs in zip(vps, vss)]  # vp / vs
-    #max_ai = max(ais)
-    #max_vpvs = max(vpvss)
-
-    ## normalize the data according to max values
-    #for i in range(len(bwb)):
-    #    if i == 0:
-    #        continue
-    #    data_ai[(y >= bwb[i-1]) & (y <= bwb[i])] = ais[i-1]/max_ai
-    #    data_vpvs[(y >= bwb[i-1]) & (y <= bwb[i])] = vpvss[i-1] * 0.9 / max_vpvs
-
-    y, vp, vs, rho = model.realize_model(0.001)
-    fig2, ax2 = plt.subplots()
-    ax2.plot(y, vp, y, vs, y, rho)
+    # realize the model to create data
+    y, layer_index, vp, vs, rho = model.realize_model(0.001)
     data_ai = vp * rho
     max_ai = max(data_ai)
     data_ai = data_ai / max_ai
@@ -75,8 +62,25 @@ def plot(model, ax=None):
     max_vpvs = max(data_vpvs)
     data_vpvs = 0.9 * data_vpvs / max_vpvs
 
+    # create a discrete data set which controls the filling
+    # 0: no fill, 1: net reservoir (sand), 2: gross reservoir (shale)
+    filler = np.zeros(len(vp))
+    # Step through each layer and search for areas where NTG < 1 and
+    # apply the filler there
+    for i, layer in enumerate(model.layers):
+        if layer.target and (layer.ntg < 1):
+            filler[
+                np.array([all(xx) for xx in zip(layer_index == i, vp == layer.vp)])
+            ] = 1.
+            filler[
+                np.array([all(xx) for xx in zip(layer_index == i, vp == layer.gross_vp)])
+            ] = 2.
+
     axis_plot(ax, y, [data_ai], [[0., 1.1]], [linestyle_ai], nxt=0)
     axis_plot(ax, y, [data_vpvs], [[0., 1.1]], [linestyle_vpvs], nxt=0)
+    ax.fill_betweenx(y, data_ai, where=(filler == 1.), color='y', alpha=0.3)
+    ax.fill_betweenx(y, data_ai, where=(filler == 2.), color='grey', alpha=0.4)
+
     for i, _y in enumerate(bwb[1:-1]):
         #ax.plot([0., ais[i+1]/max_ai], [_y, _y], **linestyle_ai)
         ax.plot([0., vps[i+1] * rhos[i+1]/max_ai], [_y, _y], **linestyle_ai)
@@ -85,6 +89,12 @@ def plot(model, ax=None):
     for _vp, _vs, _rho in zip(vps, vss, rhos):
         info_txt = '{}.\nVp: {:.1f}\nVs: {:.1f}\nRho: {:.1f}'.format(i+1, _vp/1000., _vs/1000., _rho)
         ax.text(0.5*_vp * _rho/max_ai, 0.5*(bwb[i] + bwb[i+1]), info_txt, ha='center', va='center', **text_style)
+        i += 1
+    i = 0
+    for _gvp, _gvs, _grho in zip(gross_vp, gross_vs, gross_rho):
+        if target[i] and (ntg[i] < 1):
+            info_txt = 'NTG: {:.1f}.\nVp: {:.1f}\nVs: {:.1f}\nRho: {:.1f}'.format(ntg[i], _gvp/1000., _gvs/1000., _grho)
+            ax.text(0.6*vps[i] * rhos[i]/max_ai, 0.5*(bwb[i] + bwb[i+1]), info_txt, ha='left', va='center', **text_style)
         i += 1
 
     ax.set_ylim(ax.get_ylim()[::-1])
@@ -152,15 +162,16 @@ class Model:
             raise IOError('Layer must be a Layer object')
         self.layers.insert(index, layer)
 
-    def realize_model(self, resolution):
-        this_vp, this_vs, this_rho = np.zeros(0), np.zeros(0), np.zeros(0)
-        for layer in self.layers:
-            _vp, _vs, _rho = layer.realize_layer(resolution)
+    def realize_model(self, resolution, voigt_reuss_hill=False):
+        layer_index, this_vp, this_vs, this_rho = np.zeros(0), np.zeros(0), np.zeros(0), np.zeros(0)
+        for i, layer in enumerate(self.layers):
+            _vp, _vs, _rho = layer.realize_layer(resolution, voigt_reuss_hill=voigt_reuss_hill)
+            layer_index = np.append(layer_index, np.ones(len(_vp)) * i)
             this_vp = np.append(this_vp, _vp)
             this_vs = np.append(this_vs, _vs)
             this_rho = np.append(this_rho, _rho)
         z = self.depth_to_top + np.arange(len(this_vp)) * resolution
-        return z, this_vp, this_vs, this_rho
+        return z, layer_index, this_vp, this_vs, this_rho
 
     def plot(self, ax=None):
         plot(self, ax)
@@ -243,16 +254,20 @@ class Layer:
             self.gross_rho = kwargs.pop('gross_rho', 2.)
             self.thin_bed_factor = kwargs.pop('thin_bed_factor', 3)
 
-    def realize_layer(self, resolution):
+    def realize_layer(self, resolution, voigt_reuss_hill=False):
         """
         Realize the current layer by returning arrays of the elastic properties with the given resolution
         :param resolution:
             float
             resolution in TWT [s] or depth [m]
+        :param voigt_reuss_hill:
+            bool
+            If true, the Voigt Reuss Hill average for the given NTG is used when returning the elastic parameters
+
         """
         self.resolution = resolution
         n = int(self.thickness / resolution)
-        if self.ntg < 1. and self.target:
+        if self.ntg < 1. and self.target and not voigt_reuss_hill:
             net_group_size = int(np.ceil(self.ntg * self.thickness / (self.thin_bed_factor * resolution)))
             gross_group_size = int(np.ceil((1. - self.ntg) * self.thickness / (self.thin_bed_factor * resolution)))
             this_vp = []
@@ -260,7 +275,7 @@ class Layer:
             this_rho = []
             i = 0
             while len(this_vp) <= n:
-                print(n, len(this_vp), net_group_size, gross_group_size)
+                #print(n, len(this_vp), net_group_size, gross_group_size)
                 if i <= self.thin_bed_factor - 1:
                     this_vp += [self.vp] * net_group_size
                     this_vp += [self.gross_vp] * gross_group_size
@@ -273,14 +288,20 @@ class Layer:
                     this_vs += [self.gross_vs] * gross_group_size
                     this_rho += [self.gross_rho] * gross_group_size
                 i += 1
-                if i > 6: break
-            # Cut, convert and remove unnecessary single values at the edge
-            this_vp = np.array(this_vp)[:n]
-            this_vp[-1] = this_vp[-2]
-            this_vs = np.array(this_vs)[:n]
-            this_vs[-1] = this_vs[-2]
-            this_rho = np.array(this_rho)[:n]
-            this_rho[-1] = this_rho[-2]
+            ## Cut, convert and remove unnecessary single values at the edge
+            #this_vp = np.array(this_vp)[:n]
+            #this_vp[-1] = this_vp[-2]
+            #this_vs = np.array(this_vs)[:n]
+            #this_vs[-1] = this_vs[-2]
+            #this_rho = np.array(this_rho)[:n]
+            #this_rho[-1] = this_rho[-2]
+        elif self.ntg < 1. and self.target and voigt_reuss_hill:
+            _, _, vp_vrh = rp.vrh_bounds([self.ntg, 1. - self.ntg], [self.vp, self.gross_vp])
+            _, _, vs_vrh = rp.vrh_bounds([self.ntg, 1. - self.ntg], [self.vs, self.gross_vs])
+            _, _, rho_vrh = rp.vrh_bounds([self.ntg, 1. - self.ntg], [self.rho, self.gross_rho])
+            this_vp = np.ones(n) * vp_vrh
+            this_vs = np.ones(n) * vs_vrh
+            this_rho = np.ones(n) * rho_vrh
         else:
             this_vp = np.ones(n) * self.vp
             this_vs = np.ones(n) * self.vs
@@ -325,13 +346,13 @@ def test_realization():
     second_layer = Layer(thickness=0.1, vp=3500, vs=1600, rho=2.3, target=True, ntg=0.8)
     m = Model(layers=[first_layer, second_layer])
     m.append(first_layer)
-    twt, vp, _, _ = m.realize_model(0.001)
+    twt, li, vp, _, _ = m.realize_model(0.001)
     print(len(vp))
-    plt.plot(vp)
+    plt.plot(twt, vp / 1000., twt, li)
     plt.show()
 
 
 if __name__ == '__main__':
     #test_realization()
-    #test_plot()
-    test_ntg()
+    test_plot()
+    #test_ntg()

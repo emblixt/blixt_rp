@@ -254,7 +254,10 @@ class Project(object):
 
         :return:
         """
-        _well_table = uio.project_wells(self.project_table, self.working_dir)
+        try:
+            _well_table = uio.project_wells(self.project_table, self.working_dir)
+        except OSError:
+            _well_table = uio.project_wells_new(self.project_table, self.working_dir)
         for lfile in list(_well_table.keys()):
             wname = _well_table[lfile]['Given well name']
             print('Checking {}: {}'.format(wname, os.path.split(lfile)[-1]))
@@ -285,7 +288,10 @@ class Project(object):
 
     def active_wells(self):
         active_wells = []
-        well_table = uio.project_wells(self.project_table, self.working_dir)
+        try:
+            well_table = uio.project_wells(self.project_table, self.working_dir)
+        except OSError:
+            well_table = uio.project_wells_new(self.project_table, self.working_dir)
         for _key, _value in well_table.items():
             active_wells.append(_value['Given well name'])
 
@@ -318,7 +324,10 @@ class Project(object):
         wis = None
         if block_name is None:
             block_name = ud.def_lb_name
-        well_table = uio.project_wells(self.project_table, self.working_dir)
+        try:
+            well_table = uio.project_wells(self.project_table, self.working_dir)
+        except OSError:
+            well_table = uio.project_wells_new(self.project_table, self.working_dir)
         if rename_logs is None:
             # Try reading the renaming out from the well table
             rename_logs = uio.get_rename_logs_dict(well_table)
@@ -900,10 +909,9 @@ class Well(object):
             If True, QC plots are created
         :return:
         """
-        survey_points_info = uio.project_wellpath_info(project_table)
-        survey_points = uio.read_wellpath(**survey_points_info[self.well])
+        survey_points, survey_points_info = uio.read_checkshot_or_wellpath(project_table, self.well, "Well paths")
         for lblock in list(self.block.keys()):
-            self.block[lblock].add_well_path(survey_points, survey_points_info[self.well]['well path file'], verbose)
+            self.block[lblock].add_well_path(survey_points, survey_points_info['filename'], verbose)
 
     def add_twt(self, project_table, verbose=True):
         """
@@ -919,52 +927,16 @@ class Well(object):
             If True, QC plots are created
         :return:
         """
-        result = {}
-        table = None
-        try:
-            table = pd.read_excel(project_table, header=1, sheet_name='Checkshots')
-        except ValueError:
-            raise
-        except Exception as e:
-            print(e)
-        for i, ans in enumerate(table['Use this file']):
-            if not isinstance(ans, str):
-                continue
-            if ans.lower() == 'yes':
-                temp_dict = {}
-                for key in list(table.keys()):
-                    if (key.lower() == 'use this file') or (key.lower() == 'given well name'):
-                        continue
-                    if isnan(table[key][i]):
-                        temp_dict[key.lower()] = None  # avoid NaN
-                    else:
-                        value = table[key][i]
-                        temp_dict[key.lower()] = value
-                result[table['Given well name'][i]] = temp_dict
-        if self.well not in list(result.keys()):
-            raise ValueError('Well {} not listed in Checkshot sheet of {}'.format(
-                self.well,
-                project_table
-            ))
-        # TODO
-        # Petrel checkshots are typically given in ms, but we are not checking this, we simply assume
-        checkshots = uio.read_petrel_checkshots(result[self.well]['checkshot file'])
+        checkshots, checkshot_info = uio.read_checkshot_or_wellpath(project_table, self.well, "Checkshots")
 
-        if checkshots is None:
-            info_txt = 'No check shots available for {}. No TWT added'.format(self.well)
-            print('WARNING: {}'.format(info_txt))
-            logger.warning(info_txt)
-
-        if checkshots is not None:
-            for lblock in list(self.block.keys()):
-                self.block[lblock].add_twt(
-                    {
-                      'MD': checkshots[self.well]['MD'],
-                       # TODO We assume checkshots are in ms
-                      'TWT': np.array(checkshots[self.well]['TWT picked'])/1000.
-                    },
-                    twt_file=result[self.well]['checkshot file'],
-                    verbose=verbose)
+        for lblock in list(self.block.keys()):
+            self.block[lblock].add_twt(
+                {
+                  'MD': checkshots['MD'],
+                  'TWT': np.array(checkshots['TWT'])
+                },
+                twt_file=checkshot_info['filename'],
+                verbose=verbose)
 
     def calc_mask(self,
                   cutoffs,
@@ -1227,7 +1199,7 @@ class Well(object):
                    mask=None,
                    tops=None,
                    wis=None,
-                   fig=None,
+                   #fig=None,
                    ax=None,
                    templates=None,
                    savefig=None,
@@ -1268,14 +1240,19 @@ class Well(object):
             _savefig = True
 
         # set up plotting environment
-        if fig is None:
-            if ax is None:
-                fig = plt.figure(figsize=(8, 10))
-                ax = fig.subplots()
-            else:
-                _savefig = False
-        elif ax is None:
-            ax = fig.subplots()
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(8, 10))
+        else:
+            fig = ax.get_figure()
+
+        #if fig is None:
+        #    if ax is None:
+        #        fig = plt.figure(figsize=(8, 10))
+        #        ax = fig.subplots()
+        #    else:
+        #        _savefig = False
+        #elif ax is None:
+        #    ax = fig.subplots()
 
         y_log_name = kwargs.pop('y_log_name', 'depth')
         show_masked = kwargs.pop('show_masked', False)
@@ -1318,7 +1295,7 @@ class Well(object):
                 ytempl=l2tmpl(self.block[logcurve.block].logs[y_log_name].header),
                 mask=mask,
                 show_masked=show_masked,
-                fig=fig,
+                #fig=fig,
                 ax=ax,
                 pointsize=10,
                 edge_color=False,
@@ -2138,8 +2115,8 @@ class Block(object):
                            fill_value='extrapolate')(md)
         if verbose:
             fig, axes = plt.subplots(1, 1, figsize=(5, 8))
-            axes.plot(twt_points['MD'], sign * np.array(twt_points['TWT']), '-or', lw=0)
-            axes.plot(md, new_twt)
+            axes.plot(twt_points['MD'], sign * 1000. * np.array(twt_points['TWT']), '-or', lw=0)
+            axes.plot(md, 1000. * new_twt)
             axes.set_xlabel('MD [m]')
             axes.set_ylabel('TWT [ms]')
             axes.legend(['TDR points', 'Interpolated well data'])
@@ -2172,7 +2149,7 @@ def _read_las(file):
     else:
         raise Exception("File format '{}'. not supported!".format(ext))
 
-    with open(file, "r") as f:
+    with open(file, "r", encoding='UTF8') as f:
         lines = f.readlines()
     return well_reader(lines, file_format=file_format)  # read all lines from data
 
@@ -2257,8 +2234,10 @@ def test():
     #    logs = wp.data_frame()
     #    print(logs)
 
-
-    well_table = uio.project_wells(wp.project_table, wp.working_dir)
+    try:
+        well_table = uio.project_wells(wp.project_table, wp.working_dir)
+    except OSError:
+        well_table = uio.project_wells_new(wp.project_table, wp.working_dir)
     w = Well()
     las_file = list(well_table.keys())[0]
     logs = list(well_table[las_file]['logs'].keys())
