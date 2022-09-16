@@ -159,6 +159,40 @@ def reflectivity(vp_1, vp_2, vs_1, vs_2, rho_1, rho_2, version='WigginsAkiRich',
         raise NotImplementedError
 
 
+def eei(vp, vs, rho, vp0=None, vs0=None, rho0=None, k=None):
+    """
+    Calculates the Extended Elastic Impedance according to eq. 19 in Whitcombe et al. 2002
+    Returns EEI as a function of chi, where chi is an angle in degrees
+
+    :param vp, vs & rho
+        float or float arrays of same length
+    :param k:
+        float
+        Constant in the EEI equation, typically set to the average of (vs/vp)**2
+    """
+    if k is None:
+        k = 0.25
+    if vp0 is None:
+        vp0 = np.nanmean(vp)
+    if vs0 is None:
+        vs0 = np.nanmean(vs)
+    if rho0 is None:
+        rho0 = np.nanmean(rho)
+
+    def func(chi):
+        cos_chi = np.cos(chi * np.pi / 180.)
+        sin_chi = np.sin(chi * np.pi / 180.)
+        p = cos_chi + sin_chi
+        q = - 8. * k * sin_chi
+        r = cos_chi - 4. * sin_chi
+        return vp0 * rho0 * (
+            np.power(vp / vp0, p) *
+            np.power(vs / vs0, q) *
+            np.power(rho / rho0, r)
+        )
+    return func
+
+
 def v_p(k, mu, rho):
     return np.sqrt(
         (k + 4. * mu / 3.) / rho)

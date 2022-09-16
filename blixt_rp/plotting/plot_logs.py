@@ -1,5 +1,8 @@
+import os
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from matplotlib.font_manager import FontProperties
 import numpy as np
 import logging
 from copy import deepcopy
@@ -462,7 +465,8 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
         plt.show()
 
 
-def plot_depth_trends(wells, log_table, wis, wi_name, templates, block_name=None, savefig=None, **kwargs):
+def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
+                      block_name=None, results_folder=None, verbose=True, suffix=None, **kwargs):
     """
     Plots the depth trends (TVD) for each individual log within the given working interval, for all wells
 
@@ -471,43 +475,300 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, block_name=None
     :param wis:
     :param wi_name:
     :param templates:
+    :param cutoffs:
+        dict
+       E.G. {'depth': ['><', [2100, 2200]], 'phie': ['>', 0.1]}
     :param block_name:
-    :param savefig:
+    :param results_folder:
+        str
+        full pathname of folder where results plots should be saved.
+        If verbose is False, no plots are saved
+    :param verbose:
+        bool
+        If True plots are generated, and least_square optimisation shows progress
+    :param suffix:
+        str
+        String used in title and in saved figure names, to distinguish different cases
     :param kwargs:
     :return:
     """
+    from scipy.optimize import least_squares
+    from blixt_utils.misc.curve_fitting import residuals
+    from blixt_utils.utils import mask_string
+
+    if suffix is None:
+        suffix = ''
     buffer = 0.
     y_log_name = kwargs.pop('y_log_name', 'tvd')
     if block_name is None:
         block_name = cw.def_lb_name
 
+    # The linear target function we would like to fit the data:
+    def linear_function(_t, _a, _b):
+        return _a*_t + _b
+
+    depth_trends = {}
+    # Start looping over the different log types
     for log_type in log_table:
         log_name = log_table[log_type]
-        fig, ax = plt.subplots(figsize=(10, 10))
+        if verbose:
+            fig, ax = plt.subplots(figsize=(10, 10))
+        else:
+            fig, ax = None, None
 
-        # Start looping over wells and plot the
+        # Start looping over wells and plot the data in TVD domain
+        data_container = np.zeros(0)  # empty container
+        tvd_container = np.zeros(0)
         legend_items = []
+        tvd_min = 1E6
+        tvd_max = -1E6
         for well in wells:
-            depth = wells[well].block[block_name].logs['depth'].data
-            mask = np.ma.masked_inside(depth, wis[well][wi_name][0] - buffer,
-                                       wis[well][wi_name][1] + buffer).mask
-            legend_items.append(
-                Line2D([0], [0],
-                   color=templates[well]['color'],
-                   lw=0, marker=templates[well]['symbol'],
-                   label=well))
+            wells[well].calc_mask(cutoffs, 'my_mask', log_table=log_table, wis=wis, wi_name=wi_name)
+            mask = wells[well].block[block_name].masks['my_mask'].data
+            legend_items.append(well)
             xdata = wells[well].block[block_name].logs[log_name].data[mask]
+            data_container = np.append(data_container, xdata)
             ydata = wells[well].block[block_name].logs['tvd'].data[mask]
-            xp.plot(
-                xdata,
-                ydata,
-                cdata=templates[well]['color'],
-                mdata=templates[well]['symbol'],
-                xtempl=templates[log_type],
-                ax=ax
+            tvd_container = np.append(tvd_container, ydata)
+            if np.min(ydata) < tvd_min:
+                tvd_min = np.min(ydata)
+            if np.max(ydata) > tvd_max:
+                tvd_max = np.max(ydata)
+            if verbose:
+                xp.plot(
+                    xdata,
+                    ydata,
+                    cdata=templates[well]['color'],
+                    mdata=templates[well]['symbol'],
+                    xtempl=templates[log_type],
+                    ytempl=templates['TVD'],
+                    edge_color=False,
+                    ax=ax
+                )
+        # Calculate depth trend
+        verbosity_level = 0
+        if verbose:
+            verbosity_level = 2
+        res = least_squares(residuals, [1., 1.], args=(tvd_container, data_container),
+                            kwargs={'target_function': linear_function}, verbose=verbosity_level)
+
+        depth_trends[log_name] = res.x
+        new_tvd = np.linspace(tvd_min, tvd_max)
+        if verbose:
+            ax.plot(linear_function(new_tvd, *res.x), new_tvd)
+            legend_items.append('{} = {:.3}xTVD + {:.3}'.format(log_name, res.x[0], res.x[1]))
+
+            ax.set_title('{}: {}. {} {}'.format(log_type, log_name, mask_string(cutoffs, wi_name), suffix))
+            ax.set_ylim(tvd_max, tvd_min)
+            this_legend = ax.legend(
+                legend_items,
+                prop=FontProperties(size='smaller'),
+                scatterpoints=1,
+                markerscale=2,
+                loc=1
             )
 
-        if savefig:
-            fig.savefig(savefig)
+            if results_folder:
+                if suffix != '' and suffix[0] != '_':
+                    suffix = '_{}'.format(suffix)
+                fig.savefig(os.path.join(results_folder, 'Depth trend {} in {}{}.png'.format(
+                    log_name, wi_name, suffix
+                )))
+            else:
+                plt.show()
+    return depth_trends
+
+
+def chi_rotation(well, log_tables, wis, wi_name, templates, buffer=None, chi_angles=None,
+                 common_limit=None, ref_logtable=None,
+                 plot_tops=None, annotate_tops=None,
+                 block_name=None, results_folder=None, verbose=True, suffix=None, **kwargs):
+    """
+    For the given set of brine / oil / gas elastic logs, it plots extended elastic impedance at different chi angles
+    in the selected working interval
+    Args:
+        well:
+            well object
+        log_tables:
+            list
+            List of (three) logtables which determines which elastic logs to use in the calculation of  the
+            extended elastic impedance. E.G.
+                [ {'P velocity': 'vp_brine', 'S velocity': 'vs_brine', ...},
+                  {'P velocity': 'vp_oil', 'S velocity': 'vs_oil', ...}, ... ]
+            The order is assumed to be brine, oil, gas, and they will be plotted in blue, green, red
+        wis:
+        wi_name:
+        templates:
+        buffer:
+        chi_angles:
+            list
+            List of floats specifying the Chi angles (deg) to plot
+            Defaults to [0., 5., 10., 15., 20., 30., 40., 50.]
+        common_limit:
+            list, tuple
+            Common min, max values for the EEI at all Chi angles
+        ref_logtable:
+            dict
+            A log table that is used as reference to make it easier for the user to orient themself
+            on where we are looking.
+            Preferably a gamma ray log, e.g. {'Gamma ray': 'gr'}
+        plot_tops:
+            list
+            List of MD [m] values to plot horizontal lines across all plots
+        annotate_tops:
+            list
+            List of strings, with same length as plot_tops, which are used to annotate the tops
+        block_name:
+        results_folder:
+        verbose:
+        suffix:
+        **kwargs:
+
+    Returns:
+
+    """
+    if buffer is None:
+        buffer = 50.
+    if chi_angles is None:
+        chi_angles = [0., 5., 10., 15., 20., 30., 40., 50.]
+    if block_name is None:
+        block_name = cw.def_lb_name
+    if suffix is None:
+        suffix = ''
+    if common_limit is not None:
+        if len(common_limit) != 2:
+            raise IOError('Common limits must have length 2, a min and max value')
+
+    required_log_types = ['P velocity', 'S velocity', 'Density']
+    # Check that the given log tables contain the required log types
+    for log_table in log_tables:
+        for log_type in required_log_types:
+            if log_type not in log_table:
+                raise IOError('Log type {} not included in log table'.format(log_type))
+
+    # sety up plot window
+    fig = plt.figure(figsize=(20, 10))
+    fig.suptitle('EEI in {} interval in well {}, {}'.format(wi_name, well.well, suffix))
+    n_cols = len(chi_angles)
+    if ref_logtable is not None:
+        n_cols += 1  # add an extra column for the reference log
+    n_rows = 2
+    height_ratios = [1, 5]
+    spec = fig.add_gridspec(nrows=n_rows, ncols=n_cols,
+                            height_ratios=height_ratios,
+                            hspace=0., wspace=0.,
+                            left=0.05, bottom=0.03, right=0.98, top=0.96)
+    header_axes = []
+    axes = []
+    for i in range(n_cols):
+        header_axes.append(fig.add_subplot(spec[0, i]))
+        axes.append(fig.add_subplot(spec[1, i]))
+
+    # default colors used in the plotting assuming we plot brine, oil and gas logs
+    def_colors = ['b', 'g', 'r']
+    legends = ['brine', 'oil', 'gas']
+    # if we plot more logs per chi angle, we need to extend the lists
+    if len(log_tables) > 3:
+        def_colors += xp.cnames
+        for i in range(len(log_tables) - 3):
+            legends.append('xxx')
+
+    styles = [{'lw': 1.,
+               'color': def_colors[i],
+               'ls': '-'} for i in range(len(log_tables))]
+
+    tb = well.block[block_name]  # this log block
+    depth = tb.logs['depth'].data
+    mask = np.ma.masked_inside(depth, wis[well.well][wi_name][0] - buffer, wis[well.well][wi_name][1] + buffer).mask
+    md_min = np.min(depth[mask])
+    md_max = np.max(depth[mask])
+
+    # Calculate the EEI for the different elastic logs specified in the log tables
+    # First calculate common average values used in the normalization
+    vp0 = np.nanmean(tb.logs[log_tables[0]['P velocity']].data[mask])
+    vs0 = np.nanmean(tb.logs[log_tables[0]['S velocity']].data[mask])
+    rho0 = np.nanmean(tb.logs[log_tables[0]['Density']].data[mask])
+    eeis = []
+    for log_table in log_tables:
+        vp = tb.logs[log_table['P velocity']].data[mask]
+        vs = tb.logs[log_table['S velocity']].data[mask]
+        rho = tb.logs[log_table['Density']].data[mask]
+        eeis.append(rp.eei(vp, vs, rho, vp0=vp0, vs0=vs0, rho0=rho0))
+
+    # Find the common limits for all log types at each chi angle
+    limits = []
+    if common_limit is None:
+        for i, chi in enumerate(chi_angles):
+            x_min = 1.E6
+            x_max = -1.E6
+            this_min, this_max = None, None
+            for j in range(len(log_tables)):
+                this_eei = eeis[j](chi)
+                this_min = np.nanmin(this_eei)
+                this_max = np.nanmax(this_eei)
+                if this_max > x_max:
+                    x_max = this_max
+                if this_min < x_min:
+                    x_min = this_min
+            these_limits = [this_min, this_max]
+            limits.append([these_limits] * len(log_tables))
+    else:
+        for i, chi in enumerate(chi_angles):
+            limits.append([common_limit] * len(log_tables))
+
+    # Start plotting data
+    if ref_logtable is not None:
+        ref_log_type = list(ref_logtable.keys())[0]
+        ref_log_name = ref_logtable[ref_log_type]
+        this_data = tb.logs[ref_log_name].data[mask]
+        this_template = templates[ref_log_type]
+        #normalize = mpl.colors.Normalize(vmin=this_template['min'], vmax=this_template['max'])
+        this_style = [{'lw': this_template['line width'],
+                       'color': this_template['line color'],
+                        'ls': this_template['line style']}]
+        this_legend = ['{} [{}]'.format(ref_log_name, this_template['unit'])]
+        xlims = axis_plot(axes[0], depth[mask],
+                          [this_data],
+                          [[this_template['min'], this_template['max']]],
+                          this_style,
+                          ylim=[md_min, md_max]
+                          )
+        header_plot(header_axes[0], xlims, this_legend, this_style)
+        #axes[0].fill_betweenx(depth[mask], 0, tb.logs[ref_log_name].data[mask],
+        #                      facecolor=plt.get_cmap(this_template['colormap'])(normalize(this_data)),
+        #                      #cmap=this_template['colormap'],
+        #                      clim=(this_template['min'], this_template['max'])
+        #                      )
+
+    for i, chi in enumerate(chi_angles):
+        if ref_logtable is not None:
+            axes_i = i + 1
         else:
-            plt.show()
+            axes_i = i
+        xlims = axis_plot(axes[axes_i], depth[mask],
+                          [eei(chi) for eei in eeis],
+                          limits[i], styles, ylim=[md_min, md_max],
+                          yticks=axes_i==0)
+        header_plot(header_axes[axes_i], xlims, legends, styles, title='Chi {:.0f}$^\circ$'.format(chi))
+
+    if plot_tops is not None:
+        for ax in axes:
+            for this_top in plot_tops:
+                ax.axhline(y=this_top, color='k', ls='--')
+        if annotate_tops is not None:
+            for i, this_name in enumerate(annotate_tops):
+                axes[0].text(axes[0].get_xlim()[0], plot_tops[i], this_name, ha='left', va='bottom')
+
+    axes[0].set_ylabel('Measured Depth [m]')
+    if results_folder:
+        if suffix != '' and suffix[0] != '_':
+            suffix = '_{}'.format(suffix)
+        fig.savefig(os.path.join(results_folder, 'EEI Chi {:.0f}-{:.0f} in {} in {}{}.png'.format(
+            chi_angles[0], chi_angles[-1], wi_name, well.well, suffix
+        )))
+    else:
+        plt.show()
+
+
+
+
