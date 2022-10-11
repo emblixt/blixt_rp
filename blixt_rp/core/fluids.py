@@ -374,7 +374,7 @@ class FluidMix(object):
         # First read in all fluids defined in the project table
         all_fluids = {}
         fluids_table = pd.read_excel(filename,
-                                     sheet_name=fluid_sheet, header=fluid_header)
+                                     sheet_name=fluid_sheet, header=fluid_header, engine='openpyxl')
 
         for i, name in enumerate(fluids_table['Name']):
             if isnan(name):
@@ -411,7 +411,7 @@ class FluidMix(object):
             'initial': {},
             'final': {}
         }
-        mix_table = pd.read_excel(filename, sheet_name=mix_sheet, header=mix_header)
+        mix_table = pd.read_excel(filename, sheet_name=mix_sheet, header=mix_header, engine='openpyxl')
         for i, name in enumerate(mix_table['Fluid name']):
             if mix_table['Use'][i] != 'Yes':
                 continue
@@ -472,6 +472,8 @@ class FluidMix(object):
         :param debug:
         :return:
         """
+        if block_name is None:
+            block_name = cw.def_lb_name
         if rho_sea is None:
             rho_sea = 1.025  # g/cm3
 

@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
 import numpy as np
 import sys
 import logging
@@ -46,6 +47,8 @@ def plot(model, ax=None):
     linestyle_ai = {'lw': 1, 'color': 'k', 'ls': '-'}
     linestyle_vpvs = {'lw': 1, 'color': 'k', 'ls': '--'}
     text_style = {'fontsize': 'x-small', 'bbox': {'facecolor': 'w', 'alpha': 0.5}}
+    ai_line = mlines.Line2D([1], [1], **linestyle_ai)
+    vpvs_line = mlines.Line2D([1], [1], **linestyle_vpvs)
 
     # the boundaries (bwb) need to add up the respective thicknesses
     bwb = [model.depth_to_top]
@@ -75,6 +78,10 @@ def plot(model, ax=None):
             filler[
                 np.array([all(xx) for xx in zip(layer_index == i, vp == layer.gross_vp)])
             ] = 2.
+        elif layer.target:
+            filler[
+                np.array([all(xx) for xx in zip(layer_index == i, vp == layer.vp)])
+            ] = 1.
 
     axis_plot(ax, y, [data_ai], [[0., 1.1]], [linestyle_ai], nxt=0)
     axis_plot(ax, y, [data_vpvs], [[0., 1.1]], [linestyle_vpvs], nxt=0)
@@ -88,7 +95,7 @@ def plot(model, ax=None):
     i = 0
     for _vp, _vs, _rho in zip(vps, vss, rhos):
         info_txt = '{}.\nVp: {:.1f}\nVs: {:.1f}\nRho: {:.1f}'.format(i+1, _vp/1000., _vs/1000., _rho)
-        ax.text(0.5*_vp * _rho/max_ai, 0.5*(bwb[i] + bwb[i+1]), info_txt, ha='center', va='center', **text_style)
+        ax.text(0.5*_vp * _rho/max_ai, 0.5*(bwb[i] + bwb[i+1]), info_txt, ha='right', va='center', **text_style)
         i += 1
     i = 0
     for _gvp, _gvs, _grho in zip(gross_vp, gross_vs, gross_rho):
@@ -98,6 +105,7 @@ def plot(model, ax=None):
         i += 1
 
     ax.set_ylim(ax.get_ylim()[::-1])
+    ax.legend([ai_line, vpvs_line], ['AI', 'Vp/Vs'])
 
     if show:
         plt.show()

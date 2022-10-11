@@ -278,7 +278,7 @@ class MineralMix(object):
         """
         # first read in all minerals
         all_minerals = {}
-        min_table = pd.read_excel(filename, sheet_name=min_sheet, header=min_header)
+        min_table = pd.read_excel(filename, sheet_name=min_sheet, header=min_header, engine='openpyxl')
         for i, name in enumerate(min_table['Name']):
             if isnan(name):
                 continue
@@ -295,7 +295,7 @@ class MineralMix(object):
 
         # Then read in the mineral mixtures
         min_mixes = {}
-        mix_table = pd.read_excel(filename, sheet_name=mix_sheet, header=mix_header)
+        mix_table = pd.read_excel(filename, sheet_name=mix_sheet, header=mix_header, engine='openpyxl')
         for i, name in enumerate(mix_table['Mineral name']):
             vf = mix_table['Volume fraction'][i]
             if isnan(vf):
@@ -389,8 +389,9 @@ class MineralMix(object):
                     for kk, mineral in enumerate(list(self.minerals[well_name][wi_name].keys())):
                         if self.minerals[well_name][wi_name][mineral].calculation_method == calculation_method:
                             _n += 1
-                    figs[well_name][wi_name] = plt.figure(figsize=(12, 4*_n))
-                    axes[well_name][wi_name] = figs[well_name][wi_name].subplots(nrows=_n, ncols=3)
+                    if _n != 0:
+                        figs[well_name][wi_name] = plt.figure(figsize=(12, 4*_n))
+                        axes[well_name][wi_name] = figs[well_name][wi_name].subplots(nrows=_n, ncols=3)
 
             _n = 0  # number of minerals
             for jj, wi_name in enumerate(list(self.minerals[well_name].keys())):

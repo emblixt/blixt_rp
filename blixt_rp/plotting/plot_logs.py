@@ -1,4 +1,8 @@
+import os
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.font_manager import FontProperties
 import numpy as np
 import logging
 from copy import deepcopy
@@ -6,8 +10,10 @@ from copy import deepcopy
 import blixt_rp.core.well as cw
 import blixt_utils.utils as uu
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
-from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
+from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot, \
+    chi_rotation_plot
 import blixt_rp.rp.rp_core as rp
+from blixt_utils.plotting import crossplot as xp
 from bruges.filters import ricker
 import bruges.rockphysics.anisotropy as bra
 
@@ -460,35 +466,363 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
         plt.show()
 
 
-def plot_depth_trends(wells, log_table, wis, wi_name, templates, block_name=None, savefig=None, **kwargs):
+def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
+                      block_name=None, results_folder=None, verbose=True, suffix=None, **kwargs):
     """
-    Plots the depth trends for each individual log within the given working interval, for all wells
+    Plots the depth trends (TVD) for each individual log within the given working interval, for all wells
 
     :param wells:
     :param log_table:
     :param wis:
     :param wi_name:
     :param templates:
+    :param cutoffs:
+        dict
+       E.G. {'depth': ['><', [2100, 2200]], 'phie': ['>', 0.1]}
     :param block_name:
-    :param savefig:
+    :param results_folder:
+        str
+        full pathname of folder where results plots should be saved.
+        If verbose is False, no plots are saved
+    :param verbose:
+        bool
+        If True plots are generated, and least_square optimisation shows progress
+    :param suffix:
+        str
+        String used in title and in saved figure names, to distinguish different cases
     :param kwargs:
     :return:
     """
+    from scipy.optimize import least_squares
+    from blixt_utils.misc.curve_fitting import residuals, linear_function
+    from blixt_utils.utils import mask_string
+
+    if suffix is None:
+        suffix = ''
+    buffer = 0.
     y_log_name = kwargs.pop('y_log_name', 'tvd')
     if block_name is None:
         block_name = cw.def_lb_name
 
+    depth_trends = {}
+    # Start looping over the different log types
     for log_type in log_table:
         log_name = log_table[log_type]
-        fig, ax = plt.subplots(figsize=(10, 10))
-
-        # Start looping over wells and plot the
-        legend_items = []
-        for well in wells:
-
-
-
-        if savefig:
-            fig.savefig(savefig)
+        if verbose:
+            fig, ax = plt.subplots(figsize=(10, 10))
         else:
-            plt.show()
+            fig, ax = None, None
+
+        # Start looping over wells and plot the data in TVD domain
+        data_container = np.zeros(0)  # empty container
+        tvd_container = np.zeros(0)
+        legend_items = []
+        tvd_min = 1E6
+        tvd_max = -1E6
+        for well in wells:
+            if log_name not in wells[well].log_names():
+                warn_txt = '{} log is missing in well {}'.format(log_name, well)
+                logger .warning(warn_txt)
+                print(warn_txt)
+                continue
+            wells[well].calc_mask(cutoffs, 'my_mask', log_table=log_table, wis=wis, wi_name=wi_name)
+            mask = wells[well].block[block_name].masks['my_mask'].data
+            legend_items.append(well)
+            xdata = wells[well].block[block_name].logs[log_name].data[mask]
+            data_container = np.append(data_container, xdata)
+            ydata = wells[well].block[block_name].logs['tvd'].data[mask]
+            tvd_container = np.append(tvd_container, ydata)
+            if np.min(ydata) < tvd_min:
+                tvd_min = np.min(ydata)
+            if np.max(ydata) > tvd_max:
+                tvd_max = np.max(ydata)
+            if verbose:
+                xp.plot(
+                    xdata,
+                    ydata,
+                    cdata=templates[well]['color'],
+                    mdata=templates[well]['symbol'],
+                    xtempl=templates[log_type],
+                    ytempl=templates['TVD'],
+                    edge_color=False,
+                    ax=ax
+                )
+        # Calculate depth trend
+        verbosity_level = 0
+        if verbose:
+            verbosity_level = 2
+        res = least_squares(residuals, [1., 1.], args=(tvd_container, data_container),
+                            kwargs={'target_function': linear_function}, verbose=verbosity_level)
+
+        depth_trends[log_name] = res.x
+        new_tvd = np.linspace(tvd_min, tvd_max)
+        if verbose:
+            ax.plot(linear_function(new_tvd, *res.x), new_tvd)
+            legend_items.append('{} = {:.3}xTVD + {:.3}'.format(log_name, res.x[0], res.x[1]))
+
+            ax.set_title('{}: {}. {} {}'.format(log_type, log_name, mask_string(cutoffs, wi_name), suffix))
+            ax.set_ylim(tvd_max, tvd_min)
+            this_legend = ax.legend(
+                legend_items,
+                prop=FontProperties(size='smaller'),
+                scatterpoints=1,
+                markerscale=2,
+                loc=1
+            )
+
+            if results_folder:
+                if suffix != '' and suffix[0] != '_':
+                    suffix = '_{}'.format(suffix)
+                fig.savefig(os.path.join(results_folder, 'Depth trend {} in {}{}.png'.format(
+                    log_name, wi_name, suffix
+                )))
+            else:
+                plt.show()
+    return depth_trends
+
+
+def chi_rotation(well, log_tables, wis, wi_name, templates, buffer=None, chi_angles=None,
+                 common_limit=None, ref_logtable=None,
+                 plot_tops=None, annotate_tops=None,
+                 block_name=None, results_folder=None, verbose=True, suffix=None, **kwargs):
+    """
+    For the given set of brine / oil / gas elastic logs, it plots extended elastic impedance at different chi angles
+    in the selected working interval
+    Args:
+        well:
+            well object
+        log_tables:
+            list
+            List of (three) logtables which determines which elastic logs to use in the calculation of  the
+            extended elastic impedance. E.G.
+                [ {'P velocity': 'vp_brine', 'S velocity': 'vs_brine', ...},
+                  {'P velocity': 'vp_oil', 'S velocity': 'vs_oil', ...}, ... ]
+            The order is assumed to be brine, oil, gas, and they will be plotted in blue, green, red
+        wis:
+        wi_name:
+        templates:
+        buffer:
+        chi_angles:
+            list
+            List of floats specifying the Chi angles (deg) to plot
+            Defaults to [0., 5., 10., 15., 20., 30., 40., 50.]
+        common_limit:
+            list, tuple
+            Common min, max values for the EEI at all Chi angles
+        ref_logtable:
+            dict
+            A log table that is used as reference to make it easier for the user to orient themself
+            on where we are looking.
+            Preferably a gamma ray log, e.g. {'Gamma ray': 'gr'}
+        plot_tops:
+            list
+            List of MD [m] values to plot horizontal lines across all plots
+        annotate_tops:
+            list
+            List of strings, with same length as plot_tops, which are used to annotate the tops
+        block_name:
+        results_folder:
+        verbose:
+        suffix:
+        **kwargs:
+
+    Returns:
+
+    """
+    if buffer is None:
+        buffer = 50.
+    if chi_angles is None:
+        chi_angles = [0., 5., 10., 15., 20., 30., 40., 50.]
+    if block_name is None:
+        block_name = cw.def_lb_name
+    if suffix is None:
+        suffix = ''
+    if common_limit is not None:
+        if len(common_limit) != 2:
+            raise IOError('Common limits must have length 2, a min and max value')
+
+    required_log_types = ['P velocity', 'S velocity', 'Density']
+    # Check that the given log tables contain the required log types
+    for log_table in log_tables:
+        for log_type in required_log_types:
+            if log_type not in log_table:
+                raise IOError('Log type {} not included in log table'.format(log_type))
+
+    tb = well.block[block_name]  # this log block
+    depth = tb.logs['depth'].data
+    mask = np.ma.masked_inside(depth, wis[well.well][wi_name][0] - buffer, wis[well.well][wi_name][1] + buffer).mask
+
+    # Calculate the EEI for the different elastic logs specified in the log tables
+    # First calculate common average values used in the normalization
+    vp0 = np.nanmean(tb.logs[log_tables[0]['P velocity']].data[mask])
+    vs0 = np.nanmean(tb.logs[log_tables[0]['S velocity']].data[mask])
+    rho0 = np.nanmean(tb.logs[log_tables[0]['Density']].data[mask])
+    eeis = []
+    for log_table in log_tables:
+        vp = tb.logs[log_table['P velocity']].data[mask]
+        vs = tb.logs[log_table['S velocity']].data[mask]
+        rho = tb.logs[log_table['Density']].data[mask]
+        eeis.append(rp.eei(vp, vs, rho, vp0=vp0, vs0=vs0, rho0=rho0))
+
+    # Calculate all EEI's and find the common limits for all log types at each chi angle
+    all_chis = np.zeros((len(depth[mask]), len(chi_angles), len(log_tables)))
+    limits = []
+    common_limits = []
+    for i, chi in enumerate(chi_angles):
+        x_min = 1.E6
+        x_max = -1.E6
+        this_min, this_max = None, None
+        for j in range(len(log_tables)):
+            eei_at_this_chi = eeis[j](chi)
+            all_chis[:, i, j] = eei_at_this_chi
+            this_min = np.nanmin(eei_at_this_chi)
+            this_max = np.nanmax(eei_at_this_chi)
+            if this_max > x_max:
+                x_max = this_max
+            if this_min < x_min:
+                x_min = this_min
+        these_limits = [this_min, this_max]
+        common_limits.append([these_limits] * len(log_tables))
+
+    if common_limit is None:
+        limits = common_limits
+    else:
+        for i, chi in enumerate(chi_angles):
+            limits.append([common_limit] * len(log_tables))
+
+    if ref_logtable is not None:
+        ref_log_type = list(ref_logtable.keys())[0]
+        ref_log_name = ref_logtable[ref_log_type]
+        ref_data = tb.logs[ref_log_name].data[mask]
+        ref_template = templates[ref_log_type]
+    else:
+        ref_data = None
+        ref_template = None
+
+    fig, axes, header_axes = chi_rotation_plot(all_chis, depth[mask], chi_angles, limits,
+                                               reference_log=ref_data,
+                                               reference_template=ref_template
+                                               )
+    if plot_tops is not None:
+        for ax in axes:
+            for this_top in plot_tops:
+                ax.axhline(y=this_top, color='k', ls='--')
+        if annotate_tops is not None:
+            for i, this_name in enumerate(annotate_tops):
+                axes[0].text(axes[0].get_xlim()[0], plot_tops[i], this_name, ha='left', va='bottom')
+
+    axes[0].set_ylabel('Measured Depth [m]')
+    fig.suptitle('EEI in {} interval in well {}, {}'.format(wi_name, well.well, suffix))
+
+    if results_folder:
+        if suffix != '' and suffix[0] != '_':
+            suffix = '_{}'.format(suffix)
+        fig.savefig(os.path.join(results_folder, 'EEI Chi {:.0f}-{:.0f} in {} in {}{}.png'.format(
+            chi_angles[0], chi_angles[-1], wi_name, well.well, suffix
+        )))
+    else:
+        plt.show()
+
+
+def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=None, input_wiggles=None,
+                 yticks=True, ax=None, title=None, **kwargs):
+    """
+    Plot seismic traces at different incident angles for the given reflectivity function and wavelet.
+    UNLESS input_wiggles is used, in which case those are used and the reflectivity function and wavelet are
+    ignored
+
+    :param    reflectivity:
+        A function of incident_angle [deg] which returns an array of reflectivities
+    :param    twt:
+        array
+        Two way time in seconds
+
+    :param    wavelet:
+        numpy array
+        Array of wavelet amplitudes
+
+    :param    incident_angles:
+        list
+        List of incident angles in degrees that are used  in the reflectivity function
+    :param    extract_at:
+        float or list of floats
+        TWT value(s) at which the amplitudes are extracted as a function of incident angle
+    :param input_wiggles:
+        list, same length as incident_angles
+        List of arrays containing the wiggles at the different incident angles
+        Contradicts the normal behavior of plot_wiggles, and uses the input wiggles directly instead of
+        calculating them from reflectivity and wavelet
+    :param    :param yticks:
+        bool
+        if False the yticklabels are not shown
+    :param    ax:
+        matplotlib.pyplot Axes object
+    :param    title:
+        str
+        Title of the plot
+    :param    kwargs:
+        Keyword arguments passed on to wiggle_plot()
+
+    Returns:
+        ava_curves:
+            list of AVA (amplitude versus angle) curves, one for each "extract_at" float.
+            None if exctract_at is None
+        extract_at_indices
+            list of indices of where the AVA curves have been extracted
+
+    """
+    scaling = kwargs.pop('scaling', 80)
+    fill_pos_style = kwargs.pop('fill_pos_style', 'pos-blue')
+    fill_neg_style = kwargs.pop('fill_neg_style', 'neg-red')
+    if incident_angles is None:
+        incident_angles = [10., 15., 20., 25., 30., 35., 40.]
+    if extract_at is not None:
+        if isinstance(extract_at, float):
+            extract_at = [extract_at]
+        elif not isinstance(extract_at, list):
+            raise IOError('extract_at must be a float, or list of floats')
+    if input_wiggles is not None:
+        if len(input_wiggles) != len(incident_angles):
+            raise IOError('The number of input wiggles ({}) must the same as number of incident angles ({})'.format(
+                len(input_wiggles), len(incident_angles)
+            ))
+    if ax is None:
+        fig, ax = plt.subplots()
+    if title is None:
+        title = ''
+
+    # Find indexes where the AVA curves should be extracted
+    if extract_at is not None:
+        ava_curves = np.zeros((len(incident_angles), len(extract_at)))
+        extract_at_indices = []
+        for this_twt in extract_at:
+            extract_at_indices.append(np.argmin((twt - this_twt)**2))
+    else:
+        ava_curves = None
+        extract_at_indices = None
+
+    for i, inc_angle in enumerate(incident_angles):
+        if input_wiggles is None:
+            wiggle = np.convolve(wavelet, np.nan_to_num(reflectivity(inc_angle)), mode='same')
+            while len(wiggle) < len(twt):
+                wiggle = np.append(wiggle, np.ones(1) * wiggle[-1])  # extend with one item
+            if len(twt) < len(wiggle):
+                wiggle = wiggle[:len(twt)]
+        else:
+            wiggle = input_wiggles[i]
+
+        if extract_at is not None:
+            for j, t in enumerate(extract_at_indices):
+                ava_curves[i, j] = wiggle[t]
+
+        wiggle_plot(ax, twt, wiggle, inc_angle, scaling=scaling, fill_pos_style=fill_pos_style,
+                    fill_neg_style=fill_neg_style, **kwargs)
+
+    ax.grid(which='major', alpha=0.5)
+    if not yticks:
+        ax.get_yaxis().set_ticklabels([])
+    else:
+        ax.set_ylabel('TWT [s]')
+    ax.set_xlabel('Incident angle [deg]')
+
+    return ava_curves, extract_at_indices

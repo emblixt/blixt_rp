@@ -1002,6 +1002,7 @@ class Well(object):
                    'Volume': 'vcl'}
         :return:
         """
+        from blixt_utils.utils import mask_string
         if log_table is not None:
             log_table = small_log_table(log_table)
 
@@ -1019,8 +1020,15 @@ class Well(object):
                     logger.warning(warn_txt)
                     continue
                 if log_table is not None:
+                    if _key not in log_table:
+                        warn_txt = 'Log table does not contain the log types the cutoffs are based on: {}'.format(_key)
+                        logger.warning(warn_txt)
+                        raise IOError(warn_txt)
                     _this_cutoffs[log_table[_key]] = _cutoffs[_key]
                 else:
+                    warn_txt = 'Mask in {} is based on log types, but no log table is specified'.format(self.well)
+                    print(warn_txt)
+                    logger.warning(warn_txt)
                     _this_cutoffs[self.get_logs_of_type(_key)[0].name] = _cutoffs[_key]
             return _this_cutoffs
 
@@ -1071,20 +1079,6 @@ class Well(object):
                                      ]
             return _cutoffs
 
-        def mask_string(_cutoffs):
-            msk_str = ''
-            for key in list(_cutoffs.keys()):
-                msk_str += '{}: {} [{}]'.format(
-                    key, _cutoffs[key][0], ', '.join([str(m) for m in _cutoffs[key][1]])) if \
-                    isinstance(_cutoffs[key][1], list) else \
-                    '{}: {} {}, '.format(
-                        key, _cutoffs[key][0], _cutoffs[key][1])
-            if (len(msk_str) > 2) and (msk_str[-2:] == ', '):
-                msk_str = msk_str.rstrip(', ')
-            if wi_name is not None:
-                msk_str += ' Working interval: {}'.format(wi_name)
-            return msk_str
-
         #
         # Main functionality
         #
@@ -1102,7 +1096,7 @@ class Well(object):
         elif isinstance(wi_name, str) and (wis is not None):
             cutoffs = apply_wis(cutoffs)
 
-        msk_str = mask_string(cutoffs)
+        msk_str = mask_string(cutoffs, wi_name)
 
         for lblock in list(self.block.keys()):
             masks = []
@@ -1438,12 +1432,12 @@ class Well(object):
         def add_headers(well_info, ignore_keys, _note):
             """
             Helper function that add keys to header.
-            :param well_info: 
+            :param well_info:
             :param ignore_keys:
             :param _note:
                 str
                 String with notes for the specific well
-            :return: 
+            :return:
             """
             for key in list(well_info.keys()):
                 if key in ignore_keys:
@@ -2206,7 +2200,7 @@ def overview(all_wells):
     :param all_wells:
         dict
         Dictionary with well names as keys, and corresponding well object as value
-        As returned from Project.load_all_wells() 
+        As returned from Project.load_all_wells()
     :return
         DataFrame
     """
