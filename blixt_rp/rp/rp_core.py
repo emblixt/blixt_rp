@@ -915,7 +915,8 @@ def gassmann_vel(v_p_1, v_s_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
     # Allow a mask to only do the fluid substitution where the mask is True
 
     # Avoid low porosity points
-    por[por < 7E-3] = 7E-3
+    if isinstance(por, np.ndarray):  # when input is an array
+        por[por < 7E-3] = 7E-3
 
     # Extract the initial bulk and shear modulus from v_p_1, v_s_1 and rho_1
     mu_1 = rho_1 * v_s_1**2 * 1E-6  # GPa

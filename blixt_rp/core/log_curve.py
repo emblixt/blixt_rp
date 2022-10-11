@@ -99,6 +99,10 @@ class LogCurve(object):
             header['name'] = name
         if 'well' not in list(header.keys()) or header['well'] is None:
             header['well'] = well
+        if 'unit' in list(header.keys()):
+            self.unit = header['unit']
+        else:
+            self.unit = None
 
         if isinstance(header, dict):
             self.header = Header(header)

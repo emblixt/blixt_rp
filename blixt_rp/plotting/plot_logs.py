@@ -10,7 +10,8 @@ from copy import deepcopy
 import blixt_rp.core.well as cw
 import blixt_utils.utils as uu
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
-from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
+from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot, \
+    chi_rotation_plot
 import blixt_rp.rp.rp_core as rp
 from blixt_utils.plotting import crossplot as xp
 from bruges.filters import ricker
@@ -493,7 +494,7 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
     :return:
     """
     from scipy.optimize import least_squares
-    from blixt_utils.misc.curve_fitting import residuals
+    from blixt_utils.misc.curve_fitting import residuals, linear_function
     from blixt_utils.utils import mask_string
 
     if suffix is None:
@@ -502,10 +503,6 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
     y_log_name = kwargs.pop('y_log_name', 'tvd')
     if block_name is None:
         block_name = cw.def_lb_name
-
-    # The linear target function we would like to fit the data:
-    def linear_function(_t, _a, _b):
-        return _a*_t + _b
 
     depth_trends = {}
     # Start looping over the different log types
@@ -523,6 +520,11 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
         tvd_min = 1E6
         tvd_max = -1E6
         for well in wells:
+            if log_name not in wells[well].log_names():
+                warn_txt = '{} log is missing in well {}'.format(log_name, well)
+                logger .warning(warn_txt)
+                print(warn_txt)
+                continue
             wells[well].calc_mask(cutoffs, 'my_mask', log_table=log_table, wis=wis, wi_name=wi_name)
             mask = wells[well].block[block_name].masks['my_mask'].data
             legend_items.append(well)
@@ -646,42 +648,9 @@ def chi_rotation(well, log_tables, wis, wi_name, templates, buffer=None, chi_ang
             if log_type not in log_table:
                 raise IOError('Log type {} not included in log table'.format(log_type))
 
-    # sety up plot window
-    fig = plt.figure(figsize=(20, 10))
-    fig.suptitle('EEI in {} interval in well {}, {}'.format(wi_name, well.well, suffix))
-    n_cols = len(chi_angles)
-    if ref_logtable is not None:
-        n_cols += 1  # add an extra column for the reference log
-    n_rows = 2
-    height_ratios = [1, 5]
-    spec = fig.add_gridspec(nrows=n_rows, ncols=n_cols,
-                            height_ratios=height_ratios,
-                            hspace=0., wspace=0.,
-                            left=0.05, bottom=0.03, right=0.98, top=0.96)
-    header_axes = []
-    axes = []
-    for i in range(n_cols):
-        header_axes.append(fig.add_subplot(spec[0, i]))
-        axes.append(fig.add_subplot(spec[1, i]))
-
-    # default colors used in the plotting assuming we plot brine, oil and gas logs
-    def_colors = ['b', 'g', 'r']
-    legends = ['brine', 'oil', 'gas']
-    # if we plot more logs per chi angle, we need to extend the lists
-    if len(log_tables) > 3:
-        def_colors += xp.cnames
-        for i in range(len(log_tables) - 3):
-            legends.append('xxx')
-
-    styles = [{'lw': 1.,
-               'color': def_colors[i],
-               'ls': '-'} for i in range(len(log_tables))]
-
     tb = well.block[block_name]  # this log block
     depth = tb.logs['depth'].data
     mask = np.ma.masked_inside(depth, wis[well.well][wi_name][0] - buffer, wis[well.well][wi_name][1] + buffer).mask
-    md_min = np.min(depth[mask])
-    md_max = np.max(depth[mask])
 
     # Calculate the EEI for the different elastic logs specified in the log tables
     # First calculate common average values used in the normalization
@@ -695,62 +664,45 @@ def chi_rotation(well, log_tables, wis, wi_name, templates, buffer=None, chi_ang
         rho = tb.logs[log_table['Density']].data[mask]
         eeis.append(rp.eei(vp, vs, rho, vp0=vp0, vs0=vs0, rho0=rho0))
 
-    # Find the common limits for all log types at each chi angle
+    # Calculate all EEI's and find the common limits for all log types at each chi angle
+    all_chis = np.zeros((len(depth[mask]), len(chi_angles), len(log_tables)))
     limits = []
+    common_limits = []
+    for i, chi in enumerate(chi_angles):
+        x_min = 1.E6
+        x_max = -1.E6
+        this_min, this_max = None, None
+        for j in range(len(log_tables)):
+            eei_at_this_chi = eeis[j](chi)
+            all_chis[:, i, j] = eei_at_this_chi
+            this_min = np.nanmin(eei_at_this_chi)
+            this_max = np.nanmax(eei_at_this_chi)
+            if this_max > x_max:
+                x_max = this_max
+            if this_min < x_min:
+                x_min = this_min
+        these_limits = [this_min, this_max]
+        common_limits.append([these_limits] * len(log_tables))
+
     if common_limit is None:
-        for i, chi in enumerate(chi_angles):
-            x_min = 1.E6
-            x_max = -1.E6
-            this_min, this_max = None, None
-            for j in range(len(log_tables)):
-                this_eei = eeis[j](chi)
-                this_min = np.nanmin(this_eei)
-                this_max = np.nanmax(this_eei)
-                if this_max > x_max:
-                    x_max = this_max
-                if this_min < x_min:
-                    x_min = this_min
-            these_limits = [this_min, this_max]
-            limits.append([these_limits] * len(log_tables))
+        limits = common_limits
     else:
         for i, chi in enumerate(chi_angles):
             limits.append([common_limit] * len(log_tables))
 
-    # Start plotting data
     if ref_logtable is not None:
         ref_log_type = list(ref_logtable.keys())[0]
         ref_log_name = ref_logtable[ref_log_type]
-        this_data = tb.logs[ref_log_name].data[mask]
-        this_template = templates[ref_log_type]
-        #normalize = mpl.colors.Normalize(vmin=this_template['min'], vmax=this_template['max'])
-        this_style = [{'lw': this_template['line width'],
-                       'color': this_template['line color'],
-                        'ls': this_template['line style']}]
-        this_legend = ['{} [{}]'.format(ref_log_name, this_template['unit'])]
-        xlims = axis_plot(axes[0], depth[mask],
-                          [this_data],
-                          [[this_template['min'], this_template['max']]],
-                          this_style,
-                          ylim=[md_min, md_max]
-                          )
-        header_plot(header_axes[0], xlims, this_legend, this_style)
-        #axes[0].fill_betweenx(depth[mask], 0, tb.logs[ref_log_name].data[mask],
-        #                      facecolor=plt.get_cmap(this_template['colormap'])(normalize(this_data)),
-        #                      #cmap=this_template['colormap'],
-        #                      clim=(this_template['min'], this_template['max'])
-        #                      )
+        ref_data = tb.logs[ref_log_name].data[mask]
+        ref_template = templates[ref_log_type]
+    else:
+        ref_data = None
+        ref_template = None
 
-    for i, chi in enumerate(chi_angles):
-        if ref_logtable is not None:
-            axes_i = i + 1
-        else:
-            axes_i = i
-        xlims = axis_plot(axes[axes_i], depth[mask],
-                          [eei(chi) for eei in eeis],
-                          limits[i], styles, ylim=[md_min, md_max],
-                          yticks=axes_i==0)
-        header_plot(header_axes[axes_i], xlims, legends, styles, title='Chi {:.0f}$^\circ$'.format(chi))
-
+    fig, axes, header_axes = chi_rotation_plot(all_chis, depth[mask], chi_angles, limits,
+                                               reference_log=ref_data,
+                                               reference_template=ref_template
+                                               )
     if plot_tops is not None:
         for ax in axes:
             for this_top in plot_tops:
@@ -760,6 +712,8 @@ def chi_rotation(well, log_tables, wis, wi_name, templates, buffer=None, chi_ang
                 axes[0].text(axes[0].get_xlim()[0], plot_tops[i], this_name, ha='left', va='bottom')
 
     axes[0].set_ylabel('Measured Depth [m]')
+    fig.suptitle('EEI in {} interval in well {}, {}'.format(wi_name, well.well, suffix))
+
     if results_folder:
         if suffix != '' and suffix[0] != '_':
             suffix = '_{}'.format(suffix)
@@ -770,5 +724,105 @@ def chi_rotation(well, log_tables, wis, wi_name, templates, buffer=None, chi_ang
         plt.show()
 
 
+def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=None, input_wiggles=None,
+                 yticks=True, ax=None, title=None, **kwargs):
+    """
+    Plot seismic traces at different incident angles for the given reflectivity function and wavelet.
+    UNLESS input_wiggles is used, in which case those are used and the reflectivity function and wavelet are
+    ignored
 
+    :param    reflectivity:
+        A function of incident_angle [deg] which returns an array of reflectivities
+    :param    twt:
+        array
+        Two way time in seconds
 
+    :param    wavelet:
+        numpy array
+        Array of wavelet amplitudes
+
+    :param    incident_angles:
+        list
+        List of incident angles in degrees that are used  in the reflectivity function
+    :param    extract_at:
+        float or list of floats
+        TWT value(s) at which the amplitudes are extracted as a function of incident angle
+    :param input_wiggles:
+        list, same length as incident_angles
+        List of arrays containing the wiggles at the different incident angles
+        Contradicts the normal behavior of plot_wiggles, and uses the input wiggles directly instead of
+        calculating them from reflectivity and wavelet
+    :param    :param yticks:
+        bool
+        if False the yticklabels are not shown
+    :param    ax:
+        matplotlib.pyplot Axes object
+    :param    title:
+        str
+        Title of the plot
+    :param    kwargs:
+        Keyword arguments passed on to wiggle_plot()
+
+    Returns:
+        ava_curves:
+            list of AVA (amplitude versus angle) curves, one for each "extract_at" float.
+            None if exctract_at is None
+        extract_at_indices
+            list of indices of where the AVA curves have been extracted
+
+    """
+    scaling = kwargs.pop('scaling', 80)
+    fill_pos_style = kwargs.pop('fill_pos_style', 'pos-blue')
+    fill_neg_style = kwargs.pop('fill_neg_style', 'neg-red')
+    if incident_angles is None:
+        incident_angles = [10., 15., 20., 25., 30., 35., 40.]
+    if extract_at is not None:
+        if isinstance(extract_at, float):
+            extract_at = [extract_at]
+        elif not isinstance(extract_at, list):
+            raise IOError('extract_at must be a float, or list of floats')
+    if input_wiggles is not None:
+        if len(input_wiggles) != len(incident_angles):
+            raise IOError('The number of input wiggles ({}) must the same as number of incident angles ({})'.format(
+                len(input_wiggles), len(incident_angles)
+            ))
+    if ax is None:
+        fig, ax = plt.subplots()
+    if title is None:
+        title = ''
+
+    # Find indexes where the AVA curves should be extracted
+    if extract_at is not None:
+        ava_curves = np.zeros((len(incident_angles), len(extract_at)))
+        extract_at_indices = []
+        for this_twt in extract_at:
+            extract_at_indices.append(np.argmin((twt - this_twt)**2))
+    else:
+        ava_curves = None
+        extract_at_indices = None
+
+    for i, inc_angle in enumerate(incident_angles):
+        if input_wiggles is None:
+            wiggle = np.convolve(wavelet, np.nan_to_num(reflectivity(inc_angle)), mode='same')
+            while len(wiggle) < len(twt):
+                wiggle = np.append(wiggle, np.ones(1) * wiggle[-1])  # extend with one item
+            if len(twt) < len(wiggle):
+                wiggle = wiggle[:len(twt)]
+        else:
+            wiggle = input_wiggles[i]
+
+        if extract_at is not None:
+            for j, t in enumerate(extract_at_indices):
+                ava_curves[i, j] = wiggle[t]
+
+        wiggle_plot(ax, twt, wiggle, inc_angle, scaling=scaling, fill_pos_style=fill_pos_style,
+                    fill_neg_style=fill_neg_style, **kwargs)
+
+    ax.grid(which='major', alpha=0.5)
+    if not yticks:
+        ax.get_yaxis().set_ticklabels([])
+    else:
+        ax.set_ylabel('TWT [s]')
+    ax.set_xlabel('Incident angle [deg]')
+
+    return ava_curves, extract_at_indices

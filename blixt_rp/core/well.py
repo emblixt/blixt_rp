@@ -1020,6 +1020,10 @@ class Well(object):
                     logger.warning(warn_txt)
                     continue
                 if log_table is not None:
+                    if _key not in log_table:
+                        warn_txt = 'Log table does not contain the log types the cutoffs are based on: {}'.format(_key)
+                        logger.warning(warn_txt)
+                        raise IOError(warn_txt)
                     _this_cutoffs[log_table[_key]] = _cutoffs[_key]
                 else:
                     warn_txt = 'Mask in {} is based on log types, but no log table is specified'.format(self.well)
