@@ -22,7 +22,7 @@ def harmonize_logs(well_dict, start, stop, step, orig_len, debug=False):
     :param well_dict:
         dict
         as returned from
-        null_val, generated_keys, well_dict = core.well._read_las(filename)
+        null_val, generated_keys, well_dict = core.well._read_data(filename)
     :param start:
         float
         The desired start (in MD [m]) of the well
