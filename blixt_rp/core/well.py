@@ -1347,7 +1347,7 @@ class Well(object):
         :param rename_well_logs:
             dict
             E.G.
-            {<las file name> : 'depth': ['DEPT', 'MD']}
+            {'depth': ['DEPT', 'MD']}
             where the key is the wanted well log name, and the value list is a list of well log names to translate from
         :param use_this_well_name:
             str
@@ -1408,7 +1408,7 @@ class Well(object):
         :param use_this_well_name:
             str
             Name we would like to use.
-            Useful when different las file have different wells for the same well
+            Useful when different las file have different well names for the same well
         :param note:
             str
             String containing notes for the las file being read
@@ -1665,7 +1665,7 @@ class Well(object):
             rename_well_logs:
                 dict
                 E.G.
-                {<las file name> : 'depth': ['DEPT', 'MD']}
+                {'depth': ['DEPT', 'MD']}
                 where the key is the wanted well log name, and the value list is a list of well log names to translate from
             use_this_well_name:
                 str
@@ -1678,9 +1678,7 @@ class Well(object):
         Returns:
         """
         if block_name is None:
-            error_txt = 'Name of Block where the data should be stored is needed'
-            logger.warning(error_txt)
-            raise IOError(error_txt)
+            block_name = os.path.basename(filename).split('.')[0]
 
         # make sure the only_these_logs is using small caps for all well logs
         if (only_these_logs is not None) and isinstance(only_these_logs, dict):
@@ -1704,20 +1702,106 @@ class Well(object):
             # A column header named 'Well', and a column header named 'MD' is necessary for it to work
 
             null_val = 'NaN'
-            generated_keys = []
-            accepted_sections = {"version", "well_info", "parameter", "curve"}
+            accepted_sections = {"version", "well_info", "parameter", "curve", "data"}
             well_dict = {xx: {} for xx in accepted_sections}
+            well_dict['version'] = {'vers': {'value': 'xlsx', 'unit': '', 'desc': 'Read from excel table of well data'}}
 
             # TODO
             # If data is stored on another sheet than the first, we need to add support for this!
             table = pd.read_excel(filename, header=0, engine='openpyxl')
+            generated_keys = [xx.lower() for xx in list(table.keys())]
+            for key in generated_keys:
+                well_dict['curve'][key] = {'api_code': None, 'unit': None, 'desc' : None}
+                well_dict['data'][key] = []  # initate empty lists of data
+            # collect data from excel sheet for current well
+            for i in range(len(table)):
+                this_well_name = uio.fix_well_name(table.iloc[i, 0])
+                if this_well_name != self.well:
+                    continue
+                for j, key in enumerate(generated_keys):
+                    well_dict['data'][key].append(table.iloc[i, j])
+
+            # Create / update the well_info part based on the imported data
+            md = None
+            try:
+                md = np.array(well_dict['data']['md'])
+            except:
+                raise IOError('Excel sheet {} lacks information about MD'.format(filename))
+            if md is not None:
+                well_dict['well_info']['strt'] = {'value': md.min(), 'unit': 'm', 'desc': 'First reference value'}
+                well_dict['well_info']['stop'] = {'value': md.max(), 'unit': 'm', 'desc': 'Last reference value'}
+                well_dict['well_info']['step'] = {'value': None, 'unit': '', 'desc': 'Data is not regularly sampled'}
+                well_dict['well_info']['null'] = {'value': null_val, 'unit': '', 'desc': 'Missing value'}
+                well_dict['well_info']['well'] = {'value': self.well, 'unit': '', 'desc': 'Well name'}
+
+            # return null_val, generated_keys, well_dict
+            # Rename well logs
+            if rename_well_logs is None:
+                rename_well_logs = {'depth': ['Depth', 'DEPT', 'MD', 'DEPTH']}
+            elif isinstance(rename_well_logs, dict) and ('depth' not in list(rename_well_logs.keys())):
+                rename_well_logs['depth'] = ['Depth', 'DEPT', 'MD', 'DEPTH']
+
+            for key in list(well_dict['curve'].keys()):
+                well_dict['curve'][key]['orig_name'] = ''
+                for rname, value in rename_well_logs.items():
+                    if key.lower() in [x.lower() for x in value]:
+                        well_dict['curve'][key]['orig_name'] = '{}'.format(', '.join(value))
+                        info_txt = 'Renaming log from {} to {}'.format(key, rname)
+                        # print('INFO: {}'.format(info_txt))
+                        logger.info(info_txt)
+                        well_dict['curve'][rname.lower()] = well_dict['curve'].pop(key)
+                        well_dict['data'][rname.lower()] = well_dict['data'].pop(key)
+
+            logger.debug('Reading {}'.format(filename))
+
+            # Rename well
+            if use_this_well_name is not None:
+                well_dict['well_info']['well']['value'] = uio.fix_well_name(use_this_well_name)
+
+            # Test if this well has a header, and that we are loading from the same well
+            if 'well' not in list(self.header.keys()):  # current well object is empty
+                # Add all well specific headers to well header
+                self.header = add_headers(self.header, well_dict['well_info'], ['strt', 'stop', 'step'], note)
+                self.header.name = {
+                    'value': well_dict['well_info']['well']['value'],
+                    'unit': '',
+                    'desc': 'Well name'}
+                # Add logs to a Block
+                self.block = add_logs_to_block(self.block, well_dict, block_name, only_these_logs, filename)
+
+            else:  # There is a well loaded already
+                if well_dict['well_info']['well']['value'] == self.header.well.value:
+                    add_well = True
+                else:
+                    message = 'Trying to add a well with different name ({}) to existing well object ({})'.format(
+                        well_dict['well_info']['well']['value'],
+                        self.header.well.value
+                    )
+                    logger.warning(message)
+                    print(message)
+                    question = 'Do you want to add well {} to existing well {}? Yes or No'.format(
+                        well_dict['well_info']['well']['value'],
+                        self.header.well.value
+                    )
+                    ans = input(question)
+                    logger.info('{}: {}'.format(question, ans))
+                    if 'y' in ans.lower():
+                        add_well = True
+                    else:
+                        add_well = False
+
+                if add_well:
+                    # Add all well specific headers to well header, except well name
+                    self.header = add_headers(self.header, well_dict['well_info'], ['strt', 'stop', 'step', 'well'], note)
+                    # add to existing LogBloc
+                    self.block = add_logs_to_block(self.block, well_dict, block_name, only_these_logs, filename)
+
         else:
             # TODO
             # Make read_log_data() more flexible so that it can handle standard las files too.
             error_txt = 'read_log_data() only supports excel sheet data yet'
             logger.warning(error_txt)
             raise NotImplementedError(error_txt)
-
 
     def keys(self):
         return self.__dict__.keys()
@@ -2386,7 +2470,7 @@ def add_logs_to_block(_block, _well_dict, _block_name, _only_these_logs, _filena
         for _key in list(_only_these_logs.keys()):
             if _key in list(_well_dict['curve'].keys()):
                 this_header = _well_dict['curve'][_key]
-                this_header.update({'log_type': only_these_logs[_key]})
+                this_header.update({'log_type': _only_these_logs[_key]})
                 logger.debug('Adding log {}'.format(_key))
                 these_logs[_key] = LogCurve(
                     name=_key,
@@ -2395,7 +2479,7 @@ def add_logs_to_block(_block, _well_dict, _block_name, _only_these_logs, _filena
                     data=np.array(_well_dict['data'][_key]),
                     header=this_header
                 )
-                these_logs[_key].header.orig_filename = filename
+                these_logs[_key].header.orig_filename = _filename
             else:
                 logger.warning("Log '{}' in {} is missing\n  [{}]".format(
                     _key,
@@ -2415,7 +2499,7 @@ def add_logs_to_block(_block, _well_dict, _block_name, _only_these_logs, _filena
                 data=np.array(_well_dict['data'][_key]),
                 header=_well_dict['curve'][_key]
             )
-            these_logs[_key].header.orig_filename = filename
+            these_logs[_key].header.orig_filename = _filename
             these_logs[_key].header.name = _key
     else:
         logger.warning('No logs added to {}'.format(_well_dict['well_info']['well']['value']))
