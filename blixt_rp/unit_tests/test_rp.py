@@ -70,7 +70,7 @@ class RpTestCase(unittest.TestCase):
         :return:
         """
         rho = RpTestCase.w.block['Logs'].logs['den'].data
-        vp = cnvrt(RpTestCase.w.block['Logs'].logs['ac'].data, 'us/ft', 'm/s')
+        success, vp = cnvrt(RpTestCase.w.block['Logs'].logs['ac'].data, 'us/ft', 'm/s')
         incept2 = rp.intercept(vp, None, rho, None, along_wiggle=True)
         i = np.nanargmax(incept2)
         incept1 = rp.intercept(vp[i], vp[i+1], rho[i], rho[i+1])
@@ -88,8 +88,8 @@ class RpTestCase(unittest.TestCase):
         :return:
         """
         rho = RpTestCase.w.block['Logs'].logs['den'].data
-        vp = cnvrt(RpTestCase.w.block['Logs'].logs['ac'].data, 'us/ft', 'm/s')
-        vs = cnvrt(RpTestCase.w.block['Logs'].logs['acs'].data, 'us/ft', 'm/s')
+        success, vp = cnvrt(RpTestCase.w.block['Logs'].logs['ac'].data, 'us/ft', 'm/s')
+        success, vs = cnvrt(RpTestCase.w.block['Logs'].logs['acs'].data, 'us/ft', 'm/s')
         grad2 = rp.gradient(vp, None, vs, None, rho, None, along_wiggle=True)
         i = 10637
         grad1 = rp.gradient(vp[i], vp[i+1], vs[i], vs[i+1], rho[i], rho[i+1])
@@ -109,8 +109,8 @@ class RpTestCase(unittest.TestCase):
         i = 10637
         theta = 10.  # degrees
         rho = RpTestCase.w.block['Logs'].logs['den'].data
-        vp = cnvrt(RpTestCase.w.block['Logs'].logs['ac'].data, 'us/ft', 'm/s')
-        vs = cnvrt(RpTestCase.w.block['Logs'].logs['acs'].data, 'us/ft', 'm/s')
+        success, vp = cnvrt(RpTestCase.w.block['Logs'].logs['ac'].data, 'us/ft', 'm/s')
+        success, vs = cnvrt(RpTestCase.w.block['Logs'].logs['acs'].data, 'us/ft', 'm/s')
 
         func1 = rp.reflectivity(vp[i], vp[i+1], vs[i], vs[i+1], rho[i], rho[i+1])
         func1_2 = rp.reflectivity(vp[i+1], vp[i+2], vs[i+1], vs[i+2], rho[i+1], rho[i+2])

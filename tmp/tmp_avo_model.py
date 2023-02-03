@@ -216,7 +216,7 @@ def test_synt():
 
     depth = w.block['Logs'].logs['depth'].data / 3.28084  # feet to m
     rho_orig = w.block['Logs'].logs['rhob'].data * 1000.  # g/cm3 to kg/m3
-    vp_orig = ucd.convert(w.block['Logs'].logs['dt'].data, 'us/ft', 'm/s')
+    success, vp_orig = ucd.convert(w.block['Logs'].logs['dt'].data, 'us/ft', 'm/s')
     dt_orig = w.block['Logs'].logs['dt'].data * 3.2804  # convert usec/ft to usec/m
 
     #
@@ -453,9 +453,9 @@ def test_synt2():
     }
 
     # when input is in feet and usec
-    #depth = ucd.convert(w.block['Logs'].logs['depth'].data, 'ft', 'm')
+    #succes, depth = ucd.convert(w.block['Logs'].logs['depth'].data, 'ft', 'm')
     #rho_orig = w.block['Logs'].logs['rhob'].data * 1000.  # g/cm3 to kg/m3
-    #vp_orig = ucd.convert(w.block['Logs'].logs['dt'].data, 'us/ft', 'm/s')
+    #succes, vp_orig = ucd.convert(w.block['Logs'].logs['dt'].data, 'us/ft', 'm/s')
     #dt_orig = w.block['Logs'].logs['dt'].data * 3.2804  # convert usec/ft to usec/m
     # else
     depth = w.block['Logs'].logs['depth'].data
@@ -465,7 +465,7 @@ def test_synt2():
 
     # when input is in feet and usec
     #rho = w.block['Logs'].logs['rhob'].despike(0.1) * 1000.  # g/cm3 to kg/m3
-    #vp = ucd.convert(w.block['Logs'].logs['dt'].despike(5), 'us/ft', 'm/s')
+    #succes, vp = ucd.convert(w.block['Logs'].logs['dt'].despike(5), 'us/ft', 'm/s')
     #dt = w.block['Logs'].logs['dt'].despike(5) * 3.2804  # convert usec/ft to usec/m
     # else
     rho = w.block['Logs'].logs[log_table['Density']].despike(0.1) * 1000.  # g/cm3 to kg/m3

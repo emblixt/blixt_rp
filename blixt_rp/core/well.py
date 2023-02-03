@@ -299,15 +299,19 @@ class Project(object):
         return list(set(active_wells))
 
     def load_all_wells(self, block_name=None, rename_logs=None,
-                       include_these_wells=None, include_these_intervals=None):
+                       include_these_wells=None, include_these_intervals=None,
+                       unit_convert_using_template=False):
         """
         :param rename_logs:
             dict
             Dictionary contain information about how well logs are renamed to achieve harmonized log names
             across the whole project.
             E.G. in las file for Well_A, the shale volume is called VCL, while in Well_E it is called VSH.
-            To to rename the VSH log to VCL upon import (not in the las files) the rename_logs dict should be set to
+            To rename the VSH log to VCL upon import (not in the las files) the rename_logs dict should be set to
                 {<Well E las file name path>: 'VCL': ['VSH']}}
+
+            If None, it uses the defined renaming rules used in the project table:W
+
         :param include_these_wells:
             string, or list of strings
             If None, all wells where "Use" = "Yes" in the project table are loaded
@@ -316,6 +320,10 @@ class Project(object):
             string, or list of strings
             if None, the whole log is loaded
             Else, only load the part of the logs who are contained inside the listed intervals
+        :param unit_convert_using_template:
+            Bool
+            If true, it uses the templates to unit convert well logs according to what is specified in the Templates
+            sheet of the project table
 
         :return:
             dict
@@ -338,6 +346,10 @@ class Project(object):
             if isinstance(include_these_intervals, str):
                 include_these_intervals = [include_these_intervals]
             wis = uio.project_working_intervals(self.project_table)
+        if unit_convert_using_template:
+            _templates = uio.project_templates(self.project_table)
+        else:
+            _templates = None
 
         all_wells = {}
         last_wname = ''
@@ -352,14 +364,15 @@ class Project(object):
 
             if wname != last_wname:  # New well
                 w = Well()
-                w.read_well_table(well_table, i, block_name=block_name, rename_well_logs=rename_logs)
+                w.read_well_table(well_table, i, block_name=block_name, rename_well_logs=rename_logs,
+                                  templates=_templates)
                 all_wells[wname] = w
                 last_wname = wname
             else:  # Existing well
                 all_wells[wname].read_well_table(well_table, i,
                                                  block_name=block_name,
                                                  rename_well_logs=rename_logs,
-                                                 use_this_well_name=wname)
+                                                 use_this_well_name=wname, templates=_templates)
 
         # rename well names so that the well name defined in the well_table is used "inside" each well
         for wname, well in all_wells.items():
@@ -603,14 +616,14 @@ class Well(object):
                     else:
                         # assume it is in feet
                         info_txt += '[feet].'
-                        return_value = cnvrt(this_result, 'ft', 'm')
+                        success, return_value = cnvrt(this_result, 'ft', 'm')
                 elif self.header[_key].unit.lower() == 'm':
                     info_txt += '[m].'
                     return_value = this_result
                 else:
                     # assume it is in feet
                     info_txt += '[feet].'
-                    return_value = cnvrt(this_result, 'ft', 'm')
+                    success, return_value = cnvrt(this_result, 'ft', 'm')
 
                 print('INFO: {}'.format(info_txt))
                 logger.info(info_txt)
@@ -916,7 +929,9 @@ class Well(object):
     def add_twt(self, project_table, verbose=True):
         """
         calculates (interpolates) the Two way time based on the input time-depth relations specified in the 
-        project table
+        project table.
+        If no checkshots are given for a specific well, it will try to use an existing OWT log to calculate the
+        TWT, and when no OWT log exists, nothing is done. Living in the hope that the well already have a TWT log:-)
 
         :param project_table:
             str
@@ -929,13 +944,20 @@ class Well(object):
         """
         checkshots, checkshot_info = uio.read_checkshot_or_wellpath(project_table, self.well, "Checkshots")
 
+        if checkshots is None:
+            _twt_points = None
+            _filename = None
+        else:
+            _twt_points = {
+                'MD': checkshots['MD'],
+                'TWT': np.array(checkshots['TWT'])
+            }
+            _filename = checkshot_info['filename']
+
         for lblock in list(self.block.keys()):
             self.block[lblock].add_twt(
-                {
-                  'MD': checkshots['MD'],
-                  'TWT': np.array(checkshots['TWT'])
-                },
-                twt_file=checkshot_info['filename'],
+                _twt_points,
+                twt_file=_filename,
                 verbose=verbose)
 
     def calc_mask(self,
@@ -1330,7 +1352,7 @@ class Well(object):
             fig.savefig(savefig)
 
     def read_well_table(self, well_table, index, block_name=None,
-                        rename_well_logs=None, use_this_well_name=None):
+                        rename_well_logs=None, use_this_well_name=None, templates=None):
         """
         Takes the well_table and reads in the well defined by the index number.
 
@@ -1353,6 +1375,9 @@ class Well(object):
             str
             Name we would like to use.
             Useful when different las file have different wells for the same well
+        :param templates:
+            dict
+            Template dictionary as returned from blixt_utils.io.io.project_templates('project_table.xlsx')
         :return:
         """
         if block_name is None:
@@ -1367,7 +1392,8 @@ class Well(object):
                       block_name=block_name,
                       rename_well_logs=rename_well_logs[lfile],
                       use_this_well_name=use_this_well_name,
-                      note=note)
+                      note=note,
+                      templates=templates)
 
         # rename well names so that the well name defined in the well_table is used "inside" each well
         wname = well_table[lfile]['Given well name']
@@ -1384,7 +1410,8 @@ class Well(object):
             only_these_logs=None,
             rename_well_logs=None,
             use_this_well_name=None,
-            note=None
+            note=None,
+            templates=None
     ):
         """
         Reads in a las file (filename) and adds the selected logs (listed in only_these_logs) to the
@@ -1412,6 +1439,11 @@ class Well(object):
         :param note:
             str
             String containing notes for the las file being read
+        :param templates: 
+            dict
+            Template dictionary as returned from blixt_utils.io.io.project_templates('project_table.xlsx')
+            If this is provided, read_las() tries to compare the units in the las file, with the units defined
+            in the Template dictionary, for the specific log type, and convert data accordingly
         :return:
         """
         if block_name is None:
@@ -1450,7 +1482,7 @@ class Well(object):
                     _note = '{}\n{}'.format(self.header.note.value, _note)
                 self.header.__setitem__('note', _note)
 
-        def _add_logs_to_block(_well_dict, _block_name, _only_these_logs, _filename):
+        def _add_logs_to_block(_well_dict, _block_name, _only_these_logs, _filename, _templates=None):
             """
             Helper function that add logs to the given block name.
 
@@ -1458,6 +1490,9 @@ class Well(object):
             :param _block_name:
             :param _only_these_logs:
             :param _filename:
+            :param _templates: 
+                dict
+                Template dictionary as returned from blixt_utils.io.io.project_templates('project_table.xlsx')
             :return:
 
             """
@@ -1515,14 +1550,26 @@ class Well(object):
                 # add only the selected logs
                 for _key in list(_only_these_logs.keys()):
                     if _key in list(_well_dict['curve'].keys()):
-                        this_header = _well_dict['curve'][_key]
-                        this_header.update({'log_type': only_these_logs[_key]})
                         logger.debug('Adding log {}'.format(_key))
+                        # if _templates is not None:
+                        #     print('Adding log {}, with unit {}, to unit {}'.format(
+                        #         _key, _well_dict['curve'][_key]['unit'], _templates[_only_these_logs[_key]]['unit']))
+                        _data = np.array(_well_dict['data'][_key])
+                        this_header = _well_dict['curve'][_key]
+                        this_header.update({'log_type': _only_these_logs[_key]})
+                        # Try to convert the units of the data according to the units given in _templates
+                        if _templates is not None:
+                            _success, _data = cnvrt(
+                                _data,
+                                _well_dict['curve'][_key]['unit'],
+                                _templates[_only_these_logs[_key]]['unit'])
+                            if _success:
+                                this_header.update({'unit': _templates[_only_these_logs[_key]]['unit']})
                         these_logs[_key] = LogCurve(
                             name=_key,
                             block=_block_name,
                             well=_well_dict['well_info']['well']['value'],
-                            data=np.array(_well_dict['data'][_key]),
+                            data=_data,
                             header=this_header
                         )
                         these_logs[_key].header.orig_filename = filename
@@ -1608,7 +1655,7 @@ class Well(object):
                 'unit': '',
                 'desc': 'Well name'}
             # Add logs to a Block
-            _add_logs_to_block(well_dict, block_name, only_these_logs, filename)
+            _add_logs_to_block(well_dict, block_name, only_these_logs, filename, templates)
 
         else:  # There is a well loaded already
             if well_dict['well_info']['well']['value'] == self.header.well.value:
@@ -1635,7 +1682,7 @@ class Well(object):
                 # Add all well specific headers to well header, except well name
                 _add_headers(well_dict['well_info'], ['strt', 'stop', 'step', 'well'], note)
                 # add to existing LogBloc
-                _add_logs_to_block(well_dict, block_name, only_these_logs, filename)
+                _add_logs_to_block(well_dict, block_name, only_these_logs, filename, templates)
 
     def read_log_data(
             self,
@@ -1876,7 +1923,8 @@ class Block(object):
             start = np.nanmin(self.logs['depth'].data)
         if self.get_depth_unit() != 'm':
             # Assume it is in feet
-            return cnvrt(start, 'ft', 'm')
+            success, new_start = cnvrt(start, 'ft', 'm')
+            return new_start
         else:
             return start
 
@@ -1899,7 +1947,7 @@ class Block(object):
         if self.header.step.value is not None:
             step = self.header.step.value
             if 'f' in self.header.step.unit:  # step length is in feet
-                step = cnvrt(step, 'ft', 'm')
+                success, step = cnvrt(step, 'ft', 'm')
         return step
 
     step = property(get_step)
@@ -2078,7 +2126,7 @@ class Block(object):
 
         # Replace NaN values of input log using repl_vel
         if feet_unit:
-            repl_vel = cnvrt(repl_vel, 'm', 'ft')
+            success, repl_vel = cnvrt(repl_vel, 'm', 'ft')
         if sonic:
             repl = 1. / repl_vel
         else:
@@ -2128,7 +2176,7 @@ class Block(object):
         Converts sonic to velocity
         :return:
         """
-        from blixt_utils.misc.convert_data import convert
+        from blixt_utils.misc.convert_data import convert as cnvrt
 
         for ss, vv, vtype in zip(
                 ['ac', 'acs'], ['vp', 'vs'], ['P velocity', 'S velocity']
@@ -2138,7 +2186,7 @@ class Block(object):
                 continue
             else:
                 din = self.logs[ss].data
-                dout = convert(din, 'us/ft', 'm/s')
+                success, dout = cnvrt(din, 'us/ft', 'm/s')
 
             self.add_log(
                 dout,
@@ -2239,7 +2287,13 @@ class Block(object):
 
     def add_twt(self, twt_points, twt_file=None, verbose=True):
         """
-       adds (through interpolation) the two-way-time (TWT) in seconds [s] to the well based on the input twt points
+       adds (through interpolation) the two-way time (TWT) in seconds [s] to the well based on the input twt points
+
+       If no twt_points (None) are provided, it will search for an existing One-way time log in the well, and convert those to
+       TWT
+
+       If the overwrite option is set to True, it will try to overwrite any existing TWT log with the interpolated
+       results from twt_points
 
         :param twt_points:
             dict
@@ -2255,11 +2309,17 @@ class Block(object):
             str
             Name of file the twt points are calculated from.
             Used in history of objects
+
+        :param verbose:
+            Bool
+            If True, plots are generated to show the result
+
         :return:
 
         """
-        if twt_points is None:
-            return None
+        _x = None
+        _y = None
+        _name = None
 
         if isinstance(twt_file, str):
             fname = twt_file
@@ -2268,17 +2328,33 @@ class Block(object):
 
         md = self.logs['depth'].data
 
-        # Calculate and write TWT to well
-        sign = 1.0
-        if sum(twt_points['TWT'][-10:]) < 0:
-            sign = -1.0
-        new_twt = interp1d(twt_points['MD'], sign * np.array(twt_points['TWT']),
-                           kind='linear',
-                           bounds_error=False,
-                           fill_value='extrapolate')(md)
+        if twt_points is None:
+            # Use the first existing One-way time log to calculate a TWT log
+            if 'One-way time' in self.log_types():
+                log_curve = self.get_logs_of_type('One-way time')[0]
+                new_twt = 2. * log_curve.data
+                fname = log_curve.name
+                _name = 'twt_from_owt'
+                _x = md
+                _y = 1000.0 * log_curve.data
+            else:
+                return None
+        else:
+            # Calculate TWT from input points
+            sign = 1.0
+            if sum(twt_points['TWT'][-10:]) < 0:
+                sign = -1.0
+            new_twt = interp1d(twt_points['MD'], sign * np.array(twt_points['TWT']),
+                               kind='linear',
+                               bounds_error=False,
+                               fill_value='extrapolate')(md)
+            _name = 'twt_from_interp'
+            _x = twt_points['MD']
+            _y = sign * 1000. * np.array(twt_points['TWT'])
+
         if verbose:
             fig, axes = plt.subplots(1, 1, figsize=(5, 8))
-            axes.plot(twt_points['MD'], sign * 1000. * np.array(twt_points['TWT']), '-or', lw=0)
+            axes.plot(_x, _y, '-or', lw=0)
             axes.plot(md, 1000. * new_twt)
             axes.set_xlabel('MD [m]')
             axes.set_ylabel('TWT [ms]')
@@ -2286,11 +2362,11 @@ class Block(object):
 
         self.add_log(
             new_twt,
-            'twt',
-            'Time',
+            _name,
+            'Two-way time',
             header={
                 'unit': 's',
-                'desc': 'Two way time, positive downwards',
+                'desc': 'Two-way time, positive downwards',
                 'modification_history': 'calculated from {}'.format(fname)})
 
         if verbose:

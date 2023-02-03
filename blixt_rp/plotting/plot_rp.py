@@ -172,11 +172,11 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
             vs_unit = well.block[block_name].logs[log_table['S velocity'].lower()].header.unit
         else:  # Assume we can use the sonic logs instead.
             vp_unit = 'm/s'
-            vp = cnvrt(well.block[block_name].logs[log_table['Sonic'].lower()].data,  # convert this data
+            success, vp = cnvrt(well.block[block_name].logs[log_table['Sonic'].lower()].data,  # convert this data
                        well.block[block_name].logs[log_table['Sonic'].lower()].header.unit,  # from this unit
                        vp_unit)  # to this unit
             vs_unit = 'm/s'
-            vs = cnvrt(well.block[block_name].logs[log_table['Shear sonic'].lower()].data,
+            success, vs = cnvrt(well.block[block_name].logs[log_table['Shear sonic'].lower()].data,
                        well.block[block_name].logs[log_table['Shear sonic'].lower()].header.unit,
                        vs_unit)
 
