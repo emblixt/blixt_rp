@@ -881,6 +881,82 @@ def constantcement_hidden(k0, g0, phi, phi_c=None, apc=None, c_n=None, k_c=None,
     return k_eff, g_eff
 
 
+def delta_log_r(r, ac, r0=None, ac0=None):
+    """
+    Calculates the Delta Log R value based on eq. 1 in Passey et al. 1990 "A practical model for organic richness ..."
+    Args:
+        r:
+            Param
+            Deep resistivity [Ohmm]
+        ac:
+            Param
+            Acoustic sonic [us/ft]
+        r0:
+            Param
+            Deep resistivity baseline [Ohmm], taken from a non-source, clay-rich, section of the well near the
+            area of interest
+        ac0:
+            Param
+            Acoustic sonic baseline [us/ft], taken from a non-source, clay-rich, section of the well
+
+    Returns:
+        Delta log R [-]:
+            Param
+    """
+    if r0 is None:
+        r0 = Param('', 1., '', '')
+    if ac0 is None:
+        ac0 = Param('', 100., '', '')
+
+    r = test_value(r, 'Ohmm')
+    ac = test_value(ac, 'us/ft')
+    r0 = test_value(r0, 'Ohmm')
+    ac0 = test_value(ac0, 'us/ft')
+    return Param(
+        name='DeltaLogR',
+        value=np.log10(r.value / r0.value) + 0.02 * (ac.value - ac0.value),
+        unit='-',
+        desc='Delta log R according to Passey et al. 1990'
+    )
+
+
+def toc_from_delta_log_r(deltalogr, lom, a=None, b=None):
+    """
+    Calculates the TOC from Delta Log R and Level of organic metamorphism units (lom)
+    based on eq. 2 in Passey et al. 1990 "A practical model for organic richness ..."
+    Args:
+        deltalogr:
+            Param
+            Delta log R [-] value estimated from Sonic and Resitivity logs using the method described in the
+            Passey et al. article
+        lom:
+            float
+            Unitless number somewhere between 6 and 11 which describes the level of organic metamorphism units
+            (Hood et al. 1975)
+        a:
+            float
+            Constant of the TOC equation
+        ac0:
+            float
+            Constant of the TOC equation
+
+    Returns:
+        toc
+            Total organic content
+    """
+    if a is None:
+        a = 2.297
+    if b is None:
+        b = 0.1688
+
+    dlr = test_value(deltalogr, '-')
+    return Param(
+        name='TOC',
+        value=dlr.value * 10**(a - b * lom),
+        unit='%',
+        desc='TOC estimated from Delta log R according to Passey et al. 1990'
+    )
+
 def gassmann_vel(v_p_1, v_s_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
     """
     Gassmann fluid substitution with velocity and density as input and output, following the

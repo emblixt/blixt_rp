@@ -11,7 +11,7 @@ import blixt_rp.core.well as cw
 import blixt_utils.utils as uu
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot, \
-    chi_rotation_plot
+    deltalogr_plot, chi_rotation_plot
 import blixt_rp.rp.rp_core as rp
 from blixt_utils.plotting import crossplot as xp
 from bruges.filters import ricker
@@ -24,7 +24,8 @@ def find_nearest(data, value):
     return np.nanargmin(np.abs(data - value))
 
 
-def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=None, savefig=None, **kwargs):
+def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=None, savefig=None,
+              intervals=None, interval_names=None, interval_colors=None, **kwargs):
     """
     Attempts to draw a plot similar to the "CPI plots", for one working interval with some buffer.
     :param well:
@@ -57,6 +58,14 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         str
         Full path name to file (.png or .pdf) to which the plot is exported
         if None, the plot is displayed instead
+    :param intervals:
+        list of lists with top and base of N intervals that we want to highlight in the plot, e.g.
+        [[interval1_top, interval1_base], [interval2_top, interval2_base], ...]
+    :param interval_names:
+        list of N names to annotate the intervals
+    :param interval_colors:
+        list of N colors to color each interval
+        if equal to string 'cyclic', two hardcoded colors are used to cyclically color each interval
     :kwargs
         keyword arguments
         backus_length: The Backus averaging length in m
@@ -76,6 +85,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     suffix = kwargs.pop('suffix', '')
     wiggle_fill_style = kwargs.pop('wiggle_fill_style', 'default')
     backus_length = kwargs.pop('backus_length', 5.0)
+    start_r = kwargs.pop('start_r', 0.015)
 
     if wiggle_fill_style == 'opposite':
         fill_pos_style = 'pos-blue'
@@ -90,7 +100,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     ax_names = ['gr_ax', 'md_ax', 'twt_ax', 'res_ax', 'rho_ax', 'cpi_ax', 'ai_ax', 'synt_ax']
     n_cols = 8
     n_rows = 2
-    width_ratios = [1, 0.3, 0.3, 1, 1, 1, 1, 2]
+    width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 2]
     height_ratios = [1, 5]
     spec = fig.add_gridspec(nrows=n_rows, ncols=n_cols,
                             height_ratios=height_ratios, width_ratios=width_ratios,
@@ -105,21 +115,26 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     #
     # Start plotting data
     #
+    wi_name = wi_name.upper()
     tb = well.block[block_name]  # this log block
     depth = tb.logs['depth'].data
     mask = np.ma.masked_inside(depth, wis[well.well][wi_name][0]-buffer, wis[well.well][wi_name][1]+buffer).mask
     md_min = np.min(depth[mask])
     md_max = np.max(depth[mask])
 
-    if 'twt' in tb.log_names():
-        twt = tb.logs['twt'].data
-        twt_min = np.min(twt[mask])
-        twt_max = np.max(twt[mask])
-        print('Using real twt data')
+    if 'Two-way time' in tb.log_types():
+        # Extract the first TWT log
+        twt = tb.get_logs_of_type('Two-way time')[0].data
+        twt_min = np.nanmin(twt[mask])
+        twt_max = np.nanmax(twt[mask])
+        info_txt = 'Using real twt data'
     else:
         twt = None
         twt_min = None
         twt_max = None
+        info_txt = 'Did not find TWT log, calculating from Sonic or Vp'
+    print('INFO: {}'.format(info_txt))
+    logger.info(info_txt)
 
     #
     # Gamma ray and Caliper
@@ -145,7 +160,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     #
     # MD
     header_plot(header_axes['md_ax'], None, None, None, title='MD [m]')
-    annotate_plot(axes['md_ax'], depth[mask], ylim=[md_min, md_max])
+    annotate_plot(axes['md_ax'], depth[mask], intervals=intervals, interval_names=interval_names, ylim=[md_min, md_max])
 
     #
     # TWT
@@ -196,21 +211,38 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
 
     #
     # Rho
-    try_these_log_types = ['Density', 'Neutron density']
-    log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
-    lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
-    # Replace the density with the one selected by log_table
-    lognames['Density'] = log_table['Density']
-    limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
+    # try_these_log_types = ['Density', 'Neutron density']
+    # log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
+    # lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
+    # # Replace the density with the one selected by log_table
+    # lognames['Density'] = log_table['Density']
+    # limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
+    # styles = [{'lw': templates[x]['line width'],
+    #            'color': templates[x]['line color'],
+    #            'ls': templates[x]['line style']} for x in log_types]
+    # legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
+
+    # for xx in log_types:
+    #     print(lognames[xx])
+
+    # xlims = axis_plot(axes['rho_ax'], depth[mask],
+    #                   [tb.logs[lognames[xx]].data[mask] for xx in log_types],
+    #                   limits, styles, yticks=False, ylim=[md_min, md_max])
+    # header_plot(header_axes['rho_ax'], xlims, legends, styles)
+
+    # TODO
+    # Try DeltaLogR method instead of plotting Rho
+    log_types = ['Sonic', 'Resistivity']
+    # Use the logs provided by the log_table
+    lognames = {x: log_table[x] for x in log_types}
+
+    limits = [[200., 0.], [start_r, 10000 * start_r]]
     styles = [{'lw': templates[x]['line width'],
                'color': templates[x]['line color'],
                'ls': templates[x]['line style']} for x in log_types]
     legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
 
-    for xx in log_types:
-        print(lognames[xx])
-
-    xlims = axis_plot(axes['rho_ax'], depth[mask],
+    xlims = deltalogr_plot(axes['rho_ax'], depth[mask],
               [tb.logs[lognames[xx]].data[mask] for xx in log_types],
               limits, styles, yticks=False, ylim=[md_min, md_max])
     header_plot(header_axes['rho_ax'], xlims, legends, styles)
@@ -261,8 +293,8 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         ai = None
     if ai is not None:
         #styles = [{'lw': 1, 'color': 'k', 'ls': '--'}]
-        log_types = ['AI']
-        lognames = {'AI': 'AI'}
+        log_types = ['Impedance']
+        lognames = {'Impedance': 'AI'}
         limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
         styles = [{'lw': templates[x]['line width'],
                    'color': templates[x]['line color'],
