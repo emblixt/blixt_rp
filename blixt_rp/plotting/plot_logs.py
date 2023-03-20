@@ -70,6 +70,20 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         keyword arguments
         backus_length: The Backus averaging length in m
         suffix: string. Added to the default title
+        source_rock_study:
+            dict
+            Well names are keys, and each item is a 2 item list of resistivity and sonic baseline values used in the
+            calculation of DeltaLogR and TOC. e.g.:
+            {'34_6_2S': [3., 104.], ...}
+        ref_toc:
+            dict
+            dictionary which contain core sampled TOC and LOM (and MD) values for multiple wells. eg.:
+            { '34_6_2S': {'md': np.array, 'toc': np.array, 'lom': np.array}, ... }
+        start_r:
+            dict
+            Well names are keys, with resistivity values as items. This value is the lower plotting range of the
+            resistivity in the Delta log R plot
+            {'34_6_2S': 0.015, ...}
     :return:
     """
     log_table = small_log_table(log_table)
@@ -78,6 +92,8 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     if block_name is None:
         block_name = cw.def_lb_name
 
+    text_style = {'fontsize': 'x-small', 'bbox': {'facecolor': 'lightgray', 'alpha': 0.5}}
+
     time_step = kwargs.pop('time_step', 0.001)
     c_f = kwargs.pop('center_frequency', 30.)
     duration = kwargs.pop('duration', 0.512)
@@ -85,7 +101,10 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     suffix = kwargs.pop('suffix', '')
     wiggle_fill_style = kwargs.pop('wiggle_fill_style', 'default')
     backus_length = kwargs.pop('backus_length', 5.0)
+    source_rock_study = kwargs.pop('source_rock_study', None)
+    ref_toc = kwargs.pop('ref_toc', None)
     start_r = kwargs.pop('start_r', 0.015)
+    override_lom = kwargs.pop('override_lom', None)
 
     if wiggle_fill_style == 'opposite':
         fill_pos_style = 'pos-blue'
@@ -97,10 +116,15 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     # Set up plot window
     fig = plt.figure(figsize=(20, 10))
     fig.suptitle('{} interval in well {} {}'.format(wi_name, well.well, suffix))
-    ax_names = ['gr_ax', 'md_ax', 'twt_ax', 'res_ax', 'rho_ax', 'cpi_ax', 'ai_ax', 'synt_ax']
-    n_cols = 8
+    if source_rock_study:
+        ax_names = ['gr_ax', 'md_ax', 'twt_ax', 'res_ax', 'dlr_ax', 'toc_ax', 'cpi_ax', 'ai_ax', 'synt_ax']
+        n_cols = 9
+        width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 1, 1.8]
+    else:
+        ax_names = ['gr_ax', 'md_ax', 'twt_ax', 'res_ax', 'rho_ax', 'cpi_ax', 'ai_ax', 'synt_ax']
+        n_cols = 8
+        width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 2]
     n_rows = 2
-    width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 2]
     height_ratios = [1, 5]
     spec = fig.add_gridspec(nrows=n_rows, ncols=n_cols,
                             height_ratios=height_ratios, width_ratios=width_ratios,
@@ -209,47 +233,103 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
                   limits, styles, yticks=False, ylim=[md_min, md_max])
     header_plot(header_axes['res_ax'], xlims*len(legends), legends, styles)
 
-    #
-    # Rho
-    # try_these_log_types = ['Density', 'Neutron density']
-    # log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
-    # lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
-    # # Replace the density with the one selected by log_table
-    # lognames['Density'] = log_table['Density']
-    # limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
-    # styles = [{'lw': templates[x]['line width'],
-    #            'color': templates[x]['line color'],
-    #            'ls': templates[x]['line style']} for x in log_types]
-    # legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
+    if source_rock_study is not None:
+        from blixt_rp.rp.rp_core import delta_log_r, toc_from_delta_log_r
+        # Try DeltaLogR
+        log_types = ['Sonic', 'Resistivity']
+        for necessary_log_type in log_types:
+            if necessary_log_type not in well.block[block_name].log_types():
+                raise IOError('{} log is missing in well {}'.format(necessary_log_type, well.well))
+            if necessary_log_type not in list(log_table.keys()):
+                raise IOError('{} log is missing in log table'.format(necessary_log_type))
 
-    # for xx in log_types:
-    #     print(lognames[xx])
+        # Use the logs provided by the log_table
+        lognames = {x: log_table[x] for x in log_types}
 
-    # xlims = axis_plot(axes['rho_ax'], depth[mask],
-    #                   [tb.logs[lognames[xx]].data[mask] for xx in log_types],
-    #                   limits, styles, yticks=False, ylim=[md_min, md_max])
-    # header_plot(header_axes['rho_ax'], xlims, legends, styles)
+        if start_r is not None:
+            sr = start_r[well.well]
+        else:
+            sr = 0.015
+        limits = [[200., 0.], [sr, 10000 * sr]]
+        styles = [{'lw': templates[x]['line width'],
+                   'color': templates[x]['line color'],
+                   'ls': templates[x]['line style']} for x in log_types]
+        legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
 
-    # TODO
-    # Try DeltaLogR method instead of plotting Rho
-    log_types = ['Sonic', 'Resistivity']
-    # Use the logs provided by the log_table
-    lognames = {x: log_table[x] for x in log_types}
+        xlims = deltalogr_plot(axes['dlr_ax'], depth[mask],
+                               [tb.logs[lognames[xx]].data[mask] for xx in log_types],
+                               limits, styles, yticks=False, ylim=[md_min, md_max])
+        header_plot(header_axes['dlr_ax'], xlims, legends, styles)
 
-    limits = [[200., 0.], [start_r, 10000 * start_r]]
-    styles = [{'lw': templates[x]['line width'],
-               'color': templates[x]['line color'],
-               'ls': templates[x]['line style']} for x in log_types]
-    legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
+        # Calculate delta log r and TOC according to Passey et al. 1990
+        if well.well in list(source_rock_study.keys()):
+            if (ref_toc is not None) and (well.well in list(ref_toc.keys())):
+                avg_lom = np.median(ref_toc[well.well]['lom'])
+            else:
+                avg_lom = 9.5
 
-    xlims = deltalogr_plot(axes['rho_ax'], depth[mask],
-              [tb.logs[lognames[xx]].data[mask] for xx in log_types],
-              limits, styles, yticks=False, ylim=[md_min, md_max])
-    header_plot(header_axes['rho_ax'], xlims, legends, styles)
+            if (override_lom is not None) and (well.well in list(override_lom.keys())):
+                old_lom = avg_lom
+                avg_lom = override_lom[well.well]
+            else:
+                old_lom = None
+
+            legends = ['Calculated TOC [%]']
+            limits = [[templates['TOC']['min'], templates['TOC']['max']]]
+            styles = [{'lw': templates['TOC']['line width'],
+                       'color': templates['TOC']['line color'],
+                       'ls': templates['TOC']['line style']}]
+            dlr = delta_log_r(
+                well.block[block_name].logs[log_table['Resistivity']].data,
+                well.block[block_name].logs[log_table['Sonic']].data,
+                *source_rock_study[well.well])
+            toc = toc_from_delta_log_r(dlr, avg_lom)
+            xlims = axis_plot(axes['toc_ax'], depth[mask],
+                              [toc.value[mask]],
+                              limits, styles, yticks=False, ylim=[md_min, md_max])
+            if (ref_toc is not None) and (well.well in list(ref_toc.keys())):  # plot TOC data from cuttings and cores
+                axes['toc_ax'].scatter(ref_toc[well.well]['toc'], ref_toc[well.well]['md'],
+                                       c='red', marker=templates['TOC']['marker'])
+                # modify header plot to show observed data too
+                xlims.append(xlims[0])
+                legends.append('TOC from cuttings/core [%]')
+                styles.append({'lw': 0, 'color': 'red', 'marker': templates['TOC']['marker']})
+
+            header_plot(header_axes['toc_ax'], xlims, legends, styles)
+            if old_lom is None:
+                header_axes['toc_ax'].text(1.5, 1.0,
+                                           '$r_0$={:.1f}, $ac_0$={:.1f}, LOM={:.1f}'.format(
+                                               *source_rock_study[well.well], avg_lom),
+                                           ha='center', va='bottom', **text_style)
+            else:
+                header_axes['toc_ax'].text(1.5, 1.0,
+                                           '$r_0$={:.1f}, $ac_0$={:.1f}, LOM={:.1f}->{:.1f}'.format(
+                                               *source_rock_study[well.well], old_lom, avg_lom),
+                                           ha='center', va='bottom', **text_style)
+
+    else:
+        #
+        # Rho
+         try_these_log_types = ['Density', 'Neutron density']
+         log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
+         lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
+         # Replace the density with the one selected by log_table
+         lognames['Density'] = log_table['Density']
+         limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
+         styles = [{'lw': templates[x]['line width'],
+                    'color': templates[x]['line color'],
+                    'ls': templates[x]['line style']} for x in log_types]
+         legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
+
+         xlims = axis_plot(axes['rho_ax'], depth[mask],
+                           [tb.logs[lognames[xx]].data[mask] for xx in log_types],
+                           limits, styles, yticks=False, ylim=[md_min, md_max])
+         header_plot(header_axes['rho_ax'], xlims, legends, styles)
 
     #
     # CPI
-    try_these_log_types = ['Saturation', 'Porosity', 'Volume']
+    # try_these_log_types = ['Saturation', 'Porosity', 'Volume']
+    try_these_log_types = ['Saturation', 'Porosity']
     log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
     lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
     limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
@@ -265,7 +345,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         xlims = axis_plot(axes['cpi_ax'], depth[mask],
                   [tb.logs[lognames[xx]].data[mask] for xx in log_types],
                   limits, styles, yticks=False, ylim=[md_min, md_max])
-    header_plot(header_axes['cpi_ax'], xlims, legends, styles)
+        header_plot(header_axes['cpi_ax'], xlims, legends, styles)
 
     #
     # AI
@@ -359,7 +439,8 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         for inc_a in range(0, 35, 5):
             wig = np.convolve(w, np.nan_to_num(reff(inc_a)), mode='same')
             wiggle_plot(axes['synt_ax'], t[:-1][t_mask], wig[t_mask], inc_a, scaling=scaling,
-                        fill_pos_style=fill_pos_style, fill_neg_style=fill_neg_style, ylim=[twt_min, twt_max])
+                        fill_pos_style=fill_pos_style, fill_neg_style=fill_neg_style, ylim=[twt_min, twt_max],
+                        yticks=False)
     else:
         header_plot(header_axes['synt_ax'], None, None, None, title='Refl. coeff. lacking')
         wiggle_plot(axes['synt_ax'], None, None, None)
@@ -798,7 +879,7 @@ def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=No
     Returns:
         ava_curves:
             list of AVA (amplitude versus angle) curves, one for each "extract_at" float.
-            None if exctract_at is None
+            None if extract_at is None
         extract_at_indices
             list of indices of where the AVA curves have been extracted
 

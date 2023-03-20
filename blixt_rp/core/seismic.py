@@ -17,11 +17,14 @@ clrs = list(mcolors.BASE_COLORS.keys())
 clrs.remove('w')
 cclrs = cycle(clrs)  # "infinite" loop of the base colors
 
+
 def next_color():
     return next(cclrs)
 
+
 def straight_line(x, a, b):
     return a*x + b
+
 
 def avo_ig(amp, ang):
     """Calculates the Intercept and Gradient.
@@ -41,6 +44,7 @@ def avo_ig(amp, ang):
         return m[1],m[0],qual # intercept, gradient, quality factor
     else:
         return m[1],m[0] # intercept, gradient
+
 
 def pickle_test_data():
     filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\SEISMIC DATA\KPSDM-NEAR_10deg_cropped.sgy"
@@ -147,6 +151,7 @@ def test_ixg_plot():
     ax.set_ylabel('TWT [ms]')
     plt.show()
 
+
 def test_plot_amp_vs_offset():
     filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\Test_angle_stacks\KPSDM-NEAR_10deg_cropped.sgy"
     near, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
@@ -185,6 +190,7 @@ def test_plot_amp_vs_offset():
 
     plt.show()
 
+
 def test_plot_line():
     filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\Test_angle_stacks\KPSDM-NEAR_10deg_cropped.sgy"
     data, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
@@ -193,6 +199,7 @@ def test_plot_line():
     fig, ax = plt.subplots()
     data.plot.imshow(x='XLINE', y='TWT', yincrease=False, ax=ax, **uu)
     plt.show()
+
 
 def test_amp_spectra():
     from blixt_rp.core.wavelets import plot_cwt

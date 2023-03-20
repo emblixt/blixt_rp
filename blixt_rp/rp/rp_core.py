@@ -7,25 +7,26 @@ Created on Tue Oct  1 15:25:40 2019
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
-from dataclasses import dataclass
+# from dataclasses import dataclass
 from copy import deepcopy
 
 import bruges.rockphysics.rockphysicsmodels as brr
 
 import blixt_rp.rp_utils.definitions as ud
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
+from blixt_utils.misc.param import Param
 
 logger = logging.getLogger(__name__)
 
-@dataclass
-class Param:
-    """
-    Data class to hold the different parameters used in the rock physics functions
-    """
-    name: str
-    value: float
-    unit: str
-    desc: str
+# @dataclass
+# class Param:
+#     """
+#     Data class to hold the different parameters used in the rock physics functions
+#     """
+#     name: str
+#     value: float
+#     unit: str
+#     desc: str
 
 
 def test_value(val, unit):
@@ -881,7 +882,7 @@ def constantcement_hidden(k0, g0, phi, phi_c=None, apc=None, c_n=None, k_c=None,
     return k_eff, g_eff
 
 
-def delta_log_r(r, ac, r0=None, ac0=None):
+def delta_log_r(r, ac, r0=None, ac0=None, neal_morgan=False):
     """
     Calculates the Delta Log R value based on eq. 1 in Passey et al. 1990 "A practical model for organic richness ..."
     Args:
@@ -898,26 +899,41 @@ def delta_log_r(r, ac, r0=None, ac0=None):
         ac0:
             Param
             Acoustic sonic baseline [us/ft], taken from a non-source, clay-rich, section of the well
+        neal_morgan:
+            bool
+            If True, it uses a different implementation of Delta Log R which is less sensitive to the baseline,
+            BUT it requires you to plot the sonic on a 200 - 0 scale! AND that resistivity is plotted on a
+            4 decades logarithmic plot
+            In this case, r0 is not the baseline value of resistivity, but the left most limit of the resistivity in
+            Delta Log R plot
 
     Returns:
         Delta log R [-]:
             Param
     """
     if r0 is None:
-        r0 = Param('', 1., '', '')
+        r0 = Param('', 1., 'Ohmm', '')
     if ac0 is None:
-        ac0 = Param('', 100., '', '')
+        ac0 = Param('', 100., 'us/ft', '')
 
     r = test_value(r, 'Ohmm')
     ac = test_value(ac, 'us/ft')
     r0 = test_value(r0, 'Ohmm')
     ac0 = test_value(ac0, 'us/ft')
-    return Param(
-        name='DeltaLogR',
-        value=np.log10(r.value / r0.value) + 0.02 * (ac.value - ac0.value),
-        unit='-',
-        desc='Delta log R according to Passey et al. 1990'
-    )
+    if neal_morgan:
+        return Param(
+            name='DeltaLogR',
+            value=np.log10(r.value / r0.value) + (ac.value - 200.)/200.,
+            unit='-',
+            desc='Delta log R according to Passey et al. 1990, using Neal Morgans modification'
+        )
+    else:
+        return Param(
+            name='DeltaLogR',
+            value=np.log10(r.value / r0.value) + 0.02 * (ac.value - ac0.value),
+            unit='-',
+            desc='Delta log R according to Passey et al. 1990'
+        )
 
 
 def toc_from_delta_log_r(deltalogr, lom, a=None, b=None):
@@ -936,7 +952,7 @@ def toc_from_delta_log_r(deltalogr, lom, a=None, b=None):
         a:
             float
             Constant of the TOC equation
-        ac0:
+        b:
             float
             Constant of the TOC equation
 
@@ -956,6 +972,7 @@ def toc_from_delta_log_r(deltalogr, lom, a=None, b=None):
         unit='%',
         desc='TOC estimated from Delta log R according to Passey et al. 1990'
     )
+
 
 def gassmann_vel(v_p_1, v_s_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
     """

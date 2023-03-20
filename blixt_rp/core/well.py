@@ -974,7 +974,7 @@ class Well(object):
                   ):
         """
         Based on the different cutoffs in the 'cutoffs' dictionary, each Block in well is masked accordingly.
-        In the resulting mask, a True value indicates that the data is masked out
+        In the resulting mask, a False value indicates that the data is masked out
 
         :param cutoffs:
             dict
@@ -2171,15 +2171,24 @@ class Block(object):
 
         return tdr
 
-    def sonic_to_vel(self):
+    def sonic_to_vel(self, vel_names=None):
         """
         Converts sonic to velocity
+
+        :param vel_names:
+            list
+            Optional
+            list of strings, with names of the resulting velocities
+            ['vp', 'vs']
         :return:
         """
         from blixt_utils.misc.convert_data import convert as cnvrt
 
+        if vel_names is None:
+            vel_names = ['vp', 'vs']
+
         for ss, vv, vtype in zip(
-                ['ac', 'acs'], ['vp', 'vs'], ['P velocity', 'S velocity']
+                ['ac', 'acs'], vel_names, ['P velocity', 'S velocity']
         ):
             info_txt = ''
             if ss not in self.log_names():
@@ -2372,6 +2381,69 @@ class Block(object):
         if verbose:
             fig.suptitle('Well: {}'.format(self.well))
             plt.show()
+
+    def calc_toc(self, log_table, r0=None, ac0=None, lom=None, mask_name=None, verbose=False):
+        """
+        Calculates the TOC using the functions from Passey et al. 1990 "A practical model for organic richness ...",
+        which are implemented in rp_core.py
+        The "trend" TOC is calculated using a linear trend in r and ac as baseline, so that the manual picking is not
+        necessary
+
+        Args:
+           log_table:
+                dict
+                A dictionary specifying which resistivity and ac log to use. E.G.
+                {'Resistivity: 'rdep', 'Sonic': 'ac'}
+           r0:
+                float
+                Picked baseline value of the resistivity
+           ac0:
+                float
+                Picked baseline value of the sonic
+           lom:
+                float
+                Unitless number somewhere between 6 and 11 which describes the level of organic metamorphism units
+                (Hood et al. 1975)
+            mask_name:
+                str
+                Name of the mask to be used
+           verbose:
+
+        Returns:
+
+        """
+        from blixt_rp.rp_utils.calc_toc import calc_toc
+        necessary_log_types = ['Resistivity', 'Sonic']
+        for _key in necessary_log_types:
+            if _key not in list(log_table.keys()):
+                raise IOError('No log of type {} is specified'.format(_key))
+            if log_table[_key] not in self.log_names():
+                raise IOError('The specified log {} is not present in this well block: {} {}'.format(
+                    log_table[_key], self.well, self.name
+                ))
+
+        # check if a mask named mask_name exists
+        mask = None
+        mask_desc = None
+        if mask_name is not None:
+            if self.masks is not None:
+                if mask_name not in list(self.masks.keys()):
+                    warn_txt = 'No mask applied. The desired mask {} does not exist in well {}'.format(
+                        mask_name, self.well)
+                    print('WARNING: {}'.format(warn_txt))
+                    logger.warning(warn_txt)
+                else:
+                    mask = self.masks[mask_name].data
+                    mask_desc = self.masks[mask_name].header.desc
+        toc_trend, toc_picked, dlr_trend, dlr_picked = calc_toc(self.logs[log_table['Resistivity']],
+                                         self.logs[log_table['Sonic']],
+                                         self.logs['depth'],
+                                         r0, ac0, lom,
+                                         mask=mask, mask_desc=mask_desc, verbose=verbose)
+        self.add_log_curve(toc_trend)
+        self.add_log_curve(toc_picked)
+        self.add_log_curve(dlr_trend)
+        self.add_log_curve(dlr_picked)
 
 
 def _read_data(file):

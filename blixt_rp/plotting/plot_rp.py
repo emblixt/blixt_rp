@@ -18,7 +18,7 @@ opt2 = {'ha': 'right', 'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': '
 
 
 def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend_items=None,
-            plot_type=None, ref_val=None, fig=None, ax=None, block_name=None, color_by=None, savefig=None,
+            plot_type=None, ref_val=None, ax=None, block_name=None, color_by=None, size_by=None, savefig=None,
             backus=False, **kwargs):
 
     """
@@ -70,7 +70,6 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
         dictionary with wellnames as keys. Each value is a list of reference
         Vp [m/s], Vs [m/s], and rho [g/cm3] that are used
         when calculating the Intercept and gradient
-    :param fig:
 
     :param ax:
 
@@ -81,6 +80,9 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
         str
         If None, data are colored according to each individual wells template, else set it to
         a log type, and it tries to color the points based on that data
+    :param size_by:
+        str
+        If None, data are sized the same ("pointsize"), else, this log type determines the size
     :param savefig
         str
         full pathname of file to save the plot to
@@ -113,14 +115,10 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
 
     #
     # set up plotting environment
-    if fig is None:
-        if ax is None:
-            fig = plt.figure(figsize=(10, 10))
-            ax = fig.subplots()
-        else:  # Only ax is set, but not fig. Which means all functionality calling fig must be turned off
-            _savefig = False
-    elif ax is None:
-        ax = fig.subplots()
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 10))
+    else:
+        fig = ax.get_figure()
 
     # load
     well_names = []
@@ -282,13 +280,34 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
         # arrange coloring
         this_color = templates[wname]['color']
         draw_color_bar = False
+        ctempl = None
         if isinstance(color_by, str):
-            _color_logs = well.block[block_name].get_logs_of_type(color_by)
-            if len(_color_logs) > 0:
-                this_color = _color_logs[0].data
-                # only draw colorbar for last well
-                if counter == n_wells:
-                    draw_color_bar = None
+            if color_by not in list(log_table.keys()):
+                raise IOError('The desired log type {} is not listed in the log table'.format(color_by))
+            else:
+                _color_logs = well.block[block_name].get_logs_of_name(log_table[color_by])
+                if len(_color_logs) < 1:
+                    raise IOError('The desired log {} does not exist in this well {}'.format(
+                        log_table[color_by], wname))
+                else:
+                    this_color = _color_logs[0].data
+                    # only draw colorbar for last well
+                    ctempl = templates[color_by]
+                    if counter == n_wells:
+                        draw_color_bar = None
+        p_data = None
+        ptempl = None
+        if isinstance(size_by, str):
+            if size_by not in list(log_table.keys()):
+                raise IOError('The desired log type {} is not listed in the log table'.format(size_by))
+            else:
+                _size_logs = well.block[block_name].get_logs_of_name(log_table[size_by])
+                if len(_size_logs) < 1:
+                    raise IOError('The desired log {} does not exist in this well {}'.format(
+                        log_table[size_by], wname))
+                else:
+                    p_data = _size_logs[0].data
+                    ptempl = templates[size_by]
 
         # start plotting
 
@@ -298,10 +317,12 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
             cdata=this_color,
             cbar=draw_color_bar,
             mdata=templates[wname]['symbol'],
+            pdata=p_data,
             xtempl=xtempl,
             ytempl=ytempl,
+            ctempl=ctempl,
+            ptempl=ptempl,
             mask=mask,
-            fig=fig,
             ax=ax,
             **kwargs
         )

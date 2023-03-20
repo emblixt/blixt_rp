@@ -15,6 +15,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
+from blixt_utils.misc.param import Param
 import blixt_rp.rp.rp_core as rp
 import blixt_rp.core.well as cw
 from blixt_utils.misc.attribdict import AttribDict
@@ -165,7 +166,7 @@ class Fluid(object):
                 #print('param {} is integer'.format(this_name))
             if isinstance(param, float) or isinstance(param, str):
                 #print('param {} is float or string'.format(this_name))
-                param = rp.Param(this_name, param, unit_str, desc_str)
+                param = Param(this_name, param, unit_str, desc_str)
             # TODO
             # catch the cases where input data is neither None, int,  float or str
             # TODO
@@ -202,7 +203,7 @@ class Fluid(object):
 
         #head = [pattern % (k, self.__dict__[k]) for k in keys]
         head = [pattern % (k, '{}, {}'.format( self.__dict__[k].value,  self.__dict__[k].desc)) if \
-                isinstance(self.__dict__[k], rp.Param) else pattern % (k, self.__dict__[k]) for k in keys]
+                isinstance(self.__dict__[k], Param) else pattern % (k, self.__dict__[k]) for k in keys]
         return "\n".join(head)
 
     def print_fluid(self, verbose=False):
@@ -240,7 +241,7 @@ class Fluid(object):
             if self.fluid_type == 'brine':
                 rho_b = rp.rho_b(_s, _p,  _t).value
                 v_p_b = rp.v_p_b(_s, _p, _t).value
-                this_k = rp.Param(name='k_b',
+                this_k = Param(name='k_b',
                              value=v_p_b**2 * rho_b * 1.E-6,
                              unit='GPa',
                              desc='Brine bulk modulus'
@@ -271,19 +272,19 @@ class Fluid(object):
                 print('WARNING: {}'.format(warn_txt))
                 logger.warning(warn_txt)
             if self.fluid_type == 'brine':
-                this_mu = rp.Param(name='mu_b',
+                this_mu = Param(name='mu_b',
                              value=np.nan,
                              unit='GPa',
                              desc='Brine shear modulus'
                              )
             elif self.fluid_type == 'oil':
-                this_mu = rp.Param(name='mu_o',
+                this_mu = Param(name='mu_o',
                              value=np.nan,
                              unit='GPa',
                              desc='Oil shear modulus'
                              )
             elif self.fluid_type == 'gas':
-                this_mu = rp.Param(name='mu_g',
+                this_mu = Param(name='mu_g',
                              value=np.nan,
                              unit='GPa',
                              desc='Gas shear modulus'

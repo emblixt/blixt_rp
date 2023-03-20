@@ -6,13 +6,16 @@ Module for handling LogCurve objects
     GNU Lesser General Public License, Version 3
     (https://www.gnu.org/copyleft/lesser.html)
 """
-from blixt_utils.misc.attribdict import AttribDict
-from blixt_rp.rp_utils.version import info
 from datetime import datetime
 from copy import deepcopy
 import numpy as np
+import matplotlib.pyplot as plt
 
+from blixt_utils.misc.attribdict import AttribDict
+from blixt_rp.rp_utils.version import info
 from blixt_utils.signal_analysis.signal_analysis import smooth as _smooth
+from blixt_utils.misc.curve_fitting import residuals, linear_function
+import blixt_utils.misc.masks as msks
 
 
 class Header(AttribDict):
@@ -31,7 +34,7 @@ class Header(AttribDict):
         'creation_date': datetime.now().isoformat(),
         'orig_filename': None,  
         'modification_date': None,
-        'modification_history': None,
+        'modification_history': '',
         'log_type': None
         }
 
@@ -124,14 +127,70 @@ class LogCurve(object):
 
     log_type = property(get_log_type)
 
-    def smooth(self, window_len=None, method='median'):
-        out = _smooth(self.data, window_len, method=method)
-        print('Max diff between smoothed and original version:', np.nanmax(self.data - out))
-        return out
+    def copy(self, suffix='copy'):
+        copied_logcurve = deepcopy(self)
+        copied_logcurve.name = self.name + '_' + suffix
+        copied_logcurve.header.name = self.name + '_' + suffix
+        copied_logcurve.header.modification_date = datetime.now().isoformat()
+        copied_logcurve.header.modification_history += \
+            '\nCopy of {}'.format(self.name)
+        return copied_logcurve
+
+    def smooth(self, window_len=None, method='median',
+               discrete_intervals=None,
+               verbose=False, overwrite=False, **kwargs):
+        """
+        :param discrete_intervals:
+            list
+            list of indexes at which the smoothened log are allowed discrete jumps.
+            Typically the indexes of the boundaries between two intervals (formations) in a well.
+
+        """
+        if discrete_intervals is not None:
+            if not isinstance(discrete_intervals, list):
+                raise IOError('Interval indexes must be provided as a list')
+            out = np.zeros(0)
+            for i in range(len(discrete_intervals) + 1):  # always one more section than boundaries between them
+                if i == 0:  # first section
+                    out = np.append(out, _smooth(
+                            self.data[:discrete_intervals[i]], window_len, method=method, **kwargs
+                        )
+                    )
+                elif len(discrete_intervals) == i:  # last section
+                    out = np.append(out, _smooth(
+                            self.data[discrete_intervals[-1]:], window_len, method=method, **kwargs
+                        )
+                    )
+                else:
+                    out = np.append(out, _smooth(
+                            self.data[discrete_intervals[i-1]:discrete_intervals[i]],
+                            window_len, method=method, **kwargs))
+
+        else:
+            out = _smooth(self.data, window_len, method=method, **kwargs)
+
+        if verbose:
+            print('Max diff between smoothed and original version:', np.nanmax(self.data - out))
+            fig, ax = plt.subplots()
+            ax.plot(self.data, c='black', label='Original')
+            ax.plot(out, c='r', label='{}, window length {}'.format(method, window_len))
+            if discrete_intervals is not None:
+                for xx in discrete_intervals:
+                    ax.axvline(xx, 0, 1, ls='--')
+            ax.set_title(self.name)
+            ax.legend()
+        if overwrite:
+            self.header.modification_date = datetime.now().isoformat()
+            self.header.modification_history += \
+                '\nSmoothened using {}, with window length {}'.format(method, window_len)
+            self.data = out
+            return None
+        else:
+            return out
 
     def despike(self, max_clip, window_len=None):
         if window_len is None:
-            window_len = 13 # Around 2 meters in most wells
+            window_len = 13  # Around 2 meters in most wells
         smooth = self.smooth(window_len)
         spikes = np.where(self.data - smooth > max_clip)[0]
         spukes = np.where(smooth - self.data > max_clip)[0]
@@ -139,6 +198,231 @@ class LogCurve(object):
         out[spikes] = smooth[spikes] + max_clip  # Clip at the max allowed diff
         out[spukes] = smooth[spukes] - max_clip  # Clip at the min allowed diff
         return out
+
+    def calc_depth_trend(self,
+                         depth,
+                         trend_function=None,
+                         x0=None,
+                         loss=None,
+                         mask=None,
+                         mask_descr=None,
+                         discrete_intervals=None,
+                         down_weight_outliers=False,
+                         verbose=False
+                         ):
+        """
+        Calculates the depth trend for this log data by fitting the provided trend_function to the
+        log data as a function of the provided depth data
+
+        Returns a list of optimized parameters for the trend function, with one list of parameters for each of
+        the intervals
+
+        :param depth:
+            numpy.ndarray of length N
+            The independent variable, could be MD, TVD, max burial depth, ...
+
+        :param trend_function:
+            function
+            Function to calculate the residual against
+                residual = target_function(depth, *x) - self.data
+            trend_function takes x as arguments, and depth as independent variable,
+            E.G. for a linear target function:
+            def trend_function(depth, a, b):
+                return a*depth + b
+            Default is the linear function
+
+        :param x0:
+            list
+            List of parameters values used initially in the trend_function in the optimization
+            Defaults to [1., 1.]
+
+        :param loss:
+            str
+            Keyword passed on to least_squares() to determine which loss function to use
+
+        :param mask:
+            boolean numpy array of length N
+            A False value indicates that the data is masked out
+
+        :param mask_descr:
+            str
+            Description of what cutoffs the mask is based on.
+
+        :param discrete_intervals:
+            list
+            list of indexes (in the unmasked data) at which the trend are allowed discrete jumps.
+            Typically the indexes of the boundaries between two intervals (formations) in a well.
+
+        :param down_weight_outliers:
+            bool
+            If True, a weighting is calculated to minimize the impact of data far away from the median.
+
+        :param verbose:
+            bool
+            If True plots are created and more information is printed
+
+        return
+            list of arrays with optimized parameters,
+            e.g.
+            [ array([a0, b0, ...]), array([a1, b1, ...]), ...]
+            where [a0, b0, ...] are the output from least_squares for the first interval, and so on
+        """
+        from scipy.optimize import least_squares
+
+        if trend_function is None:
+            trend_function = linear_function
+        if x0 is None:
+            x0 = [1., 1.]
+        if loss is None:
+            loss = 'cauchy'
+        if mask is None:
+            mask = np.array(np.ones(len(self.data)), dtype=bool)  # All True values -> all data is included
+        if (mask is not None) and (mask_descr is None):
+            mask_descr = 'UNKNOWN'
+        verbosity_level = 0
+        fig, ax = None, None
+        results = []
+        if verbose:
+            verbosity_level = 2
+            fig, ax = plt.subplots(figsize=(8, 10))
+            ax.plot(self.data, depth, lw=0.5, c='grey')
+            if discrete_intervals is not None:
+                for i in discrete_intervals:
+                    ax.axhline(depth[i], 0, 1, ls='--')
+
+        def do_the_fit(_mask):
+            weights = None
+
+            # Test if there are NaN values in input data, which needs to be masked out
+            if np.any(np.isnan(self.data[_mask])):
+                nan_mask = np.isnan(self.data)
+                _mask = msks.combine_masks([~nan_mask, _mask])
+
+            # TODO
+            #  do a similar test for infinite data: if np.any(np.isinf(_data))
+
+            if down_weight_outliers:
+                weights = 1. - np.sqrt((self.data[_mask] - np.median(self.data[_mask])) ** 2)
+                weights[weights < 0] = 0.
+
+            return least_squares(residuals, x0, args=(depth[_mask], self.data[_mask]),
+                                 kwargs={'target_function': trend_function, 'weight': weights},
+                                 loss=loss, verbose=verbosity_level)
+
+        if discrete_intervals is not None:
+            if not isinstance(discrete_intervals, list):
+                raise IOError('Interval indexes must be provided as a list')
+            for i in range(len(discrete_intervals) + 1):  # always one more section than boundaries between them
+                if i == 0:  # first section
+                    this_depth_mask = msks.create_mask(depth, '<', depth[discrete_intervals[i]])
+                elif len(discrete_intervals) == i:  # last section
+                    this_depth_mask = msks.create_mask(depth, '>=', depth[discrete_intervals[-1]])
+                else:  # all middle sections
+                    this_depth_mask = msks.create_mask(
+                        depth, '><', [depth[discrete_intervals[i-1]], depth[discrete_intervals[i]-1]])
+
+                combined_mask = msks.combine_masks([mask, this_depth_mask])
+                res = do_the_fit(combined_mask)
+                results.append(res.x)
+                if verbose:
+                    this_depth = np.linspace(depth[this_depth_mask][0], depth[this_depth_mask][-1], 10)
+                    ax.plot(self.data[combined_mask], depth[combined_mask])
+                    ax.plot(trend_function(this_depth, *res.x), this_depth, c='b')
+        else:
+            res = do_the_fit(mask)
+            results.append(res.x)
+            if verbose:
+                this_depth = np.linspace(depth[0], depth[-1], 10)
+                ax.plot(self.data[mask], depth[mask])
+                ax.plot(trend_function(this_depth, *res.x), this_depth, c='b')
+
+        if verbose:
+            ax.set_ylim(ax.get_ylim()[::-1])
+            title_txt = 'Well {}'.format(self.well)
+            if mask_descr is not None:
+                title_txt += ', using mask: {}'.format(mask_descr)
+            ax.set_title(title_txt)
+            ax.set_xlabel(self.name)
+
+        return results
+
+    def apply_trend_function(self,
+                             depth,
+                             trend_parameters,
+                             trend_function=None,
+                             discrete_intervals=None,
+                             verbose=False
+                             ):
+        """
+        Uses the result from calc_depth_trend() to calculate the trend over the whole well.
+        Which is trivial when discrete_intervals is None
+
+        :param depth:
+            numpy.ndarray of length N
+            The independent variable, could be MD, TVD, max burial depth, ...
+
+        :param trend_parameters:
+            list
+            List of arrays with optimized parameters of the trend_function
+            This list is the result from calc_depth_trend()
+
+        :param trend_function:
+            function
+            Function to calculate the residual against
+                residual = target_function(depth, *x) - self.data
+            trend_function takes x as arguments, and depth as independent variable,
+            E.G. for a linear target function:
+            def trend_function(depth, a, b):
+                return a*depth + b
+            Default is the linear function
+
+        :param discrete_intervals:
+            list
+            list of indexes (in the unmasked data) at which the trend are allowed discrete jumps.
+            Typically the indexes of the boundaries between two intervals (formations) in a well.
+
+        :param verbose:
+            bool
+            If True plots are created and more information is printed
+
+        return
+            np.ndarray of the trend, with same length as the original log
+        """
+        if trend_function is None:
+            trend_function = linear_function
+        fig, ax = None, None
+        output = np.zeros(0)
+        if verbose:
+            fig, ax = plt.subplots(figsize=(8, 10))
+            ax.plot(self.data, depth, lw=0.5, c='grey')
+            if discrete_intervals is not None:
+                for i in discrete_intervals:
+                    ax.axhline(depth[i], 0, 1, ls='--')
+
+        if discrete_intervals is not None:
+            if not isinstance(discrete_intervals, list):
+                raise IOError('Interval indexes must be provided as a list')
+            if len(trend_parameters) != len(discrete_intervals) + 1:
+                raise IOError('Number of trends must be one more than the number of interval boundaries')
+            for i in range(len(discrete_intervals) + 1):  # always one more section than boundaries between them
+                if i == 0:  # first section
+                    this_depth_mask = msks.create_mask(depth, '<', depth[discrete_intervals[i]])
+                elif len(discrete_intervals) == i:  # last section
+                    this_depth_mask = msks.create_mask(depth, '>=', depth[discrete_intervals[-1]])
+                else:  # all middle sections
+                    this_depth_mask = msks.create_mask(
+                        depth, '><', [depth[discrete_intervals[i-1]], depth[discrete_intervals[i]-1]])
+                output = np.append(output, trend_function(depth[this_depth_mask], *trend_parameters[i]))
+        else:
+            output = trend_function(depth, *trend_parameters[0])
+
+        if verbose:
+            ax.plot(output, depth)
+            ax.set_ylim(ax.get_ylim()[::-1])
+            ax.set_title(self.well)
+            ax.set_xlabel(self.name)
+
+        return output
 
     #def get_log_name(self):
     #    log_name = None

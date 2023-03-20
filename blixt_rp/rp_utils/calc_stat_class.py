@@ -417,6 +417,5 @@ def test_calc_stat():
     CalculateStats(stats_set_up)
 
 
-
 if __name__ == '__main__':
     test_calc_stat()
