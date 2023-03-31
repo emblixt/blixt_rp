@@ -23,7 +23,7 @@ Look into the possibility of using calculated masks, using calc_mask(), and thei
 Many functions could use a mask, and its description, as input. See blixt_rp.rp_utils.calc_toc.calc_toc() as example
 
 ##### 2023-03-20
-Move LogCurve class in to well.py
+~~Move LogCurve class in to well.py~~
 
 Get rid of the "AttribDict" thing in the header of wells and blocks.
 Instead, use the Param class, from rp.core.py, for numerical data, and ordinary strings for strings

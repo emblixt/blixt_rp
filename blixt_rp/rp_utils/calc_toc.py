@@ -90,7 +90,7 @@ def calc_toc(
         (Hood et al. 1975)
     :param true_toc:
         dict
-        Dictionary with keys 'toc' and 'md' which contains true values of TOC at given measured depths
+        Dictionary with keys 'toc' and 'depth' which contains true values of TOC at given measured depths
     :param mask:
         Boolean numpy array of same length as the LogCurves r, s and d
         A False value indicates that the data is masked out
@@ -302,7 +302,7 @@ def calc_toc(
                           [_x1, _x2],
                           limits, styles, yticks=False, ylim=[md_min, md_max])
             if true_toc is not None:
-                axes['toc_ax'].scatter(true_toc['toc'], true_toc['md'],
+                axes['toc_ax'].scatter(true_toc['toc'], true_toc['depth'],
                                        c='red', marker=templates['TOC']['marker'])
                 xlims.append(xlims[0])
                 legends.append('TOC from cuttings/core [%]')

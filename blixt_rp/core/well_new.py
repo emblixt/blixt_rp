@@ -16,7 +16,6 @@ Take inspiration from obspy and converter to create these objects
     GNU Lesser General Public License, Version 3
     (https://www.gnu.org/copyleft/lesser.html)
 """
-from datetime import datetime
 import numpy as np
 import pandas as pd
 import logging
@@ -26,8 +25,6 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
 
-from blixt_utils.misc.attribdict import AttribDict
-from blixt_rp.rp_utils.version import info
 from blixt_utils.misc.templates import log_header_to_template as l2tmpl
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 import blixt_utils.io.io as uio
@@ -37,441 +34,16 @@ from blixt_utils.utils import arrange_logging
 from blixt_rp.rp_utils.harmonize_logs import harmonize_logs as fixlogs
 from blixt_utils.plotting import crossplot as xp
 from blixt_rp.core.minerals import MineralMix
-from blixt_rp.core.log_curve import LogCurve
 import blixt_rp.rp.rp_core as rp
 from blixt_utils.misc.convert_data import convert as cnvrt
 import blixt_rp.rp_utils.definitions as ud
-from blixt_utils.utils import isnan
+from blixt_rp.core.well import Block
+from blixt_rp.core.log_curve import LogCurve
+from blixt_rp.core.header import Header
 
 # global variables
 supported_version = {2.0, 3.0}
 logger = logging.getLogger(__name__)
-
-def_lb_name = ud.def_lb_name
-def_msk_name = ud.def_msk_name
-def_water_depth_keys = ud.def_water_depth_keys
-def_kelly_bushing_keys = ud.def_kelly_bushing_keys
-def_sonic_units = ud.def_sonic_units
-
-renamewelllogs = {
-    # depth, or MD
-    'depth': ['Depth', 'DEPT', 'MD', 'DEPTH'],
-
-    # Bulk density
-    'den': ['RHOB', 'HRHOB', 'DEN', 'HDEN', 'RHO', 'CPI:RHOB', 'HRHO'],
-
-    # Density correction
-    'denc': ['HDRHO', 'DENC', 'DCOR'],
-
-    # Sonic
-    'ac': ['HDT', 'DT', 'CPI:DT', 'HAC', 'AC'],
-
-    # Shear sonic
-    'acs': ['ACS'],
-
-    # Gamma ray
-    'gr': ['HGR', 'GR', 'CPI:GR'],
-
-    # Caliper
-    'cali': ['HCALI', 'CALI', 'HCAL'],
-
-    # Deep resistivity
-    'rdep': ['HRD', 'RDEP', 'ILD', 'RD'],
-
-    # Medium resistivity
-    'rmed': ['HRM', 'RMED', 'RM'],
-
-    # Shallow resistivity
-    'rsha': ['RS', 'RSHA', 'HRS'],
-
-    # Water saturation
-    'sw': ['CPI:SW', 'SW'],
-
-    # Effective porosity
-    'phie': ['CPI:PHIE', 'PHIE'],
-
-    # Neutron porosity
-    'neu': ['HNPHI', 'NEU', 'CPI:NPHI', 'HPHI'],
-
-    # Shale volume
-    'vcl': ['VCLGR', 'VCL', 'CPI:VWCL', 'CPI:VCL']
-}
-
-
-class Project(object):
-    def __init__(self,
-                 load_from=None,
-                 name=None,
-                 working_dir=None,
-                 project_table=None,
-                 tops_file=None,
-                 tops_type=None,
-                 log_to_stdout=False,
-                 ):
-        """
-        class that keeps central information about the current well project in memory.
-
-        :param load_from:
-            str
-            full pathname of existing log file from previously set up project.
-            The other input parameters, except log_to_stdout, are ignored
-        :param name:
-            str
-            Name of the project
-        :param working_dir:
-            str
-            folder name of the project
-        :param project_table:
-            str
-            full pathname of .xlsx file that store information of which wells and logs, ... to use
-        :param tops_file:
-            str
-            full pathname of .xlsx file that contains the tops used in this project
-        :param tops_type:
-            str
-            'petrel', 'npd' or 'rokdoc' depending on which source the tops_file comes from
-        :param log_to_stdout:
-            bool
-            If True, the logging information is sent to standard output and not to file
-        """
-        logging_level = logging.INFO
-
-        if load_from is not None:
-            self.load_logfile(load_from)
-        else:
-            if name is None:
-                name = 'test'
-
-            if (working_dir is None) or (not os.path.isdir(working_dir)):
-                working_dir = os.path.dirname(os.path.realpath(__file__))
-                dir_list = working_dir.split(os.path.sep)
-                working_dir = os.path.sep.join(dir_list[:-2])
-
-            logging_file = os.path.join(
-                working_dir,
-                '{}_log.txt'.format(name))
-            arrange_logging(log_to_stdout, logging_file, logging_level)
-
-            logger.info('Project created / modified on: {}'.format(datetime.now().isoformat()))
-            self.name = name
-            self.working_dir = working_dir
-            self.logging_file = logging_file
-
-            if project_table is None:
-                self.project_table = os.path.join(self.working_dir, 'excels', 'project_table.xlsx')
-            elif not os.path.isfile(project_table):
-                self.project_table = os.path.join(self.working_dir, project_table)
-            else:
-                self.project_table = project_table
-
-            if not os.path.isfile(self.project_table):
-                warn_txt = 'The provided project table {}, does not exist'.format(self.project_table)
-                logger.warning(warn_txt)
-                raise Warning(warn_txt)
-
-            self.tops_file = tops_file
-            self.tops_type = tops_type
-
-    def __setattr__(self, key, value):
-        """
-        Catch changing attributes in the log file
-        :param key:
-        :param value:
-        :return:
-        """
-        this_str = ''
-        if key == 'name':
-            this_str = 'Project name'
-        elif key == 'working_dir':
-            this_str = 'Working directory'
-        elif key == 'project_table':
-            this_str = 'Project table'
-        elif key == 'tops_file':
-            this_str = 'Tops are taken from'
-        elif key == 'tops_type':
-            this_str = 'Tops are of type'
-        elif key == 'logging_file':
-            this_str = 'Logging to'
-        else:
-            pass
-
-        if this_str != '':
-            logger.info('{}: {}'.format(this_str, value))
-
-        super(Project, self).__setattr__(key, value)
-
-    def keys(self):
-        return self.__dict__.keys()
-
-    def __str__(self):
-        keys = list(self.__dict__.keys())
-
-        pattern = "%%%ds: %%s" % len(keys)
-
-        head = [pattern % (k, self.__dict__[k]) for k in keys]
-        return "\n".join(head)
-
-    def load_logfile(self, file_name):
-        if not os.path.isfile(file_name):
-            warn_txt = 'The provided log file {}, does not exist'.format(file_name)
-            logger.warning(warn_txt)
-            raise IOError(warn_txt)
-        self.logging_file = file_name
-
-        with open(file_name, 'r') as f:
-            lines = f.readlines()
-
-        name = working_dir = project_table = tops_file = tops_type = None
-        for line in lines:
-            if 'Project name' in line:
-                name = line.split(': ')[-1].strip()
-            elif 'Working directory:' in line:
-                working_dir = line.split(': ')[-1].strip()
-            elif 'Project table:' in line:
-                project_table = line.split(': ')[-1].strip()
-            elif 'Tops are taken from:' in line:
-                tops_file = line.split(': ')[-1].strip()
-            elif 'Tops are of type:' in line:
-                tops_type = line.split(': ')[-1].strip()
-            else:
-                continue
-
-        self.name = name
-        self.working_dir = working_dir
-        self.project_table = project_table
-        self.tops_file = tops_file
-        self.tops_type = tops_type
-
-        arrange_logging(False, file_name, logging.INFO)
-
-        logger.info('Loaded project settings from: {}'.format(file_name))
-
-    def check_wells(self):
-        """
-        Loops through the well names in the project table and checks if las files can be read,  if the requested
-        logs are to be found in the las file, and if the well name is in a consistent format
-        (E.G. "6507_3_1S" and NOT "6507/3-1 S")
-
-        :return:
-        """
-        try:
-            _well_table = uio.project_wells(self.project_table, self.working_dir)
-        except OSError:
-            _well_table = uio.project_wells_new(self.project_table, self.working_dir)
-        for lfile in list(_well_table.keys()):
-            wname = _well_table[lfile]['Given well name']
-            print('Checking {}: {}'.format(wname, os.path.split(lfile)[-1]))
-
-            # Check if las file exists (Redundant test, as uio.project_wells() tests that too
-            if not os.path.isfile(lfile):
-                warn_txt = 'Las file: {} does not exist'
-                print('WARNING: {}'.format(warn_txt))
-                logger.warning(warn_txt)
-                continue
-
-            # Check if well logs exists
-            for log_name in list(_well_table[lfile]['logs'].keys()):
-                log_exists = False
-                for line in uio.get_las_curve_info(lfile):
-                    if log_name in line.lower():
-                        log_exists = True
-                if not log_exists:
-                    warn_txt = 'Log {} does not exist in {}'.format(log_name, os.path.split(lfile)[-1])
-                    print('WARNING: {}'.format(warn_txt))
-                    logger.warning(warn_txt)
-
-            # Check if well name is consistent
-            if ('/' in wname) or ('-' in wname) or (' ' in wname):
-                warn_txt = "Special signs, like '/', '-' or ' ', are not allowed in well name: {}".format(wname)
-                print("WARNING: {}".format(warn_txt))
-                logger.warning(warn_txt)
-
-    def active_wells(self):
-        active_wells = []
-        try:
-            well_table = uio.project_wells(self.project_table, self.working_dir)
-        except OSError:
-            well_table = uio.project_wells_new(self.project_table, self.working_dir)
-        for _key, _value in well_table.items():
-            active_wells.append(_value['Given well name'])
-
-        # remove duplicates
-        return list(set(active_wells))
-
-    def load_all_wells(self, block_name=None, rename_logs=None,
-                       include_these_wells=None, include_these_intervals=None,
-                       unit_convert_using_template=False):
-        """
-        :param rename_logs:
-            dict
-            Dictionary contain information about how well logs are renamed to achieve harmonized log names
-            across the whole project.
-            E.G. in las file for Well_A, the shale volume is called VCL, while in Well_E it is called VSH.
-            To rename the VSH log to VCL upon import (not in the las files) the rename_logs dict should be set to
-                {<Well E las file name path>: 'VCL': ['VSH']}}
-
-            If None, it uses the defined renaming rules used in the project table:W
-
-        :param include_these_wells:
-            string, or list of strings
-            If None, all wells where "Use" = "Yes" in the project table are loaded
-            Else, only the wells named, and where "Use" = "Yes" , will be loaded
-        :param include_these_intervals:
-            string, or list of strings
-            if None, the whole log is loaded
-            Else, only load the part of the logs who are contained inside the listed intervals
-        :param unit_convert_using_template:
-            Bool
-            If true, it uses the templates to unit convert well logs according to what is specified in the Templates
-            sheet of the project table
-
-        :return:
-            dict
-            Dictionary with well names as keys, and corresponding well object as value
-        """
-        wis = None
-        if block_name is None:
-            block_name = ud.def_lb_name
-        try:
-            well_table = uio.project_wells(self.project_table, self.working_dir)
-        except OSError:
-            well_table = uio.project_wells_new(self.project_table, self.working_dir)
-        if rename_logs is None:
-            # Try reading the renaming out from the well table
-            rename_logs = uio.get_rename_logs_dict(well_table)
-        if include_these_wells is not None:
-            if isinstance(include_these_wells, str):
-                include_these_wells = [include_these_wells]
-        if include_these_intervals is not None:
-            if isinstance(include_these_intervals, str):
-                include_these_intervals = [include_these_intervals]
-            wis = uio.project_working_intervals(self.project_table)
-        if unit_convert_using_template:
-            _templates = uio.project_templates(self.project_table)
-        else:
-            _templates = None
-
-        all_wells = {}
-        last_wname = ''
-        for i, lasfile in enumerate(well_table):
-            wname = well_table[lasfile]['Given well name']
-            logger.info('{}, {}, {}'.format(i, wname, lasfile))
-
-            if isinstance(include_these_wells, list):
-                if wname not in include_these_wells:
-                    logger.info('Skipping: {}'.format(wname))
-                    continue
-
-            if wname != last_wname:  # New well
-                w = Well()
-                w.read_well_table(well_table, i, block_name=block_name, rename_well_logs=rename_logs,
-                                  templates=_templates)
-                all_wells[wname] = w
-                last_wname = wname
-            else:  # Existing well
-                all_wells[wname].read_well_table(well_table, i,
-                                                 block_name=block_name,
-                                                 rename_well_logs=rename_logs,
-                                                 use_this_well_name=wname, templates=_templates)
-
-        # rename well names so that the well name defined in the well_table is used "inside" each well
-        for wname, well in all_wells.items():
-            if isinstance(include_these_intervals, list):
-                count_intervals = 0
-                for count_intervals, wi_name in enumerate(include_these_intervals):
-                    if count_intervals == 0:
-                        well.calc_mask({}, name='interval_mask', wis=wis, wi_name=wi_name)
-                    else:
-                        well.calc_mask({}, name='interval_mask', append='OR', wis=wis, wi_name=wi_name)
-                    count_intervals += 1
-                well.apply_mask(name='interval_mask')
-            well.header.well.value = wname
-            well.header.name.value = wname
-            well.block[block_name].header.well = wname
-            well.block[block_name].__setattr__('well', wname)
-            for key in list(well.block[block_name].logs.keys()):
-                well.block[block_name].logs[key].header.well = wname
-
-        return all_wells
-
-    def load_all_wis(self):
-        return uio.project_working_intervals(self.project_table)
-
-    def load_all_templates(self):
-        return uio.project_templates(self.project_table)
-
-
-class Header(AttribDict):
-    """
-    Class for well header information
-    A ``Header`` object may contain all header information (also known as meta
-    data) of a Well object.
-    Those headers may be
-    accessed or modified either in the dictionary style or directly via a
-    corresponding attribute. There are various default attributes which are
-    required by every variable import and export modules
-    :param
-        header: Dictionary containing meta information of a single
-        Well object.
-    """
-    defaults = {
-        'name': None,
-        'creation_info': AttribDict({
-            'value': info(),
-            'unit': '',
-            'desc': 'Creation info'}),
-        'creation_date': AttribDict({
-            'value': datetime.now().isoformat(),
-            'unit': 'datetime',
-            'desc': 'Creation date'})
-    }
-
-    def __init__(self, header=None):
-        """
-        """
-        if header is None:
-            header = {}
-        super(Header, self).__init__(header)
-
-    def __setitem__(self, key, value):
-        """
-        """
-        # keys which shouldn't be modified
-        if key in ['creation_date', 'modification_date']:
-            pass
-        super(Header, self).__setitem__(
-            'modification_date',
-            AttribDict(
-                {'value': datetime.now().isoformat(),
-                 'unit': 'datetime', 'desc': 'Modification date'}))
-
-        # all other keys
-        if isinstance(value, dict):
-            super(Header, self).__setitem__(key, AttribDict(value))
-        elif key == 'well':
-            super(Header, self).__setitem__(
-                key, value)
-        else:
-            super(Header, self).__setitem__(
-                key,
-                AttribDict(
-                    {'value': value,
-                     'unit': '',
-                     'desc': key}
-                ))
-
-    __setattr__ = __setitem__
-
-    def __str__(self):
-        """
-        Return better readable string representation of Header object.
-        """
-        # keys = ['creation_date', 'modification_date', 'temp_gradient', 'temp_ref']
-        keys = list(self.keys())
-        return self._pretty_str(keys)
-
-    def _repr_pretty_(self, p, cycle):
-        p.text(str(self))
 
 
 class Well(object):
@@ -1213,7 +785,6 @@ class Well(object):
                    log_type='P velocity',
                    log_name=None,
                    mask=None,
-                   mask_name=None,
                    tops=None,
                    wis=None,
                    #fig=None,
@@ -1232,11 +803,6 @@ class Well(object):
             overrides the log_type selection, and plots only this log
         :param mask:
             boolean numpy array of same length as xdata
-        :param mask_name:
-            str
-            Name of mask created for this well using calc_mask()
-            If this is provided, and exists for the current well, it will take precedence over the boolean array 'mask'
-            above
         :param tops:
             dict
             as returned from rp_utils.io.read_tops() function
@@ -1308,20 +874,11 @@ class Well(object):
             xdata = logcurve.data
             ydata = self.block[logcurve.block].logs[y_log_name].data
             legends.append(logcurve.name)
-
-            # Handle mask
-            if (mask_name is not None) and (self.block[logcurve.block].masks is not None) and \
-                    (mask_name in list(self.block[logcurve.block].masks.keys())):
-                mask = self.block[logcurve.block].masks[mask_name].data
-                mask_desc = self.block[logcurve.block].masks[mask_name].header.desc
-            else:
-                mask_desc = ''
-
             xp.plot(
                 xdata,
                 ydata,
                 cdata=xp.cnames[cnt],
-                title='{}: {}, {}'.format(self.well, ttl, mask_desc),
+                title='{}: {}'.format(self.well, ttl),
                 xtempl=x_templ,
                 ytempl=l2tmpl(self.block[logcurve.block].logs[y_log_name].header),
                 mask=mask,
@@ -1458,8 +1015,7 @@ class Well(object):
             dict
             Template dictionary as returned from blixt_utils.io.io.project_templates('project_table.xlsx')
             If this is provided, read_las() tries to compare the units in the las file, with the units defined
-            in the Template dictionary, for the specific log type, and convert data accordingly.
-            If only_these_logs is None, no unit conversion can take place
+            in the Template dictionary, for the specific log type, and convert data accordingly
         :return:
         """
         if block_name is None:
@@ -1476,160 +1032,6 @@ class Well(object):
                 for rkey in list(rename_well_logs.keys()):
                     if okey.lower() in [x.lower() for x in rename_well_logs[rkey]]:
                         only_these_logs[rkey.lower()] = only_these_logs.pop(okey)
-
-        def _add_headers(well_info, ignore_keys, _note):
-            """
-            Helper function that add keys to header.
-            :param well_info:
-            :param ignore_keys:
-            :param _note:
-                str
-                String with notes for the specific well
-            :return:
-            """
-            for _key in list(well_info.keys()):
-                if _key in ignore_keys:
-                    continue
-                self.header.__setitem__(_key, well_info[_key])
-            if _note is not None:
-                if not isinstance(_note, str):
-                    raise IOError('Notes has to be of string format, not {}'.format(type(_note)))
-                if 'note' in list(self.header.keys()):
-                    _note = '{}\n{}'.format(self.header.note.value, _note)
-                self.header.__setitem__('note', _note)
-
-        def _add_logs_to_block(_well_dict, _block_name, _only_these_logs, _filename, _templates=None):
-            """
-            Helper function that add logs to the given block name.
-
-            :param _well_dict:
-            :param _block_name:
-            :param _only_these_logs:
-            :param _filename:
-            :param _templates: 
-                dict
-                Template dictionary as returned from blixt_utils.io.io.project_templates('project_table.xlsx')
-            :return:
-
-            """
-
-            # Make sure depth is always read in
-            if isinstance(_only_these_logs, dict) and ('depth' not in list(_only_these_logs.keys())):
-                _only_these_logs['depth'] = 'Depth'
-
-            exists = False
-            same = True
-            # Test if Block already exists
-            if _block_name in list(self.block.keys()):
-                exists = True
-                # print('Length of existing data: {}'.format(len(self.block[_block_name].logs['depth'].data)))
-                # Test if Block has the same header
-                for key in ['strt', 'stop', 'step']:
-                    if _well_dict['well_info'][key]['value'] != self.block[_block_name].header[key].value:
-                        # print('{} in new versus existing log block {}: {}'.format(
-                        #    key,
-                        #    _well_dict['well_info'][key]['value'],
-                        #    self.block[_block_name].header[key].value))
-                        same = False
-
-            if exists and not same:
-                ## Create a new Block, with a new name, and warn the user
-                # new_block_name = add_one(_block_name)
-                # logger.warning(
-                #    'Block {} existed and was different from imported las file, new Block {} was created'.format(
-                #        _block_name, new_block_name
-                #    ))
-                # _block_name = new_block_name
-                # info_txt = 'Start modifying the logs in las file to fit the existing Block'
-                # print(info_txt)
-                # logger.info(info_txt)
-                # print(' Length of existing data in well: {}'.format(
-                #    len(self.block[_block_name])
-                # ))
-                # print(' Length before fixing: {}'.format(len(_well_dict['data']['depth'])))
-                fixlogs(
-                    _well_dict,
-                    self.block[_block_name].header['strt'].value,
-                    self.block[_block_name].header['stop'].value,
-                    self.block[_block_name].header['step'].value,
-                    len(self.block[_block_name])
-                )
-                # print(' Length after fixing: {}'.format(len(_well_dict['data']['depth'])))
-                # Remove the 'depth' log, so we are not using two
-                xx = _well_dict['data'].pop('depth')
-                xx = _well_dict['curve'].pop('depth')
-                same = True
-
-            # Create a dictionary of the logs we are reading in
-            these_logs = {}
-            if isinstance(_only_these_logs, dict):
-                # add only the selected logs
-                for _key in list(_only_these_logs.keys()):
-                    if _key in list(_well_dict['curve'].keys()):
-                        logger.debug('Adding log {}'.format(_key))
-                        # if _templates is not None:
-                        #     print('Adding log {}, with unit {}, to unit {}'.format(
-                        #         _key, _well_dict['curve'][_key]['unit'], _templates[_only_these_logs[_key]]['unit']))
-                        _data = np.array(_well_dict['data'][_key])
-                        this_header = _well_dict['curve'][_key]
-                        this_header.update({'log_type': _only_these_logs[_key]})
-                        # Try to convert the units of the data according to the units given in _templates
-                        if _templates is not None:
-                            _success, _data = cnvrt(
-                                _data,
-                                _well_dict['curve'][_key]['unit'],
-                                _templates[_only_these_logs[_key]]['unit'])
-                            if _success:
-                                this_header.update({'unit': _templates[_only_these_logs[_key]]['unit']})
-                        these_logs[_key] = LogCurve(
-                            name=_key,
-                            block=_block_name,
-                            well=_well_dict['well_info']['well']['value'],
-                            data=_data,
-                            header=this_header
-                        )
-                        these_logs[_key].header.orig_filename = filename
-                    else:
-                        logger.warning("Log '{}' in {} is missing\n  [{}]".format(
-                            _key,
-                            _well_dict['well_info']['well']['value'],
-                            ', '.join(list(_well_dict['curve'].keys()))
-                            # ', '.join(list(_only_these_logs.keys()))
-                        )
-                        )
-            elif _only_these_logs is None:
-                # add all logs
-                for _key in list(_well_dict['curve'].keys()):
-                    logger.debug('Adding log {}'.format(_key))
-                    these_logs[_key] = LogCurve(
-                        name=_key,
-                        block=_block_name,
-                        well=_well_dict['well_info']['well']['value'],
-                        data=np.array(_well_dict['data'][_key]),
-                        header=_well_dict['curve'][_key]
-                    )
-                    these_logs[_key].header.orig_filename = filename
-                    these_logs[_key].header.name = _key
-            else:
-                logger.warning('No logs added to {}'.format(_well_dict['well_info']['well']['value']))
-
-            # Test if Block already exists
-            if exists and same:
-                self.block[_block_name].logs.update(these_logs)
-                self.block[_block_name].header.orig_filename.value = '{}, {}'.format(
-                    self.block[_block_name].header.orig_filename.value, _filename
-                )
-            else:
-                self.block[_block_name] = Block(
-                    name=_block_name,
-                    well=_well_dict['well_info']['well']['value'],
-                    logs=these_logs,
-                    orig_filename=_filename,
-                    header={
-                        key: _well_dict['well_info'][key] for key in ['strt', 'stop', 'step']
-                    }
-                )
-                self.block[_block_name].header.name = _block_name
 
         # Make sure only_these_logs is a dictionary
         if isinstance(only_these_logs, str):
@@ -1665,13 +1067,14 @@ class Well(object):
         # Test if this well has a header, and that we are loading from the same well
         if 'well' not in list(self.header.keys()):  # current well object is empty
             # Add all well specific headers to well header
-            _add_headers(well_dict['well_info'], ['strt', 'stop', 'step'], note)
+            self.header = add_headers(self.header, well_dict['well_info'], ['strt', 'stop', 'step'], note)
             self.header.name = {
                 'value': well_dict['well_info']['well']['value'],
                 'unit': '',
                 'desc': 'Well name'}
             # Add logs to a Block
-            _add_logs_to_block(well_dict, block_name, only_these_logs, filename, templates)
+            # _add_logs_to_block(well_dict, block_name, only_these_logs, filename, templates)
+            self.block = add_logs_to_block(self.block, well_dict, block_name, only_these_logs, filename, templates)
 
         else:  # There is a well loaded already
             if well_dict['well_info']['well']['value'] == self.header.well.value:
@@ -1696,9 +1099,10 @@ class Well(object):
 
             if add_well:
                 # Add all well specific headers to well header, except well name
-                _add_headers(well_dict['well_info'], ['strt', 'stop', 'step', 'well'], note)
+                self.header = add_headers(self.header, well_dict['well_info'], ['strt', 'stop', 'step'], note)
                 # add to existing LogBloc
-                _add_logs_to_block(well_dict, block_name, only_these_logs, filename, templates)
+                # _add_logs_to_block(well_dict, block_name, only_these_logs, filename, templates)
+                self.block = add_logs_to_block(self.block, well_dict, block_name, only_these_logs, filename, templates)
 
     def read_log_data(
             self,
@@ -1707,7 +1111,8 @@ class Well(object):
             only_these_logs=None,
             rename_well_logs=None,
             use_this_well_name=None,
-            note=None
+            note=None,
+            templates=None
     ):
         """
         A more general version of above 'read_las'
@@ -1737,11 +1142,17 @@ class Well(object):
             note:
                 str
                 String containing notes for the las file being read
+            :param templates:
+                dict
+                Template dictionary as returned from blixt_utils.io.io.project_templates('project_table.xlsx')
+                If this is provided, read_las() tries to compare the units in the las file, with the units defined
+                in the Template dictionary, for the specific log type, and convert data accordingly.
+                If only_these_logs is None, no unit conversion can take place
 
         Returns:
         """
         if block_name is None:
-            block_name = os.path.basename(filename).split('.')[0]
+            block_name = ud.def_lb_name
 
         # make sure the only_these_logs is using small caps for all well logs
         if (only_these_logs is not None) and isinstance(only_these_logs, dict):
@@ -1870,598 +1281,6 @@ class Well(object):
         return self.__dict__.keys()
 
 
-class Block(object):
-    """
-    A  Block is a collection of logs (or other data, perhaps with non-uniform sampling) which share the same
-    depth information, e.g start, stop, step
-    """
-
-    def __init__(self,
-                 name=None,
-                 well=None,
-                 logs=None,
-                 masks=None,
-                 orig_filename=None,
-                 header=None):
-        self.supported_version = supported_version
-        self.name = name
-        self.well = well
-        self.masks = masks
-
-        if header is None:
-            header = {}
-        if 'name' not in list(header.keys()) or header['name'] is None:
-            header['name'] = name
-        if 'well' not in list(header.keys()) or header['well'] is None:
-            header['well'] = well
-        if 'orig_filename' not in list(header.keys()) or header['orig_filename'] is None:
-            header['orig_filename'] = orig_filename
-        self.header = Header(header)
-
-        if logs is None:
-            logs = {}
-        self.logs = logs
-
-    def __str__(self):
-        return "Supported LAS Version : {0}".format(self.supported_version)
-
-    def __len__(self):
-        try:
-            return len(self.logs[self.log_names()[0]].data)  # all logs within a Block should have same length
-        except:
-            return 0
-
-    def get_depth_unit(self):
-        return self.header.strt.unit.lower()
-
-    def get_start(self, log_name=None):
-        """
-        The start value of the log can differ from from whats specified in the header
-        log_name
-            str
-            if log_name specified, return the depth to where that log starts
-        :return:
-            float
-            Start depth of log in meters
-        """
-        if log_name is not None:
-            # first check that the log exists
-            if log_name not in self.log_names():
-                raise IOError('Log {} does not exist in well {}'.format(
-                    log_name, self.well
-                ))
-            # mask out nans
-            data = self.logs[log_name].data
-            msk = np.ma.masked_invalid(data).mask
-            # Get first value depth value where data is not a nan
-            start = self.logs['depth'].data[~msk][0]
-        else:
-            start = np.nanmin(self.logs['depth'].data)
-        if self.get_depth_unit() != 'm':
-            # Assume it is in feet
-            success, new_start = cnvrt(start, 'ft', 'm')
-            return new_start
-        else:
-            return start
-
-    start = property(get_start)
-
-    def get_stop(self):
-        stop = None
-        if self.header.stop.value is not None:
-            stop = self.header.stop.value
-        return stop
-
-    stop = property(get_stop)
-
-    def get_step(self):
-        """
-        Tries to return the step length in meters
-        :return:
-        """
-        step = None
-        if self.header.step.value is not None:
-            step = self.header.step.value
-            if 'f' in self.header.step.unit:  # step length is in feet
-                success, step = cnvrt(step, 'ft', 'm')
-        return step
-
-    step = property(get_step)
-
-    def get_md(self):
-        return self.logs['depth'].data
-
-    def get_tvd(self, tvd_key=None):
-        if tvd_key is None:
-            tvd_key = 'tvd'
-
-        if tvd_key not in self.log_names():
-            warn_txt = 'No True Vertical Depth log in {}, using MD'.format(self.well)
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
-            tvd = self.get_md()
-        else:
-            tvd = self.logs[tvd_key].data
-        return tvd
-
-    def keys(self):
-        return self.__dict__.keys()
-
-    def log_types(self):
-        return [log_curve.log_type for log_curve in list(self.logs.values())]
-
-    def log_names(self):
-        return [log_curve.name for log_curve in list(self.logs.values())]
-
-    def get_logs_of_name(self, log_name):
-        return [log_curve for log_curve in list(self.logs.values()) if log_curve.name == log_name]
-
-    def get_logs_of_type(self, log_type):
-        return [log_curve for log_curve in list(self.logs.values()) if log_curve.log_type == log_type]
-
-    def add_log_curve(self, log_curve):
-        """
-        Adds the provided log_curve to the Block.
-        The user has to check that it has the correct depth information
-        :param log_curve:
-            core.log_curve.LogCurve
-        :return:
-        """
-        if not isinstance(log_curve, LogCurve):
-            raise IOError('Only LogCurve objects are valid input')
-
-        if len(self) != len(log_curve):
-            raise IOError('LogCurve must have same length as the other curves in this Block')
-
-        if log_curve.name is None:
-            raise IOError('LogCurve must have a name')
-
-        if log_curve.log_type is None:
-            raise IOError('LogCurve must have a log type')
-
-        log_curve.well = self.well
-        log_curve.block = self.name
-
-        self.logs[log_curve.name.lower()] = log_curve
-
-    def add_log(self, data, name, log_type, header=None):
-        """
-        Creates a LogCurve object based on input information, and tries to add the log curve to this Block.
-
-        :param data:
-            np.ndarray
-        :param name:
-            str
-        :param log_type:
-            str
-        :param header:
-            dict
-            Should at least contain the keywords 'unit' and 'desc'
-        :return:
-        """
-        # modify header
-        if header is None:
-            header = {}
-        if 'name' not in list(header.keys()):
-            header['name'] = name
-        if 'full_name' not in list(header.keys()):
-            header['full_name'] = name
-        if 'well' not in list(header.keys()):
-            header['well'] = self.well
-        if 'log_type' not in list(header.keys()):
-            header['log_type'] = log_type
-        if 'unit' not in list(header.keys()):
-            header['unit'] = None
-        if 'desc' not in list(header.keys()):
-            header['desc'] = None
-
-        log_curve = LogCurve(
-            name=name,
-            block=self.name,
-            well=self.well,
-            data=data,
-            header=header)
-
-        self.add_log_curve(log_curve)
-
-    def twt_at_logstart(self, log_name, water_vel, repl_vel, water_depth, kb):
-        """
-        Calculates the two-way time [s] to the top of the log.
-
-        Inspired by
-        https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
-
-        :param log_name:
-            string
-        :param water_vel:
-            float
-            Sound velocity in water [m/s]
-        :param repl_vel:
-            float
-            Sound velocity [m/s] in section between sea-floor and top of log
-        water_depth
-            float
-            Water depth in meters.
-        kb
-            float
-            Kelly bushing elevation in meters
-
-        :return:
-            float
-            twt [s] to start of log
-        """
-
-        top_of_log = self.get_start(log_name=log_name)  # Start of log in meters MD
-        repl_int = top_of_log - np.abs(kb) - np.abs(water_depth)  # Distance from sea-floor to start of log
-        # water_twt = 2.0 * (np.abs(water_depth) + np.abs(kb)) / water_vel  # TODO could it be np.abs(water_depth + np.abs(kb)) / water_vel
-        water_twt = 2.0 * np.abs(water_depth + np.abs(kb)) / water_vel
-        repl_twt = 2.0 * repl_int / repl_vel
-
-        # print('KB elevation: {} [m]'.format(kb))
-        # print('Seafloor elevation: {} [m]'.format(water_depth))
-        # print('Water time: {} [s]'.format(water_twt))
-        # print('Top of Sonic log: {} [m]'.format(top_of_log))
-        # print('Replacement interval: {} [m]'.format(repl_int))
-        # print('Two-way replacement time: {} [s]'.format(repl_twt))
-        # print('Top-of-log starting time: {} [s]'.format(repl_twt + water_twt))
-
-        return water_twt + repl_twt
-
-    def time_to_depth(self, log_start_twt, log_name, spike_threshold, repl_vel,
-                      sonic=False, feet_unit=False, us_unit=False,
-                      debug=False):
-        """
-        Calculates the twt as a function of md
-        https://github.com/seg/tutorials-2014/blob/master/1406_Make_a_synthetic/how_to_make_synthetic.ipynb
-
-        :param log_start_twt:
-            float
-            Two-way time in seconds down to start of log
-        :param log_name:
-            str
-            Name of log. slowness or velocity, used to calculate the integrated time
-        :param repl_vel:
-            float
-            Sound velocity [m/s] in section between sea-floor and top of log, Also used to fill in NaNs in sonic or velocity
-            log
-        :param sonic:
-            bool
-            Set to true if input log is sonic or slowness
-        :param feet_unit:
-            bool
-            Set to true if input log is using feet (e.g. "us/f")
-        :param us_unit:
-            bool
-            Set to true if input log is using micro seconds and not seconds (e.g. "us/f" or "s/f"
-        :return:
-        """
-        if log_name not in self.log_names():
-            raise IOError('Log {} does not exist in well {}'.format(
-                log_name, self.well
-            ))
-
-        # Replace NaN values of input log using repl_vel
-        if feet_unit:
-            success, repl_vel = cnvrt(repl_vel, 'm', 'ft')
-        if sonic:
-            repl = 1. / repl_vel
-        else:
-            repl = repl_vel
-        if us_unit:
-            repl = repl * 1e6
-        nan_mask = np.ma.masked_invalid(self.logs[log_name].data).mask
-
-        # Smooth and despiked version of vp
-        smooth_log = self.logs[log_name].despike(spike_threshold)
-        smooth_log[nan_mask] = repl
-
-        if debug:
-            fig, ax = plt.subplots()
-            ax.plot(self.logs['depth'].data, smooth_log, 'r', lw=2)
-            ax.plot(self.logs['depth'].data, self.logs[log_name].data, 'k', lw=0.5)
-            # ax.plot(self.logs['depth'].data[13000:14500]/3.2804, smooth_log[13000:14500]*3.2804, 'r', lw=2)
-            # ax.plot(self.logs['depth'].data[13000:14500]/3.2804, self.logs[log_name].data[13000:14500]*3.2804, 'k', lw=0.5)
-            ax.legend(['Smooth and despiked', 'Original'])
-
-        # Handle units
-        if sonic:
-            scaled_dt = self.get_step() * np.nan_to_num(smooth_log)
-            if feet_unit:  # sonic is in feet units, step is always in meters
-                scaled_dt = scaled_dt * 3.28084
-        else:
-            scaled_dt = self.get_step() * np.nan_to_num(1. / smooth_log)
-            if feet_unit:  # velcity is in feet, step is always in meters
-                scaled_dt = scaled_dt / 3.28084
-        if us_unit:
-            scaled_dt = scaled_dt * 1.e-6
-
-        tcum = 2 * np.cumsum(scaled_dt)
-        tdr = log_start_twt + tcum
-
-        if debug:
-            fig, ax = plt.subplots()
-            ax.plot(self.logs['depth'].data, scaled_dt, 'b', lw=1)
-            ax2 = ax
-            ax2.plot(self.logs['depth'].data, tdr, 'k', lw=1)
-            plt.show()
-
-        return tdr
-
-    def sonic_to_vel(self, vel_names=None):
-        """
-        Converts sonic to velocity
-
-        :param vel_names:
-            list
-            Optional
-            list of strings, with names of the resulting velocities
-            ['vp', 'vs']
-        :return:
-        """
-        from blixt_utils.misc.convert_data import convert as cnvrt
-
-        if vel_names is None:
-            vel_names = ['vp', 'vs']
-
-        for ss, vv, vtype in zip(
-                ['ac', 'acs'], vel_names, ['P velocity', 'S velocity']
-        ):
-            info_txt = ''
-            if ss not in self.log_names():
-                continue
-            else:
-                din = self.logs[ss].data
-                success, dout = cnvrt(din, 'us/ft', 'm/s')
-
-            self.add_log(
-                dout,
-                vv,
-                vtype,
-                header={
-                    'unit': 'm/s',
-                    'modification_history': '{} Calculated from {}'.format(info_txt, ss.upper()),
-                    'orig_filename': self.logs['ac'].header.orig_filename
-                }
-            )
-
-    def add_well_path(self, survey_points, survey_file=None, verbose=True):
-        """
-        adds (interpolates) the TVD (relative to KB) based on the input survey points for each MD value in this well
-
-        :param survey_points:
-            dict
-            Dictionary with required keywords 'MD' and 'TVD'
-            the associated items for 'MD' and 'TVD' keys are lists of measured depth and True vertical depth in meters
-            relative to KB.
-            If key 'INC' exists, it assumes it is the inclination in degrees
-            Because there are so many flavors of how the survey points are stored in a file, you need to write specific
-            readers for each files that spits out the result in a dictionary with 'MD' and 'TVD' keys
-
-            The function read_wellpath() in the blixt_utils library tries to read many variants of survey data files
-
-            if survey_points is None, the well is assumed vertical and MD is used as TVD
-
-        :param survey_file:
-            str
-            Name of file survey points are calculated from.
-            Used in history of objects
-        :return:
-
-        """
-        if isinstance(survey_file, str):
-            fname = survey_file
-        else:
-            fname = 'unknown file'
-
-        md = self.logs['depth'].data
-
-        # Calculate and write TVD to well
-        if survey_points is None:
-            new_tvd = self.get_tvd()
-        else:
-            new_tvd = interp1d(survey_points['MD'], survey_points['TVD'],
-                               kind='linear',
-                               bounds_error=False,
-                               fill_value='extrapolate')(md)
-        if verbose:
-            fig, axes = plt.subplots(1, 2, figsize=(10, 8))
-            if survey_points is not None:
-                axes[0].plot(survey_points['MD'], survey_points['TVD'], '-or', lw=0)
-            axes[0].plot(md, new_tvd)
-            axes[0].set_xlabel('MD [m]')
-            axes[0].set_ylabel('TVD [m]')
-            axes[0].legend(['Survey points', 'Interpolated well data'])
-
-        if survey_points is None:
-            mod_history = 'Assuming well is vertical, TVD calculated from MD directly'
-        else:
-            mod_history = 'TVD calculated from {}'.format(fname)
-
-        self.add_log(
-            new_tvd,
-            'tvd',
-            'Depth',
-            header={
-                'unit': 'm',
-                'desc': 'True vertical depth',
-                'modification_history': mod_history})
-
-        # Try the same for inclination
-        if (survey_points is not None) and ('INC' in list(survey_points.keys())):
-            new_inc = interp1d(survey_points['MD'], survey_points['INC'],
-                               kind='linear',
-                               bounds_error=False)(md)
-            if verbose:
-                axes[1].plot(survey_points['MD'], survey_points['INC'], '-or', lw=0)
-                axes[1].plot(md, new_inc)
-                axes[1].set_xlabel('MD [m]')
-                axes[1].set_ylabel('Inclination [deg]')
-                axes[1].legend(['Survey points', 'Interpolated well data'])
-            self.add_log(
-                new_inc,
-                'inc',
-                'Inclination',
-                header={
-                    'unit': 'deg',
-                    'desc': 'Inclination',
-                    'modification_history': 'calculated from {}'.format(fname)})
-
-        if verbose:
-            fig.suptitle('Well: {}'.format(self.well))
-            plt.show()
-
-    def add_twt(self, twt_points, twt_file=None, verbose=True):
-        """
-       adds (through interpolation) the two-way time (TWT) in seconds [s] to the well based on the input twt points
-
-       If no twt_points (None) are provided, it will search for an existing One-way time log in the well, and convert those to
-       TWT
-
-       If the overwrite option is set to True, it will try to overwrite any existing TWT log with the interpolated
-       results from twt_points
-
-        :param twt_points:
-            dict
-            Dictionary with required keywords 'MD' and 'TWT'
-            the associated items for 'MD' and 'TWT' keys are lists of measured depth [m] and two-way-time [s]
-            NOTE: If TWT is negative, and increasingly negative with depth, this function changes its sign so
-            that it is increasingly positive with depth
-
-            The function read_petrel_checkshots() in the blixt_utils is useful to calculate the input twt_points data
-            based on a checkshots file exported from Petrel
-
-        :param twt_file:
-            str
-            Name of file the twt points are calculated from.
-            Used in history of objects
-
-        :param verbose:
-            Bool
-            If True, plots are generated to show the result
-
-        :return:
-
-        """
-        _x = None
-        _y = None
-        _name = None
-
-        if isinstance(twt_file, str):
-            fname = twt_file
-        else:
-            fname = 'unknown file'
-
-        md = self.logs['depth'].data
-
-        if twt_points is None:
-            # Use the first existing One-way time log to calculate a TWT log
-            if 'One-way time' in self.log_types():
-                log_curve = self.get_logs_of_type('One-way time')[0]
-                new_twt = 2. * log_curve.data
-                fname = log_curve.name
-                _name = 'twt_from_owt'
-                _x = md
-                _y = 1000.0 * log_curve.data
-            else:
-                return None
-        else:
-            # Calculate TWT from input points
-            sign = 1.0
-            if sum(twt_points['TWT'][-10:]) < 0:
-                sign = -1.0
-            new_twt = interp1d(twt_points['MD'], sign * np.array(twt_points['TWT']),
-                               kind='linear',
-                               bounds_error=False,
-                               fill_value='extrapolate')(md)
-            _name = 'twt_from_interp'
-            _x = twt_points['MD']
-            _y = sign * 1000. * np.array(twt_points['TWT'])
-
-        if verbose:
-            fig, axes = plt.subplots(1, 1, figsize=(5, 8))
-            axes.plot(_x, _y, '-or', lw=0)
-            axes.plot(md, 1000. * new_twt)
-            axes.set_xlabel('MD [m]')
-            axes.set_ylabel('TWT [ms]')
-            axes.legend(['TDR points', 'Interpolated well data'])
-
-        self.add_log(
-            new_twt,
-            _name,
-            'Two-way time',
-            header={
-                'unit': 's',
-                'desc': 'Two-way time, positive downwards',
-                'modification_history': 'calculated from {}'.format(fname)})
-
-        if verbose:
-            fig.suptitle('Well: {}'.format(self.well))
-            plt.show()
-
-    def calc_toc(self, log_table, r0=None, ac0=None, lom=None, mask_name=None, verbose=False):
-        """
-        Calculates the TOC using the functions from Passey et al. 1990 "A practical model for organic richness ...",
-        which are implemented in rp_core.py
-        The "trend" TOC is calculated using a linear trend in r and ac as baseline, so that the manual picking is not
-        necessary
-
-        Args:
-           log_table:
-                dict
-                A dictionary specifying which resistivity and ac log to use. E.G.
-                {'Resistivity: 'rdep', 'Sonic': 'ac'}
-           r0:
-                float
-                Picked baseline value of the resistivity
-           ac0:
-                float
-                Picked baseline value of the sonic
-           lom:
-                float
-                Unitless number somewhere between 6 and 11 which describes the level of organic metamorphism units
-                (Hood et al. 1975)
-            mask_name:
-                str
-                Name of the mask to be used
-           verbose:
-
-        Returns:
-
-        """
-        from blixt_rp.rp_utils.calc_toc import calc_toc
-        necessary_log_types = ['Resistivity', 'Sonic']
-        for _key in necessary_log_types:
-            if _key not in list(log_table.keys()):
-                raise IOError('No log of type {} is specified'.format(_key))
-            if log_table[_key] not in self.log_names():
-                raise IOError('The specified log {} is not present in this well block: {} {}'.format(
-                    log_table[_key], self.well, self.name
-                ))
-
-        # check if a mask named mask_name exists
-        mask = None
-        mask_desc = None
-        if mask_name is not None:
-            if self.masks is not None:
-                if mask_name not in list(self.masks.keys()):
-                    warn_txt = 'No mask applied. The desired mask {} does not exist in well {}'.format(
-                        mask_name, self.well)
-                    print('WARNING: {}'.format(warn_txt))
-                    logger.warning(warn_txt)
-                else:
-                    mask = self.masks[mask_name].data
-                    mask_desc = self.masks[mask_name].header.desc
-        toc_trend, toc_picked, dlr_trend, dlr_picked = calc_toc(self.logs[log_table['Resistivity']],
-                                         self.logs[log_table['Sonic']],
-                                         self.logs['depth'],
-                                         r0, ac0, lom,
-                                         mask=mask, mask_desc=mask_desc, verbose=verbose)
-        self.add_log_curve(toc_trend)
-        self.add_log_curve(toc_picked)
-        self.add_log_curve(dlr_trend)
-        self.add_log_curve(dlr_picked)
-
-
 def _read_data(file):
     """Convert file and Return `self`. """
     file_format = None
@@ -2493,70 +1312,6 @@ def add_one(instring):
     else:
         instring = instring + ' 1'
     return instring
-
-
-def convert_to_dataframe(all_wells, block_name=None, rename_logs=None):
-    import pandas as pd
-
-    log_names = []
-    well_name_keys = {}
-    for i, well_name in enumerate(list(all_wells.keys())):
-        well_name_keys[well_name] = float(i)
-        for this_log_name in all_wells[well_name].log_names():
-            log_names.append(this_log_name)
-    log_names = list(set(log_names))
-    # Only keep the logs which are present in all wells
-    remove_these_logs = []
-    for well_name in list(all_wells.keys()):
-        for this_log_name in log_names:
-            if this_log_name not in all_wells[well_name].log_names():
-                print('We are removing', this_log_name)
-                remove_these_logs.append(this_log_name)
-    for this_log_name in list(set(remove_these_logs)):
-        log_names.remove(this_log_name)
-
-    log_array_list = [np.empty(0) for i in range(len(log_names) + 1)]
-
-    for well_name in list(all_wells.keys()):
-        length = 0
-        for i, this_log_name in enumerate(log_names):
-            # TODO
-            # below line takes the first block only
-            this_log = all_wells[well_name].get_logs_of_name(this_log_name)[0].data
-            log_array_list[i] = np.append(log_array_list[i], this_log)
-            length = len(this_log)
-        log_array_list[-1] = np.append(log_array_list[-1], np.repeat(well_name_keys[well_name], length))
-
-    log_names.append('Well')
-    return pd.DataFrame(data=np.array(log_array_list).T, columns=log_names), well_name_keys
-
-
-def overview(all_wells):
-    """
-    Creates a overview table in a pandas DataFrame style, which can be easily printed
-    :param all_wells:
-        dict
-        Dictionary with well names as keys, and corresponding well object as value
-        As returned from Project.load_all_wells()
-    :return
-        DataFrame
-    """
-    import pandas as pd
-    columns = ['Well', 'Log type', 'Log name', 'Orig log name', 'las file']
-    content = []
-    for wname in list(all_wells.keys()):
-        content.append([wname] + ['' for ii in range(len(columns) - 1)])
-        for log_type in all_wells[wname].log_types():
-            content.append(['', log_type] + ['' for ii in range(len(columns) - 2)])
-            for wlog in all_wells[wname].get_logs_of_type(log_type):
-                content.append([
-                    '',
-                    '',
-                    wlog.name,
-                    wlog.header['orig_name'],
-                    os.path.basename(wlog.header['orig_filename'])
-                ])
-    return pd.DataFrame(data=content, columns=columns)
 
 
 def add_headers(_header, _well_info, _ignore_keys, _note):
@@ -2598,7 +1353,9 @@ def add_logs_to_block(_block, _well_dict, _block_name, _only_these_logs, _filena
     :param _templates:
         dict
         Template dictionary as returned from blixt_utils.io.io.project_templates('project_table.xlsx')
-        When provided, we try to convert the units used in the input (las file) to the units specified in templates.
+        When provided, the template is used to convert the input data from the given unit to the units specified
+        in the templates.
+
     :return:
         modified block
 
@@ -2637,9 +1394,21 @@ def add_logs_to_block(_block, _well_dict, _block_name, _only_these_logs, _filena
         # add only the selected logs
         for _key in list(_only_these_logs.keys()):
             if _key in list(_well_dict['curve'].keys()):
+                logger.debug('Adding log {}'.format(_key))
+                _data = np.array(_well_dict['data'][_key])
                 this_header = _well_dict['curve'][_key]
                 this_header.update({'log_type': _only_these_logs[_key]})
-                logger.debug('Adding log {}'.format(_key))
+                # Try to convert the units of the data according to the units given in _templates
+                if _templates is not None:
+                    _success, _data = cnvrt(
+                        _data,
+                        _well_dict['curve'][_key]['unit'],
+                        _templates[_only_these_logs[_key]]['unit'])
+                    if _success:
+                        logger.debug('Units converted from {} to {}'.format(
+                            _well_dict['curve'][_key]['unit'],
+                            _templates[_only_these_logs[_key]]['unit']))
+                        this_header.update({'unit': _templates[_only_these_logs[_key]]['unit']})
                 these_logs[_key] = LogCurve(
                     name=_key,
                     block=_block_name,
@@ -2660,6 +1429,12 @@ def add_logs_to_block(_block, _well_dict, _block_name, _only_these_logs, _filena
         # add all logs
         for _key in list(_well_dict['curve'].keys()):
             logger.debug('Adding log {}'.format(_key))
+            _data = np.array(_well_dict['data'][_key])
+            # Try to convert the units of the data according to the units given in _templates
+            if _templates is not None:
+                logger.warning(
+                    'No unit conversion can be done. Lack information about which log type each log belongs to' +
+                    ' Need the only_these_logs dictionary for that')
             these_logs[_key] = LogCurve(
                 name=_key,
                 block=_block_name,
@@ -2694,19 +1469,11 @@ def add_logs_to_block(_block, _well_dict, _block_name, _only_these_logs, _filena
 
 
 def test():
-    wp = Project(name='MyProject', log_to_stdout=True)
-
-    #    logs = wp.data_frame()
-    #    print(logs)
-
-    try:
-        well_table = uio.project_wells(wp.project_table, wp.working_dir)
-    except OSError:
-        well_table = uio.project_wells_new(wp.project_table, wp.working_dir)
+    las_file = os.path.dirname(__file__).replace('blixt_rp\\core', 'test_data\\Well A.las')
+    print(las_file)
     w = Well()
-    las_file = list(well_table.keys())[0]
-    logs = list(well_table[las_file]['logs'].keys())
-    print(logs)
+    w.read_las(las_file)
+    return w
 
 #    w.read_las(las_file, only_these_logs=well_table[las_file]['logs'])
 #
