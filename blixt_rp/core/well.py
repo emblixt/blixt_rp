@@ -140,7 +140,12 @@ class Project(object):
             self.load_logfile(load_from)
         else:
             if name is None:
-                name = 'test'
+                if project_table is not None:
+                    name = os.path.basename(project_table).split('.')[0]
+                else:
+                    warn_txt = 'Either the name, or the project table, must be provided'
+                    logger.warning(warn_txt)
+                    raise Warning(warn_txt)
 
             if (working_dir is None) or (not os.path.isdir(working_dir)):
                 working_dir = os.path.dirname(os.path.realpath(__file__))
@@ -2480,8 +2485,13 @@ def _read_data(file):
         raise Exception("File format '{}'. not supported!".format(ext))
 
     if (file_format == 'las') or (file_format == 'RP well table'):
-        with open(file, "r", encoding='UTF8') as f:
-            lines = f.readlines()
+        try:
+            with open(file, "r", encoding='UTF8') as f:
+                lines = f.readlines()
+        except UnicodeDecodeError:
+            with open(file, "r", encoding='latin-1') as f:
+                lines = f.readlines()
+
         return well_reader(lines, file_format=file_format)  # read all lines from data
 
 

@@ -488,6 +488,8 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
     fig, ax = plt.subplots(figsize=(20, 10))
     ax.set_title('{} interval'.format(wi_name), pad=10.)
 
+    wi_name = wi_name.upper()
+
     # create fake x axes and plotting ranges
     x = np.arange(len(wells))
     pw = 0.7 * len(wells) / (len(wells) + 1)  # approximate plotting width for each well

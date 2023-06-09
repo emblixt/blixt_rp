@@ -9,24 +9,17 @@ import matplotlib.pyplot as plt
 import logging
 # from dataclasses import dataclass
 from copy import deepcopy
+import sys
 
 import bruges.rockphysics.rockphysicsmodels as brr
 
+sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
+sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_rp')
 import blixt_rp.rp_utils.definitions as ud
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.misc.param import Param
 
 logger = logging.getLogger(__name__)
-
-# @dataclass
-# class Param:
-#     """
-#     Data class to hold the different parameters used in the rock physics functions
-#     """
-#     name: str
-#     value: float
-#     unit: str
-#     desc: str
 
 
 def test_value(val, unit):
@@ -119,7 +112,7 @@ def gradient(vp_1, vp_2, vs_1, vs_2, rho_1, rho_2, along_wiggle=None):
                (2. * step(vs_1, vs_2) + step(rho_1, rho_2))
 
 
-def reflectivity(vp_1, vp_2, vs_1, vs_2, rho_1, rho_2, version='WigginsAkiRich', along_wiggle=None):
+def reflectivity(vp_1, vp_2, vs_1, vs_2, rho_1, rho_2, version='WigginsAkiRich', eei=False, along_wiggle=None):
     """
     returns function which returns the reflectivity as function of theta
     theta is in degrees
@@ -128,16 +121,26 @@ def reflectivity(vp_1, vp_2, vs_1, vs_2, rho_1, rho_2, version='WigginsAkiRich',
         'WigginsAkiRich' uses the formulation of Aki Richards by Wiggins et al. 1984 according to Hampson Russell
         'ShueyAkiRich' uses Shuey 1985's formulation of Aki Richards according to Avseth 2011 (eq. 4.7)
         'AkiRich' Aki Richards formulation according to Avseth 2011 (eq. 4.6)
-
+    :param eei:
+        bool
+        If true the function returns the reflectivity as a function of EEI rotation angle chi (-90 - 90 deg) instead
+        it follows the equation described in:
+        "Application of extended elastic impedance in seismic geomechanics"
+        Javad Sharifi, Naser Hafezi Moghaddas, Gholam Reza Lashkaripour, Abdolrahim Javaherian, and Marzieh Mirzakhanian
+        GEOPHYSICS 2019 84:3, R429-R446
     """
     def func(_):
         raise NotImplementedError
     if along_wiggle is None: along_wiggle = False
     if version is None: version = 'WigginsAkiRich'
-    if (version == 'WigginsAkiRich') or (version == 'ShueyAkiRich'):
+    if (version == 'WigginsAkiRich') or (version == 'ShueyAkiRich') or eei:
         a = intercept(vp_1, vp_2, rho_1, rho_2, along_wiggle=along_wiggle)
         b = gradient(vp_1, vp_2, vs_1, vs_2, rho_1, rho_2, along_wiggle=along_wiggle)
         c = 0.5 * step(vp_1, vp_2, along_wiggle=along_wiggle)
+        if eei:
+            def func(chi):
+                return a * np.cos(chi * np.pi / 180.) + b * np.sin(chi * np.pi / 180.)
+            return func
         if version == 'WigginsAkiRich':
             def func(theta):
                 return a + b * (np.sin(theta * np.pi / 180.)) ** 2 + \
@@ -827,6 +830,15 @@ def constantcement(k0, g0, phi, phi_c=None, apc=None, c_n=None, k_c=None, g_c=No
     """
     if smcf is None:
         smcf = 1.
+    if apc is None:
+        apc = 10.
+    if phi_c is None:
+        phi_c = 0.4
+    if c_n is None: c_n = 8.6
+    if k_c is None: k_c = 37
+    if g_c is None: g_c = 45
+    if scheme is None: scheme = 2
+
     phi_cem = phi_c - apc / 100.
     k_eff, mu_eff = brr.constant_cement(k0, g0, phi, phi_cem=phi_cem, phi_c=phi_c, Cn=c_n, Kc=k_c, Gc=g_c, scheme=scheme)
     return k_eff, smcf * mu_eff
@@ -1115,7 +1127,11 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
         core.fluids.FluidMix
     :param cutoffs:
         dict
-        E.G. {'Volume': ['<', 0.4], 'Porosity': ['>', 0.1]}
+        Defines the properties of the well logs for which can be fluid substituted
+        E.G.:
+         {'Volume': ['<', 0.4], 'Porosity': ['>', 0.1]}
+         means that the fluid substitution only can happen in sands where the
+         volume of shale is less than 0.4, and porosity is greater than 0.1,
     :param working_intervals:
         dict
         E.G.
@@ -1286,7 +1302,7 @@ if __name__ == '__main__':
     # 'rho_qz': 2.6, 'k_qz': 37, 'mu_qz': 45,
     # 'rho_sh': 2.6, 'k_sh': 15, 'mu_sh': 6,
     fig, ax = plt.subplots()
-    phi = np.linspace(0.2, 0.4, 6)
+    phi = np.linspace(0.1, 0.4, 6)
     plot_model(contactcement, 37, 45, phi, 2.6, ax)
     plot_model(constantcement, 37, 45, phi, 2.6, ax, apc=2)
     plot_model(hertz_mindlin, 37, 45, phi, 2.6, ax)

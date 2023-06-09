@@ -57,6 +57,7 @@ def calc_toc(
         r, ac, d, r0=None, ac0=None, start_r=None, lom=None, true_toc=None, mask=None, mask_desc=None, templates=None,
         axes=None, header_axes=None,
         intervals=None, interval_names=None,
+        down_weight_intervals=None,
         ylim=None,
         verbose=False
 ):
@@ -111,6 +112,10 @@ def calc_toc(
         [[interval1_top, interval1_base], [interval2_top, interval2_base], ...]
     :param interval_names:
         list of N names to annotate the intervals
+    :param down_weight_intervals:
+        list
+        List of lists, where each inner list contains the start MD, stop MD and weight, for each interval we like to
+        downweight. With weight = 0 the interval is simply ignored when calculating the background trend
     :param ylim:
         list of min max value of the y axis
 
@@ -229,11 +234,23 @@ def calc_toc(
             annotate_plot(axes['md_ax'], depth[mask], intervals=intervals, interval_names=interval_names,
                           ylim=[md_min, md_max])
 
+    if down_weight_intervals is not None:
+        if isinstance(down_weight_intervals, list):
+            if len(down_weight_intervals[0]) != 3:
+                raise IOError('down_weight_intervals must contain lists with 3 items')
+        else:
+            raise IOError('down_weight_intervals must be a list')
+        # replace the depths [m MD] with the indexes for the for this depth
+        for _i, intrvl in enumerate(down_weight_intervals):
+            down_weight_intervals[_i][0] = np.argmin(np.sqrt((depth-intrvl[0])**2))
+            down_weight_intervals[_i][1] = np.argmin(np.sqrt((depth-intrvl[1])**2))
+
     # find the linear trends matching the data. These are used as baseline in the DeltaLogR calculation
     fit_parameters_rdep = r.calc_depth_trend(
         d.data,
         mask=mask,
         down_weight_outliers=True,
+        down_weight_intervals=down_weight_intervals,
         verbose=False
     )
     fitted_rdep = r.apply_trend_function(
@@ -245,6 +262,7 @@ def calc_toc(
         d.data,
         mask=mask,
         down_weight_outliers=True,
+        down_weight_intervals=down_weight_intervals,
         verbose=False
     )
     fitted_ac = ac.apply_trend_function(

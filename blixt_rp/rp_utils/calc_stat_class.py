@@ -326,6 +326,8 @@ class CalculateStats:
         wi_labels = []
         for j, wi_name in enumerate(calc_setup.wi_names):
             this_label = '{}, {}'.format(wi_name, calc_setup.suffix[j])
+            if len(this_label) >= 10:
+                this_label = '{}\n {}'.format(wi_name, calc_setup.suffix[j])
             wi_labels.append(this_label)
             this_suffix, cutoffs_str, log_table_str = fix_strings(
                 calc_setup.suffix[j],

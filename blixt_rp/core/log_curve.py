@@ -208,6 +208,7 @@ class LogCurve(object):
                          mask_descr=None,
                          discrete_intervals=None,
                          down_weight_outliers=False,
+                         down_weight_intervals=None,
                          verbose=False
                          ):
         """
@@ -257,6 +258,13 @@ class LogCurve(object):
             bool
             If True, a weighting is calculated to minimize the impact of data far away from the median.
 
+        :param down_weight_intervals:
+            list
+            List of lists, where each inner list is a 3 item list with [start_index, stop_index, weight]
+            where weight is a float between 0 and 1. 0 indicates the data within this interval is not taken into
+            account at all. 1 is normal weight.
+            The indexes are for the unmasked data
+
         :param verbose:
             bool
             If True plots are created and more information is printed
@@ -292,6 +300,7 @@ class LogCurve(object):
 
         def do_the_fit(_mask):
             weights = None
+            fig1, ax1 = plt.subplots(nrows=2)
 
             # Test if there are NaN values in input data, which needs to be masked out
             if np.any(np.isnan(self.data[_mask])):
@@ -304,6 +313,23 @@ class LogCurve(object):
             if down_weight_outliers:
                 weights = 1. - np.sqrt((self.data[_mask] - np.median(self.data[_mask])) ** 2)
                 weights[weights < 0] = 0.
+                ax1[0].plot(weights)
+
+            if down_weight_intervals is not None:
+                if isinstance(down_weight_intervals, list):
+                    if len(down_weight_intervals[0]) != 3:
+                        raise IOError('down_weight_intervals must contain lists with 3 items')
+                else:
+                    raise IOError('down_weight_intervals must be a list')
+                interval_weights = np.ones(len(self.data))
+                for intrvl in down_weight_intervals:
+                    interval_weights[intrvl[0]:intrvl[1]] = intrvl[2]
+
+                if weights is None:
+                    weights = interval_weights[mask]
+                else:
+                    weights = weights * interval_weights[mask]
+                ax1[1].plot(weights)
 
             return least_squares(residuals, x0, args=(depth[_mask], self.data[_mask]),
                                  kwargs={'target_function': trend_function, 'weight': weights},

@@ -19,6 +19,7 @@ import blixt_rp.rp_utils.definitions as ud
 logger = logging.getLogger(__name__)
 def_msk_name = 'Mask'  # default mask name
 
+
 # TODO
 # There is a confusion about which  "calc_stat" to use. This calc_stats3() or calc_stats_class.py.
 # This need to be resolved
@@ -121,7 +122,8 @@ def calc_stats2_tops(
 
         # collect data
         collect_data_for_this_interval(
-            wells, logs, tops, interval, results, results_per_well, depth_from_top, cutoffs, log_table, block_name=block_name)
+            wells, logs, tops, interval, results, results_per_well, depth_from_top, cutoffs, log_table,
+            block_name=block_name)
 
         # create plot of logs vs depth and fill the interval plots
         plot_logs_vs_depth(logs, wells, interval, ncols, well_names, results_per_well, depth_from_top,
@@ -259,26 +261,25 @@ def calc_stats2(
             depth_from_top, cutoffs, log_table, block_name=block_name)
 
         ## create plot of logs vs depth and fill the interval plots
-        #plot_logs_vs_depth(logs, wells, wi_name, ncols, well_names, results_per_well, depth_from_top,
+        # plot_logs_vs_depth(logs, wells, wi_name, ncols, well_names, results_per_well, depth_from_top,
         #                   working_dir, cutoffs_str, suffix)
 
         # plot averages and standard deviations for each well
         plot_averages(j, logs, wells, results, results_per_well, figs_and_axes)
 
         ## create histogram plot
-        #plot_histograms(logs, results, wi_name, ncols, well_names, results_per_well, working_dir, cutoffs_str, suffix)
+        # plot_histograms(logs, results, wi_name, ncols, well_names, results_per_well, working_dir, cutoffs_str, suffix)
 
         # Test the new crossplotting functionality
         plot_crossplots(log_table, results, wi_name, well_names, results_per_well,
                         templates, working_dir, cutoffs_str, suffix)
 
-
         ## Write result to RokDoc compatible excel Sums And Average xls file:
-        #save_rokdoc_output(rokdoc_output, results, wi_name, log_table, cutoffs_str, suffix)
+        # save_rokdoc_output(rokdoc_output, results, wi_name, log_table, cutoffs_str, suffix)
 
     # arrange the interval plots
-    #well_names.append('All')
-    #for i, fax in enumerate(figs_and_axes):
+    # well_names.append('All')
+    # for i, fax in enumerate(figs_and_axes):
     #    fax[1].legend(well_names, prop={'size': 10})
     #    fax[1].grid(True)
     #    if templates is not None:
@@ -467,16 +468,16 @@ def calc_stats3(
 
         if pcube_lfp_plot:
             plot_pcube_lfp(log_table, results, wi_name, well_names, results_per_well,
-                        templates, working_dir, cutoffs_str, suffix, ax=pc_ax, save_plots=save_plots)
+                           templates, working_dir, cutoffs_str, suffix, ax=pc_ax, save_plots=save_plots)
 
-        #fig, ax = plt.subplots()
-        #x = results[log_table['P velocity'].lower()]
-        #y = results[log_table['Density'].lower()]
-        #print(len(x), len(y))
-        #print(len(~np.ma.masked_invalid(x).mask), len(~np.ma.masked_invalid(y).mask))
-        #ax.plot(x, y)
-        #ax.set_title(wi_name)
-        #fig.savefig(os.path.join(working_dir, 'test_{}.png'.format(wi_name)))
+        # fig, ax = plt.subplots()
+        # x = results[log_table['P velocity'].lower()]
+        # y = results[log_table['Density'].lower()]
+        # print(len(x), len(y))
+        # print(len(~np.ma.masked_invalid(x).mask), len(~np.ma.masked_invalid(y).mask))
+        # ax.plot(x, y)
+        # ax.set_title(wi_name)
+        # fig.savefig(os.path.join(working_dir, 'test_{}.png'.format(wi_name)))
 
         # Write result to RokDoc compatible excel Sums And Average xls file:
         if save_sums_and_averages and (rokdoc_output is not None):
@@ -488,7 +489,7 @@ def calc_stats3(
             uio.write_pcube_lfc(working_dir, results, wi_name, log_table, cutoffs_str, suffix)
             for wname in list(results_per_well.keys()):
                 uio.write_pcube_lfc(working_dir, results_per_well[wname], wi_name, log_table, cutoffs_str,
-                               suffix, well_name=wname)
+                                    suffix, well_name=wname)
 
     # arrange the interval plots
     if interval_plot:
@@ -497,8 +498,8 @@ def calc_stats3(
             fax[1].legend(well_names, prop={'size': 10})
             fax[1].grid(True)
             if templates is not None:
-                                         fax[1].set_xlim(templates[list(log_tables[0].keys())[i]]['min'],
-                                         templates[list(log_tables[0].keys())[i]]['max'])
+                fax[1].set_xlim(templates[list(log_tables[0].keys())[i]]['min'],
+                                templates[list(log_tables[0].keys())[i]]['max'])
             fax[1].set_xlabel(list(log_tables[0].keys())[i])
             fax[1].set_yticklabels([''] + interval_ticks + [''])
             fax[1].set_title(cutoffs_str)
@@ -660,7 +661,7 @@ def collect_data_for_this_interval(
         wells, logs, wis, wi_name, results, results_per_well,
         depth_from_top, cutoffs, log_table, block_name=ud.def_lb_name,
         backus_length=None
-    ):
+):
     """
     Collects the data for the given logs, for the given wells, inside the given working intervals (wis), using the
     given cutoffs, in the resulting containers 'results' and 'results_per_well', which are created (empty) beforehand.
@@ -756,7 +757,7 @@ def test_depth_tops(_this_depth, _interval, _this_well_name):
             _this_well_name
         )
     logger.info(_this_string)
-    #print('   '.format(_this_string))
+    # print('   '.format(_this_string))
 
 
 def test_depth(_this_depth, _wi_name, _this_well_name):
@@ -773,7 +774,7 @@ def test_depth(_this_depth, _wi_name, _this_well_name):
             _this_well_name
         )
     logger.info(_this_string)
-    #print('   '.format(_this_string))
+    # print('   '.format(_this_string))
 
 
 def plot_logs_vs_depth_tops(logs, wells, interval, ncols, well_names, results_per_well, depth_from_top,
@@ -870,7 +871,7 @@ def plot_averages(j, logs, wells, results, results_per_well, figs_and_axes, temp
 
 
 def plot_histograms_tops(logs, results, interval, ncols, well_names, results_per_well,
-                    working_dir, cutoffs_str, suffix):
+                         working_dir, cutoffs_str, suffix):
     fig, axs = plt.subplots(nrows=ncols, ncols=1, figsize=(9, 8 * ncols))
     for i, key in enumerate(logs):
         key = key.lower()
@@ -927,7 +928,6 @@ def plot_histograms(logs, results, wi_name, ncols, well_names, results_per_well,
 
 def plot_crossplots(log_table, results, wi_name, well_names, results_per_well,
                     templates, working_dir, cutoffs_str, suffix, save_plots=True):
-
     if save_plots and (working_dir is None):
         warn_txt = 'A working directory (working_dir) is needed for plots to be saved'
         print('WARNING: {}'.format(warn_txt))
@@ -971,7 +971,7 @@ def plot_crossplots(log_table, results, wi_name, well_names, results_per_well,
                 mdata=templates[wname]['symbol'],
                 xtempl=templates[key],
                 ytempl=templates[y_key],
-                #fig=fig,
+                # fig=fig,
                 ax=axs[i],
                 edge_color=False,
                 pointsize=80
@@ -992,8 +992,7 @@ def plot_crossplots(log_table, results, wi_name, well_names, results_per_well,
 
 
 def plot_pcube_lfp(log_table, results, wi_name, well_names, results_per_well,
-                    templates, working_dir, cutoffs_str, suffix, ax=None, save_plots=True):
-
+                   templates, working_dir, cutoffs_str, suffix, ax=None, save_plots=True):
     if save_plots and (working_dir is None):
         warn_txt = 'A working directory (working_dir) is needed for plots to be saved'
         print('WARNING: {}'.format(warn_txt))
@@ -1029,7 +1028,7 @@ def plot_pcube_lfp(log_table, results, wi_name, well_names, results_per_well,
             mdata=templates[wname]['symbol'],
             xtempl=templates['AI'],
             ytempl=templates['VpVs'],
-            #fig=fig,
+            # fig=fig,
             ax=ax,
             edge_color=False,
             pointsize=80
@@ -1038,9 +1037,9 @@ def plot_pcube_lfp(log_table, results, wi_name, well_names, results_per_well,
         uhelp.confidence_ellipse(x_data, y_data, ax, n_std=2.0, edgecolor='k', linestyle='--')
 
     legend_items.append(
-        Line2D([0], [0], color='k', lw=1,  label="1 std"))
+        Line2D([0], [0], color='k', lw=1, label="1 std"))
     legend_items.append(
-        Line2D([0], [0], color='k', lw=1, linestyle='--',  label="2 std"))
+        Line2D([0], [0], color='k', lw=1, linestyle='--', label="2 std"))
     legend_names = [x._label for x in legend_items]
     this_legend = ax.legend(
         legend_items,
@@ -1190,8 +1189,10 @@ def save_rokdoc_output(rokdoc_output, results, wi_name, log_table, cutoffs_str, 
                                         -999.25,
                                         -999.25,
                                         -999.25,
-                                        -999.25,
-                                        -999.25,
+                                        np.nanmean(results[log_table['Shear modulus'].lower()]) \
+                                            if ('Shear modulus' in list(log_table.keys())) else -999.25,
+                                        np.nanmean(results[log_table['Bulk modulus'].lower()]) \
+                                            if ('Bulk modulus' in list(log_table.keys())) else -999.25,
                                         -999.25,
                                         -999.25,
                                         -999.25,
@@ -1207,7 +1208,3 @@ def save_rokdoc_output(rokdoc_output, results, wi_name, log_table, cutoffs_str, 
                                         datetime.now()
                                     ]
                                     )
-
-
-
-
