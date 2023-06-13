@@ -430,6 +430,8 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         reff = None
 
     if reff is not None:
+        # TODO
+        # expand this functionality so that we can input a wavelet
         w = ricker(duration, time_step, c_f)
 
         # Translate the mask to the time variable
