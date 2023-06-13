@@ -134,6 +134,7 @@ class Project(object):
             bool
             If True, the logging information is sent to standard output and not to file
         """
+
         logging_level = logging.INFO
 
         if load_from is not None:

@@ -171,6 +171,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
                'ls': templates[x]['line style']} for x in log_types]
     legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
 
+    # print(md_min, md_max)
     xlims = axis_plot(axes['gr_ax'], depth[mask],
               [tb.logs[lognames[xx]].data[mask] for xx in log_types],
               limits, styles, ylim=[md_min, md_max])
