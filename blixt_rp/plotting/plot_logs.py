@@ -647,8 +647,18 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
             mask = wells[well].block[block_name].masks['my_mask'].data
             legend_items.append(well)
             xdata = wells[well].block[block_name].logs[log_name].data[mask]
+            if len(xdata) < 5:
+                warn_txt = 'To few data points in {}, in well {}, after masking'.format(log_name, well)
+                logger .warning(warn_txt)
+                print(warn_txt)
+                continue
             data_container = np.append(data_container, xdata)
             ydata = wells[well].block[block_name].logs['tvd'].data[mask]
+            if len(ydata) < 5:
+                warn_txt = 'To few data points in {}, in well {}, after masking'.format(log_name, well)
+                logger .warning(warn_txt)
+                print(warn_txt)
+                continue
             tvd_container = np.append(tvd_container, ydata)
             if np.min(ydata) < tvd_min:
                 tvd_min = np.min(ydata)

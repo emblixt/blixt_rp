@@ -101,5 +101,5 @@ def predefined_fluid_subs(wp, wells, templates, wis):
     cutoffs = {'Volume': ['<', 0.5], 'Porosity': ['>', 0.1]}
     log_table = {'P velocity': 'vp_dry', 'S velocity': 'vs_dry', 'Density': 'rho_dry', 'Porosity': 'phie',
                  'Volume': 'vcl'}
-	tag = 'fs'  # tag the resulting logs after fluid substitution
-	rp.run_fluid_sub(wells, log_table, my_minerals, my_fluids, cutoffs, wis, tag, templates=templates)
+    tag = 'fs'  # tag the resulting logs after fluid substitution
+    rp.run_fluid_sub(wells, log_table, my_minerals, my_fluids, cutoffs, wis, tag, templates=templates)
