@@ -173,7 +173,7 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
 
 
 def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, color_by_gradient=False,
-                 extract_avo_at=None, avo_angles=None, avo_plot_position=None, chi_angles=None):
+                 extract_avo_at=None, avo_angles=None, avo_plot_position=None):
     """
 
     Args:
@@ -202,24 +202,20 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             Each two tuple contains the x (index number) and y (TWT [s]) coordinates of where to extract avo curves
 
         avo_angles:
-        avo_plot_position
-        chi_angles:
             list
-            list of chi angles (-90 to 90) that can be used for plotting the chi angle dependence of
-            the EEI of 1D models.
-            Note that this option is only available for model_type = '1D'
+            List of offset angles to use in plots
+            Used quite differently for quasi-2D and 1D plots
+            AND in 1D models, when eei is True, these angles are taken to be Chi angles
+        avo_plot_position
     Returns:
 
     """
-    if avo_angles is None:
-        avo_angles = [0, 10, 20, 30, 40]
     if avo_plot_position is None:
         avo_plot_position = [0.68, 0.02, 0.3, 0.3]
-    if model.model_type == '1D' and chi_angles is not None:
-        eei = False
 
     grad = None
     show = False
+    tmp_avo_angles = False
     if ax is None:
         fig, ax = plt.subplots()
         show = True
@@ -240,6 +236,9 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
     twt, layer_i, vp, vs, rho = model.realize_model(sample_rate)
 
     if model.model_type == 'quasi 2D' and model.trace_index_range is not None:
+        if avo_angles is None:
+            avo_angles = [0, 10, 20, 30, 40]
+
         for i, trace_i in enumerate(model.trace_index_range):
             calculate_here = False
             this_index = False
@@ -281,24 +280,75 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                         # TODO the '-1' below is loose. When and why do I need it???
                         avo_curves[this_index].append(ref(_ang)[twt_index - 1])
 
-    elif model.model_type == '1D' and chi_angles is not None:
-        pass  # Continue here
+    elif model.model_type == '1D' and avo_angles is not None:
+        if eei:
+            my_x_label = 'Chi angle [deg]'
+        else:
+            my_x_label = 'Incident angle [deg]'
+        ref = rp.reflectivity(vp, None, vs, None, rho, None, eei=eei, along_wiggle=True)
+        if color_by_gradient:
+            grad = rp.gradient(vp, None, vs, None, rho, None, along_wiggle=True)
+        else:
+            grad = None
+
+        for ang in avo_angles:
+            calculate_here = False
+            this_index = False
+
+            wiggle = np.convolve(wavelet['wavelet'], np.nan_to_num(ref(ang)), mode='same')
+
+            while len(wiggle) < len(twt):
+                wiggle = np.append(wiggle, np.ones(1) * wiggle[-1])  # extend with one item
+            if len(twt) < len(wiggle):
+                wiggle = wiggle[:len(twt)]
+
+            wiggle_plot(ax, twt, wiggle, ang, scaling=80, color_by_gradient=grad)
+            # Find out where there is a new layer (layer_i has a unit jump), and annotate it with a horizontal marker
+            jumps = twt[np.diff(layer_i, prepend=[0]) != 0]
+            for jump in jumps:
+                ax.axhline(jump, linestyle='--')
+
+            # extract avo curves
+            if avo_positions is not None:
+                tmp_avo_angles = [0, 10, 20, 30, 40.]
+                for _i, _t in list(avo_positions.items()):
+                    if ang == _t[0]:
+                        calculate_here = True
+                        this_index = _i
+                if calculate_here:
+                    if eei:  # if EEI is true, then we need to calculate the normal reflectivity
+                        tmp_ref = rp.reflectivity(
+                            vp, None, vs, None, rho, None, eei=False,
+                            along_wiggle=True
+                        )
+                    twt_index = np.argmin((twt - avo_positions[this_index][1])**2)
+                    for _ang in tmp_avo_angles:
+                        # TODO the '-1' below is loose. When and why do I need it???
+                        avo_curves[this_index].append(tmp_ref(_ang)[twt_index - 1])
+
+        ax.set_xlabel(my_x_label)
+
     else:
         warn_txt = 'Not possbile to plot this model'
         print(warn_txt)
 
-
-    if eei:
-        info_txt = r'EEI at $\chi$={}$^\circ$'.format(angle)
-    else:
-        info_txt = r'Amp. at $\theta$={}$^\circ$'.format(angle)
-    ax.text(0.05, 0.95, info_txt, ha='left', va='top', transform=ax.transAxes, **text_style)
+    # Add extra information to plots
+    if model.model_type == 'quasi 2D' and model.trace_index_range is not None:
+        if eei:
+            info_txt = r'EEI at $\chi$={}$^\circ$'.format(angle)
+        else:
+            info_txt = r'Amp. at $\theta$={}$^\circ$'.format(angle)
+        ax.text(0.05, 0.95, info_txt, ha='left', va='top', transform=ax.transAxes, **text_style)
 
     if avo_curves is not None:
         avo_ax = ax.inset_axes(avo_plot_position)
+
         for _i, avo in list(avo_curves.items()):
             ax.annotate('{}'.format(_i + 1), avo_positions[_i], bbox={'boxstyle': 'circle', 'color': cnames[_i]})
-            avo_ax.plot(avo_angles, avo, c=cnames[_i], label='{}'.format(_i + 1))
+            if tmp_avo_angles:
+                avo_ax.plot(tmp_avo_angles, avo, c=cnames[_i], label='{}'.format(_i + 1))
+            else:
+                avo_ax.plot(avo_angles, avo, c=cnames[_i], label='{}'.format(_i + 1))
         # avo_ax.legend()
         avo_ax.tick_params(direction='in', labelsize='small')
         avo_ax.tick_params(axis='x', pad=-15)
@@ -664,11 +714,19 @@ class Layer:
 
 
 def test_plot():
-    first_layer = Layer(thickness=0.1, vp=3300, vs=1500, rho=2.1)
-    second_layer = Layer(thickness=0.2, vp=3500, vs=1600, rho=2.3, target=True, ntg=0.8)
-    m = Model(layers=[first_layer, second_layer])
+    import blixt_utils.misc.wavelets as bumw
+    # first_layer = Layer(thickness=0.1, vp=3300, vs=1500, rho=2.1)
+    # second_layer = Layer(thickness=0.2, vp=3500, vs=1600, rho=2.3, target=True, ntg=0.8)
+    first_layer = Layer(thickness=0.05, vp=3400, vs=1820, rho=2.6)
+    second_layer = Layer(thickness=0.03, vp=3600, vs=2120., rho=2.2, target=True)
+    m = Model(depth_to_top=1.94, layers=[first_layer, second_layer])
     m.append(first_layer)
     m.plot()
+
+    wavelet = bumw.ricker(0.096, 0.001, 25)
+    plot_wiggles(m, 0.001, wavelet, avo_angles=[0., 5., 10., 15.,  20., 25., 30., 35., 40.])
+    plot_wiggles(m, 0.001, wavelet, eei=True, avo_angles=[-90, -70., -50., -30., -15., 0., 15., 30., 50., 70., 90.],
+                 extract_avo_at=(-90, 1.99))
 
 
 def test_ntg():
@@ -706,6 +764,7 @@ def test_realization():
 
 
 def test_quasi2d():
+    import blixt_utils.misc.wavelets as bumw
     from blixt_rp.rp.rp_core import constantcement, v_p, v_s
     n_samples = 51
     # TODO
@@ -764,14 +823,15 @@ def test_quasi2d():
               trace_index_range=np.arange(n_samples))
     # m.plot()
 
-    wfile = "C:\\Users\\eribli\\OneDrive - Aker BP\\Documents\\Cook Regional AVO\\Statistical wavelets\\34_3_4A CGG18M01 Full shallow.txt"
-    wavelet = uio.read_petrel_wavelet(wfile, resample_to=0.001, convert_to_zero_phase=True, verbose=False,
-                                      return_dict=True)
+    wavelet = bumw.ricker(0.096, 0.001, 25)
+
     plot_wiggles(m, 0.001, wavelet, angle=0., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
+    plot_wiggles(m, 0.001, wavelet, angle=15., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
+    plot_wiggles(m, 0.001, wavelet, angle=-90., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
 
 
 if __name__ == '__main__':
     # test_realization()
-    # test_plot()
+    test_plot()
     # test_ntg()
-    test_quasi2d()
+    # test_quasi2d()
