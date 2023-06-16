@@ -173,7 +173,7 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
 
 
 def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, color_by_gradient=False,
-                 extract_avo_at=None, avo_angles=None, avo_plot_position=None):
+                 extract_avo_at=None, avo_angles=None, avo_plot_position=None, chi_angles=None):
     """
 
     Args:
@@ -203,7 +203,11 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
 
         avo_angles:
         avo_plot_position
-
+        chi_angles:
+            list
+            list of chi angles (-90 to 90) that can be used for plotting the chi angle dependence of
+            the EEI of 1D models.
+            Note that this option is only available for model_type = '1D'
     Returns:
 
     """
@@ -211,6 +215,9 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
         avo_angles = [0, 10, 20, 30, 40]
     if avo_plot_position is None:
         avo_plot_position = [0.68, 0.02, 0.3, 0.3]
+    if model.model_type == '1D' and chi_angles is not None:
+        eei = False
+
     grad = None
     show = False
     if ax is None:
@@ -273,6 +280,13 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                     for _ang in avo_angles:
                         # TODO the '-1' below is loose. When and why do I need it???
                         avo_curves[this_index].append(ref(_ang)[twt_index - 1])
+
+    elif model.model_type == '1D' and chi_angles is not None:
+        pass  # Continue here
+    else:
+        warn_txt = 'Not possbile to plot this model'
+        print(warn_txt)
+
 
     if eei:
         info_txt = r'EEI at $\chi$={}$^\circ$'.format(angle)
