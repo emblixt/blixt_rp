@@ -1,7 +1,7 @@
 setuptools~=47.1
 openpyxl~=3.0.4
 scipy~=1.8.1
-bruges~=0.4.0
+bruges~=0.5.4
 tqdm~=4.56.0
 re~=2.2.1
 json~=2.0.9

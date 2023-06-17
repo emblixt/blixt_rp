@@ -1,7 +1,9 @@
 # blixt_rp
 Python library developed for analysing wells, doing basic rock physics and AVO modelling.
-Several Jupyter notebooks are included to demonstrate the functionality, I suggest to start with "Introduction to blixt_rp.ipynb". A folder of demo/test data 
-is also included.
+
+Several Jupyter notebooks are included to demonstrate the functionality, I suggest to start with "Introduction to blixt_rp.ipynb". 
+
+A folder of demo/test data is also included.
 
 With pip:
 

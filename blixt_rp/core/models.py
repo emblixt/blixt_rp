@@ -172,7 +172,7 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
         plt.show()
 
 
-def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, color_by_gradient=False,
+def plot_wiggels(model, sample_rate, wavelet, angle=0., eei=False, ax=None, color_by_gradient=False,
                  extract_avo_at=None, avo_angles=None, avo_plot_position=None):
     """
 
@@ -182,9 +182,9 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
         wavelet:
             dict
             dictionary with three keys:
-                'wavelet': contains the wavelet values
+                'wavelet': contains the wavelet amplitude
                 'time': contains the time data [s]
-                'header': a dictionary with infor about the wavelet
+                'header': a dictionary with info about the wavelet
             see blixt_utils.io.io.read_petrel_wavelet() for example
         angle:
             incident angle theta in degrees
@@ -724,8 +724,8 @@ def test_plot():
     m.plot()
 
     wavelet = bumw.ricker(0.096, 0.001, 25)
-    plot_wiggles(m, 0.001, wavelet, avo_angles=[0., 5., 10., 15.,  20., 25., 30., 35., 40.])
-    plot_wiggles(m, 0.001, wavelet, eei=True, avo_angles=[-90, -70., -50., -30., -15., 0., 15., 30., 50., 70., 90.],
+    plot_wiggels(m, 0.001, wavelet, avo_angles=[0., 5., 10., 15.,  20., 25., 30., 35., 40.])
+    plot_wiggels(m, 0.001, wavelet, eei=True, avo_angles=[-90, -70., -50., -30., -15., 0., 15., 30., 50., 70., 90.],
                  extract_avo_at=(-90, 1.99))
 
 
@@ -825,9 +825,9 @@ def test_quasi2d():
 
     wavelet = bumw.ricker(0.096, 0.001, 25)
 
-    plot_wiggles(m, 0.001, wavelet, angle=0., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
-    plot_wiggles(m, 0.001, wavelet, angle=15., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
-    plot_wiggles(m, 0.001, wavelet, angle=-90., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
+    plot_wiggels(m, 0.001, wavelet, angle=0., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
+    plot_wiggels(m, 0.001, wavelet, angle=15., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
+    plot_wiggels(m, 0.001, wavelet, angle=-90., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
 
 
 if __name__ == '__main__':
