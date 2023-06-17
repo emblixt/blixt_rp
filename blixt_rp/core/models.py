@@ -6,9 +6,11 @@ import logging
 import types
 from copy import deepcopy
 
-sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
-sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_rp')
-#sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
+# sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
+# sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_rp')
+sys.path.append('C:\\Users\\MårtenBlixt\\PycharmProjects\\blixt_utils')
+sys.path.append('C:\\Users\\MårtenBlixt\\PycharmProjects\\blixt_rp')
+# sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
 
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot, wavelet_plot
 from blixt_utils.plotting.crossplot import cnames
@@ -233,6 +235,14 @@ def plot_wiggels(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                 avo_curves[_i] = []
                 avo_positions[_i] = _t
 
+    def calc_wiggle(twt_length, _wavelet, _reflectivity, _angle):
+        _wiggle = np.convolve(_wavelet['wavelet'], np.nan_to_num(_reflectivity(_angle)), mode='same')
+        while len(_wiggle) < twt_length:
+            _wiggle = np.append(_wiggle, np.ones(1) * _wiggle[-1])  # extend with one item
+        if twt_length < len(_wiggle):
+            _wiggle = _wiggle[:twt_length]
+        return _wiggle
+
     twt, layer_i, vp, vs, rho = model.realize_model(sample_rate)
 
     if model.model_type == 'quasi 2D' and model.trace_index_range is not None:
@@ -252,11 +262,8 @@ def plot_wiggels(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                 )
             else:
                 grad = None
-            wiggle = np.convolve(wavelet['wavelet'], np.nan_to_num(ref(angle)), mode='same')
-            while len(wiggle) < len(twt):
-                wiggle = np.append(wiggle, np.ones(1) * wiggle[-1])  # extend with one item
-            if len(twt) < len(wiggle):
-                wiggle = wiggle[:len(twt)]
+            wiggle = calc_wiggle(len(twt), wavelet, ref, angle)
+
             wiggle_plot(ax, twt, wiggle, i, scaling=40, color_by_gradient=grad)
             # Find out where there is a new layer (layer_i has a unit jump), and annotate it with a horizontal marker
             jumps = twt[np.diff(layer_i[trace_i, :], prepend=[0]) != 0]
@@ -277,8 +284,8 @@ def plot_wiggels(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                         )
                     twt_index = np.argmin((twt - avo_positions[this_index][1])**2)
                     for _ang in avo_angles:
-                        # TODO the '-1' below is loose. When and why do I need it???
-                        avo_curves[this_index].append(ref(_ang)[twt_index - 1])
+                        tmp_wiggle = calc_wiggle(len(twt), wavelet, ref, _ang)
+                        avo_curves[this_index].append(tmp_wiggle[twt_index - 1])
 
     elif model.model_type == '1D' and avo_angles is not None:
         if eei:
@@ -295,12 +302,13 @@ def plot_wiggels(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             calculate_here = False
             this_index = False
 
-            wiggle = np.convolve(wavelet['wavelet'], np.nan_to_num(ref(ang)), mode='same')
+            wiggle = calc_wiggle(len(twt), wavelet, ref, ang)
+            # wiggle = np.convolve(wavelet['wavelet'], np.nan_to_num(ref(ang)), mode='same')
 
-            while len(wiggle) < len(twt):
-                wiggle = np.append(wiggle, np.ones(1) * wiggle[-1])  # extend with one item
-            if len(twt) < len(wiggle):
-                wiggle = wiggle[:len(twt)]
+            # while len(wiggle) < len(twt):
+            #     wiggle = np.append(wiggle, np.ones(1) * wiggle[-1])  # extend with one item
+            # if len(twt) < len(wiggle):
+            #     wiggle = wiggle[:len(twt)]
 
             wiggle_plot(ax, twt, wiggle, ang, scaling=80, color_by_gradient=grad)
             # Find out where there is a new layer (layer_i has a unit jump), and annotate it with a horizontal marker
@@ -321,10 +329,12 @@ def plot_wiggels(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                             vp, None, vs, None, rho, None, eei=False,
                             along_wiggle=True
                         )
+                    else:
+                        tmp_ref = ref
                     twt_index = np.argmin((twt - avo_positions[this_index][1])**2)
                     for _ang in tmp_avo_angles:
-                        # TODO the '-1' below is loose. When and why do I need it???
-                        avo_curves[this_index].append(tmp_ref(_ang)[twt_index - 1])
+                        tmp_wiggle = calc_wiggle(len(twt), wavelet, tmp_ref, _ang)
+                        avo_curves[this_index].append(tmp_wiggle[twt_index - 1])
 
         ax.set_xlabel(my_x_label)
 
@@ -766,7 +776,7 @@ def test_realization():
 def test_quasi2d():
     import blixt_utils.misc.wavelets as bumw
     from blixt_rp.rp.rp_core import constantcement, v_p, v_s
-    n_samples = 51
+    n_samplings = 51
     # TODO
     # At the moment, quasi2d models will likely fail when combining a varying thickness with NTG separate from 1
     # when Voigt Reuss Hill average is set to False.
@@ -780,7 +790,7 @@ def test_quasi2d():
         return 0.06 + 0.1/50 * i
 
     def vp(i):
-        # phi = np.linspace(0.1, 0.4, n_samples)
+        # phi = np.linspace(0.1, 0.4, n_samplings)
         # k_eff, mu_eff = constantcement(37, 45, phi, apc=2)
         # # print(k_eff, mu_eff)
         # # print(v_p(k_eff[i], mu_eff[i], 2.3))
@@ -793,7 +803,7 @@ def test_quasi2d():
             return 3730.
 
     def vs(i):
-        # phi = np.linspace(0.1, 0.4, n_samples)
+        # phi = np.linspace(0.1, 0.4, n_samplings)
         # k_eff, mu_eff = constantcement(37, 45, phi, apc=2)
         # return 1000. * v_s(k_eff[i], 2.3)
         # gas lens:
@@ -820,7 +830,7 @@ def test_quasi2d():
     third_layer = Layer(thickness=0.05, vp=3400., vs=1820., rho=2.6)
 
     m = Model(depth_to_top=1.94, layers=[first_layer, second_layer, third_layer],
-              trace_index_range=np.arange(n_samples))
+              trace_index_range=np.arange(n_samplings))
     # m.plot()
 
     wavelet = bumw.ricker(0.096, 0.001, 25)
@@ -832,6 +842,6 @@ def test_quasi2d():
 
 if __name__ == '__main__':
     # test_realization()
-    test_plot()
+    # test_plot()
     # test_ntg()
-    # test_quasi2d()
+    test_quasi2d()
