@@ -3,10 +3,10 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
-working_dir = 'C:\\Users\\MårtenBlixt\\PycharmProjects\\blixt_rp'
+working_dir = 'C:\\Users\\marten\\PycharmProjects\\blixt_rp'
 # for working with development versions of the code use
 sys.path.append(working_dir)
-sys.path.append('C:\\Users\\MårtenBlixt\\PycharmProjects\\blixt_utils')
+sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
 
 import blixt_rp.core.well as cw
 import blixt_rp.rp.rp_core as rp
@@ -59,6 +59,8 @@ def init(_working_dir, new=False):
         wp = new_project(_working_dir)
     else:
         wp = Project(load_from=os.path.join(_working_dir, 'MyProject_log.txt'))
+    print(wp.project_table)
+
     wells = wp.load_all_wells(unit_convert_using_template=True)
     templates = wp.load_all_templates()
     wis = wp.load_all_wis()

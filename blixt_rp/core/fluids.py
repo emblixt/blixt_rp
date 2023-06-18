@@ -15,6 +15,10 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
+import sys
+sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
+sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_rp')
+
 from blixt_utils.misc.param import Param
 import blixt_rp.rp.rp_core as rp
 import blixt_rp.core.well as cw
@@ -416,6 +420,11 @@ class FluidMix(object):
         for i, name in enumerate(mix_table['Fluid name']):
             if mix_table['Use'][i] != 'Yes':
                 continue
+            # TODO
+            # Add the tag to this_name, then a fluid mixture can contain several fluid substitution cases
+            print(mix_table['Tag'][i])
+
+            # TODO
             vf = mix_table['Volume fraction'][i]
             ftype = mix_table['Fluid type'][i]
             # Need to pair fluid name with fluid type to get unique fluid names in fluid mixture
@@ -432,8 +441,6 @@ class FluidMix(object):
             this_fluid.fluid_type = None if isnan(ftype) else ftype.lower()
             this_fluid.name = this_name
             this_fluid.header.name = this_name
-
-
 
             # iterate down in this complex dictionary
             # {this_subst:                          # 1'st level: initial or final
@@ -582,7 +589,6 @@ class FluidMix(object):
                             continue
 
 
-
 def test_fluidsub():
     from importlib import reload
     import matplotlib.pyplot as plt
@@ -658,5 +664,28 @@ def test_fluidsub():
     plt.legend()
     plt.show()
 
+def test_fluid_mix():
+    pass
+
 if __name__ == '__main__':
-    test_fluidsub()
+    import sys
+    import os
+    working_dir = 'C:\\Users\\marten\\PycharmProjects\\blixt_rp'
+    sys.path.append(working_dir)
+
+    from blixt_rp.core.well import Project
+    wp = Project(
+        name='MyProject',
+        working_dir=working_dir,
+        project_table=os.path.join(working_dir, 'excels\\project_table.xlsx')
+    )
+
+    wells = wp.load_all_wells(unit_convert_using_template=True)
+    templates = wp.load_all_templates()
+    wis = wp.load_all_wis()
+
+    myfluids = FluidMix()
+    myfluids.read_excel(wp.project_table)
+    print(myfluids.print_all_fluids())
+
+    # test_fluidsub()

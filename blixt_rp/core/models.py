@@ -8,9 +8,8 @@ from copy import deepcopy
 
 # sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
 # sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_rp')
-sys.path.append('C:\\Users\\MårtenBlixt\\PycharmProjects\\blixt_utils')
-sys.path.append('C:\\Users\\MårtenBlixt\\PycharmProjects\\blixt_rp')
-# sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
+sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
+sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_rp')
 
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot, wavelet_plot
 from blixt_utils.plotting.crossplot import cnames
@@ -153,13 +152,13 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
 
     i = 0
     for _vp, _vs, _rho in zip(vps, vss, rhos):
-        info_txt = '{}.\nVp: {:.1f}\nVs: {:.1f}\nRho: {:.1f}'.format(i+1, _vp/1000., _vs/1000., _rho)
+        info_txt = '{}.\nVp: {:.2f}\nVs: {:.2f}\nRho: {:.2f}'.format(i+1, _vp/1000., _vs/1000., _rho)
         ax.text(0.5*_vp * _rho/max_ai, 0.5*(bwb[i] + bwb[i+1]), info_txt, ha='right', va='center', **text_style)
         i += 1
     i = 0
     for _gvp, _gvs, _grho in zip(gross_vp, gross_vs, gross_rho):
         if target[i] and (ntg[i] < 1):
-            info_txt = 'NTG: {:.1f}.\nVp: {:.1f}\nVs: {:.1f}\nRho: {:.1f}'.format(ntg[i], _gvp/1000., _gvs/1000., _grho)
+            info_txt = 'NTG: {:.1f}.\nVp: {:.2f}\nVs: {:.2f}\nRho: {:.2f}'.format(ntg[i], _gvp/1000., _gvs/1000., _grho)
             ax.text(0.6*vps[i] * rhos[i]/max_ai, 0.5*(bwb[i] + bwb[i+1]), info_txt, ha='left', va='center', **text_style)
         i += 1
 

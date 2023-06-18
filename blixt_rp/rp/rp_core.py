@@ -1112,7 +1112,7 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
             wells = wp.load_all_wells()
     :param log_table:
         dict
-        Dictionary of log type: log name key: value pairs to create statistics on
+        Dictionary of log type: log name key: value pairs that determines which logs to use in the substitution
         The Vp, Vs, Rho and Phi logs are necessary to calculate the fluid substitution
         E.G.
             log_table = {
