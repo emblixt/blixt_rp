@@ -929,8 +929,9 @@ class Well(object):
         :return:
         """
         survey_points, survey_points_info = uio.read_checkshot_or_wellpath(project_table, self.well, "Well paths")
-        for lblock in list(self.block.keys()):
-            self.block[lblock].add_well_path(survey_points, survey_points_info['filename'], verbose)
+        if survey_points is not None:
+            for lblock in list(self.block.keys()):
+                self.block[lblock].add_well_path(survey_points, survey_points_info['filename'], verbose)
 
     def add_twt(self, project_table, verbose=True):
         """

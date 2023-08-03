@@ -6,6 +6,11 @@ from copy import deepcopy
 import bruges.rockphysics.anisotropy as bra
 import logging
 
+# For beta testing of code # # # #
+import sys
+sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
+# # # # # # # # # # # # # # # # # #
+
 from blixt_utils.plotting import crossplot as xp
 import blixt_rp.rp.rp_core as rp
 import blixt_rp.core.well as cw
@@ -504,6 +509,7 @@ def rpt_phi_sw(_phi, _sw, **kwargs):
     logger.info(info_txt)
 
     # Calculate the final fluid properties for the given water saturation
+    print(_sw, k_b, k_hc)
     k_f2 = rp.vrh_bounds([_sw, 1.-_sw], [k_b, k_hc])[1]  # K_f
     rho_f2 = rp.vrh_bounds([_sw, 1.-_sw],  [rho_b, rho_hc])[0]  #RHO_f
 
@@ -536,6 +542,46 @@ def rpt_phi_sw(_phi, _sw, **kwargs):
 
     return xx, yy
 
+
+def return_rpt_keywords(prev_rpt_kwargs=None, modify_keys=None, verbose=False):
+    """
+    Returns a default set of rock physics template keywords if prev_rpt_kwargs is set to None,
+    The keywords can be modified using the dict modify_keys
+    """
+    if prev_rpt_kwargs is None:
+        rpt_kwargs = {
+            'vsh': 0.2, 'phi_c': 0.4, 'c_n': 8, 'p_conf': 45, 'smcf': 0.3,
+            'rho_hc': 0.2, 'k_hc': 0.06,
+            'rho_b': 1.02, 'k_b': 2.8,
+            'rho_qz': 2.6, 'k_qz': 37, 'mu_qz': 45,
+            'rho_sh': 2.6, 'k_sh': 20, 'mu_sh': 10,
+            'apc': 10,
+            'plot_type': 'AI-VpVs', '_ref_val': None}
+    else:
+        rpt_kwargs = prev_rpt_kwargs
+
+    # modify selected keyword values
+    if modify_keys is not None and isinstance(modify_keys, dict):
+        for _key, _value in modify_keys.items():
+            rpt_kwargs[_key] = _value
+
+    # Determine mineral properties
+    rpt_kwargs['k_min'] = rp.vrh_bounds(
+        [rpt_kwargs['vsh'], 1 - rpt_kwargs['vsh']], [rpt_kwargs['k_sh'], rpt_kwargs['k_qz']])[2]  # Mineral bulk modulus
+    if verbose:
+        print('k_min: {}'.format(rpt_kwargs['k_min']))
+    rpt_kwargs['mu_min'] = rp.vrh_bounds(
+        [rpt_kwargs['vsh'], 1 - rpt_kwargs['vsh']], [rpt_kwargs['mu_sh'], rpt_kwargs['mu_qz']])[
+        2]  # Mineral shear modulus
+    if verbose:
+        print('mu_min: {}'.format(rpt_kwargs['mu_min']))
+    rpt_kwargs['rho_min'] = rp.vrh_bounds(
+        [rpt_kwargs['vsh'], 1 - rpt_kwargs['vsh']], [rpt_kwargs['rho_sh'], rpt_kwargs['rho_qz']])[
+        0]  # Density of minerals
+
+    return rpt_kwargs
+
+
 def test():
     from blixt_rp.core.well import Project
     import blixt_utils.io.io as uio
@@ -547,15 +593,18 @@ def test():
 
     fig, ax = plt.subplots()
 
-    wp = Project()
+    # Only Well_F should be active in well
+    wp = Project(project_table=__file__.replace('blixt_rp\plotting\plot_rp.py', 'excels\project_table.xlsx'))
     log_table = {'P velocity': 'vp_dry', 'S velocity': 'vs_dry', 'Density': 'rho_dry', 'Porosity': 'phie',
                     'Volume': 'vcl'}
     wis = uio.project_working_intervals(wp.project_table)
     templates = uio.project_templates(wp.project_table)
     cutoffs = {'Volume': ['<', 0.4], 'Porosity': ['>', 0.1]}
     wells = wp.load_all_wells()
+
+    # plot the well data in the desired cross plot
     plot_rp(wells, log_table, wis, wi_name, cutoffs, templates,
-            plot_type=plot_type, ref_val=ref_val, fig=fig, ax=ax)
+            plot_type=plot_type, ref_val={'Well_A': ref_val, 'Well_B': ref_val, 'Well_C': ref_val}, fig=fig, ax=ax)
 
     # Calculate average properties of mineral mix in desired working interval
     mm = MineralMix()
@@ -585,13 +634,10 @@ def test():
         sizes[:, i] = 10 + (40 * val) ** 2
 
     xx, yy = plot_rpt(phi, rpt_phi_sw, sw,
-             {'plot_type': plot_type,
-              'ref_value': ref_val,
-              'model': 'stiff',
-              'rho_min': rho_min,
-              'k_min': k_min,
-              'mu_min': mu_min},
-             sizes, colors, fig=fig, ax=ax)
+                      return_rpt_keywords(
+                          modify_keys={'plot_type': plot_type, 'ref_value': ref_val, 'model': 'stiff',
+                                       'rho_min': rho_min, 'k_min': k_min, 'mu_min': mu_min}),
+                      sizes, colors, ax=ax)
 
     # Annotate rpt
     dx = 0; dy = 0.0
@@ -609,6 +655,7 @@ def test():
         )
 
     plt.show()
+
 
 if __name__ == '__main__':
     #t = np.linspace(2000, 6000, 6)

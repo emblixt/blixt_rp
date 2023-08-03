@@ -422,7 +422,7 @@ class FluidMix(object):
                 continue
             # TODO
             # Add the tag to this_name, then a fluid mixture can contain several fluid substitution cases
-            print(mix_table['Tag'][i])
+            # print(mix_table['Tag'][i])
 
             # TODO
             vf = mix_table['Volume fraction'][i]
