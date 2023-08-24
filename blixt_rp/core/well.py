@@ -974,6 +974,7 @@ class Well(object):
                   use_tops=None,
                   wis=None,
                   wi_name=None,
+                  buffer=None,
                   overwrite=True,
                   append=None,
                   log_type_input=True,
@@ -1008,6 +1009,10 @@ class Well(object):
         :param wi_name:
             str
             name of working interval to mask, other intervals will be set to False in boolean mask
+        :param buffer:
+            float
+            If wi_name is given, than this buffer is added so that the MD range of the mask is increased.
+            E.G. MD range = interval_top - buffer : interval_base + buffer
         :param overwrite:
             bool
             if True, any existing mask with given name will be overwritten
@@ -1034,6 +1039,8 @@ class Well(object):
         from blixt_utils.utils import mask_string
         if log_table is not None:
             log_table = small_log_table(log_table)
+        if buffer is None:
+            buffer = 0.
 
         #
         # Helper functions
@@ -1076,8 +1083,8 @@ class Well(object):
                 # Append the depth mask from the selected working interval
                 try:
                     _cutoffs['depth'] = ['><',
-                                         [wis[self.well][wi_name.upper()][0],
-                                          wis[self.well][wi_name.upper()][1]]
+                                         [wis[self.well][wi_name.upper()][0] - buffer,
+                                          wis[self.well][wi_name.upper()][1] + buffer]
                                          ]
                 except KeyError:
                     warn_txt = '{} not present in {}'.format(wi_name.upper(), self.well)

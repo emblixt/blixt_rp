@@ -4,11 +4,6 @@ import numpy as np
 import logging
 from matplotlib.font_manager import FontProperties
 
-# TODO remove this two lines, only used in testing
-import sys
-sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
-#sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
-
 from blixt_rp.core.models import Model, Layer
 import blixt_utils.utils as uu
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table

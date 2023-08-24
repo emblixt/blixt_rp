@@ -32,9 +32,9 @@ class WellBlock(object):
                  logs=None,
                  masks=None,
                  orig_filename=None,
-                 start=Param('', None, '', ''),
-                 stop=Param('', None, '', ''),
-                 step=Param('', None, '', ''),
+                 start=Param(name='', value=None),
+                 stop=Param(name='', value=None),
+                 step=Param(name='', value=None),
                  regular_sampling=True,
                  header=None):
         """
@@ -868,9 +868,9 @@ class WellBlock(object):
                 LogCurve(
                     key,
                     well_dict['data'][key],
-                    Param('start', winf['strt']['value'], winf['strt']['unit'], winf['strt']['desc'],
-                    Param('stop', winf['stop']['value'], winf['stop']['unit'], winf['stop']['desc'],
-                    Param('step', winf['step']['value'], winf['step']['unit'], winf['step']['desc'],
+                    Param(name='start', value=winf['strt']['value'], unit=winf['strt']['unit'], desc=winf['strt']['desc'],
+                    Param(name='stop', value=winf['stop']['value'], unit=winf['stop']['unit'], desc=winf['stop']['desc'],
+                    Param(name='step', value=winf['step']['value'], unit=winf['step']['unit'], desc=winf['step']['desc'],
                           XXXX
                           # TODO Continue here
 
@@ -884,29 +884,29 @@ def test():
         LogCurve(
             name='log1',
             data=np.linspace(1, 100),
-            start=Param('start', 2500., 'm', ''),
-            stop=Param('stop', 3500., 'm', ''),
+            start=Param(name='start', value=2500., unit='m'),
+            stop=Param(name='stop', value=3500., unit='m'),
             log_type='A'
         ),
         LogCurve(
             name='log2',
             data=np.linspace(2, 102),
-            start=Param('start', 2500., 'm', ''),
-            stop=Param('stop', 3500., 'm', ''),
+            start=Param(name='start', value=2500., unit='m'),
+            stop=Param(name='stop', value=3500., unit='m'),
             log_type='A'
         ),
         LogCurve(
             name='log3',
             data=np.linspace(3, 103),
-            start=Param('start', 2500., 'm', ''),
-            stop=Param('stop', 3500., 'm', ''),
+            start=Param(name='start', value=2500., unit='m'),
+            stop=Param(name='stop', value=3500., unit='m'),
             log_type='B'
         ),
         LogCurve(
             name='log4',
             data=np.linspace(4, 104),
-            start=Param('start', 2000., 'm', ''),
-            stop=Param('stop', 3000., 'm', ''),
+            start=Param(name='start', value=2000., unit='m'),
+            stop=Param(name='stop', value=3000., unit='m'),
             log_type='B'
         )
     ]

@@ -7,9 +7,7 @@ import types
 from copy import deepcopy
 
 # sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
-# sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_rp')
-sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
-sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_rp')
+# Instead of sys.path.append load all PyCharm projects in PyCharm, and they gets added to the sys.path automatically
 
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot, wavelet_plot
 from blixt_utils.plotting.crossplot import cnames
@@ -173,7 +171,7 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
         plt.show()
 
 
-def plot_wiggels(model, sample_rate, wavelet, angle=0., eei=False, ax=None, color_by_gradient=False,
+def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, color_by_gradient=False,
                  extract_avo_at=None, avo_angles=None, avo_plot_position=None):
     """
 
@@ -213,6 +211,8 @@ def plot_wiggels(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
     """
     if avo_plot_position is None:
         avo_plot_position = [0.68, 0.02, 0.3, 0.3]
+    if angle is None:
+        angle = 0
 
     grad = None
     show = False
@@ -361,6 +361,9 @@ def plot_wiggels(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
         # avo_ax.legend()
         avo_ax.tick_params(direction='in', labelsize='small')
         avo_ax.tick_params(axis='x', pad=-15)
+        avo_ax.set_xlabel('Incident angle', fontsize=8, backgroundcolor='w')
+        avo_ax.set_ylabel('Reflectivity', fontsize=8, backgroundcolor='w')
+        avo_ax.grid(axis='y')
 
     # ax.set_ylim(ax.get_ylim()[::-1])
     ax.grid(axis='y')
@@ -464,12 +467,13 @@ class Model:
         if layer.layer_type == 'quasi 2D':
             self.model_type = 'quasi 2D'
 
-    def realize_model(self, resolution, voigt_reuss_hill=False):
+    def realize_model(self, resolution, voigt_reuss_hill=False, verbose=False):
         if self.model_type == 'quasi 2D' and self.trace_index_range is not None:
 
             n = len(self.trace_index_range)
             layer_index, this_vp, this_vs, this_rho = None, None, None, None
-            bgrnd_vp, bgrnd_vs, bgrnd_rho = None, None, None
+            bgrnd_vp, bgrnd_vs, bgrnd_rho, bgrnd_layer_index = None, None, None, None
+            thickening = False
             for trace_i in self.trace_index_range:
                 tmp_layer_index = np.zeros(0)
                 tmp_vp, tmp_vs, tmp_rho = np.zeros(0), np.zeros(0), np.zeros(0)
@@ -490,16 +494,30 @@ class Model:
                     bgrnd_rho = deepcopy(tmp_rho)
                     bgrnd_layer_index = deepcopy(tmp_layer_index)
 
+                if verbose:
+                    print('Trace: {}, length: {}'.format(trace_i, len(tmp_vp)))
+
                 # First fill model with background model
                 this_vp[trace_i, :] = bgrnd_vp
                 this_vs[trace_i, :] = bgrnd_vs
                 this_rho[trace_i, :] = bgrnd_rho
                 layer_index[trace_i, :] = bgrnd_layer_index
 
-                this_vp[trace_i, :len(tmp_vp)] = tmp_vp  # TODO This will fail if model grows in depth
-                this_vs[trace_i, :len(tmp_vs)] = tmp_vs
-                this_rho[trace_i, :len(tmp_rho)] = tmp_rho
-                layer_index[trace_i, :len(tmp_layer_index)] = tmp_layer_index
+                if len(tmp_vp) > len(bgrnd_vp):
+                    thickening = True  # Model gets "thicker" for this trace
+                else:
+                    thickening = False
+
+                if thickening:
+                    this_vp[trace_i, :len(bgrnd_vp)] = tmp_vp[:len(bgrnd_vp)]
+                    this_vs[trace_i, :len(bgrnd_vs)] = tmp_vs[:len(bgrnd_vs)]
+                    this_rho[trace_i, :len(bgrnd_rho)] = tmp_rho[:len(bgrnd_rho)]
+                    layer_index[trace_i, :len(bgrnd_layer_index)] = tmp_layer_index[:len(bgrnd_layer_index)]
+                else:
+                    this_vp[trace_i, :len(tmp_vp)] = tmp_vp
+                    this_vs[trace_i, :len(tmp_vs)] = tmp_vs
+                    this_rho[trace_i, :len(tmp_rho)] = tmp_rho
+                    layer_index[trace_i, :len(tmp_layer_index)] = tmp_layer_index
 
             z = self.depth_to_top + np.arange(len(this_vp[0])) * resolution
 

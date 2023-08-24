@@ -5,11 +5,6 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.font_manager import FontProperties
 
-
-# To test blixt_rp and blixt_utils libraries directly, without installation:
-sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_rp')
-sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
-
 import openmind.openmind_tool as openmind_tool
 import openmind.core.models as models
 

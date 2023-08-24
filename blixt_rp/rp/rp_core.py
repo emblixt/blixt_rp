@@ -13,8 +13,6 @@ import sys
 
 import bruges.rockphysics.rockphysicsmodels as brr
 
-sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
-sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_rp')
 import blixt_rp.rp_utils.definitions as ud
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.misc.param import Param
@@ -924,9 +922,9 @@ def delta_log_r(r, ac, r0=None, ac0=None, neal_morgan=False):
             Param
     """
     if r0 is None:
-        r0 = Param('', 1., 'Ohmm', '')
+        r0 = Param(name='', value=1., unit='Ohmm')
     if ac0 is None:
-        ac0 = Param('', 100., 'us/ft', '')
+        ac0 = Param(name='', value=100., unit='us/ft')
 
     r = test_value(r, 'Ohmm')
     ac = test_value(ac, 'us/ft')

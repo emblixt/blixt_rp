@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from blixt_rp.rp_utils.version import info
 from blixt_utils.plotting.helpers import axis_plot, annotate_plot, header_plot, deltalogr_plot
 from blixt_rp.core.log_curve import LogCurve
+from blixt_utils.misc.templates import default_templates
 
 text_style = {'fontsize': 'x-small', 'bbox': {'facecolor': 'w', 'alpha': 0.5}}
 
@@ -58,7 +59,9 @@ def calc_toc(
         axes=None, header_axes=None,
         intervals=None, interval_names=None,
         down_weight_intervals=None,
+        discrete_intervals=None,
         ylim=None,
+        reference_logs=None,
         verbose=False
 ):
     """
@@ -102,11 +105,13 @@ def calc_toc(
         dict
         Dictionary with the the following keys; 'r_ac_ax', 'dlr_ax', 'toc_ax' which each have an Axes object that the
         data will be plotted in.
+        If reference_logs is not None, then this dict must contain an additional axes called 'ref_ax'.
         If axes are provided, the "verbose" keyword will be ignored
     :param header_axes:
         dict
         Dictionary with the the following keys; 'r_ac_ax', 'dlr_ax', 'toc_ax' which each have an Axes object that
         will hold the headers of the plots.
+        If reference_logs is not None, then this dict must contain an additional axes called 'ref_ax'.
     :param intervals:
         list of lists with top and base (in MD) of N intervals, e.g.
         [[interval1_top, interval1_base], [interval2_top, interval2_base], ...]
@@ -116,6 +121,13 @@ def calc_toc(
         list
         List of lists, where each inner list contains the start MD, stop MD and weight, for each interval we like to
         downweight. With weight = 0 the interval is simply ignored when calculating the background trend
+    :param discrete_intervals:
+        list
+        list of MD values of where we allow the trend function to have discontinuities
+    :param reference_logs:
+        LogCurve object or list of LogCurve objects
+        LogCurve(s) containing other data from this well to display in one extra sub plot
+        This axis is called 'ref_ax' and if input axes are provided, it must be found there
     :param ylim:
         list of min max value of the y axis
 
@@ -139,52 +151,11 @@ def calc_toc(
     if (mask is not None) and (mask_desc is None):
         mask_desc = 'UNKNOWN'
     if templates is None:
-        templates = {
-            'Resistivity': {'bounds': None,
-                            'center': None,
-                            'colormap': 'jet',
-                            'description': None,
-                            'max': 200.0,
-                            'min': 0.2,
-                            'scale': 'log',
-                            'type': 'float',
-                            'unit': '$\\Omega m$',
-                            'line color': '#1f77b4',
-                            'line style': '-',
-                            'line width': 1,
-                            'marker': None,
-                            'full_name': 'Resistivity'},
-            'Sonic': {'bounds': None,
-                      'center': None,
-                      'colormap': 'jet',
-                      'description': None,
-                      'max': 120.0,
-                      'min': 60.0,
-                      'scale': 'lin',
-                      'type': 'float',
-                      'unit': '$\\mu s/F$',
-                      'line color': '#2ca02c',
-                      'line style': '-',
-                      'line width': 1,
-                      'marker': None,
-                      'full_name': 'Sonic'},
-            'TOC': {'bounds': None,
-                     'center': None,
-                     'colormap': 'jet',
-                     'description': None,
-                     'max': 5.0,
-                     'min': 1.0,
-                     'scale': 'lin',
-                     'type': 'float',
-                     'unit': '%',
-                     'line color': '#9467bd',
-                     'line style': '-',
-                     'line width': 1,
-                     'marker': '*',
-                     'full_name': 'TOC'}
-        }
+        templates = default_templates
 
     ax_names = ['r_ac_ax', 'dlr_ax', 'toc_ax']
+    if reference_logs is not None:
+        ax_names += ['ref_ax']
     if axes is not None:
         verbose = False
         preset_axes = True
@@ -206,7 +177,10 @@ def calc_toc(
         md_max = ylim[1]
     fig = None
     if verbose:
-        fig = plt.figure(figsize=(12, 10))
+        if reference_logs is None:
+            fig = plt.figure(figsize=(12, 10))
+        else:
+            fig = plt.figure(figsize=(16, 10))
         title_txt = 'TOC estimation in well {}'.format(r.well)
         if mask_desc is not None:
             title_txt += ', using mask: {}'.format(mask_desc)
@@ -216,6 +190,9 @@ def calc_toc(
             width_ratios = [0.2, 1, 1, 1]
         else:
             width_ratios = [1, 1, 1]
+        if reference_logs is not None:
+            width_ratios += [1]
+
         n_cols = len(ax_names)
         n_rows = 2
         height_ratios = [1, 5]
@@ -245,17 +222,27 @@ def calc_toc(
             down_weight_intervals[_i][0] = np.argmin(np.sqrt((depth-intrvl[0])**2))
             down_weight_intervals[_i][1] = np.argmin(np.sqrt((depth-intrvl[1])**2))
 
+    if discrete_intervals is not None:
+        if not isinstance(discrete_intervals, list):
+            raise IOError('discrete_intervals must be a list')
+        # replace the depths [m MD] with the indexes for the for this depth
+        for _i, intrvl in enumerate(discrete_intervals):
+            discrete_intervals[_i] = np.argmin(np.sqrt((depth-intrvl)**2))
+            discrete_intervals[_i] = np.argmin(np.sqrt((depth-intrvl)**2))
+
     # find the linear trends matching the data. These are used as baseline in the DeltaLogR calculation
     fit_parameters_rdep = r.calc_depth_trend(
         d.data,
         mask=mask,
         down_weight_outliers=True,
         down_weight_intervals=down_weight_intervals,
+        discrete_intervals=discrete_intervals,
         verbose=False
     )
     fitted_rdep = r.apply_trend_function(
         d.data,
         fit_parameters_rdep,
+        discrete_intervals=discrete_intervals,
         verbose=False
     )
     fit_parameters_ac = ac.calc_depth_trend(
@@ -263,11 +250,13 @@ def calc_toc(
         mask=mask,
         down_weight_outliers=True,
         down_weight_intervals=down_weight_intervals,
+        discrete_intervals=discrete_intervals,
         verbose=False
     )
     fitted_ac = ac.apply_trend_function(
         d.data,
         fit_parameters_ac,
+        discrete_intervals=discrete_intervals,
         verbose=False
     )
 
@@ -357,6 +346,20 @@ def calc_toc(
                           limits, styles, yticks=not((intervals is not None) or preset_axes), ylim=[md_min, md_max])
         # header_plot(header_axes['r_ac_ax'], limits, legends, styles)
         header_plot(header_axes['r_ac_ax'], xlims, legends, styles)
+
+        if reference_logs is not None:
+            if isinstance(reference_logs, LogCurve):
+                reference_logs = [reference_logs]
+            logs_to_plot = [xx.data for xx in reference_logs]
+            styles = [{'lw': templates[xx.log_type]['line width'],
+                       'color': templates[xx.log_type]['line color'],
+                       'ls': templates[xx.log_type]['line style']}
+                      for xx in reference_logs]
+            limits = [[templates[xx.log_type]['min'], templates[xx.log_type]['max']] for xx in reference_logs]
+            legends = ['{} [{}]'.format(xx.name, templates[xx.log_type]['unit']) for xx in reference_logs]
+            xlims = axis_plot(axes['ref_ax'], depth, logs_to_plot,
+                              limits, styles, yticks=not((intervals is not None) or preset_axes), ylim=[md_min, md_max])
+            header_plot(header_axes['ref_ax'], xlims, legends, styles)
 
     dlr_picked, toc_picked = re_plot(start_r, r0, ac0)
 

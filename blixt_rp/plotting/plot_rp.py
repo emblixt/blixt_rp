@@ -6,11 +6,6 @@ from copy import deepcopy
 import bruges.rockphysics.anisotropy as bra
 import logging
 
-# For beta testing of code # # # #
-import sys
-sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
-# # # # # # # # # # # # # # # # # #
-
 from blixt_utils.plotting import crossplot as xp
 import blixt_rp.rp.rp_core as rp
 import blixt_rp.core.well as cw

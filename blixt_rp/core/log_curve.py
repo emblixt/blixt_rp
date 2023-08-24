@@ -300,7 +300,7 @@ class LogCurve(object):
 
         def do_the_fit(_mask):
             weights = None
-            fig1, ax1 = plt.subplots(nrows=2)
+            # fig1, ax1 = plt.subplots(nrows=2)
 
             # Test if there are NaN values in input data, which needs to be masked out
             if np.any(np.isnan(self.data[_mask])):
@@ -313,7 +313,7 @@ class LogCurve(object):
             if down_weight_outliers:
                 weights = 1. - np.sqrt((self.data[_mask] - np.median(self.data[_mask])) ** 2)
                 weights[weights < 0] = 0.
-                ax1[0].plot(weights)
+                # ax1[0].plot(weights)
 
             if down_weight_intervals is not None:
                 if isinstance(down_weight_intervals, list):
@@ -329,7 +329,7 @@ class LogCurve(object):
                     weights = interval_weights[mask]
                 else:
                     weights = weights * interval_weights[mask]
-                ax1[1].plot(weights)
+                # ax1[1].plot(weights)
 
             return least_squares(residuals, x0, args=(depth[_mask], self.data[_mask]),
                                  kwargs={'target_function': trend_function, 'weight': weights},

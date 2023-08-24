@@ -15,10 +15,6 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-import sys
-sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_utils')
-sys.path.append('C:\\Users\\marten\\PycharmProjects\\blixt_rp')
-
 from blixt_utils.misc.param import Param
 import blixt_rp.rp.rp_core as rp
 import blixt_rp.core.well as cw
@@ -170,7 +166,7 @@ class Fluid(object):
                 #print('param {} is integer'.format(this_name))
             if isinstance(param, float) or isinstance(param, str):
                 #print('param {} is float or string'.format(this_name))
-                param = Param(this_name, param, unit_str, desc_str)
+                param = Param(name=this_name, value=param, unit=unit_str, desc=desc_str)
             # TODO
             # catch the cases where input data is neither None, int,  float or str
             # TODO
@@ -671,7 +667,6 @@ if __name__ == '__main__':
     import sys
     import os
     working_dir = 'C:\\Users\\marten\\PycharmProjects\\blixt_rp'
-    sys.path.append(working_dir)
 
     from blixt_rp.core.well import Project
     wp = Project(

@@ -52,7 +52,7 @@ class Header(AttribDict):
 
         # all other keys
         if isinstance(value, float) or isinstance(value, int):
-            super(Header, self).__setitem__(key, Param(key, value, '', ''))
+            super(Header, self).__setitem__(key, Param(name=key, value=value))
         else:
             super(Header, self).__setitem__(key, value)
 
