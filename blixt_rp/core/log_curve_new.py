@@ -1034,6 +1034,18 @@ def _depth_sanity_checks(value):
     return value
 
 
+def _interpolate(x: np.ndarray, y: np.ndarray):
+    """
+    Returns ths interpolation function of the log data y given at specific depth intervals x
+
+    """
+    from scipy import interpolate
+    # TODO
+    # How to hande boolean arrays?
+    if x.dtype == np.dtype('bool'):
+        print('Boolean array')
+    pass
+
 def test():
     lc = LogCurve(
         name='test_data',

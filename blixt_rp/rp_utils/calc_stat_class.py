@@ -6,7 +6,7 @@ import logging
 import blixt_rp.rp_utils.definitions as ud
 import blixt_utils.io.io as uio
 from blixt_utils.plotting import crossplot as xp
-from blixt_utils.misc.templates import handle_template
+from blixt_utils.misc.templates import get_from_template
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ def plot_logs_vs_depth(logs, log_types, wells, wi_name, results_per_well, depth_
                 continue
 
         if log_types[i] in list(templates.keys()):
-            _,  lmts, _, _, _, _ = handle_template(templates[log_types[i]])
+            _, lmts, _, _ = get_from_template(templates[log_types[i]])
             axs[i].set_xlim(*lmts)
         axs[i].set_xlabel(key)
         axs[i].set_ylim(axs[i].get_ylim()[::-1])
@@ -134,7 +134,7 @@ def plot_averages(j, logs, log_types, wells, results, results_per_well, cutoffs_
         avg_plots_axes[i][1].legend(well_labels, prop={'size': 10})
 
         if log_types[i] in list(templates.keys()):
-            xlabel,  lmts, _, _, _, _ = handle_template(templates[log_types[i]])
+            xlabel, lmts, _, _ = get_from_template(templates[log_types[i]])
             avg_plots_axes[i][1].set_xlim(*lmts)
             avg_plots_axes[i][1].set_xlabel(xlabel)
         else:
