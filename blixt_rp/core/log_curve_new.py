@@ -16,6 +16,8 @@ from blixt_rp.core.header import Header
 from blixt_utils.misc.param import Param
 from blixt_utils.signal_analysis.signal_analysis import smooth as _smooth
 from blixt_utils.misc.curve_fitting import residuals, linear_function
+from blixt_rp.rp_utils.definitions import allowed_depth_formats
+from blixt_utils.misc.convert_data import convert
 import blixt_utils.misc.masks as msks
 import blixt_utils.misc.templates as tmplts
 
@@ -167,13 +169,13 @@ class LogCurve(object):
         return len(self.data)
 
     def copy(self, suffix='copy'):
-        copied_logcurve = deepcopy(self)
-        copied_logcurve.name = self.name + '_' + suffix
-        copied_logcurve.header.name = self.name + '_' + suffix
-        copied_logcurve.header.modification_date = datetime.now().isoformat()
-        copied_logcurve.header.modification_history += \
+        copied_log_curve = deepcopy(self)
+        copied_log_curve.name = self.name + '_' + suffix
+        copied_log_curve.header.name = self.name + '_' + suffix
+        copied_log_curve.header.modification_date = datetime.now().isoformat()
+        copied_log_curve.header.modification_history += \
             '\nCopy of {}'.format(self.name)
-        return copied_logcurve
+        return copied_log_curve
 
     def get_depth(self):
         if (not self.regular_sampling) or (self.start is None) or (self.stop is None):
@@ -596,22 +598,32 @@ class LogCurve2D(object):
         if header is None:
             header = {}
 
+        if isinstance(header, dict):
+            self.header = Header(header)
+        elif isinstance(header, Header):
+            self.header = header
+        elif header is None:
+            self.header = {}
+        else:
+            raise IOError('Input header is neither dictionary nor Header')
+
         if 'name' not in list(header.keys()) or header['name'] is None:
-            header['name'] = name
+            self.header['name'] = name
 
         if 'well' not in list(header.keys()) or header['well'] is None:
-            header['well'] = well
+            self.header['well'] = well
 
         if 'log_type' not in list(header.keys()) or header['log_type'] is None:
-            header['log_type'] = log_type
+            self.header['log_type'] = log_type
         elif (log_type is None) and ('log_type' in list(header.keys())) and (header['log_type'] is not None):
             log_type = header['log_type']
         self.log_type = log_type
 
-        if 'style' not in list(header.keys()) or header['style'] is None:
-            header['style'] = style
-        elif (style is None) and ('style' in list(header.keys())) and (header['style'] is not None):
+        # if 'style' not in list(header.keys()) or header['style'] is None:
+        #     header['style'] = style
+        if (style is None) and ('style' in list(header.keys())) and (header['style'] is not None):
             style = header['style']
+            _ = header.pop('style')
         elif style is None:
             style = tmplts.return_empty_template()
         self.style = style
@@ -620,26 +632,35 @@ class LogCurve2D(object):
             header['unit'] = unit
         elif (unit is None) and ('unit' in list(header.keys())) and (header['unit'] is not None):
             unit = header['unit']
+            # _ = header.pop('unit')
         self.unit = unit
-
-        if isinstance(header, dict):
-            self.header = Header(header)
-        elif isinstance(header, Header):
-            self.header = header
-        else:
-            raise IOError('Input header is neither dictionary nor Header')
 
     def __len__(self):
         return len(self.data)
 
     def copy(self, suffix='copy'):
-        copied_logcurve = deepcopy(self)
-        copied_logcurve.name = self.name + '_' + suffix
-        copied_logcurve.header.name = self.name + '_' + suffix
-        copied_logcurve.header.modification_date = datetime.now().isoformat()
-        copied_logcurve.header.modification_history += \
+        copied_log_curve = deepcopy(self)
+        copied_log_curve.name = self.name + '_' + suffix
+        copied_log_curve.header.name = self.name + '_' + suffix
+        copied_log_curve.header.modification_date = datetime.now().isoformat()
+        copied_log_curve.header.modification_history += \
             '\nCopy of {}'.format(self.name)
-        return copied_logcurve
+        return copied_log_curve
+
+    def convert_depth_to(self, to_unit, verbose=False):
+        if verbose:
+            plt.plot(self.depth.value, self.data, c='b')
+        success, self.depth.value = convert(self.depth.value, self.depth.unit, to_unit)
+        if success:
+            self.depth.unit = to_unit
+        if verbose:
+            plt.plot(self.depth.value, self.data, 'y')
+            plt.show()
+
+    def convert_data_to(self, to_unit):
+        success, self.data = convert(self.data, self.unit, to_unit)
+        if success:
+            self.unit = to_unit
 
     def depth_plot(self,
                    mask=None,
@@ -716,6 +737,9 @@ class LogCurve2D(object):
             plt.show()
 
         return this_line
+
+    def take_sampling_from(self, log_curve, verbose=False):
+        return _take_sampling_from(self, log_curve, verbose=verbose)
 
     def smooth(self, window_len=None, method='median',
                discrete_intervals=None,
@@ -1026,6 +1050,9 @@ def _data_sanity_checks(value):
 def _depth_sanity_checks(value):
     if not isinstance(value, Param):
         raise ValueError('Depth data must be a Param object')
+    if (value.name is not None) and (value.name.lower() not in allowed_depth_formats):
+        raise ValueError('Depth name {} not valid. Must be either: {}'.format(
+            value.name, ', '.join(allowed_depth_formats)))
     if value.name is None:
         value.name = 'MD'
     if (value.name.upper() == 'MD') and (value.unit is None):
@@ -1034,17 +1061,60 @@ def _depth_sanity_checks(value):
     return value
 
 
-def _interpolate(x: np.ndarray, y: np.ndarray):
+def _interpolate(x: np.ndarray, y: np.ndarray, x_new: np.ndarray, **kwargs):
     """
-    Returns ths interpolation function of the log data y given at specific depth intervals x
+    Returns interpolated version of y(x), but now for x_new.
+
+    kwargs
+    keyword arguments passed on to scipy interp1d
 
     """
     from scipy import interpolate
-    # TODO
-    # How to hande boolean arrays?
-    if x.dtype == np.dtype('bool'):
-        print('Boolean array')
-    pass
+
+    bounds_error = kwargs.pop('bounds_error', False)
+    # fill_value = kwargs.pop('fill_value', 'extrapolate')
+    fill_value = kwargs.pop('fill_value', None)
+
+    bool_input = False
+    if y.dtype == np.dtype('bool'):
+        bool_input = True
+        # convert boolean array to ints
+        y = y * 1
+
+    _out = interpolate.interp1d(x, y, bounds_error=bounds_error, fill_value=fill_value, **kwargs)(x_new)
+
+    if bool_input:
+        return _out > 0.5
+    else:
+        return _out
+
+
+def _take_sampling_from(log_curve1: LogCurve2D, log_curve2: LogCurve2D, verbose=False):
+    """
+    Takes values from log_curve1 and interpolates them according to depth parameter (sampling) of log_curve2,
+    and returns a new log_curve
+    """
+    if log_curve1.depth.name.lower() != log_curve2.depth.name.lower():
+        raise ValueError('The two depth formats (names) are not the same: {} != {}'.format(
+            log_curve1.depth.name, log_curve2.depth.name
+        ))
+    if log_curve1.depth.unit != log_curve2.depth.unit:
+        raise ValueError('The two depth units are not the same: {} != {}'.format(
+            log_curve1.depth.unit, log_curve2.depth.unit
+        ))
+    new_y = _interpolate(log_curve1.depth.value, log_curve1.data, log_curve2.depth.value)
+    if verbose:
+        plt.plot(log_curve1.depth.value, log_curve1.data, 'o', log_curve2.depth.value, new_y, '-')
+        plt.show()
+    new_log_curve = deepcopy(log_curve1)
+    new_log_curve.header.modification_date = datetime.now().isoformat()
+    new_log_curve.header.modification_history += \
+        '\nValues from {} adapted to depth sampling of {}'.format(log_curve1.name, log_curve2.name)
+    new_log_curve.data = new_y
+    new_log_curve.depth = log_curve2.depth
+
+    return new_log_curve
+
 
 def test():
     lc = LogCurve(
@@ -1072,9 +1142,7 @@ def test():
     return lc
 
 
-def test_2d():
-    n = 1500
-    fig, ax = plt.subplots()
+def return_2d_log_curves(n=1500):
     lc = LogCurve2D(
         name='test_data',
         data=np.linspace(6, 8, n) + np.random.random(n),
@@ -1084,18 +1152,29 @@ def test_2d():
                'max': 10},
         header={'unit': 'X'}
     )
+    lc2 = LogCurve2D(
+        name='irregular data',
+        data=np.linspace(2, 4, n) + np.random.random(n),
+        depth=Param(np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n), name='md', unit='ft'),
+        style={'full_name': 'Another test', 'min': 1.5, 'max': 4.5, 'unit': 's'}
+    )
+    return lc, lc2
+
+
+def test_2d():
+    n = 1500
+    fig, ax = plt.subplots()
+    lc, lc2 = return_2d_log_curves(n)
     lc.smooth(40, discrete_intervals=[int(n/3), int(2*n/3)], verbose=True)
     # mask = np.ma.masked_inside(lc.data, 6.5, 7.5).mask
     # lc.depth_plot(mask=mask, mask_desc='Inside 2.5 to 3.5', ax=ax)
 
     fig2, ax2 = plt.subplots()
-    lc2 = LogCurve2D(
-        name='irregular data',
-        data=np.linspace(2, 4, n) + np.random.random(n),
-        depth=Param(np.linspace(1000., 3000., n) + np.random.random(n), name='md', unit='ft'),
-        style={'full_name': 'Another test', 'min': 1.5, 'max': 4.5, 'unit': 's'}
-    )
-    lc2.smooth(40, discrete_intervals=[int(n/3), int(2*n/3)], verbose=True)
+
+    # TODO
+    # Smoothing looks wrong:
+    # lc2.smooth(40, discrete_intervals=[int(n/3), int(2*n/3)], verbose=True)
+
     # mask = np.ma.masked_inside(lc2.depth.value, 1750, 2500).mask
     # lc2.depth_plot(mask=mask, mask_desc='Depth 1750 to 2500', ax=ax2)
     # print(lc.header)
@@ -1113,6 +1192,33 @@ def test_md_data_pair():
     # lc = MdDataPair({'md': md, 'data': data})
     lc = MdDataPair(name='Test', md=md, data=data)
     print(lc.md)
+
+
+def test_interpolate():
+    x = np.array([0, 1, 1.5, 2., 2.5, 3., 4., 5., 8., 9.])
+    y = np.exp(-x / 3.0)
+    x_new = np.arange(0, 12, 1)
+    y_new = _interpolate(x, y, x_new)
+    plt.plot(x, y, 'o', x_new, y_new, '-')
+    mask = np.ma.masked_inside(x, 1, 4).mask
+    new_mask = _interpolate(x, mask, x_new)
+    plt.plot(x_new[new_mask], y_new[new_mask])
+
+    mask = np.ma.masked_greater(y, 0.7).mask
+    new_mask = _interpolate(x, mask, x_new)
+    plt.plot(x_new[new_mask], y_new[new_mask])
+
+    plt.show()
+
+
+def test_take_sampling():
+    lc, lc2 = return_2d_log_curves()
+    # lc2.depth_plot()
+    lc2.convert_depth_to('m', verbose=False)
+    lc3 = lc.take_sampling_from(lc2, verbose=True)
+    # lc3.style['min'] = None
+    # lc3.style['max'] = None
+    # lc3.depth_plot()
 
 
 if __name__ == '__main__':
