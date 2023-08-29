@@ -269,6 +269,8 @@ class LogCurve(object):
             Typically the indexes of the boundaries between two intervals (formations) in a well.
 
         """
+        if method == 'median' and np.mod(window_len, 2) == 0:
+            window_len += 1  # avoid even length windows
         if discrete_intervals is not None:
             if not isinstance(discrete_intervals, list):
                 raise IOError('Interval indexes must be provided as a list')
@@ -602,8 +604,6 @@ class LogCurve2D(object):
             self.header = Header(header)
         elif isinstance(header, Header):
             self.header = header
-        elif header is None:
-            self.header = {}
         else:
             raise IOError('Input header is neither dictionary nor Header')
 
@@ -751,6 +751,8 @@ class LogCurve2D(object):
             Typically the indexes of the boundaries between two intervals (formations) in a well.
 
         """
+        if method == 'median' and np.mod(window_len, 2) == 0:
+            window_len += 1  # avoid even length windows
         if discrete_intervals is not None:
             if not isinstance(discrete_intervals, list):
                 raise IOError('Interval indexes must be provided as a list')
@@ -1163,16 +1165,18 @@ def return_2d_log_curves(n=1500):
 
 def test_2d():
     n = 1500
-    fig, ax = plt.subplots()
+    # fig, ax = plt.subplots()
     lc, lc2 = return_2d_log_curves(n)
-    lc.smooth(40, discrete_intervals=[int(n/3), int(2*n/3)], verbose=True)
+    # TODO
+    # Smoothing looks wrong:
+    #lc.smooth(41, discrete_intervals=[int(n/3), int(2*n/3)], verbose=True)
+    lc.smooth(40, discrete_intervals=None, verbose=True)
+    lc.smooth(41, discrete_intervals=None, verbose=True)
     # mask = np.ma.masked_inside(lc.data, 6.5, 7.5).mask
     # lc.depth_plot(mask=mask, mask_desc='Inside 2.5 to 3.5', ax=ax)
 
-    fig2, ax2 = plt.subplots()
+    # fig2, ax2 = plt.subplots()
 
-    # TODO
-    # Smoothing looks wrong:
     # lc2.smooth(40, discrete_intervals=[int(n/3), int(2*n/3)], verbose=True)
 
     # mask = np.ma.masked_inside(lc2.depth.value, 1750, 2500).mask
