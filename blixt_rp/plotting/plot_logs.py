@@ -432,6 +432,7 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     if reff is not None:
         # TODO
         # expand this functionality so that we can input a wavelet
+        # similar to how its done in models.py
         w = ricker(duration, time_step, c_f)
 
         # Translate the mask to the time variable
@@ -868,6 +869,8 @@ def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=No
     :param    wavelet:
         numpy array
         Array of wavelet amplitudes
+        TODO
+        use the wavelet type as used in models.py
 
     :param    incident_angles:
         list

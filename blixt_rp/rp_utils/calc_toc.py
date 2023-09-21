@@ -55,7 +55,7 @@ def get_values(array1, array2, depth, md):
 
 
 def calc_toc(
-        r, ac, d, r0=None, ac0=None, start_r=None, lom=None, true_toc=None, mask=None, mask_desc=None, templates=None,
+        r, ac, md, r0=None, ac0=None, start_r=None, lom=None, true_toc=None, mask=None, mask_desc=None, templates=None,
         axes=None, header_axes=None,
         intervals=None, interval_names=None,
         down_weight_intervals=None,
@@ -76,7 +76,7 @@ def calc_toc(
     :param ac:
         LogCurve object
         LogCurve containing the sonic
-    :param d:
+    :param md:
         LogCurve object
         LogCurve containing the MD of the well
     :param r0:
@@ -167,8 +167,7 @@ def calc_toc(
     else:
         preset_axes = False
 
-    depth = d.data
-    print(mask)
+    depth = md.data
     if ylim is None:
         md_min = np.min(depth[mask])
         md_max = np.max(depth[mask])
@@ -232,7 +231,7 @@ def calc_toc(
 
     # find the linear trends matching the data. These are used as baseline in the DeltaLogR calculation
     fit_parameters_rdep = r.calc_depth_trend(
-        d.data,
+        md.data,
         mask=mask,
         down_weight_outliers=True,
         down_weight_intervals=down_weight_intervals,
@@ -240,13 +239,13 @@ def calc_toc(
         verbose=False
     )
     fitted_rdep = r.apply_trend_function(
-        d.data,
+        md.data,
         fit_parameters_rdep,
         discrete_intervals=discrete_intervals,
         verbose=False
     )
     fit_parameters_ac = ac.calc_depth_trend(
-        d.data,
+        md.data,
         mask=mask,
         down_weight_outliers=True,
         down_weight_intervals=down_weight_intervals,
@@ -254,7 +253,7 @@ def calc_toc(
         verbose=False
     )
     fitted_ac = ac.apply_trend_function(
-        d.data,
+        md.data,
         fit_parameters_ac,
         discrete_intervals=discrete_intervals,
         verbose=False
@@ -365,7 +364,7 @@ def calc_toc(
 
     def on_press(event):
         # print('you pressed', event.button, event.xdata, event.ydata)
-        _r00, _ac00 = get_values(r.data, ac.data, d.data, event.ydata)
+        _r00, _ac00 = get_values(r.data, ac.data, md.data, event.ydata)
         print('At MD {:.2f}m, RDEP={:.2f}, AC={:.2f}'.format(event.ydata, _r00, _ac00))
         _, _, = re_plot(10**(0.02*_ac00 + np.log10(_r00)) / 10000., _r00, _ac00)
         plt.show()

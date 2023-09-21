@@ -647,6 +647,21 @@ class LogCurve2D(object):
             '\nCopy of {}'.format(self.name)
         return copied_log_curve
 
+    def valid_depth(self, z, verbose=False):
+        # TODO
+        # This will not work for Z values that are increasingly negative with depth.
+        # Will it help to use abs(z) < abs(min(depth)) ??
+        if z < np.min(self.depth.value):
+            if verbose:
+                print('WARNING. depth {} is less than depth range of {}'.format(z, self.name))
+            return False
+        elif z > np.max(self.depth.value):
+            if verbose:
+                print('WARNING. depth {} is greater than depth range of {}'.format(z, self.name))
+            return False
+        else:
+            return True
+
     def convert_depth_to(self, to_unit, verbose=False):
         if verbose:
             plt.plot(self.depth.value, self.data, c='b')
@@ -747,8 +762,9 @@ class LogCurve2D(object):
         """
         :param discrete_intervals:
             list
-            list of indexes at which the smoothened log are allowed discrete jumps.
-            Typically the indexes of the boundaries between two intervals (formations) in a well.
+            list of depth values (same unit as depth in LogCurve) at which the smoothened log are allowed
+            discrete jumps.
+            Typically the depth of the boundaries between two intervals (formations) in a well.
 
         """
         if method == 'median' and np.mod(window_len, 2) == 0:
@@ -756,21 +772,27 @@ class LogCurve2D(object):
         if discrete_intervals is not None:
             if not isinstance(discrete_intervals, list):
                 raise IOError('Interval indexes must be provided as a list')
+
+            # check if the proposed jump depths are within the depth range of the LogCurve
+
+            # calculate the indexes of where the smoothened log are allowed discrete jumps.
+            discrete_indexes = [np.argmin((self.depth.value - _z)**2) for _z in discrete_intervals]
+
             out = np.zeros(0)
             for i in range(len(discrete_intervals) + 1):  # always one more section than boundaries between them
                 if i == 0:  # first section
                     out = np.append(out, _smooth(
-                            self.data[:discrete_intervals[i]], window_len, method=method, **kwargs
+                            self.data[:discrete_indexes[i]], window_len, method=method, **kwargs
                         )
                     )
                 elif len(discrete_intervals) == i:  # last section
                     out = np.append(out, _smooth(
-                            self.data[discrete_intervals[-1]:], window_len, method=method, **kwargs
+                            self.data[discrete_indexes[-1]:], window_len, method=method, **kwargs
                         )
                     )
                 else:
                     out = np.append(out, _smooth(
-                            self.data[discrete_intervals[i-1]:discrete_intervals[i]],
+                            self.data[discrete_indexes[i-1]:discrete_indexes[i]],
                             window_len, method=method, **kwargs))
 
         else:
@@ -1170,14 +1192,14 @@ def test_2d():
     # TODO
     # Smoothing looks wrong:
     #lc.smooth(41, discrete_intervals=[int(n/3), int(2*n/3)], verbose=True)
-    lc.smooth(40, discrete_intervals=None, verbose=True)
-    lc.smooth(41, discrete_intervals=None, verbose=True)
+    # lc.smooth(40, discrete_intervals=None, verbose=True)
+    # lc.smooth(41, discrete_intervals=None, verbose=True)
     # mask = np.ma.masked_inside(lc.data, 6.5, 7.5).mask
     # lc.depth_plot(mask=mask, mask_desc='Inside 2.5 to 3.5', ax=ax)
 
     # fig2, ax2 = plt.subplots()
 
-    # lc2.smooth(40, discrete_intervals=[int(n/3), int(2*n/3)], verbose=True)
+    lc2.smooth(40, discrete_intervals=[1800., 2200.], verbose=True)
 
     # mask = np.ma.masked_inside(lc2.depth.value, 1750, 2500).mask
     # lc2.depth_plot(mask=mask, mask_desc='Depth 1750 to 2500', ax=ax2)

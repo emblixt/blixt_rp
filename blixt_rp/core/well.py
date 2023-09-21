@@ -2743,5 +2743,43 @@ def test():
 #    print(w.block[ud.def_lb_name].logs['phie'].header)
 
 
+def test_work_project():
+    dir_path = os.path.dirname(os.path.realpath(__file__)).replace('\\blixt_rp\\core', '')
+    project_table = os.path.join(dir_path, 'excels', 'project_table.xlsx')
+    wp = Project(project_table=project_table)
+    return wp
+
+
+def test_templates():
+    wp = test_work_project()
+    templates = wp.load_all_templates()
+    print(list(templates.keys()))
+    print(list(templates['Resistivity'].keys()))
+
+
+def test_wells():
+    wp = test_work_project()
+    wells = wp.load_all_wells()
+    print(list(wells.keys()))
+    return wells
+
+
+def test_logs():
+    wells = test_wells()
+    this_well = wells[list(wells.keys())[0]]
+    print(this_well.log_names())
+    print(this_well.log_types())
+    print(this_well.get_logs_of_type('P velocity'))
+
+
+def test_twt():
+    wp = test_work_project()
+    wells = wp.load_all_wells()
+    this_well = wells[list(wells.keys())[0]]
+    this_well.add_twt(wp.project_table)
+    print(this_well.log_types())
+    print(this_well.log_names())
+
+
 if __name__ == '__main__':
-    test()
+    test_twt()

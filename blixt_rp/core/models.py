@@ -12,6 +12,7 @@ from copy import deepcopy
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot, wavelet_plot
 from blixt_utils.plotting.crossplot import cnames
 import blixt_rp.rp.rp_core as rp
+import blixt_utils.misc.wavelets as bumw
 import blixt_utils.io.io as uio
 
 logger = logging.getLogger(__name__)
@@ -172,7 +173,7 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
 
 
 def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, color_by_gradient=False,
-                 extract_avo_at=None, avo_angles=None, avo_plot_position=None):
+                 extract_avo_at=None, avo_angles=None, avo_plot_position=None, **kwargs):
     """
 
     Args:
@@ -206,6 +207,8 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             Used quite differently for quasi-2D and 1D plots
             AND in 1D models, when eei is True, these angles are taken to be Chi angles
         avo_plot_position
+        kwargs
+            keyword arguments passed on to wiggle_plot
     Returns:
 
     """
@@ -234,13 +237,13 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                 avo_curves[_i] = []
                 avo_positions[_i] = _t
 
-    def calc_wiggle(twt_length, _wavelet, _reflectivity, _angle):
-        _wiggle = np.convolve(_wavelet['wavelet'], np.nan_to_num(_reflectivity(_angle)), mode='same')
-        while len(_wiggle) < twt_length:
-            _wiggle = np.append(_wiggle, np.ones(1) * _wiggle[-1])  # extend with one item
-        if twt_length < len(_wiggle):
-            _wiggle = _wiggle[:twt_length]
-        return _wiggle
+    # def calc_wiggle(twt_length, _wavelet, _reflectivity, _angle):
+    #     _wiggle = np.convolve(_wavelet['wavelet'], np.nan_to_num(_reflectivity(_angle)), mode='same')
+    #     while len(_wiggle) < twt_length:
+    #         _wiggle = np.append(_wiggle, np.ones(1) * _wiggle[-1])  # extend with one item
+    #     if twt_length < len(_wiggle):
+    #         _wiggle = _wiggle[:twt_length]
+    #     return _wiggle
 
     twt, layer_i, vp, vs, rho = model.realize_model(sample_rate)
 
@@ -261,9 +264,10 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                 )
             else:
                 grad = None
-            wiggle = calc_wiggle(len(twt), wavelet, ref, angle)
+            # wiggle = calc_wiggle(len(twt), wavelet, ref, angle)
+            wiggle = bumw.convolve_with_refl(wavelet['wavelet'], ref(angle))
 
-            wiggle_plot(ax, twt, wiggle, i, scaling=40, color_by_gradient=grad)
+            wiggle_plot(ax, twt, wiggle, i, scaling=40, color_by_gradient=grad, **kwargs)
             # Find out where there is a new layer (layer_i has a unit jump), and annotate it with a horizontal marker
             jumps = twt[np.diff(layer_i[trace_i, :], prepend=[0]) != 0]
             for jump in jumps:
@@ -283,7 +287,8 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                         )
                     twt_index = np.argmin((twt - avo_positions[this_index][1])**2)
                     for _ang in avo_angles:
-                        tmp_wiggle = calc_wiggle(len(twt), wavelet, ref, _ang)
+                        # tmp_wiggle = calc_wiggle(len(twt), wavelet, ref, _ang)
+                        tmp_wiggle = bumw.convolve_with_refl(wavelet['wavelet'], ref(_ang))
                         avo_curves[this_index].append(tmp_wiggle[twt_index - 1])
 
     elif model.model_type == '1D' and avo_angles is not None:
@@ -301,15 +306,10 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             calculate_here = False
             this_index = False
 
-            wiggle = calc_wiggle(len(twt), wavelet, ref, ang)
-            # wiggle = np.convolve(wavelet['wavelet'], np.nan_to_num(ref(ang)), mode='same')
+            # wiggle = calc_wiggle(len(twt), wavelet, ref, ang)
+            wiggle = bumw.convolve_with_refl(wavelet['wavelet'], ref(ang))
 
-            # while len(wiggle) < len(twt):
-            #     wiggle = np.append(wiggle, np.ones(1) * wiggle[-1])  # extend with one item
-            # if len(twt) < len(wiggle):
-            #     wiggle = wiggle[:len(twt)]
-
-            wiggle_plot(ax, twt, wiggle, ang, scaling=80, color_by_gradient=grad)
+            wiggle_plot(ax, twt, wiggle, ang, scaling=80, color_by_gradient=grad, **kwargs)
             # Find out where there is a new layer (layer_i has a unit jump), and annotate it with a horizontal marker
             jumps = twt[np.diff(layer_i, prepend=[0]) != 0]
             for jump in jumps:
@@ -332,7 +332,8 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                         tmp_ref = ref
                     twt_index = np.argmin((twt - avo_positions[this_index][1])**2)
                     for _ang in tmp_avo_angles:
-                        tmp_wiggle = calc_wiggle(len(twt), wavelet, tmp_ref, _ang)
+                        # tmp_wiggle = calc_wiggle(len(twt), wavelet, tmp_ref, _ang)
+                        tmp_wiggle = bumw.convolve_with_refl(wavelet['wavelet'], tmp_ref(_ang))
                         avo_curves[this_index].append(tmp_wiggle[twt_index - 1])
 
         ax.set_xlabel(my_x_label)
@@ -751,8 +752,8 @@ def test_plot():
     m.plot()
 
     wavelet = bumw.ricker(0.096, 0.001, 25)
-    plot_wiggels(m, 0.001, wavelet, avo_angles=[0., 5., 10., 15.,  20., 25., 30., 35., 40.])
-    plot_wiggels(m, 0.001, wavelet, eei=True, avo_angles=[-90, -70., -50., -30., -15., 0., 15., 30., 50., 70., 90.],
+    plot_wiggles(m, 0.001, wavelet, avo_angles=[0., 5., 10., 15.,  20., 25., 30., 35., 40.])
+    plot_wiggles(m, 0.001, wavelet, eei=True, avo_angles=[-90, -70., -50., -30., -15., 0., 15., 30., 50., 70., 90.],
                  extract_avo_at=(-90, 1.99))
 
 
@@ -852,9 +853,9 @@ def test_quasi2d():
 
     wavelet = bumw.ricker(0.096, 0.001, 25)
 
-    plot_wiggels(m, 0.001, wavelet, angle=0., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
-    plot_wiggels(m, 0.001, wavelet, angle=15., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
-    plot_wiggels(m, 0.001, wavelet, angle=-90., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
+    plot_wiggles(m, 0.001, wavelet, angle=0., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
+    plot_wiggles(m, 0.001, wavelet, angle=15., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
+    plot_wiggles(m, 0.001, wavelet, angle=-90., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
 
 
 if __name__ == '__main__':

@@ -114,6 +114,9 @@ def reflectivity(vp_1, vp_2, vs_1, vs_2, rho_1, rho_2, version='WigginsAkiRich',
     """
     returns function which returns the reflectivity as function of theta
     theta is in degrees
+    When 'along_wiggle' is True, the return array will be one item shorter than the input because of how step(),
+    intercept() and gradient() works.
+    To alleviate this, we add an extra item at the end of the returned array
     :param version:
         str
         'WigginsAkiRich' uses the formulation of Aki Richards by Wiggins et al. 1984 according to Hampson Russell
@@ -137,25 +140,38 @@ def reflectivity(vp_1, vp_2, vs_1, vs_2, rho_1, rho_2, version='WigginsAkiRich',
         c = 0.5 * step(vp_1, vp_2, along_wiggle=along_wiggle)
         if eei:
             def func(chi):
-                return a * np.cos(chi * np.pi / 180.) + b * np.sin(chi * np.pi / 180.)
+                result = a * np.cos(chi * np.pi / 180.) + b * np.sin(chi * np.pi / 180.)
+                if along_wiggle:
+                    result = np.append(result, np.ones(1) * result[-1])
+                return result
             return func
+
         if version == 'WigginsAkiRich':
             def func(theta):
-                return a + b * (np.sin(theta * np.pi / 180.)) ** 2 + \
+                result = a + b * (np.sin(theta * np.pi / 180.)) ** 2 + \
                        c * ((np.tan(theta * np.pi / 180.)) ** 2 * (np.sin(theta * np.pi / 180.)) ** 2)
+                if along_wiggle:
+                    result = np.append(result, np.ones(1) * result[-1])
+                return result
+
         elif version == 'ShueyAkiRich':
             def func(theta):
-                return a + b * (np.sin(theta * np.pi / 180.)) ** 2 + \
+                result = a + b * (np.sin(theta * np.pi / 180.)) ** 2 + \
                        c * ((np.tan(theta * np.pi / 180.)) ** 2 - (np.sin(theta * np.pi / 180.)) ** 2)
+                if along_wiggle:
+                    result = np.append(result, np.ones(1) * result[-1])
+                return result
         return func
     elif version == 'AkiRich':
         a = (vs_1 + vs_2) ** 2 / vp_1 ** 2  # = 4 * p**2 * vs**2/sin(theta)**2 in eq. 4.6
 
         def func(theta):
-            return 0.5 * (1. - a * (np.sin(theta * np.pi / 180.)) ** 2) * step(rho_1, rho_2) + \
+            result = 0.5 * (1. - a * (np.sin(theta * np.pi / 180.)) ** 2) * step(rho_1, rho_2) + \
                    0.5 * step(vp_1, vp_2) / (np.cos(theta * np.pi / 180.)) ** 2 - \
                    a * (np.sin(theta * np.pi / 180.)) ** 2 * step(vs_1, vs_2)
-
+            if along_wiggle:
+                result = np.append(result, np.ones(1) * result[-1])
+            return result
         return func
     else:
         raise NotImplementedError
