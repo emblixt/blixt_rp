@@ -29,7 +29,7 @@ def calc_ai_around_top(
         mask=None, mask_desc=None,
         templates=None, axes=None, header_axes=None,
         intervals=None, interval_names=None,
-        wavelet=None,
+        wavelet=None, interactive=True,
         **kwargs
 ):
     """
@@ -237,12 +237,14 @@ def calc_ai_around_top(
         above_layer = Layer(thickness=twt_mid - twt_min + 2 * time_step,
                             vp=avg_vp_above, vs=avg_vp_above, rho=avg_rho_above)
         below_layer = Layer(thickness=twt_max - twt_mid, vp=avg_vp_below, vs=avg_vp_below, rho=avg_rho_below)
-        print('Layer thicknesses: ', above_layer.thickness, below_layer.thickness)
         m = Model(depth_to_top=twt_min, layers=[above_layer, below_layer])
         _twt, _layer_i, _vp, _vs, _rho = m.realize_model(time_step)
         _reff = rp.reflectivity(_vp, None, _vs, None, _rho, None, along_wiggle=True)
         m_wiggle = bumw.convolve_with_refl(wavelet['wavelet'], _reff(0.), verbose=False)
-        wiggle_plot(axes['synth_ax'], _twt, m_wiggle, ylim=[twt_min, twt_max], yticks=False, ls='--')
+        t_to_d = [np.nanargmin((twt.data - _t)**2) for _t in _twt]
+        print(len(md.data[t_to_d]), len(m_wiggle))
+        #  wiggle_plot(axes['synth_ax'], _twt, m_wiggle, ylim=[twt_min, twt_max], yticks=False, ls='--')
+        wiggle_plot(axes['synth_ax'], md.data[t_to_d], m_wiggle, ylim=[md_min, md_max], yticks=False, ls='--')
 
         vp_t = np.interp(x=t, xp=twt.data, fp=vp.data)
         rho_t = np.interp(x=t, xp=twt.data, fp=rho.data)
@@ -250,11 +252,14 @@ def calc_ai_around_top(
         # include vs in the calculation
         reff = rp.reflectivity(vp_t, None, vp_t, None, rho_t, None, along_wiggle=True)
         wiggle = bumw.convolve_with_refl(wavelet['wavelet'], reff(0.), verbose=False)
+        t_to_d = [np.nanargmin((twt.data - _t)**2) for _t in t]
 
-        wiggle_plot(axes['synth_ax'], t, wiggle, ylim=[twt_min, twt_max], yticks=False)
-        for _md, _ls in zip([top - _h_above, top, top + _h_below], ['--', '-', '--']):
-            this_twt = twt.data[np.argmin((md.data - _md)**2)]
-            axes['synth_ax'].axhline(this_twt, c='k', ls=_ls)
+        # wiggle_plot(axes['synth_ax'], t, wiggle, ylim=[twt_min, twt_max], yticks=False)
+        wiggle_plot(axes['synth_ax'], md.data[t_to_d], wiggle, ylim=[md_min, md_max], yticks=False)
+
+        # for _md, _ls in zip([top - _h_above, top, top + _h_below], ['--', '-', '--']):
+        #    this_twt = twt.data[np.argmin((md.data - _md)**2)]
+        #    axes['synth_ax'].axhline(this_twt, c='k', ls=_ls)
 
         header_plot(header_axes['synth_ax'],
                     [[np.min(wiggle), np.max(wiggle)], [np.min(m_wiggle), np.max(m_wiggle)]],
@@ -262,7 +267,7 @@ def calc_ai_around_top(
                                                          {'color': 'k', 'ls': '--'}], title='Synthetics')
 
         header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]')
-        annotate_plot(axes['twt_ax'], twt.data[mask], ylim=[twt_min, twt_max])
+        annotate_plot(axes['twt_ax'], twt.data, ylim=[twt_min, twt_max])
 
         if _ref_traces is not None:
             # for trace in _ref_traces:
@@ -311,7 +316,8 @@ def calc_ai_around_top(
         # print('h_above:', h_above, ',  h_below', h_below)
         plt.show()
 
-    cid = fig.canvas.mpl_connect('button_press_event', on_press)
+    if interactive:
+        cid = fig.canvas.mpl_connect('button_press_event', on_press)
     plt.show()
     return h_above, h_below, results
 
