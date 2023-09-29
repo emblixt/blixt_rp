@@ -229,22 +229,35 @@ def calc_ai_around_top(
         header_plot(header_axes['ai_ax'], xlims, legends, styles)
 
         # get the twt that corresponds to md_min and md_max
-        twt_min = twt.data[np.argmin((md.data - md_min)**2)]
-        twt_mid = twt.data[np.argmin((md.data - top)**2)]
-        twt_max = twt.data[np.argmin((md.data - md_max)**2)]
+        twt_min = twt.data[np.nanargmin((md.data - md_min)**2)]
+        if np.isnan(twt_min):
+            twt_min = np.nanmin(twt.data[mask])
+        twt_mid = twt.data[np.nanargmin((md.data - top)**2)]
+        twt_max = twt.data[np.nanargmin((md.data - md_max)**2)]
+        if np.isnan(twt_max):
+            twt_max = np.nanmax(twt.data[mask])
 
         # Build a model based on the average elastic properties
+        build_model = True
         above_layer = Layer(thickness=twt_mid - twt_min + 2 * time_step,
                             vp=avg_vp_above, vs=avg_vp_above, rho=avg_rho_above)
+        if np.isnan(above_layer.thickness) or (above_layer.thickness <= 0.):
+            build_model = False
         below_layer = Layer(thickness=twt_max - twt_mid, vp=avg_vp_below, vs=avg_vp_below, rho=avg_rho_below)
-        m = Model(depth_to_top=twt_min, layers=[above_layer, below_layer])
-        _twt, _layer_i, _vp, _vs, _rho = m.realize_model(time_step)
-        _reff = rp.reflectivity(_vp, None, _vs, None, _rho, None, along_wiggle=True)
-        m_wiggle = bumw.convolve_with_refl(wavelet['wavelet'], _reff(0.), verbose=False)
-        t_to_d = [np.nanargmin((twt.data - _t)**2) for _t in _twt]
-        print(len(md.data[t_to_d]), len(m_wiggle))
-        #  wiggle_plot(axes['synth_ax'], _twt, m_wiggle, ylim=[twt_min, twt_max], yticks=False, ls='--')
-        wiggle_plot(axes['synth_ax'], md.data[t_to_d], m_wiggle, ylim=[md_min, md_max], yticks=False, ls='--')
+        if np.isnan(below_layer.thickness) or (below_layer.thickness <= 0.):
+            build_model = False
+
+        if build_model:
+            m = Model(depth_to_top=twt_min, layers=[above_layer, below_layer])
+            # print(' - Well {}, dt_above {}, dt_below {}, timestep {}'.format(
+            #    twt.well, above_layer.thickness, below_layer.thickness, time_step
+            # ))
+            _twt, _layer_i, _vp, _vs, _rho = m.realize_model(time_step)
+            _reff = rp.reflectivity(_vp, None, _vs, None, _rho, None, along_wiggle=True)
+            m_wiggle = bumw.convolve_with_refl(wavelet['wavelet'], _reff(0.), verbose=False)
+            t_to_d = [np.nanargmin((twt.data - _t)**2) for _t in _twt]
+            #  wiggle_plot(axes['synth_ax'], _twt, m_wiggle, ylim=[twt_min, twt_max], yticks=False, ls='--')
+            wiggle_plot(axes['synth_ax'], md.data[t_to_d], m_wiggle, ylim=[md_min, md_max], yticks=False, ls='--')
 
         vp_t = np.interp(x=t, xp=twt.data, fp=vp.data)
         rho_t = np.interp(x=t, xp=twt.data, fp=rho.data)
@@ -261,10 +274,15 @@ def calc_ai_around_top(
         #    this_twt = twt.data[np.argmin((md.data - _md)**2)]
         #    axes['synth_ax'].axhline(this_twt, c='k', ls=_ls)
 
-        header_plot(header_axes['synth_ax'],
-                    [[np.min(wiggle), np.max(wiggle)], [np.min(m_wiggle), np.max(m_wiggle)]],
-                    ['Synthetics', 'Synth. from avg.'], [{'color': 'k', 'ls': '-'},
-                                                         {'color': 'k', 'ls': '--'}], title='Synthetics')
+        if build_model:
+            header_plot(header_axes['synth_ax'],
+                        [[np.min(wiggle), np.max(wiggle)], [np.min(m_wiggle), np.max(m_wiggle)]],
+                        ['Synthetics', 'Synth. from avg.'], [{'color': 'k', 'ls': '-'},
+                                                             {'color': 'k', 'ls': '--'}], title='Synthetics')
+        else:
+            header_plot(header_axes['synth_ax'],
+                        [[np.min(wiggle), np.max(wiggle)]],
+                        ['Synthetics'], [{'color': 'k', 'ls': '-'}], title='Synthetics')
 
         header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]')
         annotate_plot(axes['twt_ax'], twt.data, ylim=[twt_min, twt_max])

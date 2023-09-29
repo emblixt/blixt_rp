@@ -2367,6 +2367,7 @@ class Block(object):
 
         md = self.logs['depth'].data
 
+        legend_texts = None
         if twt_points is None:
             # Use the first existing One-way time log to calculate a TWT log
             if 'One-way time' in self.log_types():
@@ -2375,7 +2376,8 @@ class Block(object):
                 fname = log_curve.name
                 _name = 'twt_from_owt'
                 _x = md
-                _y = 1000.0 * log_curve.data
+                _y = 1000.0 * 2. * log_curve.data
+                legend_texts = ['OWT * 2 from log', 'OWT * 2 from log']
             else:
                 return None
         else:
@@ -2390,6 +2392,7 @@ class Block(object):
             _name = 'twt_from_interp'
             _x = twt_points['MD']
             _y = sign * 1000. * np.array(twt_points['TWT'])
+            legend_texts = ['TDR points', 'Interpolated well data']
 
         if verbose:
             fig, axes = plt.subplots(1, 1, figsize=(5, 8))
@@ -2397,7 +2400,7 @@ class Block(object):
             axes.plot(md, 1000. * new_twt)
             axes.set_xlabel('MD [m]')
             axes.set_ylabel('TWT [ms]')
-            axes.legend(['TDR points', 'Interpolated well data'])
+            axes.legend(legend_texts)
 
         self.add_log(
             new_twt,

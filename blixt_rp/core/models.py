@@ -20,15 +20,27 @@ logger = logging.getLogger(__name__)
 text_style = {'fontsize': 'x-small', 'bbox': {'facecolor': 'w', 'alpha': 0.5}}
 
 
-def plot_quasi_2d(model, ax=None):
+def plot_quasi_2d(model, ax=None, **kwargs):
     show = False
+    new_ax = False
     if ax is None:
-        fig, axs = plt.subplots(1, len(model.trace_index_range), figsize=(10, 8))
+        # fig, axs = plt.subplots(1, len(model.trace_index_range), figsize=(10, 8))
+        fig, ax = plt.subplots(figsize=(10, 8))
         show = True
+        new_ax = True
 
-    for i, trace_i in enumerate(model.trace_index_range):
-        plot_1d(model, ax=axs[i], index=trace_i, legend=i == 0, yticks=i == 0)
-
+    # for i, trace_i in enumerate(model.trace_index_range):
+        # plot_1d(model, ax=axs[i], index=trace_i, legend=i == 0, yticks=i == 0)
+    i_range = model.trace_index_range
+    last_layer_depth = [model.depth_to_top]*len(i_range)
+    ax.plot(i_range, last_layer_depth, **kwargs)
+    for _layer in model.layers:
+        _h = np.array([_layer.thickness(_i) for _i in i_range])
+        _tmp = np.array([last_layer_depth[_i] + _layer.thickness(_i) for _i in i_range])
+        ax.plot(i_range[_h > 0], _tmp[_h > 0], **kwargs)
+        last_layer_depth = _tmp
+    if new_ax:
+        ax.set_ylim(ax.get_ylim()[::-1])
     if show:
         plt.show()
 
@@ -268,10 +280,10 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             wiggle = bumw.convolve_with_refl(wavelet['wavelet'], ref(angle))
 
             wiggle_plot(ax, twt, wiggle, i, scaling=40, color_by_gradient=grad, **kwargs)
-            # Find out where there is a new layer (layer_i has a unit jump), and annotate it with a horizontal marker
-            jumps = twt[np.diff(layer_i[trace_i, :], prepend=[0]) != 0]
-            for jump in jumps:
-                ax.scatter([i], [jump], c='black', marker='_')
+            # # Find out where there is a new layer (layer_i has a unit jump), and annotate it with a horizontal marker
+            # jumps = twt[np.diff(layer_i[trace_i, :], prepend=[0]) != 0]
+            # for jump in jumps:
+            #     ax.scatter([i], [jump], c='black', marker='_')
 
             # extract avo curves
             if avo_positions is not None:
@@ -310,10 +322,10 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             wiggle = bumw.convolve_with_refl(wavelet['wavelet'], ref(ang))
 
             wiggle_plot(ax, twt, wiggle, ang, scaling=80, color_by_gradient=grad, **kwargs)
-            # Find out where there is a new layer (layer_i has a unit jump), and annotate it with a horizontal marker
-            jumps = twt[np.diff(layer_i, prepend=[0]) != 0]
-            for jump in jumps:
-                ax.axhline(jump, linestyle='--')
+            # # Find out where there is a new layer (layer_i has a unit jump), and annotate it with a horizontal marker
+            # jumps = twt[np.diff(layer_i, prepend=[0]) != 0]
+            # for jump in jumps:
+            #     ax.axhline(jump, linestyle='--')
 
             # extract avo curves
             if avo_positions is not None:
@@ -380,6 +392,11 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             mini_ax = ax.inset_axes([0.8, 0.8, 0.8 * wf, wf])
             wavelet_plot(mini_ax, wavelet['time'], wavelet['wavelet'], orientation='down', show_ticks=False)
         mini_ax.tick_params(labelsize='small')
+
+    plot_outline = True
+    if plot_outline:
+        plot_quasi_2d(model, ax=ax, c='k', ls='--', lw=0.5)
+
     if show:
         plt.show()
 
@@ -431,8 +448,6 @@ class Model:
             self.layers = []
         else:
             self.layers = layers
-
-
 
         if domain is None:
             self.domain = 'TWT'
