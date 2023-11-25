@@ -54,3 +54,16 @@ rename_well_logs = {
     'vcl': ['VCLGR', 'VCL', 'CPI:VWCL', 'CPI:VCL']
 }
 
+
+def gr_cmap():
+    """
+    Creates a useful colormap (color map) for plotting gamma ray logs
+    """
+    from matplotlib.colors import ListedColormap
+    import numpy as np
+    N = 256
+    vals = np.ones((N, 4))
+    vals[:, 0] = np.linspace(1, 0 / 256, N)
+    vals[:, 1] = np.linspace(1, 85 / 256, N)
+    vals[:, 2] = np.linspace(0, 0 / 256, N)
+    return ListedColormap(vals)

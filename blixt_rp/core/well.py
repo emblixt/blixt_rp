@@ -2478,6 +2478,126 @@ class Block(object):
         self.add_log_curve(dlr_trend)
         self.add_log_curve(dlr_picked)
 
+    def calc_impedances(self, log_table, backus_length=None, result_names=None):
+        """
+        Calculates the shear and acoustic impedance, and vp/vs, with backus averaging if provided
+        :param log_table:
+            dict
+            Dictionary of log type: log name key: value pairs which decides which log to use when selecting which
+            velocity / sonic and density logs. Other logs (e.g. 'Resistivity') are selected based on their presence
+            E.G.
+                log_table = {
+                   'P velocity': 'vp',
+                   'S velocity': 'vs',
+                   'Density': 'rhob'}
+        :param backus_length:
+            float
+            The Backus averaging length in m
+        :param result_names:
+            list
+            Optional
+            list of strings, with names of the resulting impedances
+            ['ai', 'shear_ai', 'vp_vs']
+        """
+        import bruges.rockphysics.anisotropy as bra
+        if not self.check_log_types(['Density', 'P velocity', 'S velocity'], log_table):
+            return
+        if result_names is None:
+            result_names = ['ai', 'shear_ai', 'vp_vs']
+
+        post_fix = ''
+        desc = 'Calculated from {}'.format(', '.join([log_table[_t] for _t in list(log_table.keys())]))
+        vp = self.logs[log_table['P velocity']].data
+        vs = self.logs[log_table['S velocity']].data
+        rho = self.logs[log_table['Density']].data
+        if backus_length is not None:
+            ba = bra.backus(vp, vs, rho, backus_length, self.step)
+            vp = ba[0]
+            vs = ba[1]
+            rho = ba[2]
+            post_fix = '_ba{}m'.format(round(backus_length))
+            desc += '. Using Backus avg, length {}m'.format(round(backus_length))
+
+        self.add_log_curve(
+            LogCurve(name=result_names[0] + post_fix,
+                     data=vp*rho,
+                     header={
+                         'unit': 'kPa s/m',  # TODO Make sure to test these units!
+                         'log_type': 'Impedance',
+                         'desc': result_names[0] + desc
+                     }))
+        self.add_log_curve(
+            LogCurve(name=result_names[1] + post_fix,
+                     data=vs*rho,
+                     header={
+                         'unit': 'kPa s/m',  # TODO Make sure to test these units!
+                         'log_type': 'Impedance',
+                         'desc': result_names[1] + desc
+                     }))
+        self.add_log_curve(
+            LogCurve(name=result_names[2] + post_fix,
+                     data=vp/vs,
+                     header={
+                         'unit': '-',
+                         'log_type': 'VpVs',
+                         'desc': result_names[2] + desc
+                     }))
+
+    def calc_reflectivity_in_time(self, log_table, time_step=None, backus_length=None):
+        """
+        Calculates the reflectivity function (function of incidence angle) along a uniformly sampled
+        time axis
+
+        """
+        import bruges.rockphysics.anisotropy as bra
+        uniform_twt = None
+        reflectivity = None
+        if time_step is None:
+            time_step = 0.001
+        if not self.check_log_types(['Density', 'P velocity', 'S velocity', 'Two-way time'], log_table):
+            return
+        true_twt = self.logs[log_table['Two-way time']].data
+
+        if backus_length is None:
+            uniform_twt, vp = self.logs[log_table['P velocity']].uniform_sampling_in_time(true_twt, time_step)
+            uniform_twt, vs = self.logs[log_table['S velocity']].uniform_sampling_in_time(true_twt, time_step)
+            uniform_twt, rho = self.logs[log_table['Density']].uniform_sampling_in_time(true_twt, time_step)
+
+        else:
+            uniform_twt = np.arange(np.nanmin(true_twt), np.nanmax(true_twt), time_step)
+            # We can not run backus averaging in time, so we need to first run the backus averaging, and then
+            # interpolate the result to be uniformly sampled in time.
+            ba = bra.backus(
+                self.logs[log_table['P velocity']].data,
+                self.logs[log_table['S velocity']].data,
+                self.logs[log_table['Density']].data,
+                backus_length, self.step)
+
+            vp = np.interp(x=uniform_twt, xp=true_twt, fp=ba[0])
+            vs = np.interp(x=uniform_twt, xp=true_twt, fp=ba[1])
+            rho = np.interp(x=uniform_twt, xp=true_twt, fp=ba[2])
+
+        return uniform_twt, rp.reflectivity(vp, None, vs, None, rho, None, along_wiggle=True)
+
+    def check_log_types(self, necessary_types, log_table):
+        for ltype in necessary_types:
+            if ltype not in list(log_table.keys()):
+                info_txt = 'WARNING: {} is not specified in log_table'.format(ltype)
+                print(info_txt)
+                logger.info(info_txt)
+                return False
+            if ltype not in self.log_types():
+                info_txt = 'WARNING: Log type {} is lacking in well {}'.format(ltype, self.well)
+                print(info_txt)
+                logger.info(info_txt)
+                return False
+            if log_table[ltype] not in self.log_names():
+                info_txt = 'WARNING: Log {} is lacking in well {}'.format(log_table[ltype], self.well)
+                print(info_txt)
+                logger.info(info_txt)
+                return False
+        return True
+
 
 def _read_data(file):
     """Convert file and Return `self`. """

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import os
 import pandas as pd
 
-from blixt_utils.plotting.helpers import axis_plot, annotate_plot, header_plot, wiggle_plot
+from blixt_utils.plotting.helpers import axis_plot, annotate_plot, header_plot, wiggle_plot, set_up_column_plot
 from blixt_utils.misc.templates import default_templates
 from blixt_rp.core.well import Project, LogCurve
 import blixt_rp.rp.rp_core as rp
@@ -18,6 +18,7 @@ import blixt_rp.plotting.plot_logs as rpp
 h_above = 50.
 h_below = 50.
 results = None
+soft_below = None
 
 
 def calc_ai_around_top(
@@ -67,11 +68,7 @@ def calc_ai_around_top(
         List of incident angles in degrees for the different seismic reference traces
 
     :param axes:
-        dict
-        Dictionary with keys defined by the parameter ax_names below, each value is an Axes object that the
-        data will be plotted in.
-        If ref_logs is not None, then this dict must contain an additional axes called 'ref_ax'.
-        If axes are provided, the "verbose" keyword will be ignored
+        not implemented
     wavelet:
         dict
         dictionary with three keys:
@@ -80,7 +77,7 @@ def calc_ai_around_top(
             'header': a dictionary with info about the wavelet
         see blixt_utils.io.io.read_petrel_wavelet() for example
     """
-    global h_above, h_below, results
+    global h_above, h_below, results, soft_below
 
     if thickness_above is not None:
         h_above = thickness_above
@@ -120,36 +117,40 @@ def calc_ai_around_top(
     if ref_traces is not None:
         ax_names.insert(-2, 'ref_trace_ax')
         width_ratios.insert(-2, 1)
-    if axes is not None:
-        for n in ax_names:
-            if n not in list(axes.keys()):
-                raise IOError('The {} axis is missing among the provided axes')
-            if n not in list(header_axes.keys()):
-                raise IOError('The {} axis is missing among the provided header axes')
+    # TODO
+    # Check that axes never are used as input
+    # if axes is not None:
+    #     for n in ax_names:
+    #         if n not in list(axes.keys()):
+    #             raise IOError('The {} axis is missing among the provided axes')
+    #         if n not in list(header_axes.keys()):
+    #             raise IOError('The {} axis is missing among the provided header axes')
 
     depth = md.data
-    fig = None
-    if ref_logs is None:
-        fig = plt.figure(figsize=(12, 10))
-    else:
-        fig = plt.figure(figsize=(16, 10))
+    # fig = None
+    # if ref_logs is None:
+    #     fig = plt.figure(figsize=(12, 10))
+    # else:
+    #     fig = plt.figure(figsize=(16, 10))
+
+    # n_cols = len(ax_names)
+    # n_rows = 2
+    # height_ratios = [1, 5]
+    # spec = fig.add_gridspec(nrows=n_rows, ncols=n_cols,
+    #                         height_ratios=height_ratios, width_ratios=width_ratios,
+    #                         hspace=0., wspace=0.,
+    #                         left=0.05, bottom=0.03, right=0.98, top=0.96)
+    # header_axes = {}
+    # axes = {}
+    # for i in range(len(ax_names)):
+    #     header_axes[ax_names[i]] = fig.add_subplot(spec[0, i])
+    #     axes[ax_names[i]] = fig.add_subplot(spec[1, i])
+    fig, header_axes, axes = set_up_column_plot(ax_names=ax_names, width_ratios=width_ratios)
+
     title_txt = 'Elastics estimation in well {}'.format(md.well)
     if mask_desc is not None:
         title_txt += ', using mask: {}'.format(mask_desc)
     fig.suptitle(title_txt)
-
-    n_cols = len(ax_names)
-    n_rows = 2
-    height_ratios = [1, 5]
-    spec = fig.add_gridspec(nrows=n_rows, ncols=n_cols,
-                            height_ratios=height_ratios, width_ratios=width_ratios,
-                            hspace=0., wspace=0.,
-                            left=0.05, bottom=0.03, right=0.98, top=0.96)
-    header_axes = {}
-    axes = {}
-    for i in range(len(ax_names)):
-        header_axes[ax_names[i]] = fig.add_subplot(spec[0, i])
-        axes[ax_names[i]] = fig.add_subplot(spec[1, i])
 
     log_types = ['Impedance', 'P velocity', 'Density']
     lws = {ltype: _x for ltype, _x in zip(log_types, [2, 0.5, 0.5])}
@@ -187,10 +188,17 @@ def calc_ai_around_top(
         avg_rho_above = np.nanmedian(_x2[mask][above_mask])
         avg_rho_below = np.nanmedian(_x2[mask][below_mask])
 
+        soft_below_mask = np.ma.masked_less(
+            _x1[mask][below_mask] * _x2[mask][below_mask],
+            avg_vp_above * avg_rho_above).mask
+        softness_below = avg_vp_above * avg_rho_above / \
+                         (_x1[mask][below_mask][soft_below_mask] * _x2[mask][below_mask][soft_below_mask])
+
         positions = ['above', 'below']
         _results = {'top': top, 'h_above': _h_above, 'h_below': _h_below,
                    'vp_above': avg_vp_above, 'vp_below': avg_vp_below,
                    'rho_above': avg_rho_above, 'rho_below': avg_rho_below}
+        _soft_below = {'softness_below': softness_below}
         # _averages = {'above': {'vp': avg_vp_above, 'rho': avg_rho_above},
         #              'below': {'vp': avg_vp_below, 'rho': avg_rho_below}}
         if _ref_logs is not None:
@@ -202,6 +210,7 @@ def calc_ai_around_top(
                         this_mask = above_mask
                     else:
                         this_mask = below_mask
+                        _soft_below['{}_soft_below'.format(_log.name)] = _log.data[mask][this_mask][soft_below_mask]
                     _results['{}_{}'.format(_log.name, pos)] = np.nanmedian(_log.data[mask][this_mask])
 
         if _ref_traces is not None:
@@ -320,24 +329,24 @@ def calc_ai_around_top(
         #     print('Seismic amplitudes {} top:'.format(position))
         #     print('  ', ', '.join(['{}: {}'.format(key, value) for key, value in _trace_amplitudes[position].items()]))
         # print('')
-        return _h_above, _h_below, _results
+        return _h_above, _h_below, _results, _soft_below
 
-    h_above, h_below, results = re_plot(h_above, h_below, ref_logs, ref_traces)
+    h_above, h_below, results, soft_below = re_plot(h_above, h_below, ref_logs, ref_traces)
 
     def on_press(event):
         global h_above, h_below, results
         # print('you pressed', event.button, event.xdata, event.ydata)
         if event.ydata > top:
-            h_above, h_below, results = re_plot(h_above, event.ydata - top, ref_logs, ref_traces)
+            h_above, h_below, results, soft_below = re_plot(h_above, event.ydata - top, ref_logs, ref_traces)
         if event.ydata < top:
-            h_above, h_below, results = re_plot(top - event.ydata, h_below, ref_logs, ref_traces)
+            h_above, h_below, results, soft_below = re_plot(top - event.ydata, h_below, ref_logs, ref_traces)
         # print('h_above:', h_above, ',  h_below', h_below)
         plt.show()
 
     if interactive:
         cid = fig.canvas.mpl_connect('button_press_event', on_press)
     plt.show()
-    return h_above, h_below, results
+    return h_above, h_below, results, soft_below
 
 
 def test_calc_elastics():

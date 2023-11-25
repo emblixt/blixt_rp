@@ -7,7 +7,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from blixt_rp.rp_utils.version import info
-from blixt_utils.plotting.helpers import axis_plot, annotate_plot, header_plot, deltalogr_plot
+from blixt_utils.plotting.helpers import axis_plot, annotate_plot, header_plot, deltalogr_plot, set_up_column_plot, \
+    axis_plot_with_color_gradient
 from blixt_rp.core.log_curve import LogCurve
 from blixt_utils.misc.templates import default_templates
 
@@ -155,7 +156,7 @@ def calc_toc(
 
     ax_names = ['r_ac_ax', 'dlr_ax', 'toc_ax']
     if reference_logs is not None:
-        ax_names += ['ref_ax']
+        ax_names = ['ref_ax'] + ax_names
     if axes is not None:
         verbose = False
         preset_axes = True
@@ -175,15 +176,11 @@ def calc_toc(
         md_min = ylim[0]
         md_max = ylim[1]
     fig = None
+
     if verbose:
-        if reference_logs is None:
-            fig = plt.figure(figsize=(12, 10))
-        else:
-            fig = plt.figure(figsize=(16, 10))
         title_txt = 'TOC estimation in well {}'.format(r.well)
         if mask_desc is not None:
             title_txt += ', using mask: {}'.format(mask_desc)
-        fig.suptitle(title_txt)
         if intervals is not None:
             ax_names = ['md_ax'] + ax_names
             width_ratios = [0.2, 1, 1, 1]
@@ -191,43 +188,15 @@ def calc_toc(
             width_ratios = [1, 1, 1]
         if reference_logs is not None:
             width_ratios += [1]
+            width_ratios[1] = 0.8
 
-        n_cols = len(ax_names)
-        n_rows = 2
-        height_ratios = [1, 5]
-        spec = fig.add_gridspec(nrows=n_rows, ncols=n_cols,
-                                height_ratios=height_ratios, width_ratios=width_ratios,
-                                hspace=0., wspace=0.,
-                                left=0.05, bottom=0.03, right=0.98, top=0.96)
-        header_axes = {}
-        axes = {}
-        for i in range(len(ax_names)):
-            header_axes[ax_names[i]] = fig.add_subplot(spec[0, i])
-            axes[ax_names[i]] = fig.add_subplot(spec[1, i])
+        fig, header_axes, axes = set_up_column_plot(ax_names=ax_names, width_ratios=width_ratios)
+        fig.suptitle(title_txt)
 
         if intervals is not None:
             header_plot(header_axes['md_ax'], None, None, None, title='MD [m]')
             annotate_plot(axes['md_ax'], depth[mask], intervals=intervals, interval_names=interval_names,
                           ylim=[md_min, md_max])
-
-    if down_weight_intervals is not None:
-        if isinstance(down_weight_intervals, list):
-            if len(down_weight_intervals[0]) != 3:
-                raise IOError('down_weight_intervals must contain lists with 3 items')
-        else:
-            raise IOError('down_weight_intervals must be a list')
-        # replace the depths [m MD] with the indexes for the for this depth
-        for _i, intrvl in enumerate(down_weight_intervals):
-            down_weight_intervals[_i][0] = np.argmin(np.sqrt((depth-intrvl[0])**2))
-            down_weight_intervals[_i][1] = np.argmin(np.sqrt((depth-intrvl[1])**2))
-
-    if discrete_intervals is not None:
-        if not isinstance(discrete_intervals, list):
-            raise IOError('discrete_intervals must be a list')
-        # replace the depths [m MD] with the indexes for the for this depth
-        for _i, intrvl in enumerate(discrete_intervals):
-            discrete_intervals[_i] = np.argmin(np.sqrt((depth-intrvl)**2))
-            discrete_intervals[_i] = np.argmin(np.sqrt((depth-intrvl)**2))
 
     # find the linear trends matching the data. These are used as baseline in the DeltaLogR calculation
     fit_parameters_rdep = r.calc_depth_trend(
@@ -316,6 +285,12 @@ def calc_toc(
             header_plot(header_axes['toc_ax'], xlims, legends, styles)
             header_axes['toc_ax'].text(1.5, 1.0, '$r_0$={:.1f}, $ac_0$={:.1f}, LOM={:.1f}'.format(
                 _r0, _ac0, lom), ha='center', va='bottom', **text_style)
+
+            if intervals is not None:
+                for interval in intervals:
+                    for ax in [axes[x] for x in ax_names if x not in ['twt_ax']]:
+                        ax.axhline(y=interval[0], color='k', lw=0.5)
+
         return _dlr_picked, _toc_picked
 
     if verbose or preset_axes:
@@ -356,8 +331,13 @@ def calc_toc(
                       for xx in reference_logs]
             limits = [[templates[xx.log_type]['min'], templates[xx.log_type]['max']] for xx in reference_logs]
             legends = ['{} [{}]'.format(xx.name, templates[xx.log_type]['unit']) for xx in reference_logs]
-            xlims = axis_plot(axes['ref_ax'], depth, logs_to_plot,
-                              limits, styles, yticks=not((intervals is not None) or preset_axes), ylim=[md_min, md_max])
+            # xlims = axis_plot(axes['ref_ax'], depth, logs_to_plot,
+            #                   limits, styles, yticks=not((intervals is not None) or preset_axes), ylim=[md_min, md_max])
+            xlims = list()
+            xlims.append(axis_plot_with_color_gradient(
+                axes['ref_ax'], depth, logs_to_plot[0],
+                limits[0], styles[0], yticks=not((intervals is not None) or preset_axes),
+                horizontal_gradient=False, vmin=0.2, ylim=[md_min, md_max]))
             header_plot(header_axes['ref_ax'], xlims, legends, styles)
 
     dlr_picked, toc_picked = re_plot(start_r, r0, ac0)

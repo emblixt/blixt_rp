@@ -96,7 +96,7 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
     """
     #
     # some initial setups
-    backus_length = 15.
+    backus_length = 5.
     if ref_val is not None:
         if not isinstance(ref_val, dict):
             raise ValueError('ref_val must be a dictionary with reference Vp, Vs and rho for each well')
@@ -422,6 +422,8 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
         if ax is None:
             fig = plt.figure(figsize=(10, 10))
             ax = fig.subplots()
+        else:
+            fig = ax.get_figure()
     elif ax is None:
         ax = fig.subplots()
 

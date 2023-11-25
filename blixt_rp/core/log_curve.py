@@ -251,8 +251,8 @@ class LogCurve(object):
 
         :param discrete_intervals:
             list
-            list of indexes (in the unmasked data) at which the trend are allowed discrete jumps.
-            Typically the indexes of the boundaries between two intervals (formations) in a well.
+            list of depth values at which the trend are allowed discrete jumps.
+            Typically the boundaries between consequent intervals (formations) in a well.
 
         :param down_weight_outliers:
             bool
@@ -260,10 +260,11 @@ class LogCurve(object):
 
         :param down_weight_intervals:
             list
-            List of lists, where each inner list is a 3 item list with [start_index, stop_index, weight]
+            # The indexes are for the unmasked data
+            # List of lists, where each inner list is a 3 item list with [start_index, stop_index, weight]
+            List of lists, where each inner list is a 3 item list with [start_depth, stop_depth, weight]
             where weight is a float between 0 and 1. 0 indicates the data within this interval is not taken into
             account at all. 1 is normal weight.
-            The indexes are for the unmasked data
 
         :param verbose:
             bool
@@ -296,7 +297,7 @@ class LogCurve(object):
             ax.plot(self.data, depth, lw=0.5, c='grey')
             if discrete_intervals is not None:
                 for i in discrete_intervals:
-                    ax.axhline(depth[i], 0, 1, ls='--')
+                    ax.axhline(i, 0, 1, ls='--')
 
         def do_the_fit(_mask):
             weights = None
@@ -321,14 +322,18 @@ class LogCurve(object):
                         raise IOError('down_weight_intervals must contain lists with 3 items')
                 else:
                     raise IOError('down_weight_intervals must be a list')
-                interval_weights = np.ones(len(self.data))
-                for intrvl in down_weight_intervals:
-                    interval_weights[intrvl[0]:intrvl[1]] = intrvl[2]
-
+                interval_weights = np.ones(len(self.data[_mask]))
+                for int_weight in down_weight_intervals:
+                    interval_weights[
+                        np.argmin(np.sqrt((depth[_mask] - int_weight[0])**2)):\
+                        np.argmin(np.sqrt((depth[_mask] - int_weight[1])**2))
+                    ] = int_weight[2]
+                # interval_weights = np.ones(len(self.data))
                 if weights is None:
-                    weights = interval_weights[mask]
+                    # weights = interval_weights[mask]
+                    weights = interval_weights
                 else:
-                    weights = weights * interval_weights[mask]
+                    weights = weights * interval_weights
                 # ax1[1].plot(weights)
 
             return least_squares(residuals, x0, args=(depth[_mask], self.data[_mask]),
@@ -340,12 +345,12 @@ class LogCurve(object):
                 raise IOError('Interval indexes must be provided as a list')
             for i in range(len(discrete_intervals) + 1):  # always one more section than boundaries between them
                 if i == 0:  # first section
-                    this_depth_mask = msks.create_mask(depth, '<', depth[discrete_intervals[i]])
+                    this_depth_mask = msks.create_mask(depth, '<', discrete_intervals[i])
                 elif len(discrete_intervals) == i:  # last section
-                    this_depth_mask = msks.create_mask(depth, '>=', depth[discrete_intervals[-1]])
+                    this_depth_mask = msks.create_mask(depth, '>=', discrete_intervals[-1])
                 else:  # all middle sections
                     this_depth_mask = msks.create_mask(
-                        depth, '><', [depth[discrete_intervals[i-1]], depth[discrete_intervals[i]-1]])
+                        depth, '><', [discrete_intervals[i-1], discrete_intervals[i]])
 
                 combined_mask = msks.combine_masks([mask, this_depth_mask])
                 res = do_the_fit(combined_mask)
@@ -432,12 +437,12 @@ class LogCurve(object):
                 raise IOError('Number of trends must be one more than the number of interval boundaries')
             for i in range(len(discrete_intervals) + 1):  # always one more section than boundaries between them
                 if i == 0:  # first section
-                    this_depth_mask = msks.create_mask(depth, '<', depth[discrete_intervals[i]])
+                    this_depth_mask = msks.create_mask(depth, '<', discrete_intervals[i])
                 elif len(discrete_intervals) == i:  # last section
-                    this_depth_mask = msks.create_mask(depth, '>=', depth[discrete_intervals[-1]])
+                    this_depth_mask = msks.create_mask(depth, '>=', discrete_intervals[-1])
                 else:  # all middle sections
                     this_depth_mask = msks.create_mask(
-                        depth, '><', [depth[discrete_intervals[i-1]], depth[discrete_intervals[i]-1]])
+                        depth, '><', [discrete_intervals[i-1], discrete_intervals[i]])
                 output = np.append(output, trend_function(depth[this_depth_mask], *trend_parameters[i]))
         else:
             output = trend_function(depth, *trend_parameters[0])
@@ -449,6 +454,12 @@ class LogCurve(object):
             ax.set_xlabel(self.name)
 
         return output
+
+    def uniform_sampling_in_time(self,
+                                 true_twt,
+                                 time_step):
+        t = np.arange(np.nanmin(true_twt), np.nanmax(true_twt), time_step)
+        return t, np.interp(x=t, xp=true_twt, fp=self.data)
 
     #def get_log_name(self):
     #    log_name = None

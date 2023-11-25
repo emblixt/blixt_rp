@@ -11,10 +11,11 @@ import blixt_rp.core.well as cw
 import blixt_utils.utils as uu
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot, \
-    deltalogr_plot, chi_rotation_plot
+    deltalogr_plot, chi_rotation_plot, set_up_column_plot
 import blixt_rp.rp.rp_core as rp
 from blixt_utils.plotting import crossplot as xp
-from bruges.filters import ricker
+# from bruges.filters import ricker
+import blixt_utils.misc.wavelets as bumw
 import bruges.rockphysics.anisotropy as bra
 
 logger = logging.getLogger(__name__)
@@ -24,8 +25,8 @@ def find_nearest(data, value):
     return np.nanargmin(np.abs(data - value))
 
 
-def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=None, savefig=None,
-              intervals=None, interval_names=None, interval_colors=None, **kwargs):
+def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name=None, savefig=None,
+              intervals=None, interval_names=None, interval_colors=None, wavelet=None, **kwargs):
     """
     Attempts to draw a plot similar to the "CPI plots", for one working interval with some buffer.
     :param well:
@@ -43,9 +44,10 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         dict
         Dictionary of working intervals, keys are working interval names, and the values are a two
         items list with top & bottom
-    :param wi_name:
-        str
-        Name of working interval to use in this plot
+    :param wi_names:
+        list of strings
+        Name of working intervals to use in this plot
+        set to None to plot whole well
     :param templates:
         dict
         Dictionary of different templates as returned from Project().load_all_templates()
@@ -66,6 +68,13 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     :param interval_colors:
         list of N colors to color each interval
         if equal to string 'cyclic', two hardcoded colors are used to cyclically color each interval
+    wavelet:
+        dict
+        dictionary with three keys:
+            'wavelet': contains the wavelet amplitude
+            'time': contains the time data [s]
+            'header': a dictionary with info about the wavelet
+        see blixt_utils.io.io.read_petrel_wavelet() for example
     :kwargs
         keyword arguments
         backus_length: The Backus averaging length in m
@@ -113,36 +122,45 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         fill_pos_style = 'default'
         fill_neg_style = 'default'
 
+    if isinstance(wi_names, str):
+        wi_names = list(wi_names)
+
     # Set up plot window
-    fig = plt.figure(figsize=(20, 10))
-    fig.suptitle('{} interval in well {} {}'.format(wi_name, well.well, suffix))
+    ax_names = None
+    width_ratios = None
     if source_rock_study:
         ax_names = ['gr_ax', 'md_ax', 'twt_ax', 'res_ax', 'dlr_ax', 'toc_ax', 'cpi_ax', 'ai_ax', 'synt_ax']
-        n_cols = 9
         width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 1, 1.8]
     else:
         ax_names = ['gr_ax', 'md_ax', 'twt_ax', 'res_ax', 'rho_ax', 'cpi_ax', 'ai_ax', 'synt_ax']
-        n_cols = 8
         width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 2]
-    n_rows = 2
-    height_ratios = [1, 5]
-    spec = fig.add_gridspec(nrows=n_rows, ncols=n_cols,
-                            height_ratios=height_ratios, width_ratios=width_ratios,
-                            hspace=0., wspace=0.,
-                            left=0.05, bottom=0.03, right=0.98, top=0.96)
-    header_axes = {}
-    axes = {}
-    for i in range(len(ax_names)):
-        header_axes[ax_names[i]] = fig.add_subplot(spec[0, i])
-        axes[ax_names[i]] = fig.add_subplot(spec[1, i])
+    fig, header_axes, axes = set_up_column_plot(ax_names=ax_names, width_ratios=width_ratios)
+
+    if wi_names is None:
+        fig.suptitle('Well {} {}'.format(well.well, suffix))
+    else:
+        fig.suptitle('{} interval in well {} {}'.format(', '.join(wi_names), well.well, suffix))
 
     #
     # Start plotting data
     #
-    wi_name = wi_name.upper()
     tb = well.block[block_name]  # this log block
     depth = tb.logs['depth'].data
-    mask = np.ma.masked_inside(depth, wis[well.well][wi_name][0]-buffer, wis[well.well][wi_name][1]+buffer).mask
+    if wi_names is not None:
+        _md_min = 1E6
+        _md_max = -1E6
+        for wi_name in wi_names:
+            wi_name = wi_name.upper()
+            if wis[well.well][wi_name][0] < _md_min:
+                _md_min = wis[well.well][wi_name][0]
+            if wis[well.well][wi_name][1] > _md_max:
+                _md_max = wis[well.well][wi_name][1]
+        # mask = np.ma.masked_inside(depth, wis[well.well][wi_names][0]-buffer, wis[well.well][wi_names][1]+buffer).mask
+        mask = np.ma.masked_inside(depth, _md_min-buffer, _md_max+buffer).mask
+    else:
+        mask = np.ma.masked_inside(depth, np.nanmin(depth), np.nanmax(depth)).mask
+        _md_min = None
+        _md_max = None
     md_min = np.min(depth[mask])
     md_max = np.max(depth[mask])
 
@@ -178,9 +196,14 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
     header_plot(header_axes['gr_ax'], xlims, legends, styles)
 
     #for ax in [axes[x] for x in ax_names if x not in ['twt_ax', 'synt_ax']]:
-    for ax in [axes[x] for x in ax_names if x not in ['twt_ax']]:
-        ax.axhline(y=wis[well.well][wi_name][0], color='k', ls='--')
-        ax.axhline(y=wis[well.well][wi_name][1], color='k', ls='--')
+    if wi_names is not None:
+        for ax in [axes[x] for x in ax_names if x not in ['twt_ax']]:
+            ax.axhline(y=_md_min, color='k', ls='--')
+            ax.axhline(y=_md_max, color='k', ls='--')
+    if intervals is not None:
+        for interval in intervals:
+            for ax in [axes[x] for x in ax_names if x not in ['twt_ax']]:
+                ax.axhline(y=interval[0], color='k', lw=0.5)
 
     #
     # MD
@@ -213,11 +236,16 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]')
         annotate_plot(axes['twt_ax'], twt[mask], ylim=[twt_min, twt_max])
 
-    if twt is not None:
-        tops_twt = [twt[find_nearest(depth, y)] for y in wis[well.well][wi_name]]
+    if twt is not None and wi_names is not None:
+        tops_twt = [twt[find_nearest(depth, y)] for y in [_md_min, _md_max]]
         for ax in [axes[x] for x in ['twt_ax', 'synt_ax']]:
             ax.axhline(y=tops_twt[0], color='k', ls='--')
             ax.axhline(y=tops_twt[1], color='k', ls='--')
+    if twt is not None and intervals is not None:
+        for interval in intervals:
+            tops_twt = twt[find_nearest(depth, interval[0])]
+            for ax in [axes[x] for x in ['twt_ax', 'synt_ax']]:
+                ax.axhline(y=tops_twt, color='k', lw=0.5)
 
     #
     # Resistivity
@@ -430,19 +458,19 @@ def plot_logs(well, log_table, wis, wi_name, templates, buffer=None, block_name=
         reff = None
 
     if reff is not None:
-        # TODO
-        # expand this functionality so that we can input a wavelet
-        # similar to how its done in models.py
-        w = ricker(duration, time_step, c_f)
+        if wavelet is None:
+            wavelet = bumw.ricker(duration, time_step, c_f)
 
         # Translate the mask to the time variable
         t_mask = np.ma.masked_inside(t[:-1], np.nanmin(twt[mask]), np.nanmax(twt[mask])).mask
 
         header_plot(header_axes['synt_ax'], None, None, None,
-                    title='Incidence angle\nRicker f={:.0f} Hz, l={:.3f} s'.format(c_f, duration))
+                    title='Incidence angle\n{} f={:.0f} Hz, l={:.3f} s'.format(wavelet['header']['Name'], c_f, duration))
         for inc_a in range(0, 35, 5):
-            wig = np.convolve(w, np.nan_to_num(reff(inc_a)), mode='same')
-            wiggle_plot(axes['synt_ax'], t[:-1][t_mask], wig[t_mask], inc_a, scaling=scaling,
+            # wig = np.convolve(w, np.nan_to_num(reff(inc_a)), mode='same')
+            wig = bumw.convolve_with_refl(wavelet['wavelet'], reff(inc_a), verbose=False)
+            # wiggle_plot(axes['synt_ax'], t[:-1][t_mask], wig[t_mask], inc_a, scaling=scaling,
+            wiggle_plot(axes['synt_ax'], t[:-1][t_mask], wig[:-1][t_mask], inc_a, scaling=scaling,
                         fill_pos_style=fill_pos_style, fill_neg_style=fill_neg_style, ylim=[twt_min, twt_max],
                         yticks=False)
     else:
@@ -867,10 +895,12 @@ def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=No
         Two way time in seconds
 
     :param    wavelet:
-        numpy array
-        Array of wavelet amplitudes
-        TODO
-        use the wavelet type as used in models.py
+        dict
+        dictionary with three keys:
+            'wavelet': contains the wavelet amplitude
+            'time': contains the time data [s]
+            'header': a dictionary with info about the wavelet
+        see blixt_utils.io.io.read_petrel_wavelet() for example
 
     :param    incident_angles:
         list
@@ -905,6 +935,9 @@ def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=No
     scaling = kwargs.pop('scaling', 80)
     fill_pos_style = kwargs.pop('fill_pos_style', 'pos-blue')
     fill_neg_style = kwargs.pop('fill_neg_style', 'neg-red')
+    if input_wiggles is None and wavelet is None:
+        _dt = (np.nanmax(twt) - np.nanmin(twt)) / (len(twt) -1)
+        wavelet = bumw.ricker(0.096, _dt, 25)
     if incident_angles is None:
         incident_angles = [10., 15., 20., 25., 30., 35., 40.]
     if extract_at is not None:
@@ -934,11 +967,7 @@ def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=No
 
     for i, inc_angle in enumerate(incident_angles):
         if input_wiggles is None:
-            wiggle = np.convolve(wavelet, np.nan_to_num(reflectivity(inc_angle)), mode='same')
-            while len(wiggle) < len(twt):
-                wiggle = np.append(wiggle, np.ones(1) * wiggle[-1])  # extend with one item
-            if len(twt) < len(wiggle):
-                wiggle = wiggle[:len(twt)]
+            wiggle = bumw.convolve_with_refl(wavelet['wavelet'], reflectivity(inc_angle))
         else:
             wiggle = input_wiggles[i]
 
