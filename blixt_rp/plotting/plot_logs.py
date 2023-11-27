@@ -881,7 +881,8 @@ def chi_rotation(well, log_tables, wis, wi_name, templates, buffer=None, chi_ang
         plt.show()
 
 
-def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=None, input_wiggles=None,
+def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=None, extract_at_styles=None,
+                 input_wiggles=None,
                  yticks=True, ax=None, title=None, **kwargs):
     """
     Plot seismic traces at different incident angles for the given reflectivity function and wavelet.
@@ -893,6 +894,8 @@ def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=No
     :param    twt:
         array
         Two way time in seconds
+        OR
+        depth (TWT, MD or TVD or ...) when input_wiggles are used, which can be in any depth domain
 
     :param    wavelet:
         dict
@@ -907,7 +910,11 @@ def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=No
         List of incident angles in degrees that are used  in the reflectivity function
     :param    extract_at:
         float or list of floats
-        TWT value(s) at which the amplitudes are extracted as a function of incident angle
+        TWT value(s) at which amplitudes are extracted as a function of incident angle
+    :param extract_at_styles:
+        dict or list of dicts
+        Each dictionary are used to control the linestyle of the axhlines that indicate the extract_at depths
+        E.G. [{'c': 'b', 'lw':2}, ...]
     :param input_wiggles:
         list, same length as incident_angles
         List of arrays containing the wiggles at the different incident angles
@@ -926,7 +933,9 @@ def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=No
 
     Returns:
         ava_curves:
-            list of AVA (amplitude versus angle) curves, one for each "extract_at" float.
+            np.ndarray
+            size len(incident_angles), len(extract_at)
+            Array with AVA (amplitude versus angle) curves, one for each "extract_at" float.
             None if extract_at is None
         extract_at_indices
             list of indices of where the AVA curves have been extracted
@@ -945,6 +954,16 @@ def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=No
             extract_at = [extract_at]
         elif not isinstance(extract_at, list):
             raise IOError('extract_at must be a float, or list of floats')
+    if extract_at_styles is not None:
+        if isinstance(extract_at_styles, dict):
+            extract_at_styles = [extract_at_styles]
+        if len(extract_at_styles) != len(extract_at):
+            warn_txt = 'Length of extract_at ({}) must be the same as extract_at_styles ({])'.format(
+                len(extract_at), len(extract_at_styles)
+            )
+            print('WARNING: {}'.format(warn_txt))
+            logger.warning(warn_txt)
+            extract_at_styles = None
     if input_wiggles is not None:
         if len(input_wiggles) != len(incident_angles):
             raise IOError('The number of input wiggles ({}) must the same as number of incident angles ({})'.format(
@@ -979,6 +998,12 @@ def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=No
                     fill_neg_style=fill_neg_style, **kwargs)
 
     ax.grid(which='major', alpha=0.5)
+    if extract_at is not None:
+        for i, _y in enumerate(extract_at):
+            if extract_at_styles is not None:
+                ax.axhline(_y, 0, 1, **extract_at_styles[i])
+            else:
+                ax.axhline(_y, 0, 1, c='k', ls='--')
     if not yticks:
         ax.get_yaxis().set_ticklabels([])
     else:
