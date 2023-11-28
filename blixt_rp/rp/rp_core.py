@@ -9,13 +9,12 @@ import matplotlib.pyplot as plt
 import logging
 # from dataclasses import dataclass
 from copy import deepcopy
-import sys
 
 import bruges.rockphysics.rockphysicsmodels as brr
 
 import blixt_rp.rp_utils.definitions as ud
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
-from blixt_utils.misc.param import Param
+from blixt_rp.core.param import Param
 
 logger = logging.getLogger(__name__)
 

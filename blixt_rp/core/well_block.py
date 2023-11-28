@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 """
-from datetime import datetime
 import numpy as np
 import logging
 import matplotlib.pyplot as plt
@@ -12,7 +11,7 @@ from blixt_utils.io.io import well_excel_reader
 from blixt_rp.core.log_curve_new import LogCurve
 from blixt_utils.misc.convert_data import convert as cnvrt
 import blixt_rp.rp_utils.definitions as ud
-from blixt_utils.misc.param import Param
+from blixt_rp.core.param import Param
 from blixt_rp.core.header import Header
 
 # global variables

@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from pandas import DataFrame
 
 from blixt_rp.core.header import Header
-from blixt_utils.misc.param import Param
+from blixt_rp.core.param import Param
 from blixt_utils.signal_analysis.signal_analysis import smooth as _smooth
 from blixt_utils.misc.curve_fitting import residuals, linear_function
 from blixt_rp.rp_utils.definitions import allowed_depth_formats

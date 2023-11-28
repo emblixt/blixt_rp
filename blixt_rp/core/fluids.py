@@ -15,7 +15,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-from blixt_utils.misc.param import Param
+from blixt_rp.core.param import Param
 import blixt_rp.rp.rp_core as rp
 import blixt_rp.core.well as cw
 from blixt_utils.misc.attribdict import AttribDict
@@ -664,7 +664,6 @@ def test_fluid_mix():
     pass
 
 if __name__ == '__main__':
-    import sys
     import os
     working_dir = 'C:\\Users\\marten\\PycharmProjects\\blixt_rp'
 

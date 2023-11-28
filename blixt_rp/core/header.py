@@ -4,7 +4,7 @@ from datetime import datetime
 import logging
 
 from blixt_rp.rp_utils.version import info
-from blixt_utils.misc.param import Param
+from blixt_rp.core.param import Param
 from blixt_utils.misc.attribdict import AttribDict
 
 logger = logging.getLogger(__name__)
