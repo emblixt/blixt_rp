@@ -451,7 +451,13 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
 
 
 def rpt_phi_sw(_phi, _sw, **kwargs):
-    plot_type = kwargs.pop('plot_type', 'AI-VpVs')
+    """
+    Useful rock physics template that can return elastic properties (e.g. AI, Vp/Vs) for many
+    different rock physics functions (constant cement, contact cement, stiff sand, soft sand)
+    from the input variables _phi and _sw (porosity and water saturation)
+
+    """
+    plot_type = kwargs.pop('plot_type', 'AI-VpVs')  # when 'elastics' is used, this function returns vp, vs, rho
     ref_val = kwargs.pop('ref_val', None)  # ref values of Vp, Vs and rho for calculating I x G [Vp, Vs, rho]
     model = kwargs.pop('model', 'stiff')
     phi_c = kwargs.pop('phi_c', None)  # critical porosity
@@ -534,6 +540,8 @@ def rpt_phi_sw(_phi, _sw, **kwargs):
             raise IOError('List of Vp, Vs, and density must be provided to calculate I and G')
         xx = rp.intercept(ref_val[0], vp_2, ref_val[2], rho_2)
         yy = rp.gradient(ref_val[0], vp_2, ref_val[1], vs_2, ref_val[2], rho_2)
+    elif plot_type == 'elastics':
+        return vp_2, vs_2, rho_2
     else:
         raise IOError('No valid plot_type selected')
 

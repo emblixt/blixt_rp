@@ -261,7 +261,7 @@ def calc_ai_around_top(
             # print(' - Well {}, dt_above {}, dt_below {}, timestep {}'.format(
             #    twt.well, above_layer.thickness, below_layer.thickness, time_step
             # ))
-            _twt, _layer_i, _vp, _vs, _rho = m.realize_model(time_step)
+            _twt, _layer_i, _vp, _vs, _rho, _z = m.realize_model(time_step)
             _reff = rp.reflectivity(_vp, None, _vs, None, _rho, None, along_wiggle=True)
             m_wiggle = bumw.convolve_with_refl(wavelet['wavelet'], _reff(0.), verbose=False)
             t_to_d = [np.nanargmin((twt.data - _t)**2) for _t in _twt]

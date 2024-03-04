@@ -35,8 +35,12 @@ def plot_quasi_2d(model, ax=None, **kwargs):
     last_layer_depth = [model.depth_to_top]*len(i_range)
     ax.plot(i_range, last_layer_depth, **kwargs)
     for _layer in model.layers:
-        _h = np.array([_layer.thickness(_i) for _i in i_range])
-        _tmp = np.array([last_layer_depth[_i] + _layer.thickness(_i) for _i in i_range])
+        if isinstance(_layer.thickness, float) or isinstance(_layer.thickness, int):
+            _h = np.array([_layer.thickness for _i in i_range])
+            _tmp = np.array([last_layer_depth[_i] + _layer.thickness for _i in i_range])
+        else:
+            _h = np.array([_layer.thickness(_i) for _i in i_range])
+            _tmp = np.array([last_layer_depth[_i] + _layer.thickness(_i) for _i in i_range])
         ax.plot(i_range[_h > 0], _tmp[_h > 0], **kwargs)
         last_layer_depth = _tmp
     if new_ax:
@@ -108,7 +112,12 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
             bwb.append(last_top + model.layers[i].thickness)
 
     # realize the model to create data
-    y, layer_index, vp, vs, rho = model.realize_model(0.001)
+    twt, layer_index, vp, vs, rho, z = model.realize_model(0.001)
+    if model.domain == 'TWT':
+        y = twt
+    else:
+        y = z
+
     if model.model_type == 'quasi 2D':
         data_ai = vp[index, :] * rho[index, :]
         data_vpvs = vp[index, :] / vs[index, :]
@@ -179,18 +188,28 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
     if not yticks:
         ax.get_yaxis().set_ticklabels([])
         ax.tick_params(axis='y', length=0)
+    else:
+        if model.domain == 'TWT':
+            ax.set_ylabel('TWT [s]')
+        else:
+            # TODO
+            # The realization returns the twt
+            # ax.set_ylabel('TWT [s]')
+            ax.set_ylabel('Z [m]')
 
     if show:
         plt.show()
 
 
 def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, color_by_gradient=False,
-                 extract_avo_at=None, avo_angles=None, avo_plot_position=None, **kwargs):
+                 extract_avo_at=None, avo_angles=None, avo_plot_position=None,
+                 extract_amp_at=None, plot_domain=None, overburden_vel=3000., **kwargs):
     """
 
     Args:
         model:
         sample_rate:
+            Always in seconds!
         wavelet:
             dict
             dictionary with three keys:
@@ -211,7 +230,7 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             If True, use the polarity of the gradient to color the wiggle, instead of the polarity of the amplitude
         extract_avo_at:
             two-tuple, or list of two-tuples
-            Each two tuple contains the x (index number) and y (TWT [s]) coordinates of where to extract avo curves
+            Each two tuple contains the x (index number) and y (TWT [s] or Z [m]) coordinates of where to extract avo curves
 
         avo_angles:
             list
@@ -219,15 +238,26 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             Used quite differently for quasi-2D and 1D plots
             AND in 1D models, when eei is True, these angles are taken to be Chi angles
         avo_plot_position
+        extract_amp_at:
+            float, or list of floats
+            depth (TWT or Z) values at which the seismic amplitude is extracted.
+            Same length as number of traces in model.
+            If given as a single float, it is repeated to yield a list
         kwargs
             keyword arguments passed on to wiggle_plot
     Returns:
-
+        avo_curves, extracted_amplitudes, minimum amplitude, maximum amplitude, distance between min & max
     """
     if avo_plot_position is None:
         avo_plot_position = [0.68, 0.02, 0.3, 0.3]
     if angle is None:
         angle = 0
+    extracted_amplitudes = None
+    min_amp = None
+    max_amp = None
+    dist_min_max = None
+    if extract_amp_at is not None:
+        extracted_amplitudes = []
 
     grad = None
     show = False
@@ -249,17 +279,15 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                 avo_curves[_i] = []
                 avo_positions[_i] = _t
 
-    # def calc_wiggle(twt_length, _wavelet, _reflectivity, _angle):
-    #     _wiggle = np.convolve(_wavelet['wavelet'], np.nan_to_num(_reflectivity(_angle)), mode='same')
-    #     while len(_wiggle) < twt_length:
-    #         _wiggle = np.append(_wiggle, np.ones(1) * _wiggle[-1])  # extend with one item
-    #     if twt_length < len(_wiggle):
-    #         _wiggle = _wiggle[:twt_length]
-    #     return _wiggle
+    if plot_domain is None:
+        plot_domain = 'TWT'
 
-    twt, layer_i, vp, vs, rho = model.realize_model(sample_rate)
+    twt, layer_i, vp, vs, rho, z = model.realize_model(sample_rate, overburden_vel=overburden_vel)
 
     if model.model_type == 'quasi 2D' and model.trace_index_range is not None:
+        min_amp = []
+        max_amp = []
+        dist_min_max = {'twt': [], 'z': []}
         if avo_angles is None:
             avo_angles = [0, 10, 20, 30, 40]
 
@@ -279,11 +307,24 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             # wiggle = calc_wiggle(len(twt), wavelet, ref, angle)
             wiggle = bumw.convolve_with_refl(wavelet['wavelet'], ref(angle))
 
-            wiggle_plot(ax, twt, wiggle, i, scaling=40, color_by_gradient=grad, **kwargs)
-            # # Find out where there is a new layer (layer_i has a unit jump), and annotate it with a horizontal marker
-            # jumps = twt[np.diff(layer_i[trace_i, :], prepend=[0]) != 0]
-            # for jump in jumps:
-            #     ax.scatter([i], [jump], c='black', marker='_')
+            min_amp.append(np.min(wiggle))
+            max_amp.append(np.max(wiggle))
+            dist_min_max['twt'].append(np.abs(twt[wiggle.argmin()] - twt[wiggle.argmax()]))
+            dist_min_max['z'].append(np.abs(z[i, wiggle.argmin()] - z[i, wiggle.argmax()]))
+
+            if extract_amp_at is not None:
+                if isinstance(extract_amp_at, float):
+                    twt_extract = extract_amp_at
+                elif isinstance(extract_avo_at, list):
+                    twt_extract = extract_amp_at[i]
+                else:
+                    raise IOError('extract_amp_at must be either float or list of floats')
+                extracted_amplitudes.append(wiggle[np.argmin((twt - twt_extract)**2)])
+
+            if plot_domain == 'TWT':
+                wiggle_plot(ax, twt, wiggle, i, scaling=40, color_by_gradient=grad, **kwargs)
+            else:
+                wiggle_plot(ax, z[0, :], wiggle, i, scaling=40, color_by_gradient=grad, **kwargs)
 
             # extract avo curves
             if avo_positions is not None:
@@ -366,7 +407,15 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
         avo_ax = ax.inset_axes(avo_plot_position)
 
         for _i, avo in list(avo_curves.items()):
-            ax.annotate('{}'.format(_i + 1), avo_positions[_i], bbox={'boxstyle': 'circle', 'color': cnames[_i]})
+            if plot_domain == 'TWT':
+                ax.annotate('{}'.format(_i + 1), avo_positions[_i], bbox={'boxstyle': 'circle', 'color': cnames[_i]})
+            else:
+                # TODO
+                # The Z position is not entirely correct, as we have hard-coded it to use the first
+                # vector of the Z array
+                twt_index = np.argmin((twt - avo_positions[_i][1]) ** 2)
+                ax.annotate('{}'.format(_i + 1),
+                            (avo_positions[_i][0], z[0, twt_index]), bbox={'boxstyle': 'circle', 'color': cnames[_i]})
             if tmp_avo_angles:
                 avo_ax.plot(tmp_avo_angles, avo, c=cnames[_i], label='{}'.format(_i + 1))
             else:
@@ -399,6 +448,8 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
 
     if show:
         plt.show()
+
+    return avo_curves, extracted_amplitudes, min_amp, max_amp, dist_min_max
 
 
 class Model:
@@ -439,24 +490,42 @@ class Model:
             self.model_type = '1D'
         else:
             self.model_type = model_type
-        if depth_to_top is None:
-            self.depth_to_top = 2.0
-        else:
-            self.depth_to_top = depth_to_top
 
         if layers is None:
             self.layers = []
         else:
             self.layers = layers
 
-        if domain is None:
-            self.domain = 'TWT'
-        else:
-            self.domain = domain
+        last_domain = None
+        if len(self.layers) > 0:
+            last_domain = self.layers[0].domain
+            for i, _layer in enumerate(self.layers):
+                if _layer.layer_type == 'quasi 2D':
+                    self.model_type = 'quasi 2D'
+                if _layer.domain != last_domain:
+                    raise ValueError('Not all layers have the same domain')
 
-        for _layer in self.layers:
-            if _layer.layer_type == 'quasi 2D':
-                self.model_type = 'quasi 2D'
+        if domain is None:
+            if last_domain is not None:
+                self.domain = last_domain
+            else:
+                self.domain = 'TWT'
+        else:
+            if (last_domain is not None) and last_domain != domain:
+                raise ValueError(
+                    'The layers does not have the same domain ({}) as the model ({})'.format(
+                        last_domain, domain
+                    ))
+            else:
+                self.domain = domain
+
+        if depth_to_top is None:
+            if self.domain == 'TWT':
+                self.depth_to_top = 2.0
+            else:
+                self.depth_to_top = 3000.
+        else:
+            self.depth_to_top = depth_to_top
 
         if trace_index_range is None:
             self.trace_index_range = None
@@ -469,9 +538,80 @@ class Model:
     def __len__(self):
         return len(self.layers)
 
+    def __getitem__(self, index):
+        if self.model_type == 'quasi 2D' and self.trace_index_range is not None:
+            if np.abs(index) >= len(self.trace_index_range):
+                raise IndexError('list index out of range')
+            if index < 0:
+                index = len(self.trace_index_range) + index
+            layers = []
+            for layer in self.layers:
+                if hasattr(layer.thickness, '__call__'):  # True if vp is a function
+                    layer_thickness = layer.thickness(index)
+                else:
+                    layer_thickness = layer.thickness
+                if hasattr(layer.vp, '__call__'):  # True if vp is a function
+                    layer_vp = layer.vp(index)
+                else:
+                    layer_vp = layer.vp
+                if hasattr(layer.vs, '__call__'):  # True if vp is a function
+                    layer_vs = layer.vs(index)
+                else:
+                    layer_vs = layer.vs
+                if hasattr(layer.rho, '__call__'):  # True if vp is a function
+                    layer_rho = layer.rho(index)
+                else:
+                    layer_rho = layer.rho
+                if hasattr(layer.ntg, '__call__'):  # True if vp is a function
+                    layer_ntg = layer.ntg(index)
+                else:
+                    layer_ntg = layer.ntg
+                if hasattr(layer, 'gross_vp'):
+                    layer_gross_vp = layer.gross_vp
+                else:
+                    layer_gross_vp = 3400.
+                if hasattr(layer, 'gross_vs'):
+                    layer_gross_vs = layer.gross_vs
+                else:
+                    layer_gross_vs = 1000.
+                if hasattr(layer, 'gross_rho'):
+                    layer_gross_rho = layer.gross_rho
+                else:
+                    layer_gross_rho = 2.
+                if hasattr(layer, 'thin_bed_factor'):
+                    layer_thin_bed_factor = layer.thin_bed_factor
+                else:
+                    layer_thin_bed_factor = 3.
+
+                layers.append(
+                    Layer(
+                        thickness=layer_thickness,
+                        target=layer.target,
+                        vp=layer_vp,
+                        vs=layer_vs,
+                        rho=layer_rho,
+                        ntg=layer_ntg,
+                        layer_type='1D',
+                        domain=layer.domain,
+                        gross_vp=layer_gross_vp,
+                        gross_vs=layer_gross_vs,
+                        gross_rho=layer_gross_rho,
+                        thin_bed_factor=layer_thin_bed_factor
+                    )
+                )
+            return Model(depth_to_top=self.depth_to_top,
+                         model_type='1D',
+                         domain=self.domain,
+                         layers=layers
+                         )
+        else:
+            return self  # if it is a 1D model, return itself. Does this make sense?
+
     def append(self, layer):
         if not isinstance(layer, Layer):
             raise IOError('Layer must be a Layer object')
+        if layer.domain != self.domain:
+            raise ValueError('Appended layer must be in same domain as model')
         self.layers.append(layer)
         if layer.layer_type == 'quasi 2D':
             self.model_type = 'quasi 2D'
@@ -479,12 +619,40 @@ class Model:
     def insert(self, index, layer):
         if not isinstance(layer, Layer):
             raise IOError('Layer must be a Layer object')
+        if layer.domain != self.domain:
+            raise ValueError('Inserted layer must be in same domain as model')
         self.layers.insert(index, layer)
         if layer.layer_type == 'quasi 2D':
             self.model_type = 'quasi 2D'
 
-    def realize_model(self, resolution, voigt_reuss_hill=False, verbose=False):
+    def realize_model(self, resolution, voigt_reuss_hill=False, overburden_vel=3000., verbose=False):
+        """
+        Realize the current model so that the parameters are regularly sampled in TWT, regardless if the
+        model is given in TWT or Z domain
+        :param resolution:
+            float
+            resolution in TWT [s]
+        :param voigt_reuss_hill:
+            bool
+            If true, the Voigt Reuss Hill average for the given NTG is used when returning the elastic parameters
+        :param overburden_vel:
+            float
+            Approximate vp velocity in the overburden to give a reasonable estimate of top TWT when the model is
+            specified in Z
+
+        """
+
+        if self.domain == 'TWT':
+            twt_top = self.depth_to_top
+            z_top = self.depth_to_top * overburden_vel / 2.
+        else:
+            twt_top = 2. * self.depth_to_top / overburden_vel
+            z_top = self.depth_to_top
+
         if self.model_type == 'quasi 2D' and self.trace_index_range is not None:
+
+            if self.domain != 'TWT':
+                raise NotImplementedError('Realization of 2D models in Z-domain is yet not implemented')
 
             n = len(self.trace_index_range)
             layer_index, this_vp, this_vs, this_rho = None, None, None, None
@@ -535,25 +703,44 @@ class Model:
                     this_rho[trace_i, :len(tmp_rho)] = tmp_rho
                     layer_index[trace_i, :len(tmp_layer_index)] = tmp_layer_index
 
-            z = self.depth_to_top + np.arange(len(this_vp[0])) * resolution
+            twt = twt_top + np.arange(len(this_vp[0])) * resolution
+            this_z = np.zeros(this_vp.shape)
+            for trace_i in self.trace_index_range:
+                this_z[trace_i, :] = z_top + 0.5 * np.cumsum(this_vp[trace_i, :] * resolution)
 
         else:
             layer_index, this_vp, this_vs, this_rho = np.zeros(0), np.zeros(0), np.zeros(0), np.zeros(0)
+            this_z = np.zeros(0)
+            last_z = z_top
             for i, layer in enumerate(self.layers):
                 _vp, _vs, _rho = layer.realize_layer(resolution, voigt_reuss_hill=voigt_reuss_hill)
                 layer_index = np.append(layer_index, np.ones(len(_vp)) * i)
                 this_vp = np.append(this_vp, _vp)
                 this_vs = np.append(this_vs, _vs)
                 this_rho = np.append(this_rho, _rho)
-            z = self.depth_to_top + np.arange(len(this_vp)) * resolution
+                # print(i)
+                # print('this_z', type(this_z))  #, this_z)
+                # print('last_z', type(last_z))  #, last_z)
+                # print('_vp', type(_vp))  #, _vp)
+                # print('resolution', type(resolution))  #, resolution)
+                this_z = np.append(this_z, last_z + 0.5 * np.cumsum(_vp * resolution))
+                last_z = this_z[-1]
 
-        return z, layer_index, this_vp, this_vs, this_rho
+            twt = twt_top + np.arange(len(this_vp)) * resolution
 
-    def plot(self, ax=None, index=None):
+        return twt, layer_index, this_vp, this_vs, this_rho, this_z
+
+    def plot(self, ax=None, index=None, kwargs1d=None):
         if self.model_type == '1D':
-            plot_1d(self, ax)
+            if kwargs1d is None:
+                plot_1d(self, ax)
+            else:
+                plot_1d(self, ax, **kwargs1d)
         elif self.model_type == 'quasi 2D' and index is not None:
-            plot_1d(self, ax, index=index)
+            if kwargs1d is None:
+                plot_1d(self, ax, index=index)
+            else:
+                plot_1d(self, ax, index=index, **kwargs1d)
         elif self.model_type == 'quasi 2D':
             plot_quasi_2d(self, ax)
 
@@ -570,6 +757,7 @@ class Layer:
                  vs=None,
                  rho=None,
                  ntg=None,
+                 domain=None,
                  **kwargs
                  ):
         """
@@ -603,6 +791,9 @@ class Layer:
         :param ntg:
             float or function
             net-to-gross, 0 <= ntg >= 1
+        :param domain:
+            string
+            'TWT' (time in seconds) or 'Z' (depth in meters)
         :param index:
             int
             index used in the parameterization of an independent variable, such as thickness, or porosity.
@@ -655,6 +846,13 @@ class Layer:
         else:
             self.ntg = ntg
 
+        if domain is None:
+            self.domain = 'TWT'
+        else:
+            self.domain = domain
+        if (self.domain != 'Z') and (self.domain != 'TWT'):
+            raise ValueError('The domain must be either TWT or Z, not {}'.format(self.domain))
+
         if not (0 <= self.ntg <= 1):
             raise ValueError('NTG must be between 0 and 1')
 
@@ -672,9 +870,11 @@ class Layer:
     def realize_layer(self, resolution, voigt_reuss_hill=False, index=0):
         """
         Realize the current layer by returning arrays of the elastic properties with the given resolution
+        *Note* that a layer is always realized in TWT domain, so the resolution is interpreted as dt in seconds
+
         :param resolution:
             float
-            resolution in TWT [s] or depth [m]
+            resolution in TWT [s]
         :param voigt_reuss_hill:
             bool
             If true, the Voigt Reuss Hill average for the given NTG is used when returning the elastic parameters
@@ -690,13 +890,18 @@ class Layer:
         else:
             layer_thickness = self.thickness
 
-        n = int(layer_thickness / resolution)
-
         if isinstance(self.vp, types.FunctionType):
             layer_vp = self.vp(index)
             # print(layer_vp)
         else:
             layer_vp = self.vp
+
+        # Let the domain decide how the layer is realized
+        if self.domain == 'TWT':
+            n = int(layer_thickness / resolution)
+        else:
+            twt_thickness = 2. * layer_thickness / layer_vp
+            n = int(twt_thickness / resolution)
 
         if isinstance(self.vs, types.FunctionType):
             layer_vs = self.vs(index)
@@ -753,18 +958,165 @@ class Layer:
             this_vs = np.ones(n) * layer_vs
             this_rho = np.ones(n) * layer_rho
 
-        return this_vp, this_vs, this_rho
+        return np.array(this_vp), np.array(this_vs), np.array(this_rho)
+
+
+def build_wedge(depth_to_wedge, from_thickness, to_thickness, n_traces, overburden, target, underburden, domain='TWT'):
+    """
+    Returns a simple wedge model with constant elastic properties in the three layers of the model
+
+    :param depth_to_wedge:
+        float
+        depth in TWT [s] or Z [m] to top of wedge
+    :param from_thickness:
+        float
+        Thickness, in TWT [s] or Z [m], at the left most side of the wedge
+    :param to_thickness:
+    :param n_traces:
+        int
+        Number of traces
+    :param overburden:
+        dict
+        with keys: 'vp', 'vs', and 'rho'
+    :param target:
+        dict
+        with keys: 'vp', 'vs', and 'rho'
+    :param underburden:
+        dict
+        with keys: 'vp', 'vs', and 'rho'
+
+    """
+    if from_thickness > to_thickness:
+        top_thickness = 0.5 * from_thickness
+
+        def wedge(i):
+            return from_thickness - (from_thickness - to_thickness) * i / (n_traces - 1)
+
+        def reverse_wedge(i):
+            return top_thickness + (from_thickness - to_thickness) * i / (n_traces - 1)
+    else:
+        top_thickness = 0.5 * to_thickness
+
+        def wedge(i):
+            return from_thickness + (to_thickness - from_thickness) * i / (n_traces - 1)
+
+        def reverse_wedge(i):
+            return top_thickness + (to_thickness - from_thickness) - (to_thickness - from_thickness) * i / (n_traces - 1)
+
+    def top(i):
+        return top_thickness
+
+    top_layer = Layer(thickness=top, **overburden, domain=domain)
+    wedge_layer = Layer(thickness=wedge, **target, target=True, domain=domain)
+    base_layer = Layer(thickness=reverse_wedge, **underburden, domain=domain)
+
+    return Model(
+        depth_to_top=depth_to_wedge - top_thickness,
+        layers=[top_layer, wedge_layer, base_layer],
+        trace_index_range=np.arange(n_traces),
+        domain=domain
+    )
+
+
+def tuning_wedge_analysis(depth_to_wedge, from_thickness, to_thickness, n_traces, overburden, target, underburden,
+                          sample_rate, wavelet, plot_domain='TWT', title=None, savefig=None, overburden_vel=3000.,
+                          extract_avo_at=None):
+    """
+    Tuning wedge is always done on a model in time domain, but the result can be plotted in depth domain
+    """
+
+    if from_thickness > to_thickness:  # Wedge pointing rightwards
+        loc = 'lower left'
+        fig, axs = plt.subplots(2, 2, figsize=(8, 8), gridspec_kw={'height_ratios': [2, 1], 'width_ratios': [0.2, 1]})
+        axs[1, 0].set_axis_off()
+        wiggle_ax = axs[0, 1]
+        model_ax = axs[0, 0]
+        wedge_ax = axs[1, 1]
+
+    else:  # Wedge pointing leftwards
+        loc = 'lower right'
+        fig, axs = plt.subplots(2, 2, figsize=(8, 8), gridspec_kw={'height_ratios': [2, 1], 'width_ratios': [1, 0.2]})
+        axs[1, 1].set_axis_off()
+        wiggle_ax = axs[0, 0]
+        model_ax = axs[0, 1]
+        wedge_ax = axs[1, 0]
+
+    fig.subplots_adjust(wspace=0.)
+
+    if plot_domain == 'TWT':
+        wedge_thickness = np.linspace(from_thickness, to_thickness, n_traces) * 1000.  # ms
+        wedge_xlabel = 'Wedge thickness [ms]'
+    else:
+        wedge_thickness = np.linspace(from_thickness, to_thickness, n_traces) * target['vp'] * 0.5  # m
+        wedge_xlabel = 'Wedge thickness [m]'
+
+    m = build_wedge(depth_to_wedge, from_thickness, to_thickness, n_traces,
+                    overburden, target, underburden, domain='TWT')
+    avo_curves, amps, min_amps, max_amps, dist_min_max = plot_wiggles(
+        m, sample_rate, wavelet, ax=wiggle_ax, extract_avo_at=extract_avo_at,
+        plot_domain=plot_domain, overburden_vel=overburden_vel)
+    if title is not None:
+        fig.suptitle(title)
+
+    if loc == 'lower left':
+        m[0].plot(ax=model_ax, kwargs1d={'yticks': False, 'legend': False})
+    else:
+        m[-1].plot(ax=model_ax, kwargs1d={'yticks': False, 'legend': False})
+    model_ax.autoscale(tight=True)
+
+    wedge_ax.plot(wedge_thickness, np.abs(np.array(max_amps)), label='|Max|')
+    wedge_ax.plot(wedge_thickness,  np.abs(np.array(min_amps)), label='|Min|')
+    wedge_ax.set_ylabel('Amplitude')
+    wedge_ax.set_xlabel(wedge_xlabel)
+    wedge_ax.legend(loc=loc)
+
+    ax2 = wedge_ax.twinx()
+    color = 'tab:green'
+    if plot_domain == 'TWT':
+        ax2.plot(wedge_thickness, np.array(dist_min_max['twt']) * 1000., color=color)
+        ax2.set_ylabel('Apparent thickness [ms]', color=color)
+    else:
+        ax2.plot(wedge_thickness, np.array(dist_min_max['z']), color=color)
+        ax2.set_ylabel('Apparent thickness [m]', color=color)
+    ax2.tick_params(axis='y', labelcolor=color)
+
+    if savefig:
+        fig.savefig(savefig)
+
+
+l1 = {'vp': 3000, 'vs': 1820, 'rho': 2.6}
+l2 = {'vp': 2000, 'vs': 1120, 'rho': 2.2}
+
+
+def test_1d_twt():
+    first_layer = Layer(thickness=0.1, **l1)
+    second_layer = Layer(thickness=0.04, **l2, target=True)
+    m = Model(depth_to_top=2.0, layers=[first_layer, second_layer])
+    m.append(first_layer)
+    m.plot()
+    return m
+
+
+def test_1d_z():
+    first_layer = Layer(thickness=150, **l1, domain='Z')
+    second_layer = Layer(thickness=40, **l2, target=True, domain='Z')
+    m = Model(depth_to_top=3000., layers=[first_layer, second_layer])
+    m.append(first_layer)
+    m.plot()
+    return m
+
+
+def test_wedge():
+    m = build_wedge(2.0, 0.02, 0.1, 51, l1, l2, l1)
+    # m = build_wedge(3000., 10.0, 40., 51, l1, l2, l1, domain='Z')
+    return m
 
 
 def test_plot():
     import blixt_utils.misc.wavelets as bumw
     # first_layer = Layer(thickness=0.1, vp=3300, vs=1500, rho=2.1)
     # second_layer = Layer(thickness=0.2, vp=3500, vs=1600, rho=2.3, target=True, ntg=0.8)
-    first_layer = Layer(thickness=0.05, vp=3400, vs=1820, rho=2.6)
-    second_layer = Layer(thickness=0.03, vp=3600, vs=2120., rho=2.2, target=True)
-    m = Model(depth_to_top=1.94, layers=[first_layer, second_layer])
-    m.append(first_layer)
-    m.plot()
+    m = test_1d_twt()
 
     wavelet = bumw.ricker(0.096, 0.001, 25)
     plot_wiggles(m, 0.001, wavelet, avo_angles=[0., 5., 10., 15.,  20., 25., 30., 35., 40.])
@@ -796,13 +1148,27 @@ def test_ntg():
 
 
 def test_realization():
+    # in TWT
     first_layer = Layer(thickness=0.1, vp=3300, vs=1500, rho=2.1)
     second_layer = Layer(thickness=0.1, vp=3500, vs=1600, rho=2.3, target=True, ntg=0.8)
     m = Model(layers=[first_layer, second_layer])
     m.append(first_layer)
-    twt, li, vp, _, _ = m.realize_model(0.001)
+    m.plot()
+    twt, li, vp, _, _, _ = m.realize_model(0.001)
     print(len(vp))
-    plt.plot(twt, vp / 1000., twt, li)
+    fig, ax = plt.subplots()
+    ax.plot(twt, vp / 1000., twt, li)
+
+    # in Z
+    first_layer = Layer(thickness=100, vp=3300, vs=1500, rho=2.1, domain='Z')
+    second_layer = Layer(thickness=20., vp=3500, vs=1600, rho=2.3, target=True, ntg=0.8, domain='Z')
+    m = Model(layers=[first_layer, second_layer])
+    m.append(first_layer)
+    m.plot()
+    twt, li, vp, _, _, _ = m.realize_model(0.001)
+    print(len(vp))
+    fig, ax = plt.subplots()
+    ax.plot(twt, vp / 1000., twt, li)
     plt.show()
 
 
@@ -874,7 +1240,11 @@ def test_quasi2d():
 
 
 if __name__ == '__main__':
+    # test_1d_twt()
+    # test_1d_z()
+    test_wedge()
     # test_realization()
     # test_plot()
     # test_ntg()
-    test_quasi2d()
+    # test_quasi2d()
+    plt.show()

@@ -196,6 +196,7 @@ def plot_one_interface(sums, name1, name2, color, fig_ig, ax_ig, fig_refl, ax_re
             100.*c1/n_samps, 100.*c2p/n_samps, 100.*c2/n_samps, 100.*c3/n_samps, 100.*c4/n_samps))
     print('Rest:  {:.0f}%'.format(100.*rest/n_samps))
 
+
 def elastics_from_stats(layer_stats,  n_samps):
     """
     For the given statistical properties (mean, standard deviation and correlation coefficient) of the

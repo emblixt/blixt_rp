@@ -94,7 +94,7 @@ def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, in
         wedge_layer = Layer(vp=vps[1], vs=vss[1], rho=rhos[1], thickness=this_wedge_thickness, target=True)
         base_layer = Layer(vp=vps[2], vs=vss[2], rho=rhos[2], thickness=buffer + (up_to_thickness - this_wedge_thickness))
         m = Model(layers=[top_layer, wedge_layer, base_layer])
-        twt, vp, vs, rho = m.realize_model(time_step)
+        twt, vp, vs, rho, z = m.realize_model(time_step)
         top.append(t0 + buffer)
         base.append(t0 + buffer + this_wedge_thickness)
         wedge_thickness.append(this_wedge_thickness)
