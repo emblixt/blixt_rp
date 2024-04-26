@@ -554,6 +554,22 @@ class LogCurve2D(object):
     """
     Class handling logs of a well
     Each log is a pair of depth data and log data
+
+    XXX
+    TODO
+    A newer version of this "new" log curve object should use the xarray library
+    log_curve = xarray.DataArray(log_values, dims=('md'), coords={'md': md}
+    where log_values is a 1D array of logvalues, and md is a 1D array of MD values. Both of same length
+    A nice improvement would be to use pint to take care of the units
+    > from pint import UnitRegistry
+    > ureg = UnitRegistry()
+    And before creating the log_curve above, we should use pint to add units to the data
+    > log_values = log_values * ureg.celsius  # if it is temperature in celsius
+    > md = md * ureg.meter
+    But the units of the coordinate md is being stripped when creating the xarray!
+    However, there could be a work around as explained on this page: https://xarray.dev/blog/introducing-pint-xarray
+
+
     """
     
     def __init__(self,
