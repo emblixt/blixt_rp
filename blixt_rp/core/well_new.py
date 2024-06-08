@@ -4,6 +4,9 @@ Module for handling wells
 The goal is to have one Well object, which contains "all" the well specific
 information (with a minimum required set), and a log (or curve) object for each
 log.
+
+A well can only have one trajectory
+
 It should be possible to save a Well object as a las or json file.
 It should be possible to add and remove logs from a Well object
 It should be possible to do fluid replacement etc. on logs

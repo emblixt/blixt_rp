@@ -7,13 +7,21 @@ Module for handling LogCurve objects
     (https://www.gnu.org/copyleft/lesser.html)
 """
 from datetime import datetime
+import logging
 from copy import deepcopy
 import numpy as np
 import matplotlib.pyplot as plt
 from pandas import DataFrame
+import xarray as xr
+import pint_xarray
+import pint
+from pint import UnitRegistry
+from math import isclose
 
-from blixt_rp.core.header import Header
+
 from blixt_rp.core.param import Param
+from blixt_rp.core.template_new import Template
+from blixt_rp.core.header_new import Header
 from blixt_utils.signal_analysis.signal_analysis import smooth as _smooth
 from blixt_utils.misc.curve_fitting import residuals, linear_function
 from blixt_rp.rp_utils.definitions import allowed_depth_formats
@@ -21,27 +29,8 @@ from blixt_utils.misc.convert_data import convert
 import blixt_utils.misc.masks as msks
 import blixt_utils.misc.templates as tmplts
 
-
-class MdDataPair(DataFrame):
-    """
-    Testing this class which inherits the pandas DataFrame object.
-    Unsure if it is necessary
-    """
-    def __init__(self,
-                 name,
-                 md,
-                 data,
-                 *args,
-                 **kwargs):
-        print(*args)
-        super().__init__({'md': md, 'data': data}, **kwargs)
-        # super().__init__(*args, **kwargs)
-        self.name = name
-
-    @property
-    def _constructor(self):
-        return MdDataPair
-
+ureg = UnitRegistry()
+logger = logging.getLogger(__name__)
 
 class LogCurve(object):
     """
@@ -157,12 +146,8 @@ class LogCurve(object):
             unit = header['unit']
         self.unit = unit
 
-        if isinstance(header, dict):
-            self.header = Header(header)
-        elif isinstance(header, Header):
-            self.header = header
-        else:
-            raise IOError('Input header is neither dictionary nor Header')
+        if not isinstance(header, dict):
+            raise IOError('Input header must be a dictionary')
         self.data = data
 
     def __len__(self):
@@ -550,27 +535,93 @@ class LogCurve(object):
         return output
 
 
+class LogCurve2dNew(object):
+    """
+    This log curve object use the xarray library to create a log curve with a 1D dimension (index)
+     attached to it. In combination with pint to take care of units
+    > import xarray as xr
+    > import pint_xarray  # a workaround because pint doesn't work with dimensions: https://xarray.dev/blog/introducing-pint-xarray
+    > md = xr.DataArray(np.linspace(10., 500.), dims='md')  # Measured depth
+    > log_values = xr.DataArray(name='log_values', data=np.random.rand(50) * 100, dims=['md'], coords={'md': md})  # fantasy log values
+    > log_values = log_values.pint.quantify({'log_values': 'us/ft', 'md': 'meters'})  # attach units to the xarray
+    """
+
+    def __init__(self,
+                 data_array: xr.DataArray,
+                 log_type=None,
+                 well=None,
+                 regular_sampling=True,
+                 style=None,
+                 header=None):
+        """
+        The basic building block of all well related data.
+        Should hold both regularly sampled log curves and irregularly sampled core data
+
+        :param data_array:
+            xr.DataArray
+            should contain an 1D DataArray with name, data and a dimension (index) which is either md, twt or owt
+            see _create_data_array for the basic construct
+        :param log_type:
+            str
+            Name of the log type, e.g. "P velocity", as specified in the project table .xlsx file
+        :param well:
+            str
+            Name of the well this data belongs to
+        :param regular_sampling:
+            bool
+            True if data is regularly sampled. False if not
+        :param style:
+            Template object or dict
+        :param header:
+            Header object or dict
+        """
+        self.name = data_array.name
+        self.well = well
+
+        if style is None:
+            self.style = Template(template={})
+        elif isinstance(style, dict):
+            self.style = Template(template=style)
+        elif isinstance(style, Template):
+            self.style = style
+        else:
+            raise IOError('style must be either a dict or a Template, not {}'.format(type(style)))
+
+        if header is None:
+            self.header = Header(header={})
+        elif isinstance(header, dict):
+            self.header = Header(header=header)
+        elif isinstance(header, Header):
+            self.header = header
+        else:
+            raise IOError('header must be either a dict or a Header, not {}'.format(type(style)))
+
+        # If the style Template contains a unit, which is not None, then we should convert the data to this
+        # unit if it is not already using those units.
+        print(self.style.unit)
+        if self.style.unit is not None:
+            print('Units in template is {}'.format(self.style.unit))
+            if not is_equivalent(data_array.data.units, ureg.Unit(self.style.unit)):
+                print('Units are not the same, try to convert')
+                try:
+                    data_array = data_array.pint.to(self.style.unit)
+                except pint.DimensionalityError:
+                    warn_txt = 'Pint cant convert from {} to {}'.format(
+                        str(data_array.data.units), self.style.unit
+                    )
+                    print(warn_txt)
+                    logger.warning(warn_txt)
+
+        self.data = data_array
+
+
 class LogCurve2D(object):
     """
     Class handling logs of a well
     Each log is a pair of depth data and log data
 
-    XXX
-    TODO
-    A newer version of this "new" log curve object should use the xarray library
-    log_curve = xarray.DataArray(log_values, dims=('md'), coords={'md': md}
-    where log_values is a 1D array of logvalues, and md is a 1D array of MD values. Both of same length
-    A nice improvement would be to use pint to take care of the units
-    > from pint import UnitRegistry
-    > ureg = UnitRegistry()
-    And before creating the log_curve above, we should use pint to add units to the data
-    > log_values = log_values * ureg.celsius  # if it is temperature in celsius
-    > md = md * ureg.meter
-    But the units of the coordinate md is being stripped when creating the xarray!
-    However, there could be a work around as explained on this page: https://xarray.dev/blog/introducing-pint-xarray
-
-
     """
+    import xarray
     
     def __init__(self,
                  name: str,
@@ -616,12 +667,8 @@ class LogCurve2D(object):
         if header is None:
             header = {}
 
-        if isinstance(header, dict):
-            self.header = Header(header)
-        elif isinstance(header, Header):
-            self.header = header
-        else:
-            raise IOError('Input header is neither dictionary nor Header')
+        if not isinstance(header, dict):
+            raise IOError('Input header must be a dictionary')
 
         if 'name' not in list(header.keys()) or header['name'] is None:
             self.header['name'] = name
@@ -1156,30 +1203,101 @@ def _take_sampling_from(log_curve1: LogCurve2D, log_curve2: LogCurve2D, verbose=
     return new_log_curve
 
 
-def test():
-    lc = LogCurve(
-        name='test_data',
-        data=np.linspace(2, 4, 1500) + np.random.random(1500),
-        start=Param(name='start', value=24, unit='m'),
-        stop=Param(name='stop', value=3430, unit='m'),
-        style={'full_name': 'A test',
-               'min': 1,
-               'max': 10},
-        header={'unit': 'X'}
-    )
-    fig, ax = plt.subplots()
-    mask = np.ma.masked_inside(lc.get_depth(), 1000.,1750.).mask
-    lc.depth_plot(mask=mask, mask_desc='Inside 1000 - 1750 m MD', ax=ax)
-    lc.smooth(window_len=50, overwrite=True)
-    lc.depth_plot(ax=ax)
-    fit_parameters = lc.calc_depth_trend(
-        lc.get_depth(),
-        down_weight_outliers=True,
-        verbose=False
-    )
-    fitted_log = lc.apply_trend_function(lc.get_depth(), fit_parameters, verbose=False)
-    ax.plot(fitted_log, lc.get_depth(), '--')
-    return lc
+def create_data_array(
+        name: str,
+        data: np.ndarray,
+        data_unit: str,
+        coord: np.ndarray,
+        coord_unit: str,
+        coord_type: str,
+        verbose=False):
+    """
+    This data pair object should use the xarray library in combination with pint to take
+    care of units
+    A workaround because pint doesn't work with units: https://xarray.dev/blog/introducing-pint-xarray
+    is to use the pint_xarray library
+
+    Returns a xarray.DataArray with units
+    > log_values = _create_data_array(name, data, data_unit, coord, coord_unit, coord_type)
+
+
+    The data is accessed through
+    > print(log_values.name)
+    > log_values.data.magnitude  # returns the data without coordinates
+    > print(log_values.data.units) # prints the units
+
+    The coord_type of the result is seen using
+    > print(list(log_values.coords.keys())[0])
+    The units of the coordinates
+    > print(log_values.coords[coord_type].units)
+    And the coordinate (index) themselves  can be accessed by
+    > log_values.coords[coord_type].data
+
+    And the data can be plotted using
+    > log_value.plot()
+
+    :param name:
+        str
+    :param data:
+        np.ndarray
+    :param data_unit:
+        str
+        A unit supported by pint
+    :param coord:
+        np.ndarray
+        same length as data
+    :param coord_unit:
+        str
+        A unit supported by pint
+    :param coord_type:
+        str
+        Either 'md', 'twt' or 'owt'
+    """
+    coord_type = coord_type.lower()
+    if coord_type not in ['md', 'twt', 'owt']:
+        raise IOError('Dimension type must be either md, twt or owt. Not {}'.format(coord_type))
+
+    # automatically convert the coordinate units to meter or ms
+    if coord_type == 'md':
+        if coord_unit in ['f', 'ft', 'feet', 'foot']:
+            _coord = coord * ureg.foot  # attach units to the coordinates
+            _coord = _coord.to(ureg.meter)  # convert to meter
+            info_txt = 'Converting coord from {} to meter'.format(coord_unit)
+            if verbose:
+                print(info_txt)
+            logger.info(info_txt)
+            coord = _coord.magnitude
+            coord_unit = 'meter'
+    else:
+        if coord_unit in ['s', 'sec', 'second']:
+            _coord = coord * ureg.second  # attach units to the coordinates
+            _coord = _coord.to(ureg.millisecond)  # convert to milliseconds
+            info_txt = 'Converting coord from {} to ms'.format(coord_unit)
+            if verbose:
+                print(info_txt)
+            logger.info(info_txt)
+            coord = _coord.magnitude
+            coord_unit = 'millisecond'
+
+    coord_data = xr.DataArray(coord, dims=coord_type)
+    log_values = xr.DataArray(name=name, data=data, dims=[coord_type], coords={coord_type: coord_data})
+    # attach units to the xarray
+    log_values = log_values.pint.quantify({name: data_unit, coord_type: coord_unit})
+    return log_values
+
+
+def is_equivalent(first: pint.Unit, second: pint.Unit):
+    """
+    Test if two units are equivalent
+    :param first:
+    :param second:
+    :return:
+    """
+    try:
+        factor = ureg.convert(1, first, second)
+    except pint.DimensionalityError:
+        return False
+    return isclose(factor, 1)
 
 
 def return_2d_log_curves(n=1500):
@@ -1225,15 +1343,6 @@ def test_2d():
     # df = lc.return_dataframe()
     # print(df)
     plt.show()
-
-
-def test_md_data_pair():
-    n = 1500
-    data = np.linspace(2, 4, n) + np.random.random(n)
-    md = np.linspace(1100., 2350., n)
-    # lc = MdDataPair({'md': md, 'data': data})
-    lc = MdDataPair(name='Test', md=md, data=data)
-    print(lc.md)
 
 
 def test_interpolate():
