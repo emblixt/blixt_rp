@@ -1135,12 +1135,15 @@ def save_rokdoc_output(rokdoc_output, results, wi_name, log_table, cutoffs_str, 
     else:
         well_name = 'NONE'
         name = '{}{}'.format(wi_name, suffix)
+    # print(' - save_rokdoc_output: {}'.format(name))
     log_table_str = ''
     for key in log_table:
         log_table_str += '{}: {}, '.format(key, log_table[key])
     log_table_str = log_table_str.rstrip(', ')
 
     if rokdoc_output is not None:
+        # for param in ['P velocity', 'S velocity', 'Density', 'Porosity']:
+        #     print('  - save_rokdoc_output: {}, len: {}'.format(param, len(results[log_table[param].lower()])))
         uio.write_sums_and_averages(rokdoc_output,
                                     [
                                         name,
