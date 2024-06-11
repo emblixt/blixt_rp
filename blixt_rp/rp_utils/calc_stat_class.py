@@ -343,6 +343,8 @@ class CalculateStats:
             results, results_per_well, depth_from_top = create_containers(logs)
 
             # collect data
+            print('-CalculateStats using wells: {}'.format(
+                ', '.join(list(calc_setup.wells.keys()))))
             collect_data_for_this_interval(
                 calc_setup.wells, logs, calc_setup.wis, wi_name, results, results_per_well,
                 depth_from_top, calc_setup.cutoffs[j], calc_setup.log_table[j], block_name=calc_setup.block_name)

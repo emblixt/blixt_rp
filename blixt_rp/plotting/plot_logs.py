@@ -614,7 +614,8 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
 
 
 def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
-                      block_name=None, results_folder=None, verbose=True, suffix=None, **kwargs):
+                      block_name=None, results_folder=None, verbose=True, suffix=None,
+                      log_type_input=True, **kwargs):
     """
     Plots the depth trends (TVD) for each individual log within the given working interval, for all wells
 
@@ -672,7 +673,8 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
                 logger .warning(warn_txt)
                 print(warn_txt)
                 continue
-            wells[well].calc_mask(cutoffs, 'my_mask', log_table=log_table, wis=wis, wi_name=wi_name)
+            wells[well].calc_mask(cutoffs, 'my_mask', log_table=log_table, wis=wis, wi_name=wi_name,
+                                  log_type_input=log_type_input)
             mask = wells[well].block[block_name].masks['my_mask'].data
             legend_items.append(well)
             xdata = wells[well].block[block_name].logs[log_name].data[mask]
@@ -708,8 +710,14 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
         verbosity_level = 0
         if verbose:
             verbosity_level = 2
-        res = least_squares(residuals, [1., 1.], args=(tvd_container, data_container),
+        try:
+            res = least_squares(residuals, [1., 1.], args=(tvd_container, data_container),
                             kwargs={'target_function': linear_function}, verbose=verbosity_level)
+        except ValueError as error:
+            warn_txt = 'WARNING: depth trend could not calculated for {} for all wells'.format(log_type)
+            logger.warning(warn_txt)
+            continue
+
 
         depth_trends[log_name] = res.x
         new_tvd = np.linspace(tvd_min, tvd_max)
