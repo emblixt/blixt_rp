@@ -203,7 +203,7 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
 
 def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, color_by_gradient=False,
                  extract_avo_at=None, avo_angles=None, avo_plot_position=None,
-                 extract_amp_at=None, plot_domain=None, overburden_vel=3000., **kwargs):
+                 extract_amp_at=None, plot_domain=None, overburden_vel=3000., scaling=None, **kwargs):
     """
 
     Args:
@@ -243,6 +243,9 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             depth (TWT or Z) values at which the seismic amplitude is extracted.
             Same length as number of traces in model.
             If given as a single float, it is repeated to yield a list
+        scaling:
+            float
+            Scaling parameter passed on to wiggle_plot
         kwargs
             keyword arguments passed on to wiggle_plot
     Returns:
@@ -306,7 +309,7 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                 grad = None
             # wiggle = calc_wiggle(len(twt), wavelet, ref, angle)
             wiggle = bumw.convolve_with_refl(wavelet['wavelet'], ref(angle))
-
+            # print('plot_wiggles: {}, {}'.format(np.min(wiggle), np.max(wiggle)))
             min_amp.append(np.min(wiggle))
             max_amp.append(np.max(wiggle))
             dist_min_max['twt'].append(np.abs(twt[wiggle.argmin()] - twt[wiggle.argmax()]))
@@ -322,9 +325,9 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                 extracted_amplitudes.append(wiggle[np.argmin((twt - twt_extract)**2)])
 
             if plot_domain == 'TWT':
-                wiggle_plot(ax, twt, wiggle, i, scaling=40, color_by_gradient=grad, **kwargs)
+                wiggle_plot(ax, twt, wiggle, i, scaling=scaling, color_by_gradient=grad, **kwargs)
             else:
-                wiggle_plot(ax, z[0, :], wiggle, i, scaling=40, color_by_gradient=grad, **kwargs)
+                wiggle_plot(ax, z[0, :], wiggle, i, scaling=scaling, color_by_gradient=grad, **kwargs)
 
             # extract avo curves
             if avo_positions is not None:
@@ -392,7 +395,7 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
         ax.set_xlabel(my_x_label)
 
     else:
-        warn_txt = 'Not possbile to plot this model'
+        warn_txt = 'Not possible to plot this model'
         print(warn_txt)
 
     # Add extra information to plots
