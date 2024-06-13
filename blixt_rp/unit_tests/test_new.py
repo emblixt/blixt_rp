@@ -51,6 +51,19 @@ class WellTestCase(unittest.TestCase):
             style={'units': 'kg'}
         )
 
+    def test_LogCurve_copy(self):
+        lc = LogCurve2dNew(
+            self.dp2
+        )
+        lc2 = lc.copy()
+
+    def test_print(self):
+        lc = LogCurve2dNew(
+            self.dp2,
+            header={'name': dp2.name}
+        )
+        print(lc)
+
 
     def test_LogCurve(self):
         lc = LogCurve(
@@ -95,7 +108,6 @@ class WellTestCase(unittest.TestCase):
         time.sleep(1)
         h.orig_filename = 'A TEST'
         print(h.orig_filename, h.creation_date, h.modification_date)
-
 
     def test_units(self):
         nM = ureg.Unit('nM')

@@ -537,7 +537,7 @@ class LogCurve(object):
 
 class LogCurve2dNew(object):
     """
-    This log curve object use the xarray library to create a log curve with a 1D dimension (index)
+    This log curve object use the xarray library to create a log curve with a 1D dimensional coordinate (index)
      attached to it. In combination with pint to take care of units
     > import xarray as xr
     > import pint_xarray  # a workaround because pint doesn't work with dimensions: https://xarray.dev/blog/introducing-pint-xarray
@@ -559,7 +559,7 @@ class LogCurve2dNew(object):
 
         :param data_array:
             xr.DataArray
-            should contain an 1D DataArray with name, data and a dimension (index) which is either md, twt or owt
+            should contain an 1D DataArray with name, data and a coordinate dimension (index) which is either md, twt or owt
             see _create_data_array for the basic construct
         :param log_type:
             str
@@ -613,6 +613,21 @@ class LogCurve2dNew(object):
                     logger.warning(warn_txt)
 
         self.data = data_array
+
+    def __len__(self):
+        return len(self.data)
+
+    def __str__(self):
+        return '{}: {}'.format(self.name, str(self.header))
+
+    def copy(self, suffix='copy'):
+        copied_log_curve = deepcopy(self)
+        copied_log_curve.name = self.name + '_' + suffix
+        copied_log_curve.header.name = self.name + '_' + suffix
+        copied_log_curve.header.modification_date = datetime.now().isoformat()
+        copied_log_curve.header.modification_history += \
+            '\nCopy of {}'.format(self.name)
+        return copied_log_curve
 
 
 class LogCurve2D(object):
