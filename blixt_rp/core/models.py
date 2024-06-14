@@ -402,9 +402,11 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
     if model.model_type == 'quasi 2D' and model.trace_index_range is not None:
         if eei:
             info_txt = r'EEI at $\chi$={}$^\circ$'.format(angle)
+            ax.text(0.05, 0.95, info_txt, ha='left', va='top', transform=ax.transAxes, **text_style)
         else:
-            info_txt = r'Amp. at $\theta$={}$^\circ$'.format(angle)
-        ax.text(0.05, 0.95, info_txt, ha='left', va='top', transform=ax.transAxes, **text_style)
+            if angle > 0:
+                info_txt = r'Amp. at $\theta$={}$^\circ$'.format(angle)
+                ax.text(0.05, 0.95, info_txt, ha='left', va='top', transform=ax.transAxes, **text_style)
 
     if avo_curves is not None:
         avo_ax = ax.inset_axes(avo_plot_position)
@@ -1082,6 +1084,41 @@ def tuning_wedge_analysis(depth_to_wedge, from_thickness, to_thickness, n_traces
         ax2.plot(wedge_thickness, np.array(dist_min_max['z']), color=color)
         ax2.set_ylabel('Apparent thickness [m]', color=color)
     ax2.tick_params(axis='y', labelcolor=color)
+
+    if savefig:
+        fig.savefig(savefig)
+
+def laminar_model_analysis(
+        model: Model,
+        sample_rate: float,
+        wavelet: dict,
+        plot_domain='TWT',
+        title=None, savefig=None,
+        overburden_vel=3000.,
+        extract_avo_at=None,
+        avo_plot_position=None,
+        scaling=None):
+    """
+    Plot a model together with wiggles and more
+    """
+
+    fig, axs = plt.subplots(1, 2, figsize=(8, 8), gridspec_kw={'width_ratios': [1, 0.4]})
+    # axs[1, 1].set_axis_off()
+    wiggle_ax = axs[0]
+    model_ax = axs[1]
+
+    fig.subplots_adjust(wspace=0.)
+
+    avo_curves, amps, min_amps, max_amps, dist_min_max = plot_wiggles(
+        model, sample_rate, wavelet, ax=wiggle_ax, extract_avo_at=extract_avo_at,
+        avo_plot_position=avo_plot_position,
+        plot_domain=plot_domain, overburden_vel=overburden_vel, scaling=scaling)
+    if title is not None:
+        fig.suptitle(title)
+
+    wiggle_ax.set_ylim(wiggle_ax.get_ylim()[::-1])
+    model[0].plot(ax=model_ax, kwargs1d={'yticks': False, 'legend': False})
+    model_ax.autoscale(tight=True)
 
     if savefig:
         fig.savefig(savefig)
