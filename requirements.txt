@@ -14,3 +14,5 @@ matplotlib~=3.5.2
 seaborn~=0.11.2
 xarray~=2024.5.0
 segyio~=1.9.12
+pint~=0.23
+pint-xarray~=0.3

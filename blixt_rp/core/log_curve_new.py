@@ -620,6 +620,14 @@ class LogCurve2dNew(object):
     def __str__(self):
         return '{}: {}'.format(self.name, str(self.header))
 
+    def get_log_type(self):
+        log_type = None
+        if self.header.log_type is not None:
+            log_type = self.header.log_type
+        return log_type
+
+    log_type = property(get_log_type)
+
     def copy(self, suffix='copy'):
         copied_log_curve = deepcopy(self)
         copied_log_curve.name = self.name + '_' + suffix

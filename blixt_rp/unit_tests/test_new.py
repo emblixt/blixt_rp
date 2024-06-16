@@ -14,61 +14,76 @@ from blixt_rp.core.header_new import Header
 
 ureg = UnitRegistry()
 
+n = 1500
+data1 = np.linspace(2, 4, n) + np.random.random(n)
+depth1 = np.linspace(24, 3430, n)
+data2 = np.linspace(6, 8, n) + np.random.random(n)
+depth2 = np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n)
+
+dp1 = create_data_array(
+    'DataPair1',
+    data1,
+    'us/feet',
+    depth1,
+    'm',
+    'md')
+
+dp2 = create_data_array(
+    'DataPair2',
+    data2,
+    's/m',
+    depth2,
+    'feet',
+    'md')
+
+
 class WellTestCase(unittest.TestCase):
-    n = 1500
-    data1 = np.linspace(2, 4, n) + np.random.random(n)
-    depth1 = np.linspace(24, 3430, n)
-    data2 = np.linspace(6, 8, n) + np.random.random(n)
-    depth2 = np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n)
-
-    dp1 = create_data_array(
-        'DataPair1',
-        data1,
-        'us/feet',
-        depth1,
-        'm',
-        'md')
-
-    dp2 = create_data_array(
-        'DataPair2',
-        data2,
-        's/m',
-        depth2,
-        'feet',
-        'md')
 
     def test_data_pair(self):
-        print(type(self.dp1))
-        print(self.dp1.name)
-        if isinstance(self.dp1, xr.DataArray):
+        print(type(dp1))
+        print(dp1.name)
+        if isinstance(dp1, xr.DataArray):
             print('It is recognised as a DataArray')
         else:
             print('It is NOT recognized')
 
     def test_LogCurve_units(self):
         lc = LogCurve2dNew(
-            self.dp2,
+            dp2,
             style={'units': 'kg'}
         )
 
     def test_LogCurve_copy(self):
         lc = LogCurve2dNew(
-            self.dp2
+            dp2
         )
         lc2 = lc.copy()
 
     def test_print(self):
         lc = LogCurve2dNew(
-            self.dp2,
+            dp2,
             header={'name': dp2.name}
         )
         print(lc)
+
+    def test_log_type(self ):
+        lc = LogCurve2dNew(
+            dp2,
+            header={'name': dp2.name, 'log_type': 'TEST'}
+        )
+        print(lc.log_type)
+        lc = LogCurve2dNew(
+            dp2,
+            header={'name': dp2.name}
+        )
+        lc.log_type = 'TEST 2'
+        print(lc.log_type)
 
 
     def test_LogCurve(self):
         lc = LogCurve(
             name='test_data',
-            data=self.data1,
+            data=data1,
             start=Param(name='start', value=24, unit='m'),
             stop=Param(name='stop', value=3430, unit='m'),
             style={'full_name': 'A test',
