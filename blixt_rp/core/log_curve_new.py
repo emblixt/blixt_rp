@@ -32,6 +32,7 @@ import blixt_utils.misc.templates as tmplts
 ureg = UnitRegistry()
 logger = logging.getLogger(__name__)
 
+
 class LogCurve(object):
     """
     Class handling logs of a well
@@ -616,6 +617,43 @@ class LogCurve2dNew(object):
 
     def __len__(self):
         return len(self.data)
+
+    def __lt__(self, other):
+        if len(self.data) < len(other.data):
+            return True
+        else:
+            return False
+
+    def __le__(self, other):
+        if len(self.data) <= len(other.data):
+            return True
+        else:
+            return False
+
+    def __gt__(self, other):
+        if len(self.data) > len(other.data):
+            return True
+        else:
+            return False
+
+    def __eq__(self, other):
+        if len(self.data) == len(other.data):
+            return True
+        else:
+            return False
+
+    # TODO
+    # add a test for data with same units and type of dimension ("MD", "TWT" vs "OWT")
+
+    # TODO
+    # add test for data with same depth sampling
+
+    def __ge__(self, other):
+        if len(self.data) >= len(other.data):
+            return True
+        else:
+            return False
+
 
     def __str__(self):
         return '{}: {}'.format(self.name, str(self.header))

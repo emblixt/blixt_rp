@@ -15,10 +15,22 @@ from blixt_rp.core.header_new import Header
 ureg = UnitRegistry()
 
 n = 1500
+# create a regularly sampled data set
 data1 = np.linspace(2, 4, n) + np.random.random(n)
 depth1 = np.linspace(24, 3430, n)
+
+# create an irregularly sampled data set
 data2 = np.linspace(6, 8, n) + np.random.random(n)
 depth2 = np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n)
+
+n = 1400
+# create a shorter regularly sampled data set
+data3 = np.linspace(2, 4, n) + np.random.random(n)
+depth3 = np.linspace(24, 3430, n)
+
+# create a shorter irregularly sampled data set
+data4 = np.linspace(6, 8, n) + np.random.random(n)
+depth4 = np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n)
 
 dp1 = create_data_array(
     'DataPair1',
@@ -33,6 +45,22 @@ dp2 = create_data_array(
     data2,
     's/m',
     depth2,
+    'feet',
+    'md')
+
+dp3 = create_data_array(
+    'DataPair1',
+    data3,
+    'us/feet',
+    depth3,
+    'm',
+    'md')
+
+dp4 = create_data_array(
+    'DataPair2',
+    data4,
+    's/m',
+    depth4,
     'feet',
     'md')
 
