@@ -551,7 +551,7 @@ class LogCurve2dNew(object):
                  data_array: xr.DataArray,
                  log_type=None,
                  well=None,
-                 regular_sampling=True,
+                 evenly_spaced=True,
                  style=None,
                  header=None):
         """
@@ -568,7 +568,7 @@ class LogCurve2dNew(object):
         :param well:
             str
             Name of the well this data belongs to
-        :param regular_sampling:
+        :param evenly_spaced:
             bool
             True if data is regularly sampled. False if not
         :param style:
@@ -618,6 +618,19 @@ class LogCurve2dNew(object):
     def __len__(self):
         return len(self.data)
 
+    def even_spacing(self, tolerance=None):
+        """
+        Tests if the dimension of a LogCurve is evenly spaced within a certain
+        tolerance
+
+        :param tolerance:
+            float
+
+        :return:
+            bool
+            True if evenly sampled
+        """
+
     def __lt__(self, other):
         if len(self.data) < len(other.data):
             return True
@@ -653,7 +666,6 @@ class LogCurve2dNew(object):
             return True
         else:
             return False
-
 
     def __str__(self):
         return '{}: {}'.format(self.name, str(self.header))
