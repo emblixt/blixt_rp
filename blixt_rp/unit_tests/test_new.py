@@ -75,11 +75,48 @@ class WellTestCase(unittest.TestCase):
         else:
             print('It is NOT recognized')
 
-    def test_LogCurve_units(self):
+    def test_LogCurve_new(self):
         lc = LogCurve2dNew(
-            dp2,
-            style={'units': 'kg'}
+            dp2
         )
+        print(lc.coord_type)
+        print(lc.coord_units)
+        print(lc.coords)
+        print(lc.is_evenly_spaced)
+        print(lc.step)
+        # Try convert units of data
+        print(lc.data.data.max())
+        lc.data = lc.data.pint.to('s/feet')
+        print(lc.data.data.max())
+        lc = LogCurve2dNew(
+            dp1,
+            style={'units': 's/feet'}
+        )
+        print(lc.is_evenly_spaced)
+        print(lc.step)
+        print(lc.data.data.max())
+        lc.data = lc.data.pint.to('s/m')
+        print(lc.data.data.max())
+        print(lc.units)
+        print(lc.values)
+
+    def test_failing_unit_convert(self):
+        # This should fail because the data pair has units us/ft, which can't be converted to 'kg' which the
+        # style asks for
+        style = {'units': 'kg'}
+        self.assertRaises(ValueError, LogCurve2dNew, dp2, None, None, style, None)
+
+    def test_built_in_unit_convert(self):
+        lc = LogCurve2dNew(
+            dp2
+        )
+        print(lc.style)
+        print(lc.data.data.max())
+        lc.convert_to('us/m')
+        print(lc.style)
+        print(lc.data.data.max())
+        print(lc.header)
+
 
     def test_LogCurve_copy(self):
         lc = LogCurve2dNew(
@@ -94,7 +131,7 @@ class WellTestCase(unittest.TestCase):
         )
         print(lc)
 
-    def test_log_type(self ):
+    def test_log_type(self):
         lc = LogCurve2dNew(
             dp2,
             header={'name': dp2.name, 'log_type': 'TEST'}
@@ -107,6 +144,12 @@ class WellTestCase(unittest.TestCase):
         lc.log_type = 'TEST 2'
         print(lc.log_type)
 
+    def test_failing_log_type(self):
+        # This should raise an IOError because log type is not the same in header and initialization
+        header = {'name': dp2.name, 'log_type': 'TEST'}
+        self.assertRaises(IOError, LogCurve2dNew, dp2, 'FAIL', None,  None, header)
+        # Below works too. Don't understand why
+        # self.assertRaises(OSError, LogCurve2dNew, dp2, 'FAIL', None, True, None, header)
 
     def test_LogCurve(self):
         lc = LogCurve(
@@ -134,9 +177,9 @@ class WellTestCase(unittest.TestCase):
         return lc
 
     def test_Template(self):
-        t = Template({'name': 'MY NAME', 'well': 'MY WELL', 'unit': 'METER'})
+        t = Template({'name': 'MY NAME', 'well': 'MY WELL', 'units': 'METER'})
         print(list(t.keys()))
-        print(t.name, t.unit)
+        print(t.name, t.units)
         t = Template()
         print(t)
         t.get_from_project("C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table.xlsx", 'Resistivity')

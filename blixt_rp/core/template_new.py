@@ -13,7 +13,7 @@ class Template(AttribDict):
     """
     defaults = {
         'full_name': None,
-        'unit': None,
+        'units': None,
         'min': None, 'max': None,
         'colormap': None,
         'center': None,
@@ -66,6 +66,11 @@ class Template(AttribDict):
                 if _key == 'full_name':
                     self.__setattr__(_key, ans)
                     self.__setitem__(_key, ans)
+                elif _key == 'units':
+                    # After starting to use XArray, we shifted from using 'unit' to 'units' to be more
+                    # similar to xarray in terminology
+                    self.__setattr__(_key, None if isnan(table['unit'][i]) else table['unit'][i])
+                    self.__setitem__(_key, None if isnan(table['unit'][i]) else table['unit'][i])
                 else:
                     self.__setattr__(_key, None if isnan(table[_key][i]) else table[_key][i])
                     self.__setitem__(_key, None if isnan(table[_key][i]) else table[_key][i])
