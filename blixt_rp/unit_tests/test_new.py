@@ -116,7 +116,24 @@ class WellTestCase(unittest.TestCase):
         print(lc.style)
         print(lc.data.data.max())
         print(lc.header)
+        print(lc.data.coords.values())
+        lc.convert_coords_to('feet')
+        print(lc.style)
+        print(lc.data.data.max())
+        print(lc.header)
+        print(lc.data.coords.values())
 
+    def test_take_sampling(self):
+        lc1 = LogCurve2dNew(dp1)
+        lc3 = LogCurve2dNew(dp3)
+        lc_new = lc1.take_sampling_from(lc3)
+        print(lc1.step)
+        print(lc3.step)
+        print(lc_new.step)
+        lc1.data.plot()
+        lc3.data.plot()
+        lc_new.data.plot()
+        plt.show()
 
     def test_LogCurve_copy(self):
         lc = LogCurve2dNew(
@@ -150,6 +167,33 @@ class WellTestCase(unittest.TestCase):
         self.assertRaises(IOError, LogCurve2dNew, dp2, 'FAIL', None,  None, header)
         # Below works too. Don't understand why
         # self.assertRaises(OSError, LogCurve2dNew, dp2, 'FAIL', None, True, None, header)
+
+    def test_masks(self):
+        lc1 = LogCurve2dNew(
+            dp1,
+            log_type='TEST'
+        )
+        cutoffs1 = {'DataPair1': ['><', [2.9, 3.1]]}
+        cutoffs2 = {'Depth': ['><', [1000., 2000.]]}
+        cutoffs3 = {'DataPair1': ['><', [2.9, 3.1]], 'Depth': ['><', [1000., 2000.]]}
+        log_table1 = {'TEST': 'DataPair1'}
+        cutoffs4 = {'TEST': ['><', [2.9, 3.1]]}
+        cutoffs5 = {'TEST': ['><', [2.9, 3.1]], 'Depth': ['><', [1000., 2000.]]}
+        cutoffs6 = {'DataPair1': ['<',  5]}  # all should be included
+        cutoffs7 = {'DataPair1': ['>',  5]}  # all should be excluded
+        self.assertIsInstance(lc1.calc_mask(cutoffs1, verbose=True), LogCurve2dNew, '')
+        self.assertIsInstance(lc1.calc_mask(cutoffs2, verbose=True), LogCurve2dNew, '')
+        self.assertIsInstance(lc1.calc_mask(cutoffs3, verbose=True), LogCurve2dNew, '')
+        self.assertIsInstance(lc1.calc_mask(cutoffs4, verbose=True, log_table=log_table1), LogCurve2dNew, '')
+        self.assertIsInstance(lc1.calc_mask(cutoffs5, verbose=True, log_table=log_table1), LogCurve2dNew, '')
+        self.assertLessEqual(np.max(lc1.values[lc1.calc_mask(cutoffs1, verbose=True).values]), 3.1, '')
+        self.assertTrue(lc1.calc_mask(cutoffs6, verbose=True).values.all())
+        self.assertTrue(np.sum(lc1.calc_mask(cutoffs7, verbose=True).values) < 1)
+
+    def test_read(self):
+        lc = LogCurve2dNew(None)
+        las_file = 'C:\\Users\\marte\\PycharmProjects\\blixt_rp\\test_data\\Well E_CPI.las'
+        self.assertTrue(lc.read('TEST', las_file, 'las', True))
 
     def test_LogCurve(self):
         lc = LogCurve(

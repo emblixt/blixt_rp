@@ -6,6 +6,7 @@ Module for handling LogCurve objects
     GNU Lesser General Public License, Version 3
     (https://www.gnu.org/copyleft/lesser.html)
 """
+import os.path
 from datetime import datetime
 import logging
 from copy import deepcopy
@@ -570,7 +571,7 @@ class LogCurve2dNew(object):
     """
 
     def __init__(self,
-                 data_array: xr.DataArray,
+                 data_array,
                  log_type=None,
                  well=None,
                  style=None,
@@ -595,7 +596,7 @@ class LogCurve2dNew(object):
             Header object or dict
         """
         self.data = data_array
-        self.name = data_array.name
+        self.name = None if (data_array is None) else str(data_array.name)
         self.well = well
 
         if style is None:
@@ -635,13 +636,13 @@ class LogCurve2dNew(object):
                     print(warn_txt)
                     logger.warning(warn_txt)
         else:
-            self.style.units = str(data_array.data.units)
+            self.style.units = None if (data_array is None) else str(data_array.data.units)
 
         if log_type is None:
             if self.header.log_type is not None:
                 self.log_type = self.header.log_type
             else:
-                self.log_type = None
+                self.log_type = ''
         else:
             if (self.header.log_type is not None) and (self.header.log_type != log_type):
                 warn_txt = 'Log type in header ({}), does not match given log type ({})'.format(
@@ -653,27 +654,27 @@ class LogCurve2dNew(object):
                 self.log_type = log_type
 
     def __len__(self):
-        return len(self.data)
+        return None if (self.data is None) else len(self.data)
 
     @property
     def coord_type(self):
-        return list(self.data.coords.keys())[0]
+        return None if (self.data is None) else list(self.data.coords.keys())[0]
 
     @property
     def coord_units(self):
-        return self.data.coords[self.coord_type].units
+        return None if (self.data is None) else self.data.coords[self.coord_type].units
 
     @property
     def units(self):
-        return str(self.data.data.units)
+        return None if (self.data is None) else str(self.data.data.units)
 
     @property
     def coords(self):
-        return self.data.coords[self.coord_type].data
+        return None if (self.data is None) else self.data.coords[self.coord_type].data
 
     @property
     def values(self):
-        return self.data.data.magnitude
+        return None if (self.data is None) else self.data.data.magnitude
 
     @property
     def is_evenly_spaced(self):
@@ -737,8 +738,9 @@ class LogCurve2dNew(object):
 
     def copy(self, suffix='copy'):
         copied_log_curve = deepcopy(self)
-        copied_log_curve.name = self.name + '_' + suffix
-        copied_log_curve.header.name = self.name + '_' + suffix
+        if len(suffix) > 0:
+            copied_log_curve.name = self.name + '_' + suffix
+            copied_log_curve.header.name = self.name + '_' + suffix
         copied_log_curve.header.modification_date = datetime.now().isoformat()
         copied_log_curve.header.modification_history += \
             '\nCopy of {}'.format(self.name)
@@ -765,24 +767,261 @@ class LogCurve2dNew(object):
             print(warn_txt)
             logger.warning(warn_txt)
 
+    def convert_coords_to(self, to_units):
+        """ Converts the coordinate units to 'to_units'"""
+        try:
+            cnv_txt = 'Convert coordinates from {} to {}'.format(
+                str(self.data.coords[self.coord_type].units), to_units
+            )
+            info_txt = '{}: {}: {}'.format(
+                self.well, self.name, cnv_txt
+            )
+            self.data = self.data.pint.to({self.coord_type: to_units})
+            logger.info(info_txt)
+            self.header.modification_date = datetime.now().isoformat()
+            self.header.modification_history += '\n{}'.format(cnv_txt)
+        except pint.DimensionalityError:
+            warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
+                self.well, self.name, str(self.data.coords[self.coord_type].units), to_units
+            )
+            print(warn_txt)
+            logger.warning(warn_txt)
+
     def take_sampling_from(self, log_curve, verbose=False):
         """
-        Interpolates the data match depth parameter (sampling) of log_curve,
+        Interpolates the data to match the depth parameter (sampling) of input log_curve,
         and returns a new log_curve
 
         :param log_curve:
             LogCurve2dNew object
         :param verbose:
             Bool
+
+        :return
+            LogCurve2dNew object
         """
         if self.coord_type != log_curve.coord_type:
             raise ValueError('The two depth formats (coord_type) are not the same: {} != {}'.format(
                 self.coord_type, log_curve.coord_type))
 
-        # TODO
-        # If coord_units doesn't match convert to the units of the input log_curve
-        if self.coord_units != log_curve.coord_units:
-            pass
+        # # Create copy of original that we will modify
+        # result = self.copy(suffix='')
+        #
+        # # If coord_units doesn't match convert to the units of the input log_curve
+        # if result.coord_units != log_curve.coord_units:
+        #     result.convert_coords_to(log_curve.coord_units)
+
+        # Do the interpolation
+        old_x = self.coords
+        old_y = self.values
+        new_x = log_curve.coords
+        new_y = _interpolate(old_x, old_y, new_x)
+
+        # Create a new xarray.DataArray using the new x (coords) and y
+        new_da = create_data_array(
+            name=self.name,
+            data=new_y,
+            data_units=self.units,
+            coords=new_x,
+            coord_units=log_curve.coord_units,
+            coord_type=log_curve.coord_type
+        )
+
+        # Modify header to capture changes
+        header = deepcopy(self.header)
+        header.modification_date = datetime.now().isoformat()
+        info_txt = 'Resampled to match {}'.format(log_curve.name)
+        header.modification_history += '\n{}'.format(info_txt)
+
+        return LogCurve2dNew(
+            new_da,
+            log_type=self.log_type,
+            well=self.well,
+            style=self.style,
+            header=header
+        )
+
+    def smooth(self,
+               window_len=None,
+               method='median',
+               discrete_intervals=None,
+               mask=None,
+               mask_desc=None,
+               verbose=False,
+               overwrite=False,
+               ):
+        """
+
+        :param window_len:
+        :param method:
+        :param discrete_intervals:
+        :param mask:
+        :param mask_desc:
+        :param verbose:
+        :param overwrite:
+        :return:
+        """
+        #TODO
+        pass
+
+    def calc_mask(self,
+                  cutoffs,
+                  name=None,
+                  log_table=None,
+                  verbose=False):
+        """
+        Based on the different cutoffs in the 'cutoffs' dictionary a mask is created.
+        In the resulting mask, a False value indicates that the data is masked out
+
+        When log_table is given, both the log type and log name need to match to return a mask
+        Else, it tries to match the log type of the current log curve, and then the log name, with the
+        keys in the 'cutoffs' dictionary.
+
+        When a key in 'cutoffs' match either 'Depth', 'md', 'owt' or 'twt', and is the correct coordinate
+        of the log curve, the mask will work on the coordinate (I.E. a 'md' cut off will not work on a log curve
+        with 'twt' coordinates)
+
+        :param cutoffs:
+            dict
+            dictionary with log name as keys, and list with mask operator and limits as values
+            E.G. {'md': ['><', [2100, 2200]], 'phie': ['>', 0.1]}
+                OR
+            use the log type instead of log name
+            E.G. {'Depth': ['><', [2100, 2200]], 'Porosity': ['>', 0.1]}
+
+            In the above examples, the Depth values within 2100 - 2200 are True,
+            and Porosity values above 0.1 are also True
+        :param name:
+            str
+            name of the mask
+        :param log_table:
+            dict
+            Dictionary of log type: log name key: value pairs that specify which log to use for each log type
+            E.G.
+                log_table = {
+                   'P velocity': 'vp',
+                   'S velocity': 'vs',
+                   'Density': 'rhob',
+                   'Porosity': 'phie',
+                   'Volume': 'vcl'}
+        :param verbose:
+            bool
+
+        :return:
+            LogCurve2dNew object
+        """
+        from blixt_utils.utils import mask_string
+
+        green_flag = True
+        final_mask = None
+        masks = []
+
+        if not isinstance(cutoffs, dict):
+            raise IOError('Cutoffs must be specified as dict, not {}'.format(type(cutoffs)))
+
+        mask_description = mask_string(cutoffs, None)
+        if len(cutoffs) == 0:  # no cutoffs, mask is all true
+            final_mask = np.array(np.ones(len(self.data)))
+            mask_description = 'All true mask for empty cutoffs'
+
+        if log_table is not None:  # See if this log curve matches the log table criteria
+            green_flag = False
+            for _log_type, _log_name in log_table.items():
+                if (_log_type.lower() == self.log_type.lower()) and (_log_name.lower() == self.name.lower()):
+                    green_flag = True
+            if (not green_flag) and verbose:
+                warn_txt = "The given log table does not match the current logcurve '{}', of type '{}', "\
+                    "for well {}".format(
+                        self.name, self.log_type, self.well
+                )
+                print('WARNING: {}'.format(warn_txt))
+                logger.warning(warn_txt)
+
+        for lname in list(cutoffs.keys()):
+            if lname.lower() in ['depth', 'md', 'twt', 'owt']:  # Create mask on coordinate
+                if lname.lower() == 'depth':  # For the special case of using Depth instead of md in the cutoffs
+                    this_lname = 'md'
+                else:
+                    this_lname = lname.lower()
+                if self.coord_type.lower() == this_lname:
+                    # True when coordinate type is same as in cutoffs
+                    masks.append(
+                        msks.create_mask(
+                            self.coords, cutoffs[lname][0], cutoffs[lname][1]
+                        )
+                    )
+                    if verbose:
+                        info_txt = "Creating mask based on coordinate '{}', for well {}, based on {}".format(
+                            self.coord_type, self.well, mask_description
+                        )
+                        print('INFO: {}'.format(info_txt))
+                        logger.info(info_txt)
+            if green_flag and (lname.lower() == self.name.lower()) or (lname.lower() == self.log_type.lower()):
+                masks.append(
+                    msks.create_mask(
+                        self.values, cutoffs[lname][0], cutoffs[lname][1])
+                )
+                if verbose:
+                    info_txt = "Creating mask based on '{}', for well {}, based on {}".format(
+                        self.name, self.well, mask_description
+                    )
+                    print('INFO: {}'.format(info_txt))
+                    logger.info(info_txt)
+        if len(masks) > 0:
+            # Combine all masks
+            final_mask = msks.combine_masks(masks)
+
+        if np.sum(final_mask) < 1:
+            warn_txt = 'All values in log {}, in well {}, are masked out using {}'.format(
+                self.name, self.well, mask_description)
+            print('WARNING: {}'.format(warn_txt))
+            logger.warning(warn_txt)
+        elif verbose:
+            info_txt = '{} of {} are inside mask, for log {} in well {}, using {}'.format(
+                np.sum(final_mask), len(final_mask), self.name, self.well, mask_description
+            )
+            print('INFO: {}'.format(info_txt))
+            logger.info(info_txt)
+
+        return LogCurve2dNew(
+            create_data_array(
+                name=name,
+                data=final_mask,
+                data_units=self.units,
+                coords=self.coords,
+                coord_units=self.coord_units,
+                coord_type=self.coord_type,
+                verbose=verbose
+            ),
+            log_type='Mask',
+            well=self.well,
+            header={
+                'name': name,
+                'well': self.well,
+                'log_type': 'Mask',
+                'desc': mask_description
+            }
+        )
+
+    def read(self,
+             log_name,
+             file_name,
+             file_format,
+             verbose=False,
+             **kwargs):
+        from blixt_utils.io.io import well_reader
+        if file_format == 'las':
+            with open(file_name, "r", encoding='UTF8') as f:
+                lines = f.readlines()
+            null_val, generated_keys, well_dict = well_reader(lines, file_format=file_format)
+            if log_name.lower() not in [_key.lower() for _key in generated_keys]:
+                warn_txt = 'The parameter {} was not found in {}, which contains: {}'.format(
+                    log_name, os.path.basename(file_name), ', '.join(generated_keys)
+                )
+                if verbose:
+                    print('WARNING: {}'.format(warn_txt))
+                logger.warning(warn_txt)
+        return True
 
 
 class LogCurve2D(object):
@@ -1406,6 +1645,12 @@ def create_data_array(
 
     And the data can be plotted using
     > log_value.plot()
+
+    You can convert units of data and/or coordinates by
+    > log_values.pint.to(
+    >     {'<NAME>': '<TO_UNIT>',
+           '<COORD_TYPE>': '<TO_ANOTHER_UNIT>'}
+    > )
 
     :param name:
         str
