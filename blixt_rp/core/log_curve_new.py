@@ -29,6 +29,7 @@ from blixt_rp.rp_utils.definitions import allowed_depth_formats
 from blixt_utils.misc.convert_data import convert
 import blixt_utils.misc.masks as msks
 import blixt_utils.misc.templates as tmplts
+import blixt_rp.rp_utils.definitions as rud
 
 ureg = UnitRegistry()
 logger = logging.getLogger(__name__)
@@ -1009,19 +1010,9 @@ class LogCurve2dNew(object):
              file_format,
              verbose=False,
              **kwargs):
-        from blixt_utils.io.io import well_reader
         if file_format == 'las':
-            with open(file_name, "r", encoding='UTF8') as f:
-                lines = f.readlines()
-            null_val, generated_keys, well_dict = well_reader(lines, file_format=file_format)
-            if log_name.lower() not in [_key.lower() for _key in generated_keys]:
-                warn_txt = 'The parameter {} was not found in {}, which contains: {}'.format(
-                    log_name, os.path.basename(file_name), ', '.join(generated_keys)
-                )
-                if verbose:
-                    print('WARNING: {}'.format(warn_txt))
-                logger.warning(warn_txt)
-        return True
+            self.data = create_data_array(*_read_las(log_name, file_name, verbose))
+            self.name = log_name.lower()
 
 
 class LogCurve2D(object):
@@ -1610,6 +1601,73 @@ def _take_sampling_from(log_curve1: LogCurve2D, log_curve2: LogCurve2D, verbose=
     new_log_curve.depth = log_curve2.depth
 
     return new_log_curve
+
+
+def _read_las(log_name, file_name, verbose=False):
+    from blixt_utils.io.io import well_reader
+    accepted_depth_keys = rud.rename_well_logs['depth']
+
+    with open(file_name, "r", encoding='UTF8') as f:
+        lines = f.readlines()
+    null_val, generated_keys, well_dict = well_reader(lines, file_format='las')
+
+    # Find and extract data
+    data_units = None
+    data_key = None
+    for _key in generated_keys:
+        if log_name.lower() == _key.lower():
+            data_key = _key
+    if data_key is None:
+        warn_txt = 'The parameter {} was not found in {}, which contains: {}'.format(
+            log_name, os.path.basename(file_name), ', '.join(generated_keys)
+        )
+        if verbose:
+            print('WARNING: {}'.format(warn_txt))
+        logger.warning(warn_txt)
+    else:
+        data_units = well_dict['curve'][data_key]['unit']
+    if (data_units is None) or (data_units == ''):
+        warn_txt = 'No valid data unit was found in {} for data key {}'.format(
+            os.path.basename(file_name), data_key
+        )
+        if verbose:
+            print('WARNING: {}'.format(warn_txt))
+        logger.warning(warn_txt)
+
+    # Find depth parameter
+    depth_key = None
+    coord_type = None
+    coord_units = None
+    for _key in generated_keys:
+        if _key.lower() in [_x.lower() for _x in accepted_depth_keys]:
+            depth_key = _key
+            coord_type = 'md'
+            coord_units = well_dict['curve'][_key]['unit']
+        elif _key.lower() == 'owt':
+            depth_key = _key
+            coord_type = 'owt'
+            coord_units = well_dict['curve'][_key]['unit']
+        elif _key.lower() == 'twt':
+            depth_key = _key
+            coord_type = 'twt'
+            coord_units = well_dict['curve'][_key]['unit']
+    if depth_key is None:
+        warn_txt = 'No valid depth parameter was found in {}, which contains: {}'.format(
+            os.path.basename(file_name), ', '.join(generated_keys)
+        )
+        if verbose:
+            print('WARNING: {}'.format(warn_txt))
+        logger.warning(warn_txt)
+    if (coord_units is None) or (coord_units == ''):
+        warn_txt = 'No valid depth unit was found in {} for depth coordinate {}'.format(
+            os.path.basename(file_name), depth_key
+        )
+        if verbose:
+            print('WARNING: {}'.format(warn_txt))
+        logger.warning(warn_txt)
+
+    return log_name.lower(), well_dict['data'][data_key], data_units, well_dict['data'][depth_key], \
+        coord_units, coord_type
 
 
 def create_data_array(

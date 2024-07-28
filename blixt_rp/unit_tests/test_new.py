@@ -193,7 +193,10 @@ class WellTestCase(unittest.TestCase):
     def test_read(self):
         lc = LogCurve2dNew(None)
         las_file = 'C:\\Users\\marte\\PycharmProjects\\blixt_rp\\test_data\\Well E_CPI.las'
-        self.assertTrue(lc.read('TEST', las_file, 'las', True))
+        lc.read('phie', las_file, 'las', True)
+        print(lc.name, np.nanmin(lc.values), np.nanmax(lc.values), lc.units, lc.coord_type, np.min(lc.coords),
+              np.max(lc.coords), lc.coord_units)
+        self.assertIsInstance(lc, LogCurve2dNew, '')
 
     def test_LogCurve(self):
         lc = LogCurve(
