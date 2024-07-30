@@ -928,7 +928,8 @@ class Well(object):
             If True, QC plots are created
         :return:
         """
-        survey_points, survey_points_info = uio.read_checkshot_or_wellpath(project_table, self.well, "Well paths")
+        survey_points, survey_points_info = uio.read_checkshot_or_wellpath(
+            project_table, self.well, "Well paths", verbose=verbose)
         if survey_points is not None:
             for lblock in list(self.block.keys()):
                 self.block[lblock].add_well_path(survey_points, survey_points_info['filename'], verbose)
