@@ -9,7 +9,7 @@ from copy import deepcopy
 
 import blixt_rp.core.well as cw
 import blixt_utils.utils as uu
-from blixt_utils.utils import log_table_in_smallcaps as small_log_table
+from blixt_utils.utils import log_table_in_smallcaps as small_log_table, print_info
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot, \
     deltalogr_plot, chi_rotation_plot, set_up_column_plot
 import blixt_rp.rp.rp_core as rp
@@ -151,6 +151,11 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
         _md_max = -1E6
         for wi_name in wi_names:
             wi_name = wi_name.upper()
+            if wi_name not in list(wis[well.well].keys()):
+                print_info(
+                    'Interval {} not present in {}'.format(wi_name, well.well),
+                    'warning', logger)
+                continue
             if wis[well.well][wi_name][0] < _md_min:
                 _md_min = wis[well.well][wi_name][0]
             if wis[well.well][wi_name][1] > _md_max:
@@ -442,7 +447,13 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     else:
         vp_t = None
     if 'S velocity' in list(log_table.keys()):
-        vs_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['S velocity']].data)
+        try:
+            vs_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['S velocity']].data)
+        except KeyError:
+            warn_txt = 'No S velocity log in {}'.format(tb.well)
+            print('WARNING: {}'.format(warn_txt))
+            logger.warning(warn_txt)
+            vs_t = None
     elif 'Shear sonic' in list(log_table.keys()):
         vs_t = np.interp(x=t, xp=twt, fp=1./tb.logs[log_table['Shear sonic']].data)
     else:
@@ -517,7 +528,7 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
 
     sea_style = {'lw': 10, 'color': 'b', 'alpha': 0.5}
     kb_style = {'lw': 10, 'color': 'k', 'alpha': 0.5}
-    fig, ax = plt.subplots(figsize=(20, 10))
+    fig, ax = plt.subplots(figsize=(18, 9))
     ax.set_title('{} interval'.format(wi_name), pad=10.)
 
     wi_name = wi_name.upper()
@@ -533,21 +544,36 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
     c_styles = {}  # style of line that defines the center of each well.
     for i, well in enumerate(wells.values()):
         wnames.append(well.well)
-        c_styles[well.well] = {'color': 'k', 'ls': '--', 'lw': 1}
+        print('Plotting {}'.format(well.well))
+        if 'tvd' in well.log_names():
+            c_styles[well.well] = {'color': 'k', 'ls': '-', 'lw': 1}
+            depth_key = 'tvd'
+        else:
+            depth_key = 'depth'
+            c_styles[well.well] = {'color': 'k', 'ls': '--', 'lw': 1}
+
         # extract the relevant log block
         tb = well.block[block_name]
 
         # Try finding the depth interval of the desired working interval 'wi_name'
         # TODO missing working intervals are tricky to capture, sometimes they cause a TypeError, sometimes not
         # So I need to handle both cases
-        try:
-            well.calc_mask({}, name='XXX', wis=wis, wi_name=wi_name)
-            mask = tb.masks['XXX'].data
-            int_exists = True
-        except TypeError:
+        int_exists = False
+        mask = None
+        if well.well not in list(wis.keys()):
+            print('No working intervals in {}. Continue'.format(well.well))
+        elif wi_name not in list(wis[well.well].keys()):
             print('{} not present in well {}. Continue'.format(wi_name, well.well))
-            mask = None
-            int_exists = False
+        else:
+            try:
+                well.calc_mask({}, name='XXX', wis=wis, wi_name=wi_name)
+                mask = tb.masks['XXX'].data
+                int_exists = True
+            except TypeError:
+                print('{} not present in well {}. Continue'.format(wi_name, well.well))
+                mask = None
+                int_exists = False
+
         if int_exists:
             if mask.all():
                 # All values in mask is True, meaning that all data in well is masked out
@@ -556,11 +582,6 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
                 int_exists = False
 
         if int_exists:
-            if 'tvd' in well.log_names():
-                c_styles[well.well] = {'color': 'k', 'ls': '-', 'lw': 1}
-                depth_key = 'tvd'
-            else:
-                depth_key = 'depth'
             if wis[well.well][wi_name][1] > y_max:
                 y_max = wis[well.well][wi_name][1]
             #if np.nanmax(tb.logs[depth_key].data[mask]) > y_max:
@@ -590,6 +611,14 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
                         bbox={'boxstyle': 'round', 'facecolor': 'lightgreen', 'alpha': 0.5},
                         verticalalignment='bottom',
                         horizontalalignment='center')
+        else:
+            ax.text(i, np.nanmean(tb.logs[depth_key].data),
+                    '{} is missing'.format(wi_name),
+                    bbox = {'boxstyle': 'round', 'facecolor': 'orangered', 'alpha': 0.5},
+                    rotation='vertical',
+                    verticalalignment = 'bottom',
+                    horizontalalignment = 'center'
+                    )
 
         water_depth = well.get_from_well_info('water depth', templates=templates)
         kb = well.get_from_well_info('kb', templates=templates)
