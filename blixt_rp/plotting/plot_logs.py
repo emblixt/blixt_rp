@@ -343,7 +343,7 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     else:
         #
         # Rho
-         try_these_log_types = ['Density', 'Neutron density']
+         try_these_log_types = ['Density', 'Neutron']
          log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
          lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
          # Replace the density with the one selected by log_table
