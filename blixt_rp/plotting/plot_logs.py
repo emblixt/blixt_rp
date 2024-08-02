@@ -180,8 +180,7 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
         twt_min = None
         twt_max = None
         info_txt = 'Did not find TWT log, calculating from Sonic or Vp'
-    print('INFO: {}'.format(info_txt))
-    logger.info(info_txt)
+    print_info(info_txt, 'info', logger)
 
     #
     # Gamma ray and Caliper
@@ -451,8 +450,7 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
             vs_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['S velocity']].data)
         except KeyError:
             warn_txt = 'No S velocity log in {}'.format(tb.well)
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
             vs_t = None
     elif 'Shear sonic' in list(log_table.keys()):
         vs_t = np.interp(x=t, xp=twt, fp=1./tb.logs[log_table['Shear sonic']].data)
@@ -699,8 +697,7 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
         for well in wells:
             if log_name not in wells[well].log_names():
                 warn_txt = '{} log is missing in well {}'.format(log_name, well)
-                logger .warning(warn_txt)
-                print(warn_txt)
+                print_info(warn_txt, 'warning', logger)
                 continue
             wells[well].calc_mask(cutoffs, 'my_mask', log_table=log_table, wis=wis, wi_name=wi_name,
                                   log_type_input=log_type_input)
@@ -744,7 +741,7 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
                             kwargs={'target_function': linear_function}, verbose=verbosity_level)
         except ValueError as error:
             warn_txt = 'WARNING: depth trend could not calculated for {} for all wells'.format(log_type)
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
             continue
 
 
@@ -998,8 +995,7 @@ def plot_wiggles(reflectivity, twt, wavelet, incident_angles=None, extract_at=No
             warn_txt = 'Length of extract_at ({}) must be the same as extract_at_styles ({])'.format(
                 len(extract_at), len(extract_at_styles)
             )
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
             extract_at_styles = None
     if input_wiggles is not None:
         if len(input_wiggles) != len(incident_angles):

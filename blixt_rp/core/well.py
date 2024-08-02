@@ -33,7 +33,7 @@ from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 import blixt_utils.io.io as uio
 from blixt_utils.io.io import well_reader
 import blixt_utils.misc.masks as msks
-from blixt_utils.utils import arrange_logging
+from blixt_utils.utils import arrange_logging, print_info
 from blixt_rp.rp_utils.harmonize_logs import harmonize_logs as fixlogs
 from blixt_utils.plotting import crossplot as xp
 from blixt_rp.core.minerals import MineralMix
@@ -145,7 +145,7 @@ class Project(object):
                     name = os.path.basename(project_table).split('.')[0]
                 else:
                     warn_txt = 'Either the name, or the project table, must be provided'
-                    logger.warning(warn_txt)
+                    print_info(warn_txt, 'warning', logger)
                     raise Warning(warn_txt)
 
             if (working_dir is None) or (not os.path.isdir(working_dir)):
@@ -158,7 +158,7 @@ class Project(object):
                 '{}_log.txt'.format(name))
             arrange_logging(log_to_stdout, logging_file, logging_level)
 
-            logger.info('Project created / modified on: {}'.format(datetime.now().isoformat()))
+            print_info('Project created / modified on: {}'.format(datetime.now().isoformat()), 'info', logger)
             self.name = name
             self.working_dir = working_dir
             self.logging_file = logging_file
@@ -172,7 +172,7 @@ class Project(object):
 
             if not os.path.isfile(self.project_table):
                 warn_txt = 'The provided project table {}, does not exist'.format(self.project_table)
-                logger.warning(warn_txt)
+                print_info(warn_txt, 'warning', logger)
                 raise Warning(warn_txt)
 
             self.tops_file = tops_file
@@ -202,7 +202,7 @@ class Project(object):
             pass
 
         if this_str != '':
-            logger.info('{}: {}'.format(this_str, value))
+            print_info('{}: {}'.format(this_str, value), 'info', logger)
 
         super(Project, self).__setattr__(key, value)
 
@@ -220,7 +220,7 @@ class Project(object):
     def load_logfile(self, file_name):
         if not os.path.isfile(file_name):
             warn_txt = 'The provided log file {}, does not exist'.format(file_name)
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
             raise IOError(warn_txt)
         self.logging_file = file_name
 
@@ -250,7 +250,7 @@ class Project(object):
 
         arrange_logging(False, file_name, logging.INFO)
 
-        logger.info('Loaded project settings from: {}'.format(file_name))
+        print_info('Loaded project settings from: {}'.format(file_name), 'info', logger)
 
     def check_wells(self):
         """
@@ -271,8 +271,7 @@ class Project(object):
             # Check if las file exists (Redundant test, as uio.project_wells() tests that too
             if not os.path.isfile(lfile):
                 warn_txt = 'Las file: {} does not exist'
-                print('WARNING: {}'.format(warn_txt))
-                logger.warning(warn_txt)
+                print_info(warn_txt, 'warning', logger)
                 continue
 
             # Check if well logs exists
@@ -283,14 +282,12 @@ class Project(object):
                         log_exists = True
                 if not log_exists:
                     warn_txt = 'Log {} does not exist in {}'.format(log_name, os.path.split(lfile)[-1])
-                    print('WARNING: {}'.format(warn_txt))
-                    logger.warning(warn_txt)
+                    print_info(warn_txt, 'warning', logger)
 
             # Check if well name is consistent
             if ('/' in wname) or ('-' in wname) or (' ' in wname):
                 warn_txt = "Special signs, like '/', '-' or ' ', are not allowed in well name: {}".format(wname)
-                print("WARNING: {}".format(warn_txt))
-                logger.warning(warn_txt)
+                print_info(warn_txt, 'warning', logger)
 
     def active_wells(self):
         active_wells = []
@@ -361,11 +358,11 @@ class Project(object):
         last_wname = ''
         for i, lasfile in enumerate(well_table):
             wname = well_table[lasfile]['Given well name']
-            logger.info('{}, {}, {}'.format(i, wname, lasfile))
+            print_info('{}, {}, {}'.format(i, wname, lasfile), 'info', logger)
 
             if isinstance(include_these_wells, list):
                 if wname not in include_these_wells:
-                    logger.info('Skipping: {}'.format(wname))
+                    print_info('Skipping: {}'.format(wname), 'info', logger)
                     continue
 
             if wname != last_wname:  # New well
@@ -595,16 +592,14 @@ class Well(object):
                     (what in list(templates[self.well].keys())) and \
                     (templates[self.well][what] is not None):
                 info_txt += ' from templates'
-                print('INFO: {}'.format(info_txt))
-                logger.info(info_txt)
+                print_info(info_txt, 'info', logger)
                 return templates[self.well][what]
 
         # When above didn't work, try the well header
         start_unit = ''
         if search_keys is None:
             warn_txt = 'No keys, to search for {} in well info, is provided'.format(what)
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
             return None
 
         for _key in list(self.header.keys()):
@@ -631,13 +626,11 @@ class Well(object):
                     info_txt += '[feet].'
                     success, return_value = cnvrt(this_result, 'ft', 'm')
 
-                print('INFO: {}'.format(info_txt))
-                logger.info(info_txt)
+                print_info(info_txt, 'info', logger)
                 return return_value
 
         info_txt += ' failed. No matching keys in header.'
-        print('WARNING: {}'.format(info_txt))
-        logger.warning(info_txt)
+        print_info(info_txt, 'warning', logger)
         return 0.0
 
     def get_burial_depth(self, templates=None, block_name=None, tvd_key=None):
@@ -700,8 +693,7 @@ class Well(object):
 
         if log_name not in tb.log_names():
             warn_txt = 'Log {} does not exist in well {}'.format(log_name, self.well)
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
             return None
 
         if water_vel is None:
@@ -800,7 +792,7 @@ class Well(object):
                 'Input fluid_minerals must be a MineralMix or a subselection of a FluidMix object, not {}'.format(
                     type(fluid_minerals)
                 )
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
             raise Warning(warn_txt)
 
         if isinstance(fluid_minerals, MineralMix):
@@ -815,7 +807,7 @@ class Well(object):
         # Test if this well is present among the minerals / fluids
         if self.well not in list(obj.keys()):
             warn_txt = 'Well {} not among the given fluid / mineral mixes'.format(self.well)
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
             raise Warning(warn_txt)
 
         # Use the fluid / minerals for this well only
@@ -827,8 +819,7 @@ class Well(object):
                 if wi not in list(wis[self.well].keys()):
                     warn_txt = 'Interval {} not present in the given working intervals for {}'.format(
                         wi, self.well)
-                    print('WARNING: {}'.format(warn_txt))
-                    logger.warning(warn_txt)
+                    print_info(warn_txt, 'warning', logger)
 
         if param not in ['k', 'mu', 'rho']:
             raise IOError('Bounds can only be calculated for k, mu and rho')
@@ -856,14 +847,12 @@ class Well(object):
                 info_txt += "    K: {}, Mu: {}, Rho {}\n".format(
                     val[m].k.value, val[m].mu.value, val[m].rho.value)
                 info_txt += "    Volume fraction: {}\n".format(val[m].volume_fraction)
-            logger.info(info_txt)
-            print('INFO: {}'.format(info_txt))
+            print_info(info_txt, 'info', logger)
 
             if len(list(val.keys())) > 2:
                 warn_txt = 'The bounds calculation has only been tested for two-components mixtures\n'
                 warn_txt += 'There is no guarantee that the total fraction does not exceed one'
-                print('Warning {}'.format(warn_txt))
-                logger.warning(warn_txt)
+                print_info(warn_txt, 'warning', logger)
 
             for this_fm in list(val.keys()):  # loop over each fluid / mineral component
                 print(' {} {}: {}, volume frac: {}'.format(fm_type, param, this_fm, val[this_fm].volume_fraction))
@@ -881,8 +870,7 @@ class Well(object):
                         warn_txt = 'The volume fraction {} is lacking in Block {} of well {}'.format(
                             _name, block_name, self.well
                         )
-                        print('WARNING: {}'.format(warn_txt))
-                        logger.warning(warn_txt)
+                        print_info(warn_txt, 'warning', logger)
                         continue
                     this_fraction = self.block[block_name].logs[_name].data
                 if param == 'k':
@@ -1053,19 +1041,17 @@ class Well(object):
             for _key in list(_cutoffs.keys()):
                 if len(self.get_logs_of_type(_key)) < 1:
                     warn_txt = 'No logs of type {} in well {}'.format(_key, self.well)
-                    print('WARNING: {}'.format(warn_txt))
-                    logger.warning(warn_txt)
+                    print_info(warn_txt, 'warning', logger)
                     continue
                 if log_table is not None:
                     if _key not in log_table:
                         warn_txt = 'Log table does not contain the log types the cutoffs are based on: {}'.format(_key)
-                        logger.warning(warn_txt)
+                        print_info(warn_txt, 'warning', logger)
                         raise IOError(warn_txt)
                     _this_cutoffs[log_table[_key]] = _cutoffs[_key]
                 else:
                     warn_txt = 'Mask in {} is based on log types, but no log table is specified'.format(self.well)
-                    print(warn_txt)
-                    logger.warning(warn_txt)
+                    print_info(warn_txt, 'warning', logger)
                     _this_cutoffs[self.get_logs_of_type(_key)[0].name] = _cutoffs[_key]
             return _this_cutoffs
 
@@ -1077,8 +1063,7 @@ class Well(object):
                     self.well,
                     ', '.join(list(wis.keys()))
                 )
-                logger.warning(warn_txt)
-                print('WARNING: {}'.format(warn_txt))
+                print_info(warn_txt, 'warning', logger)
                 return _cutoffs
             else:
                 # Append the depth mask from the selected working interval
@@ -1089,8 +1074,7 @@ class Well(object):
                                          ]
                 except KeyError:
                     warn_txt = '{} not present in {}'.format(wi_name.upper(), self.well)
-                    print('WARNING: {}'.format(warn_txt))
-                    logger.warning(warn_txt)
+                    print_info(warn_txt, 'warning', logger)
             return _cutoffs
 
         def apply_tops(_cutoffs):
@@ -1099,15 +1083,13 @@ class Well(object):
                     self.well,
                     ', '.join(list(tops.keys()))
                 )
-                logger.warning(warn_txt)
-                print('WARNING: {}'.format(warn_txt))
+                print_info(warn_txt, 'warning', logger)
             elif not all([t.upper() in list(tops[self.well].keys()) for t in use_tops]):
                 warn_txt = 'The selected tops {} are not among the well tops {}'.format(
                     ', '.join(use_tops),
                     '. '.join(list(tops[self.well].keys()))
                 )
-                logger.warning(warn_txt)
-                print('WARNING: {}'.format(warn_txt))
+                print_info(warn_txt, 'warning', logger)
             else:
                 # Append the depth mask from the tops file
                 _cutoffs['depth'] = ['><',
@@ -1152,8 +1134,7 @@ class Well(object):
             for lname in list(cutoffs.keys()):
                 if lname.lower() not in list(self.block[lblock].logs.keys()):
                     warn_txt = 'Log {} to calculate mask from is not present in well {}'.format(lname, self.well)
-                    print('WARNING: {}'.format(warn_txt))
-                    logger.warning(warn_txt)
+                    print_info(warn_txt, 'warning', logger)
                     continue
                 else:
                     # calculate mask
@@ -1194,8 +1175,7 @@ class Well(object):
                 if np.sum(block_mask) < 1:
                     warn_txt = 'All values in well {}, block {}, are masked out using {}'.format(
                         self.well, lblock, msk_str)
-                    print('WARNING: {}'.format(warn_txt))
-                    logger.warning(warn_txt)
+                    print_info(warn_txt, 'warning', logger)
                 else:
                     # print('{} True values in mask: {}'.format(np.sum(block_mask), msk_str))
                     pass
@@ -1296,8 +1276,7 @@ class Well(object):
 
         if y_log_name not in self.log_names():
             info_txt = 'No log named {} in {}, plotting data against depth instead'.format(y_log_name, self.well)
-            print('WARNING: {}'.format(info_txt))
-            logger.warning(info_txt)
+            print_info(info_txt, 'warning', logger)
             y_log_name = 'depth'
 
         if log_name is not None:
@@ -1351,7 +1330,7 @@ class Well(object):
         if tops is not None:
             wname = uio.fix_well_name(self.well)
             if wname not in list(tops.keys()):
-                logger.warning('No tops in loaded tops for well {}'.format(wname))
+                print_info('No tops in loaded tops for well {}'.format(wname), 'warning', logger)
             else:
                 for top_name, top_md in tops[wname].items():
                     if (top_md < ax.get_ylim()[0]) or (top_md > ax.get_ylim()[-1]):
@@ -1361,7 +1340,7 @@ class Well(object):
         elif wis is not None:
             wname = uio.fix_well_name(self.well)
             if wname not in list(wis.keys()):
-                logger.warning('No working intervals in loaded valid for well {}'.format(wname))
+                print_info('No working intervals in loaded valid for well {}'.format(wname), 'warning', logger)
             else:
                 for top_name, top_md in wis[wname].items():
                     if (top_md[0] < ax.get_ylim()[0]) or (top_md[0] > ax.get_ylim()[-1]):
@@ -1556,8 +1535,6 @@ class Well(object):
                 #    ))
                 # _block_name = new_block_name
                 # info_txt = 'Start modifying the logs in las file to fit the existing Block'
-                # print(info_txt)
-                # logger.info(info_txt)
                 # print(' Length of existing data in well: {}'.format(
                 #    len(self.block[_block_name])
                 # ))
@@ -1581,7 +1558,7 @@ class Well(object):
                 # add only the selected logs
                 for _key in list(_only_these_logs.keys()):
                     if _key in list(_well_dict['curve'].keys()):
-                        logger.debug('Adding log {}'.format(_key))
+                        print_info('Adding log {}'.format(_key), 'debug', logger, verbose=False)
                         # if _templates is not None:
                         #     print('Adding log {}, with unit {}, to unit {}'.format(
                         #         _key, _well_dict['curve'][_key]['unit'], _templates[_only_these_logs[_key]]['unit']))
@@ -1605,17 +1582,15 @@ class Well(object):
                         )
                         these_logs[_key].header.orig_filename = filename
                     else:
-                        logger.warning("Log '{}' in {} is missing\n  [{}]".format(
-                            _key,
-                            _well_dict['well_info']['well']['value'],
+                        print_info("Log '{}' in {} is missing\n  [{}]".format(
+                            _key, _well_dict['well_info']['well']['value'],
                             ', '.join(list(_well_dict['curve'].keys()))
-                            # ', '.join(list(_only_these_logs.keys()))
-                        )
-                        )
+                        ), 'warning', logger)
+
             elif _only_these_logs is None:
                 # add all logs
                 for _key in list(_well_dict['curve'].keys()):
-                    logger.debug('Adding log {}'.format(_key))
+                    print_info('Adding log {}'.format(_key), 'debug', logger, verbose=False)
                     these_logs[_key] = LogCurve(
                         name=_key,
                         block=_block_name,
@@ -1626,7 +1601,7 @@ class Well(object):
                     these_logs[_key].header.orig_filename = filename
                     these_logs[_key].header.name = _key
             else:
-                logger.warning('No logs added to {}'.format(_well_dict['well_info']['well']['value']))
+                print_info('No logs added to {}'.format(_well_dict['well_info']['well']['value']), 'warning', logger)
 
             # Test if Block already exists
             if exists and same:
@@ -1663,12 +1638,11 @@ class Well(object):
                 if key.lower() in [x.lower() for x in value]:
                     well_dict['curve'][key]['orig_name'] = '{}'.format(', '.join(value))
                     info_txt = 'Renaming log from {} to {}'.format(key, rname)
-                    # print('INFO: {}'.format(info_txt))
-                    logger.info(info_txt)
+                    print_info(info_txt, 'info', logger)
                     well_dict['curve'][rname.lower()] = well_dict['curve'].pop(key)
                     well_dict['data'][rname.lower()] = well_dict['data'].pop(key)
 
-        logger.debug('Reading {}'.format(filename))
+        print_info('Reading {}'.format(filename), 'debug', logger, verbose=False)
         if well_dict['version']['vers']['value'] not in supported_version:
             raise Exception("Version {} not supported!".format(
                 well_dict['version']['vers']['value']))
@@ -1696,14 +1670,13 @@ class Well(object):
                     well_dict['well_info']['well']['value'],
                     self.header.well.value
                 )
-                logger.warning(message)
-                print(message)
+                print_info(message, 'warning', logger)
                 question = 'Do you want to add well {} to existing well {}? Yes or No'.format(
                     well_dict['well_info']['well']['value'],
                     self.header.well.value
                 )
                 ans = input(question)
-                logger.info('{}: {}'.format(question, ans))
+                print_info('{}: {}'.format(question, ans), 'info', logger)
                 if 'y' in ans.lower():
                     add_well = True
                 else:
@@ -1825,12 +1798,11 @@ class Well(object):
                     if key.lower() in [x.lower() for x in value]:
                         well_dict['curve'][key]['orig_name'] = '{}'.format(', '.join(value))
                         info_txt = 'Renaming log from {} to {}'.format(key, rname)
-                        # print('INFO: {}'.format(info_txt))
-                        logger.info(info_txt)
+                        print_info(info_txt, 'info', logger)
                         well_dict['curve'][rname.lower()] = well_dict['curve'].pop(key)
                         well_dict['data'][rname.lower()] = well_dict['data'].pop(key)
 
-            logger.debug('Reading {}'.format(filename))
+            print_info('Reading {}'.format(filename), 'debug', logger, verbose=False)
 
             # Rename well
             if use_this_well_name is not None:
@@ -1855,14 +1827,13 @@ class Well(object):
                         well_dict['well_info']['well']['value'],
                         self.header.well.value
                     )
-                    logger.warning(message)
-                    print(message)
+                    print_info(message, 'warning', logger)
                     question = 'Do you want to add well {} to existing well {}? Yes or No'.format(
                         well_dict['well_info']['well']['value'],
                         self.header.well.value
                     )
                     ans = input(question)
-                    logger.info('{}: {}'.format(question, ans))
+                    print_info('{}: {}'.format(question, ans), 'info', logger)
                     if 'y' in ans.lower():
                         add_well = True
                     else:
@@ -1878,7 +1849,7 @@ class Well(object):
             # TODO
             # Make read_log_data() more flexible so that it can handle standard las files too.
             error_txt = 'read_log_data() only supports excel sheet data yet'
-            logger.warning(error_txt)
+            print_info(error_txt, 'warning', logger)
             raise NotImplementedError(error_txt)
 
     def keys(self):
@@ -1992,8 +1963,7 @@ class Block(object):
 
         if tvd_key not in self.log_names():
             warn_txt = 'No True Vertical Depth log in {}, using MD'.format(self.well)
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
             tvd = self.get_md()
         else:
             tvd = self.logs[tvd_key].data
@@ -2464,8 +2434,7 @@ class Block(object):
                 if mask_name not in list(self.masks.keys()):
                     warn_txt = 'No mask applied. The desired mask {} does not exist in well {}'.format(
                         mask_name, self.well)
-                    print('WARNING: {}'.format(warn_txt))
-                    logger.warning(warn_txt)
+                    print_info(warn_txt, 'warning', logger)
                 else:
                     mask = self.masks[mask_name].data
                     mask_desc = self.masks[mask_name].header.desc
@@ -2583,19 +2552,16 @@ class Block(object):
     def check_log_types(self, necessary_types, log_table):
         for ltype in necessary_types:
             if ltype not in list(log_table.keys()):
-                info_txt = 'WARNING: {} is not specified in log_table'.format(ltype)
-                print(info_txt)
-                logger.info(info_txt)
+                info_txt = '{} is not specified in log_table'.format(ltype)
+                print_info(info_txt, 'info', logger)
                 return False
             if ltype not in self.log_types():
-                info_txt = 'WARNING: Log type {} is lacking in well {}'.format(ltype, self.well)
-                print(info_txt)
-                logger.info(info_txt)
+                info_txt = 'Log type {} is lacking in well {}'.format(ltype, self.well)
+                print_info(info_txt, 'info', logger)
                 return False
             if log_table[ltype] not in self.log_names():
-                info_txt = 'WARNING: Log {} is lacking in well {}'.format(log_table[ltype], self.well)
-                print(info_txt)
-                logger.info(info_txt)
+                info_txt = 'Log {} is lacking in well {}'.format(log_table[ltype], self.well)
+                print_info(info_txt, 'info', logger)
                 return False
         return True
 
@@ -2782,7 +2748,7 @@ def add_logs_to_block(_block, _well_dict, _block_name, _only_these_logs, _filena
             if _key in list(_well_dict['curve'].keys()):
                 this_header = _well_dict['curve'][_key]
                 this_header.update({'log_type': _only_these_logs[_key]})
-                logger.debug('Adding log {}'.format(_key))
+                print_info('Adding log {}'.format(_key), 'debug', logger, verbose=False)
                 these_logs[_key] = LogCurve(
                     name=_key,
                     block=_block_name,
@@ -2792,17 +2758,18 @@ def add_logs_to_block(_block, _well_dict, _block_name, _only_these_logs, _filena
                 )
                 these_logs[_key].header.orig_filename = _filename
             else:
-                logger.warning("Log '{}' in {} is missing\n  [{}]".format(
+                warn_txt = "Log '{}' in {} is missing\n  [{}]".format(
                     _key,
                     _well_dict['well_info']['well']['value'],
                     ', '.join(list(_well_dict['curve'].keys()))
                     # ', '.join(list(_only_these_logs.keys()))
                 )
-                )
+                print_info(warn_txt, 'warning', logger)
+
     elif _only_these_logs is None:
         # add all logs
         for _key in list(_well_dict['curve'].keys()):
-            logger.debug('Adding log {}'.format(_key))
+            print_info('Adding log {}'.format(_key), 'debug', logger, verbose=False)
             these_logs[_key] = LogCurve(
                 name=_key,
                 block=_block_name,
@@ -2813,7 +2780,8 @@ def add_logs_to_block(_block, _well_dict, _block_name, _only_these_logs, _filena
             these_logs[_key].header.orig_filename = _filename
             these_logs[_key].header.name = _key
     else:
-        logger.warning('No logs added to {}'.format(_well_dict['well_info']['well']['value']))
+        warn_txt = 'No logs added to {}'.format(_well_dict['well_info']['well']['value'])
+        print_info(warn_txt, 'warning', logger)
 
     # Test if Block already exists
     if exists and same:

@@ -11,6 +11,7 @@ import blixt_rp.rp.rp_core as rp
 import blixt_rp.core.well as cw
 from blixt_utils.misc.convert_data import convert as cnvrt
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
+from blixt_utils.utils import print_info
 
 logger = logging.getLogger(__name__)
 opt1 = {'bbox': {'facecolor': '0.9', 'alpha': 0.5, 'edgecolor': 'none'}}
@@ -134,16 +135,14 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
         these_wis = wis[wname]
         if wi_name.upper() not in [_x.upper() for _x in list(these_wis.keys())]:
             warn_txt = 'Working interval {} does not exist in well {}'.format(wi_name, wname)
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
             continue  # this working interval does not exist in current well
         # test if necessary logs are in the well
         skip = False
         for _log in logs:
             if _log not in list(well.block[block_name].logs.keys()):
                 warn_txt = '{} log is lacking in {}'.format(_log, wname)
-                print('WARNING: {}'.format(warn_txt))
-                logger.warning(warn_txt)
+                print_info(warn_txt, 'warning', logger)
                 skip = True
         if skip:
             continue
@@ -508,8 +507,7 @@ def rpt_phi_sw(_phi, _sw, **kwargs):
         model = 'soft'
         k_dry, mu_dry = rp.softsand(k_min, mu_min, phi, phi_c, c_n, p_conf, smcf)
     info_txt = 'Using {} rock physics template'.format(model)
-    print(info_txt)
-    logger.info(info_txt)
+    print_info(info_txt, 'info', logger)
 
     # Calculate the final fluid properties for the given water saturation
     print(_sw, k_b, k_hc)

@@ -7,6 +7,7 @@ import blixt_rp.rp_utils.definitions as ud
 import blixt_utils.io.io as uio
 from blixt_utils.plotting import crossplot as xp
 from blixt_utils.misc.templates import get_from_template
+from blixt_utils.utils import print_info
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +62,7 @@ def test_types(_log_types):
             # set the output to None
             warn_txt = 'Logs of type {}, are lacking for storing output as a RokDoc Sums and Averages file'.format(
                 necessary_type)
-            logger.warning(warn_txt)
-            print('WARNING: {}'.format(warn_txt))
+            print_info(warn_txt, 'warning', logger)
             return False
     return True
 
@@ -91,8 +91,7 @@ def plot_logs_vs_depth(logs, log_types, wells, wi_name, results_per_well, depth_
             except ValueError:
                 warn_txt = 'Log {}, is lacking in working interval {} in well {}'.format(
                     key, wi_name, this_well_name)
-                logger.warning(warn_txt)
-                print('WARNING: {}'.format(warn_txt))
+                print_info(warn_txt, 'warning', logger)
                 continue
 
         if log_types[i] in list(templates.keys()):
@@ -292,8 +291,7 @@ class SetUpCalculation:
         if working_dir is not None:
             if not os.path.isdir(working_dir):
                 warn_txt = 'The specified folder, where results should be saved, does not exist: {}'.format(working_dir)
-                logger.warning(warn_txt)
-                print(warn_txt)
+                print_info(warn_txt, 'warning', logger)
                 working_dir = None
 
         # Set up plots

@@ -11,6 +11,7 @@ import numpy as np
 import logging
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
+from blixt_utils.utils import print_info
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +53,8 @@ def harmonize_logs(well_dict, start, stop, step, orig_len, debug=False):
     true_md = np.linspace(start, stop, orig_len)
 
     info_txt = 'Actual length versus desired length: {} - {}'.format(len(input_md), len(true_md))
-    #logger.info(info_txt)
     if debug:
+        print_info(info_txt, 'debug', logger)
         lname = 'tvd'
         fig, ax = plt.subplots()
         print(info_txt)
@@ -65,11 +66,10 @@ def harmonize_logs(well_dict, start, stop, step, orig_len, debug=False):
     if input_step != step:
         warn_txt = 'Step lengths are not equal. {:.4f} vs {:.4f} in well {}'.format(
             input_step, step, well_dict['well_info']['well']['value'])
-        logger.warning(warn_txt)
+        print_info(warn_txt, 'warning', logger)
         # print('WARNING: {}'.format(warn_txt))
-        logger.info('Re-sampling the log with step {} to use {} instead.'.format(
-            input_step, step
-        ))
+        print_info('Re-sampling the log with step {} to use {} instead.'.format(input_step, step), 'info',
+                   logger)
         dd = None
         for key in list(well_dict['data'].keys()):
             # re-sample the data
@@ -157,8 +157,7 @@ def harmonize_logs(well_dict, start, stop, step, orig_len, debug=False):
     if len(well_dict['data']['depth']) != orig_len:
         warn_txt = 'Lengths does not match. Input versus desired length: {} - {}\n Interpolation started'.format(
             len(well_dict['data']['depth']), orig_len)
-        logger.warning(warn_txt)
-        #print('WARNING: {}'.format(warn_txt))
+        print_info(warn_txt, 'warning', logger)
         this_md =  well_dict['data']['depth']
         for key in list(well_dict['data'].keys()):
             # re-sample the data
@@ -171,7 +170,7 @@ def harmonize_logs(well_dict, start, stop, step, orig_len, debug=False):
 
     info_txt = 'New length versus desired length: {} - {}'.format(len(well_dict['data']['depth']), len(true_md))
     #print(info_txt)
-    #logger.info(info_txt)
+    #print_info(info_txt, 'info', logger)
 
 
 def interpolate(MD, log, step, length=None, kind='linear'):

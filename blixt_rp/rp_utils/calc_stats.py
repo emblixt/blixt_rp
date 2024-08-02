@@ -12,7 +12,7 @@ import bruges.rockphysics.anisotropy as bra
 import blixt_utils.io.io as uio
 from blixt_utils.plotting import crossplot as xp
 from blixt_utils.plotting import helpers as uhelp
-from blixt_utils.utils import nan_corrcoef
+from blixt_utils.utils import nan_corrcoef, print_info
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 import blixt_rp.rp_utils.definitions as ud
 
@@ -398,21 +398,18 @@ def calc_stats3(
 
     if not (len(log_tables) == len(wi_names) == len(cutoffs) == len(suffixes)):
         warn_txt = 'Input lists are not of same length'
-        print('WARNING: {}'.format(warn_txt))
-        logger.warning(warn_txt)
+        print_info(warn_txt, 'warning', logger)
         raise IOError
 
     if save_plots and (working_dir is None):
         warn_txt = 'A working directory (working_dir) is needed for plots to be saved'
-        print('WARNING: {}'.format(warn_txt))
-        logger.warning(warn_txt)
+        print_info(warn_txt, 'warning', logger)
         raise IOError
 
     n_logs = len(log_tables[0])
     if not all([len(xx) == n_logs for xx in log_tables]):
         warn_txt = 'Not the same number of logs in all log tables'
-        print('WARNING: {}'.format(warn_txt))
-        logger.warning(warn_txt)
+        print_info(warn_txt, 'warning', logger)
         raise IOError
 
     # TODO
@@ -558,8 +555,7 @@ def test_types(_log_types, _rokdoc_output):
             _rokdoc_output = None
             warn_txt = 'Logs of type {}, are lacking for storing output as a RokDoc Sums and Averages file'.format(
                 necessary_type)
-            logger.warning(warn_txt)
-            print('WARNING: {}'.format(warn_txt))
+            print_info(warn_txt, 'warning', logger)
     return _rokdoc_output
 
 
@@ -576,14 +572,14 @@ def test_top_presence_tops(tops, interval, this_well_name, results_per_well, log
     results_per_well[this_well_name] = {}
     _cont = False
     try:
-        logger.info('Well: {}'.format(this_well_name))
-        logger.info(' Top: {}: {:.2f} [m] MD'.format(interval['tops'][0],
-                                                     tops[this_well_name][interval['tops'][0].upper()]))
-        logger.info(' Base: {}: {:.2f} [m] MD'.format(interval['tops'][1],
-                                                      tops[this_well_name][interval['tops'][1].upper()]))
+        print_info('Well: {}'.format(this_well_name), 'info', logger)
+        print_info(' Top: {}: {:.2f} [m] MD'.format(interval['tops'][0],
+                                                     tops[this_well_name][interval['tops'][0].upper()]), 'info', logger)
+        print_info(' Base: {}: {:.2f} [m] MD'.format(interval['tops'][1],
+                                                      tops[this_well_name][interval['tops'][1].upper()]), 'info', logger)
     except KeyError:
-        logger.info(
-            'Tops {} & {} not present in {}'.format(interval['tops'][0], interval['tops'][1], this_well_name))
+        print_info(
+            'Tops {} & {} not present in {}'.format(interval['tops'][0], interval['tops'][1], this_well_name), 'info', logger)
         depth_from_top[this_well_name] = np.empty(0)
         for key in logs:
             results_per_well[this_well_name][key.lower()] = np.empty(0)
@@ -596,13 +592,13 @@ def test_top_presence(wis, wi_name, this_well_name, results_per_well, logs, dept
     results_per_well[this_well_name] = {}
     _cont = False
     try:
-        logger.info('Well: {}'.format(this_well_name))
-        logger.info(' Interval: {}: {:.2f} - {:.2f} [m] MD'.format(wi_name,
+        print_info('Well: {}'.format(this_well_name), 'info', logger)
+        print_info(' Interval: {}: {:.2f} - {:.2f} [m] MD'.format(wi_name,
                                                                    wis[this_well_name][wi_name.upper()][0],
-                                                                   wis[this_well_name][wi_name.upper()][1]))
+                                                                   wis[this_well_name][wi_name.upper()][1]), 'info', logger)
     except KeyError:
-        logger.info(
-            'Interval {} not present in {}'.format(wi_name, this_well_name))
+        print_info(
+            'Interval {} not present in {}'.format(wi_name, this_well_name), 'info', logger)
         depth_from_top[this_well_name] = np.empty(0)
         for key in logs:
             results_per_well[this_well_name][key.lower()] = np.empty(0)
@@ -619,7 +615,7 @@ def test_log_presence(this_well_name, results_per_well, logs):
         else:
             results_per_well[this_well_name][key.lower()] = np.empty(0)
             log_string += '  DOES NOT contains log: {}\n'.format(key)
-    logger.info(log_string)
+    print_info(log_string, 'info', logger)
 
 
 def collect_data_for_this_interval_tops(
@@ -714,7 +710,7 @@ def collect_data_for_this_interval(
                     calculate_backus = False
         if calculate_backus:
             info_txt = 'Calculating Backus averaged values of Vp, Vs and Rho'
-            logger.info(info_txt)
+            print_info(info_txt, 'warning', logger)
             vp = well.block[block_name].logs[log_table['P velocity']].data
             vs = well.block[block_name].logs[log_table['S velocity']].data
             rho = well.block[block_name].logs[log_table['Density']].data
@@ -722,8 +718,7 @@ def collect_data_for_this_interval(
                 ba = bra.backus(vp, vs, rho, backus_length, well.block[block_name].step)
             except:
                 warn_txt = 'Calculation of Backus averaged values failed (missing logs?)'
-                print('WARING: {}'.format(warn_txt))
-                logger.warning(warn_txt)
+                print_info(warn_txt, 'warning', logger)
                 # create three arrays of nans
                 ba = [np.array([np.nan for i in range(len(vp))]) for j in range(3)]
 
@@ -732,8 +727,7 @@ def collect_data_for_this_interval(
             well.block[block_name].logs[log_table['Density']].data = ba[2]
         elif backus_length is not None:
             warn_txt = 'Calculation of Backus averaged values failed (missing logs?)'
-            print('WARING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
 
         for key in logs:
             if key not in well.log_names():
@@ -756,7 +750,7 @@ def test_depth_tops(_this_depth, _interval, _this_well_name):
             _interval['name'],
             _this_well_name
         )
-    logger.info(_this_string)
+    print_info(_this_string, 'info', logger)
     # print('   '.format(_this_string))
 
 
@@ -773,7 +767,7 @@ def test_depth(_this_depth, _wi_name, _this_well_name):
             _wi_name,
             _this_well_name
         )
-    logger.info(_this_string)
+    print_info(_this_string, 'info', logger)
     # print('   '.format(_this_string))
 
 
@@ -825,8 +819,7 @@ def plot_logs_vs_depth(logs, wells, wi_name, ncols, well_names, results_per_well
             except ValueError:
                 warn_txt = 'Log {}, is lacking in working interval {} in well {}'.format(
                     key, wi_name, this_well_name)
-                logger.warning(warn_txt)
-                print('WARNING: {}'.format(warn_txt))
+                print_info(warn_txt, 'warning', logger)
                 continue
 
         axs[i].set_xlabel(key)
@@ -930,8 +923,7 @@ def plot_crossplots(log_table, results, wi_name, well_names, results_per_well,
                     templates, working_dir, cutoffs_str, suffix, save_plots=True):
     if save_plots and (working_dir is None):
         warn_txt = 'A working directory (working_dir) is needed for plots to be saved'
-        print('WARNING: {}'.format(warn_txt))
-        logger.warning(warn_txt)
+        print_info(warn_txt, 'warning', logger)
         raise IOError
 
     # Create a Panda DataFrame with the elastic logs
@@ -940,8 +932,7 @@ def plot_crossplots(log_table, results, wi_name, well_names, results_per_well,
     for i, key in enumerate(['P velocity', 'S velocity', 'Density']):
         if key not in list(log_table.keys()):
             warn_txt = 'No logs of type {} in requested dataset'.format(key)
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
             raise IOError
         df_content.append(results[log_table[key]])
         df_columns.append(log_table[key])
@@ -995,15 +986,13 @@ def plot_pcube_lfp(log_table, results, wi_name, well_names, results_per_well,
                    templates, working_dir, cutoffs_str, suffix, ax=None, save_plots=True):
     if save_plots and (working_dir is None):
         warn_txt = 'A working directory (working_dir) is needed for plots to be saved'
-        print('WARNING: {}'.format(warn_txt))
-        logger.warning(warn_txt)
+        print_info(warn_txt, 'warning', logger)
         raise IOError
 
     for i, key in enumerate(['P velocity', 'S velocity', 'Density']):
         if key not in list(log_table.keys()):
             warn_txt = 'No logs of type {} in requested dataset'.format(key)
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
             raise IOError
         pass
 

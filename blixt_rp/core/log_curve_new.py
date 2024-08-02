@@ -30,6 +30,7 @@ from blixt_utils.misc.convert_data import convert
 import blixt_utils.misc.masks as msks
 import blixt_utils.misc.templates as tmplts
 import blixt_rp.rp_utils.definitions as rud
+from blixt_utils.utils import print_info
 
 ureg = UnitRegistry()
 logger = logging.getLogger(__name__)
@@ -629,13 +630,12 @@ class LogCurve2dNew(object):
                         self.well, self.name, str(data_array.data.units), self.style.units
                     )
                     self.data = data_array.pint.to(self.style.units)
-                    logger.info(info_txt)
+                    print_info(info_txt, 'info', logger)
                 except pint.DimensionalityError:
                     warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
                         self.well, self.name, str(data_array.data.units), self.style.units
                     )
-                    print(warn_txt)
-                    logger.warning(warn_txt)
+                    print_info(warn_txt, 'warning', logger)
         else:
             self.style.units = None if (data_array is None) else str(data_array.data.units)
 
@@ -649,7 +649,7 @@ class LogCurve2dNew(object):
                 warn_txt = 'Log type in header ({}), does not match given log type ({})'.format(
                     self.header.log_type, log_type)
                 warn_txt += '\nFix inconsistency and try again'
-                logger.warning(warn_txt)
+                print_info(warn_txt, 'warning', logger)
                 raise IOError(warn_txt)
             else:
                 self.log_type = log_type
@@ -758,15 +758,14 @@ class LogCurve2dNew(object):
             )
             self.data = self.data.pint.to(to_units)
             self.style.units = to_units
-            logger.info(info_txt)
+            print_info(info_txt, 'info', logger)
             self.header.modification_date = datetime.now().isoformat()
             self.header.modification_history += '\n{}'.format(cnv_txt)
         except pint.DimensionalityError:
             warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
                 self.well, self.name, str(self.data.data.units), to_units
             )
-            print(warn_txt)
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
 
     def convert_coords_to(self, to_units):
         """ Converts the coordinate units to 'to_units'"""
@@ -778,15 +777,14 @@ class LogCurve2dNew(object):
                 self.well, self.name, cnv_txt
             )
             self.data = self.data.pint.to({self.coord_type: to_units})
-            logger.info(info_txt)
+            print_info(info_txt, 'info', logger)
             self.header.modification_date = datetime.now().isoformat()
             self.header.modification_history += '\n{}'.format(cnv_txt)
         except pint.DimensionalityError:
             warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
                 self.well, self.name, str(self.data.coords[self.coord_type].units), to_units
             )
-            print(warn_txt)
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
 
     def take_sampling_from(self, log_curve, verbose=False):
         """
@@ -935,8 +933,7 @@ class LogCurve2dNew(object):
                     "for well {}".format(
                         self.name, self.log_type, self.well
                 )
-                print('WARNING: {}'.format(warn_txt))
-                logger.warning(warn_txt)
+                print_info(warn_txt, 'warning', logger)
 
         for lname in list(cutoffs.keys()):
             if lname.lower() in ['depth', 'md', 'twt', 'owt']:  # Create mask on coordinate
@@ -955,8 +952,7 @@ class LogCurve2dNew(object):
                         info_txt = "Creating mask based on coordinate '{}', for well {}, based on {}".format(
                             self.coord_type, self.well, mask_description
                         )
-                        print('INFO: {}'.format(info_txt))
-                        logger.info(info_txt)
+                        print_info(info_txt, 'info', logger)
             if green_flag and (lname.lower() == self.name.lower()) or (lname.lower() == self.log_type.lower()):
                 masks.append(
                     msks.create_mask(
@@ -966,8 +962,7 @@ class LogCurve2dNew(object):
                     info_txt = "Creating mask based on '{}', for well {}, based on {}".format(
                         self.name, self.well, mask_description
                     )
-                    print('INFO: {}'.format(info_txt))
-                    logger.info(info_txt)
+                    print_info(info_txt, 'info', logger)
         if len(masks) > 0:
             # Combine all masks
             final_mask = msks.combine_masks(masks)
@@ -975,14 +970,12 @@ class LogCurve2dNew(object):
         if np.sum(final_mask) < 1:
             warn_txt = 'All values in log {}, in well {}, are masked out using {}'.format(
                 self.name, self.well, mask_description)
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
         elif verbose:
             info_txt = '{} of {} are inside mask, for log {} in well {}, using {}'.format(
                 np.sum(final_mask), len(final_mask), self.name, self.well, mask_description
             )
-            print('INFO: {}'.format(info_txt))
-            logger.info(info_txt)
+            print_info(info_txt, 'info', logger)
 
         return LogCurve2dNew(
             create_data_array(
@@ -1621,18 +1614,14 @@ def _read_las(log_name, file_name, verbose=False):
         warn_txt = 'The parameter {} was not found in {}, which contains: {}'.format(
             log_name, os.path.basename(file_name), ', '.join(generated_keys)
         )
-        if verbose:
-            print('WARNING: {}'.format(warn_txt))
-        logger.warning(warn_txt)
+        print_info(warn_txt, 'warning', logger)
     else:
         data_units = well_dict['curve'][data_key]['unit']
     if (data_units is None) or (data_units == ''):
         warn_txt = 'No valid data unit was found in {} for data key {}'.format(
             os.path.basename(file_name), data_key
         )
-        if verbose:
-            print('WARNING: {}'.format(warn_txt))
-        logger.warning(warn_txt)
+        print_info(warn_txt, 'warning', logger)
 
     # Find depth parameter
     depth_key = None
@@ -1655,16 +1644,12 @@ def _read_las(log_name, file_name, verbose=False):
         warn_txt = 'No valid depth parameter was found in {}, which contains: {}'.format(
             os.path.basename(file_name), ', '.join(generated_keys)
         )
-        if verbose:
-            print('WARNING: {}'.format(warn_txt))
-        logger.warning(warn_txt)
+        print_info(warn_txt, 'warning', logger)
     if (coord_units is None) or (coord_units == ''):
         warn_txt = 'No valid depth unit was found in {} for depth coordinate {}'.format(
             os.path.basename(file_name), depth_key
         )
-        if verbose:
-            print('WARNING: {}'.format(warn_txt))
-        logger.warning(warn_txt)
+        print_info(warn_txt, 'warning', logger)
 
     return log_name.lower(), well_dict['data'][data_key], data_units, well_dict['data'][depth_key], \
         coord_units, coord_type
@@ -1737,9 +1722,7 @@ def create_data_array(
             _coords = coords * ureg.foot  # attach units to the coordinates
             _coords = _coords.to(ureg.meter)  # convert to meter
             info_txt = 'Converting coords from {} to meter'.format(coord_units)
-            if verbose:
-                print(info_txt)
-            logger.info(info_txt)
+            print_info(info_txt, 'info', logger)
             coords = _coords.magnitude
             coord_units = 'meter'
     else:
@@ -1747,9 +1730,7 @@ def create_data_array(
             _coords = coords * ureg.second  # attach units to the coordinates
             _coords = _coords.to(ureg.millisecond)  # convert to milliseconds
             info_txt = 'Converting coords from {} to ms'.format(coord_units)
-            if verbose:
-                print(info_txt)
-            logger.info(info_txt)
+            print_info(info_txt, 'info', logger)
             coords = _coords.magnitude
             coord_units = 'millisecond'
 

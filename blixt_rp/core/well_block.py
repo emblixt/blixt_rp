@@ -13,6 +13,7 @@ from blixt_utils.misc.convert_data import convert as cnvrt
 import blixt_rp.rp_utils.definitions as ud
 from blixt_rp.core.param import Param
 from blixt_rp.core.header import Header
+from blixt_utils.utils import print_info
 
 # global variables
 logger = logging.getLogger(__name__)
@@ -125,8 +126,7 @@ class WellBlock(object):
 
         if tvd_key not in self.log_names():
             warn_txt = 'No True Vertical Depth log in {}, using MD'.format(self.well)
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
             tvd = self.get_md()
         else:
             tvd = self.logs[tvd_key].data
@@ -632,8 +632,7 @@ class WellBlock(object):
                 if mask_name not in list(self.masks.keys()):
                     warn_txt = 'No mask applied. The desired mask {} does not exist in well {}'.format(
                         mask_name, self.well)
-                    print('WARNING: {}'.format(warn_txt))
-                    logger.warning(warn_txt)
+                    print_info(warn_txt, 'warning', logger)
                 else:
                     mask = self.masks[mask_name].data
                     mask_desc = self.masks[mask_name].header.desc
@@ -696,8 +695,7 @@ class WellBlock(object):
 
         if (log_names is None) and (log_types is None):
             warn_txt = 'Either log_names or log_types must be specified'
-            print('WARNING: {}'.format(warn_txt))
-            logger.warning(warn_txt)
+            print_info(warn_txt, 'warning', logger)
 
         list_of_log_curves =[]
         if log_names is not None:
@@ -855,26 +853,26 @@ class WellBlock(object):
                         well_dict['curve'][key]['orig_name'] = '{}'.format(', '.join(value))
                         info_txt = 'Renaming log from {} to {}'.format(key, rname)
                         # print('INFO: {}'.format(info_txt))
-                        logger.info(info_txt)
+                        print_info(info_txt, 'info', logger)
                         well_dict['curve'][rname.lower()] = well_dict['curve'].pop(key)
                         well_dict['data'][rname.lower()] = well_dict['data'].pop(key)
 
-        logger.debug('Reading {}'.format(filename))
+        print_info('Reading {}'.format(filename), 'debug', logger)
 
         winf = well_dict['well_info']
-        for key in generated_keys:
-            self.add_log_curve(
-                LogCurve(
-                    key,
-                    well_dict['data'][key],
-                    Param(name='start', value=winf['strt']['value'], unit=winf['strt']['unit'], desc=winf['strt']['desc'],
-                    Param(name='stop', value=winf['stop']['value'], unit=winf['stop']['unit'], desc=winf['stop']['desc'],
-                    Param(name='step', value=winf['step']['value'], unit=winf['step']['unit'], desc=winf['step']['desc'],
-                          XXXX
-                          # TODO Continue here
-
-                                      )
-            )
+        # TODO REPAIR THIS:
+        # for key in generated_keys:
+        #     self.add_log_curve(
+        #         LogCurve(
+        #             key,
+        #             well_dict['data'][key],
+        #             Param(name='start', value=winf['strt']['value'], unit=winf['strt']['unit'], desc=winf['strt']['desc'],
+        #             Param(name='stop', value=winf['stop']['value'], unit=winf['stop']['unit'], desc=winf['stop']['desc'],
+        #             Param(name='step', value=winf['step']['value'], unit=winf['step']['unit'], desc=winf['step']['desc'],
+        #                   XXXX
+        #                   # TODO Continue here
+        #                               )
+        #     )
 
 
 

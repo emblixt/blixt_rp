@@ -14,6 +14,7 @@ import bruges.rockphysics.rockphysicsmodels as brr
 
 import blixt_rp.rp_utils.definitions as ud
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
+from blixt_utils.utils import print_info
 from blixt_rp.core.param import Param
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ def test_value(val, unit):
        # warn_str = 'Input parameter needs to be a Param instance with units. Default unit {} is now used'.format(
        #     unit
        #)
-       #logger.warning(warn_str)
+       #print_info(warn_txt, 'warning', logger)
 
     if (val.unit != unit):
         raise NotImplementedError('Unit conversion not yet implemented')
@@ -1189,8 +1190,7 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
             print('Well {} not listed in the fluid mixture, skipping'.format(wname))
             continue
         info_txt = 'Starting Gassmann fluid substitution on well {}'.format(wname)
-        print('INFO: {}'.format(info_txt))
-        logger.info(info_txt)
+        print_info('{}'.format(info_txt), 'info', logger)
 
         # Extract log block
         lb = well.block[block_name]
@@ -1199,8 +1199,7 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
         for xx in ['Porosity', 'Density', 'P velocity', 'S velocity']:
             if xx not in lb.log_types():
                 warn_txt = 'Log type {} not present in well {}'.format(xx, wname)
-                print('WARNING: {}'.format(warn_txt))
-                logger.warning(warn_txt)
+                print_info(warn_txt, 'warning', logger)
                 skip_this_well = True
         if skip_this_well:
             continue

@@ -20,7 +20,7 @@ import blixt_rp.rp.rp_core as rp
 import blixt_rp.core.well as cw
 from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
-from blixt_utils.utils import isnan
+from blixt_utils.utils import isnan, print_info
 
 # data class decorator explained here:
 # https://realpython.com/python-data-classes/
@@ -183,8 +183,7 @@ class Fluid(object):
 #            print('Batzle and Wang')#
 #        #    if (item == 'k') or (item == 'mu') or (item == 'rho'):
 #        #        warn_txt = 'Calculation of fluid properties not yet implemented'
-#        #        print('WARNING: {}'.format(warn_txt))
-#        #        logger.warning(warn_txt)
+#        #        print_info(warn_txt, 'warning', logger)
 #        #        return None
 #        #else:
 #        #    return object.__getattribute__(self, item)
@@ -232,8 +231,7 @@ class Fluid(object):
             if (bd is None) or isnan(bd):
                 warn_txt = 'No Burial depth value given for the fluid calculation. ' \
                            'Batzle and Wang not possible to calculate'
-                print('WARNING: {}'.format(warn_txt))
-                logger.warning(warn_txt)
+                print_info(warn_txt, 'warning', logger)
 
             _s = self.salinity
             _p = self.pressure_ref.value + self.pressure_gradient.value * bd
@@ -269,8 +267,7 @@ class Fluid(object):
             if bd is None:
                 warn_txt = 'No Burial depth value given for the fluid calculation. ' \
                            'Batzle and Wang not possible to calculate'
-                print('WARNING: {}'.format(warn_txt))
-                logger.warning(warn_txt)
+                print_info(warn_txt, 'warning', logger)
             if self.fluid_type == 'brine':
                 this_mu = Param(name='mu_b',
                              value=np.nan,
@@ -302,8 +299,7 @@ class Fluid(object):
             if bd is None:
                 warn_txt = 'No Burial depth value given for the fluid calculation. ' \
                            'Batzle and Wang not possible to calculate'
-                print('WARNING: {}'.format(warn_txt))
-                logger.warning(warn_txt)
+                print_info(warn_txt, 'warning', logger)
 
             _s = self.salinity
             _p = self.pressure_ref.value + self.pressure_gradient.value * bd
@@ -382,8 +378,7 @@ class FluidMix(object):
                 continue  # Avoid empty lines
             #if fluids_table['Calculation method'][i] == 'Batzle and Wang':
             #    warn_txt = 'Calculation of fluid properties is still not implemented, please use constant values'
-            #    print('WARNING {}'.format(warn_txt))
-            #    logger.warning(warn_txt)
+            #    print_info(warn_txt, 'warning', logger)
             this_fluid = Fluid(
                     'User specified' if isnan(fluids_table['Calculation method'][i]) else \
                         fluids_table['Calculation method'][i],
@@ -486,8 +481,7 @@ class FluidMix(object):
             for this_well in list(self.fluids[subst_ordr].keys()):
                 if this_well not in list(wells.keys()):
                     warn_txt = 'Pressure reference not calculated for {}'.format(this_well)
-                    print('WARNING: {}'.format(warn_txt))
-                    logger.warning(warn_txt)
+                    print_info(warn_txt, 'warning', logger)
                     continue
                 for wi_name in list(self.fluids[subst_ordr][this_well].keys()):
                     for fluid in list(self.fluids[subst_ordr][this_well][wi_name].keys()):
@@ -527,15 +521,13 @@ class FluidMix(object):
             for w in list(self.fluids[key].keys()):
                 if w not in list(wells.keys()):
                     warn_txt = 'Well {} not present among the input wells'.format(w)
-                    print('WARNING: {}'.format(warn_txt))
-                    logger.warning(warn_txt)
+                    print_info(warn_txt, 'warning', logger)
                     continue
 
                 # test if this will is listed in the working intervals
                 if w not in list(wis.keys()):
                     warn_txt = 'Well {} not present among the working intervals'.format(w)
-                    print('WARNING: {}'.format(warn_txt))
-                    logger.warning(warn_txt)
+                    print_info(warn_txt, 'warning', logger)
                     continue
 
                 # Extract the measured and burial depth for this well
@@ -546,8 +538,7 @@ class FluidMix(object):
                 for wi in list(self.fluids[key][w].keys()):
                     if wi not in list(wis[w].keys()):
                         warn_txt = 'Interval {} not present among the working intervals'.format(wi)
-                        print('WARNING: {}'.format(warn_txt))
-                        logger.warning(warn_txt)
+                        print_info(warn_txt, 'warning', logger)
                         continue
                     # Extract the mean burial depth for this working interval
                     wi_md = np.mean(wis[w][wi])
