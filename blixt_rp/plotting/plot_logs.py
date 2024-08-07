@@ -98,8 +98,7 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     log_table = small_log_table(log_table)
     if buffer is None:
         buffer = 50.
-    if block_name is None:
-        block_name = cw.def_lb_name
+    if block_name is None:        block_name = cw.def_lb_name
 
     text_style = {'fontsize': 'x-small', 'bbox': {'facecolor': 'lightgray', 'alpha': 0.5}}
 
@@ -109,7 +108,7 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     scaling = kwargs.pop('scaling', 60.0)
     suffix = kwargs.pop('suffix', '')
     wiggle_fill_style = kwargs.pop('wiggle_fill_style', 'default')
-    backus_length = kwargs.pop('backus_length', 5.0)
+    backus_length = kwargs.pop('backus_length', 10.0)
     source_rock_study = kwargs.pop('source_rock_study', None)
     ref_toc = kwargs.pop('ref_toc', None)
     start_r = kwargs.pop('start_r', 0.015)
@@ -131,10 +130,16 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     if source_rock_study:
         ax_names = ['gr_ax', 'md_ax', 'twt_ax', 'res_ax', 'dlr_ax', 'toc_ax', 'cpi_ax', 'ai_ax', 'synt_ax']
         width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 1, 1.8]
+        raise NotImplementedError('2024-08-07: Need to fix support for log_table, but the main functionality is correct')
     else:
         ax_names = ['gr_ax', 'md_ax', 'twt_ax', 'res_ax', 'rho_ax', 'cpi_ax', 'ai_ax', 'synt_ax']
         #  width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 2]
         width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 1]
+        try_these_log_types = {
+            ax_names[0]: ['Gamma ray', 'Caliper', 'Bit size', 'Inclination'],
+            ax_names[4]: ['Density', 'Neutron'],
+            ax_names[5]: ['Saturation', 'Porosity'],
+        }
     # fig, header_axes, axes = set_up_column_plot(ax_names=ax_names, width_ratios=width_ratios)
     fig, header_axes, axes = set_up_column_plot(ax_names=ax_names, width_ratios=width_ratios,
                                                 fig_width=len(width_ratios) * 2)
@@ -187,8 +192,8 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
 
     #
     # Gamma ray and Caliper
-    try_these_log_types = ['Gamma ray', 'Caliper', 'Bit size', 'Inclination']
-    log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
+    this_ax = ax_names[0]
+    log_types = [x for x in try_these_log_types[this_ax] if (len(well.get_logs_of_type(x)) > 0)]
     lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
     limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
     styles = [{'lw': templates[x]['line width'],
@@ -197,10 +202,10 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
 
     # print(md_min, md_max)
-    xlims = axis_plot(axes['gr_ax'], depth[mask],
+    xlims = axis_plot(axes[this_ax], depth[mask],
               [tb.logs[lognames[xx]].data[mask] for xx in log_types],
               limits, styles, ylim=[md_min, md_max])
-    header_plot(header_axes['gr_ax'], xlims, legends, styles)
+    header_plot(header_axes[this_ax], xlims, legends, styles)
 
     #for ax in [axes[x] for x in ax_names if x not in ['twt_ax', 'synt_ax']]:
     if wi_names is not None:
@@ -346,8 +351,8 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     else:
         #
         # Rho
-        try_these_log_types = ['Density', 'Neutron']
-        log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
+        this_ax = ax_names[4]
+        log_types = [x for x in try_these_log_types[this_ax] if (len(well.get_logs_of_type(x)) > 0)]
         lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
         if len(log_types) == 2:
             fill_betweens = [(1, 0, 'yellow')]
@@ -361,19 +366,24 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
                     'ls': templates[x]['line style']} for x in log_types]
         legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
 
-        xlims = axis_plot(axes['rho_ax'], depth[mask],
+        xlims = axis_plot(axes[this_ax], depth[mask],
                            [tb.logs[lognames[xx]].data[mask] for xx in log_types],
                            limits, styles, yticks=False, ylim=[md_min, md_max],
                            fill_betweens=fill_betweens
                            )
-        header_plot(header_axes['rho_ax'], xlims, legends, styles)
+        header_plot(header_axes[this_ax], xlims, legends, styles)
 
     #
     # CPI
-    # try_these_log_types = ['Saturation', 'Porosity', 'Volume']
-    try_these_log_types = ['Saturation', 'Porosity']
-    log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
+    this_ax = ax_names[5]
+    log_types = [x for x in try_these_log_types[this_ax] if (len(well.get_logs_of_type(x)) > 0)]
     lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
+
+    # Replace the lognames with those specified in the log_table
+    for _log_type in try_these_log_types[this_ax]:
+        if _log_type in list(log_table.keys()):
+            lognames[_log_type] = log_table[_log_type]
+
     limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
     styles = [{'lw': templates[x]['line width'],
                'color': templates[x]['line color'],
@@ -381,13 +391,13 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
 
     if len(log_types) == 0:
-        header_plot(header_axes['cpi_ax'], None, None, None, title='CPI is lacking')
-        axis_plot(axes['cpi_ax'], None, None, None, None, ylim=[md_min, md_max])
+        header_plot(header_axes[this_ax], None, None, None, title='CPI is lacking')
+        axis_plot(axes[this_ax], None, None, None, None, ylim=[md_min, md_max])
     else:
-        xlims = axis_plot(axes['cpi_ax'], depth[mask],
+        xlims = axis_plot(axes[this_ax], depth[mask],
                   [tb.logs[lognames[xx]].data[mask] for xx in log_types],
                   limits, styles, yticks=False, ylim=[md_min, md_max])
-        header_plot(header_axes['cpi_ax'], xlims, legends, styles)
+        header_plot(header_axes[this_ax], xlims, legends, styles)
 
     #
     # AI
