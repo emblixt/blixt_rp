@@ -106,7 +106,7 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     time_step = kwargs.pop('time_step', 0.001)
     c_f = kwargs.pop('center_frequency', 30.)
     duration = kwargs.pop('duration', 0.512)
-    scaling = kwargs.pop('scaling', 30.0)
+    scaling = kwargs.pop('scaling', 60.0)
     suffix = kwargs.pop('suffix', '')
     wiggle_fill_style = kwargs.pop('wiggle_fill_style', 'default')
     backus_length = kwargs.pop('backus_length', 5.0)
@@ -133,8 +133,11 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
         width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 1, 1.8]
     else:
         ax_names = ['gr_ax', 'md_ax', 'twt_ax', 'res_ax', 'rho_ax', 'cpi_ax', 'ai_ax', 'synt_ax']
-        width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 2]
-    fig, header_axes, axes = set_up_column_plot(ax_names=ax_names, width_ratios=width_ratios)
+        #  width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 2]
+        width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 1]
+    # fig, header_axes, axes = set_up_column_plot(ax_names=ax_names, width_ratios=width_ratios)
+    fig, header_axes, axes = set_up_column_plot(ax_names=ax_names, width_ratios=width_ratios,
+                                                fig_width=len(width_ratios) * 2)
 
     if wi_names is None:
         fig.suptitle('Well {} {}'.format(well.well, suffix))
@@ -343,21 +346,27 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     else:
         #
         # Rho
-         try_these_log_types = ['Density', 'Neutron']
-         log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
-         lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
-         # Replace the density with the one selected by log_table
-         lognames['Density'] = log_table['Density']
-         limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
-         styles = [{'lw': templates[x]['line width'],
+        try_these_log_types = ['Density', 'Neutron']
+        log_types = [x for x in try_these_log_types if (len(well.get_logs_of_type(x)) > 0)]
+        lognames = {ltype: well.get_logs_of_type(ltype)[0].name for ltype in log_types}
+        if len(log_types) == 2:
+            fill_betweens = [(1, 0, 'yellow')]
+        else:
+            fill_betweens = None
+        # Replace the density with the one selected by log_table
+        lognames['Density'] = log_table['Density']
+        limits = [[templates[x]['min'], templates[x]['max']] for x in log_types]
+        styles = [{'lw': templates[x]['line width'],
                     'color': templates[x]['line color'],
                     'ls': templates[x]['line style']} for x in log_types]
-         legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
+        legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
 
-         xlims = axis_plot(axes['rho_ax'], depth[mask],
+        xlims = axis_plot(axes['rho_ax'], depth[mask],
                            [tb.logs[lognames[xx]].data[mask] for xx in log_types],
-                           limits, styles, yticks=False, ylim=[md_min, md_max])
-         header_plot(header_axes['rho_ax'], xlims, legends, styles)
+                           limits, styles, yticks=False, ylim=[md_min, md_max],
+                           fill_betweens=fill_betweens
+                           )
+        header_plot(header_axes['rho_ax'], xlims, legends, styles)
 
     #
     # CPI
