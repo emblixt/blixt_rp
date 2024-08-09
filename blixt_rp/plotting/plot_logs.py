@@ -688,8 +688,21 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
     :return:
     """
     from scipy.optimize import least_squares
-    from blixt_utils.misc.curve_fitting import residuals, linear_function
+    from blixt_utils.misc.curve_fitting import residuals, linear_function, depth_trend, exp_function
     from blixt_utils.utils import mask_string
+
+    target_function = exp_function
+    x0 = [3000., -1500., -0.1]
+    # target_function = linear_function
+    # x0 = [1., 1.]
+    # TODO
+    # We need a x0 for each log type
+
+    res = {
+        'success': False,
+        'message': 'No fit done',
+        'x': x0
+    }
 
     if suffix is None:
         suffix = ''
@@ -700,8 +713,10 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
 
     depth_trends = {}
     # Start looping over the different log types
+    print_info('START ANALYZING DEPTH TRENDS:', '', None, verbose, False)
     for log_type in log_table:
         log_name = log_table[log_type]
+        print_info('Working on log type: {}, on log: {}'.format(log_type, log_name), ' -', None, verbose, False)
         if verbose:
             fig, ax = plt.subplots(figsize=(10, 10))
         else:
@@ -718,24 +733,25 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
                 warn_txt = '{} log is missing in well {}'.format(log_name, well)
                 print_info(warn_txt, 'warning', logger)
                 continue
+            print_info('Well: {}'.format(well), '  *', None, verbose, False)
             wells[well].calc_mask(cutoffs, 'my_mask', log_table=log_table, wis=wis, wi_name=wi_name,
                                   log_type_input=log_type_input)
             mask = wells[well].block[block_name].masks['my_mask'].data
-            legend_items.append(well)
+
             xdata = wells[well].block[block_name].logs[log_name].data[mask]
-            if len(xdata) < 5:
+            # Index of NaN's
+            nans = np.isnan(xdata)
+            if len(xdata[~nans]) < 5:
                 warn_txt = 'To few data points in {}, in well {}, after masking'.format(log_name, well)
-                logger .warning(warn_txt)
-                print(warn_txt)
+                print_info(warn_txt, 'warning', logger)
                 continue
-            data_container = np.append(data_container, xdata)
+            data_container = np.append(data_container, xdata[~nans])
+
             ydata = wells[well].block[block_name].logs['tvd'].data[mask]
-            if len(ydata) < 5:
-                warn_txt = 'To few data points in {}, in well {}, after masking'.format(log_name, well)
-                logger .warning(warn_txt)
-                print(warn_txt)
-                continue
-            tvd_container = np.append(tvd_container, ydata)
+
+            tvd_container = np.append(tvd_container, ydata[~nans])
+
+            legend_items.append(well)
             if np.min(ydata) < tvd_min:
                 tvd_min = np.min(ydata)
             if np.max(ydata) > tvd_max:
@@ -753,22 +769,31 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
                 )
         # Calculate depth trend
         verbosity_level = 0
-        if verbose:
-            verbosity_level = 2
+        # if verbose:
+        #     verbosity_level = 2
+        print_info('Finished adding all wells for log type {}'.format(log_type), ' -', None, verbose, False)
+        print_info('Trying to fit {} to data'.format(target_function.__name__), ' - ', None, verbose, False)
         try:
-            res = least_squares(residuals, [1., 1.], args=(tvd_container, data_container),
-                            kwargs={'target_function': linear_function}, verbose=verbosity_level)
+            res = least_squares(residuals, x0, args=(tvd_container, data_container),
+                                loss='soft_l1', f_scale=0.1,
+                                kwargs={'target_function': target_function}, verbose=verbosity_level)
+
         except ValueError as error:
-            warn_txt = 'WARNING: depth trend could not calculated for {} for all wells'.format(log_type)
+            warn_txt = 'Depth trend could not calculated for {} for all wells'.format(log_type)
             print_info(warn_txt, 'warning', logger)
-            continue
+            print(error)
+            pass
+        info_txt = '  * Success: {}\n  * {}\n  * x0: {}\n  * x: {}'.format(
+            res['success'], res['message'], x0, res['x']
+        )
+        print_info(info_txt, '', None, verbose, False)
+        depth_trends[log_name] = res['x']
 
-
-        depth_trends[log_name] = res.x
         new_tvd = np.linspace(tvd_min, tvd_max)
         if verbose:
-            ax.plot(linear_function(new_tvd, *res.x), new_tvd)
-            legend_items.append('{} = {:.3}xTVD + {:.3}'.format(log_name, res.x[0], res.x[1]))
+            ax.plot(target_function(new_tvd, *res['x']), new_tvd)
+            legend_items.append('{}, {}'.format(log_name, target_function.__name__))
+            # legend_items.append('{} = {:.3}xTVD + {:.3}'.format(log_name, res.x[0], res.x[1]))
 
             ax.set_title('{}: {}. {} {}'.format(log_type, log_name, mask_string(cutoffs, wi_name), suffix))
             ax.set_ylim(tvd_max, tvd_min)
