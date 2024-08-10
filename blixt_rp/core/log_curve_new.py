@@ -16,7 +16,7 @@ from pandas import DataFrame
 import xarray as xr
 import pint_xarray
 import pint
-from pint import UnitRegistry
+# from pint import UnitRegistry
 from math import isclose
 
 
@@ -31,9 +31,14 @@ import blixt_utils.misc.masks as msks
 import blixt_utils.misc.templates as tmplts
 import blixt_rp.rp_utils.definitions as rud
 from blixt_utils.utils import print_info
+from blixt_utils.io.io import read_general_ascii_GENERAL as read_file, project_wells_new
 
-ureg = UnitRegistry()
+
+from ... import ureg, Q_
+ureg.load_definitions("C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\units_to_pint.txt")
+
 logger = logging.getLogger(__name__)
+
 
 
 class LogCurve(object):
@@ -1015,7 +1020,7 @@ class LogCurve2D(object):
 
     """
     import xarray
-    
+
     def __init__(self,
                  name: str,
                  data: np.ndarray,
@@ -1596,27 +1601,47 @@ def _take_sampling_from(log_curve1: LogCurve2D, log_curve2: LogCurve2D, verbose=
     return new_log_curve
 
 
-def _read_las(log_name, file_name, verbose=False):
+def _read_las(log_name, file_name, verbose=False, encoding='UTF8'):
+    """
+    Ineffecient and simple las reader that is used to populates a LogCurve2dNew object with data from
+    one log (log_name)
+    NOTE: no information about well and log type is used
+
+    :param log_name:
+    :param file_name:
+    :param verbose:
+    :param encoding:
+    :return:
+    """
     from blixt_utils.io.io import well_reader
+    from blixt_utils.io.io import (get_las_well_info, get_las_curve_info, get_las_header, get_las_names_units,
+                                   get_las_start_data_line as las_line)
     accepted_depth_keys = rud.rename_well_logs['depth']
 
-    with open(file_name, "r", encoding='UTF8') as f:
-        lines = f.readlines()
-    null_val, generated_keys, well_dict = well_reader(lines, file_format='las')
+    # with open(file_name, "r", encoding=encoding) as f:
+    #     lines = f.readlines()
+    # null_val, generated_keys, well_dict = well_reader(lines, file_format='las')
 
     # Find and extract data
     data_units = None
     data_key = None
-    for _key in generated_keys:
+    log_names, log_units = get_las_names_units(file_name, encoding)
+    # for _key in generated_keys:
+    #     if log_name.lower() == _key.lower():
+    #         data_key = _key
+    for _key, _units in zip(log_names, log_units):
         if log_name.lower() == _key.lower():
             data_key = _key
+            data_units = _units
+
     if data_key is None:
         warn_txt = 'The parameter {} was not found in {}, which contains: {}'.format(
-            log_name, os.path.basename(file_name), ', '.join(generated_keys)
+            log_name, os.path.basename(file_name), ', '.join(log_names)
+            # log_name, os.path.basename(file_name), ', '.join(generated_keys)
         )
         print_info(warn_txt, 'warning', logger)
-    else:
-        data_units = well_dict['curve'][data_key]['unit']
+    # else:
+    #     data_units = well_dict['curve'][data_key]['unit']
     if (data_units is None) or (data_units == ''):
         warn_txt = 'No valid data unit was found in {} for data key {}'.format(
             os.path.basename(file_name), data_key
@@ -1627,22 +1652,27 @@ def _read_las(log_name, file_name, verbose=False):
     depth_key = None
     coord_type = None
     coord_units = None
-    for _key in generated_keys:
+    # for _key in generated_keys:
+    for _key, _units in zip(log_names, log_units):
         if _key.lower() in [_x.lower() for _x in accepted_depth_keys]:
             depth_key = _key
             coord_type = 'md'
-            coord_units = well_dict['curve'][_key]['unit']
+            #coord_units = well_dict['curve'][_key]['unit']
+            coord_units = _units
         elif _key.lower() == 'owt':
             depth_key = _key
             coord_type = 'owt'
-            coord_units = well_dict['curve'][_key]['unit']
+            # coord_units = well_dict['curve'][_key]['unit']
+            coord_units = _units
         elif _key.lower() == 'twt':
             depth_key = _key
             coord_type = 'twt'
-            coord_units = well_dict['curve'][_key]['unit']
+            # coord_units = well_dict['curve'][_key]['unit']
+            coord_units = _units
     if depth_key is None:
         warn_txt = 'No valid depth parameter was found in {}, which contains: {}'.format(
-            os.path.basename(file_name), ', '.join(generated_keys)
+            os.path.basename(file_name), ', '.join(log_names)
+            # os.path.basename(file_name), ', '.join(generated_keys)
         )
         print_info(warn_txt, 'warning', logger)
     if (coord_units is None) or (coord_units == ''):
@@ -1651,8 +1681,11 @@ def _read_las(log_name, file_name, verbose=False):
         )
         print_info(warn_txt, 'warning', logger)
 
-    return log_name.lower(), well_dict['data'][data_key], data_units, well_dict['data'][depth_key], \
-        coord_units, coord_type
+    # return log_name.lower(), well_dict['data'][data_key], data_units, well_dict['data'][depth_key], \
+    #     coord_units, coord_type
+    data_line = las_line(file_name, encoding)
+    data, units = read_file(file_name, 'space', data_line, log_names, log_units, encoding)
+    return log_name.lower(), data[data_key], data_units, data[depth_key], coord_units, coord_type
 
 
 def create_data_array(
