@@ -34,8 +34,7 @@ from blixt_utils.utils import print_info
 from blixt_utils.io.io import read_general_ascii_GENERAL as read_file, project_wells_new
 
 
-from ... import ureg, Q_
-ureg.load_definitions("C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\units_to_pint.txt")
+from .. import ureg, Q_
 
 logger = logging.getLogger(__name__)
 
@@ -668,7 +667,7 @@ class LogCurve2dNew(object):
 
     @property
     def coord_units(self):
-        return None if (self.data is None) else self.data.coords[self.coord_type].units
+        return None if (self.data is None) else str(self.data.coords[self.coord_type].units)
 
     @property
     def units(self):
