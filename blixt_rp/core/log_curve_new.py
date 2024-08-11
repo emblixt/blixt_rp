@@ -844,6 +844,30 @@ class LogCurve2dNew(object):
             header=header
         )
 
+    def clean_data(self, nans=True, infinites=True):
+        if nans:
+            _nans = np.isnan(self.data.data.magnitude)
+        if infinites:
+            _infs = np.isinf(self.data.data.magnitude)
+
+        if nans & infinites:
+            valid_indxs = ~_nans & ~_infs
+        elif infinites:
+            valid_indxs = ~_infs
+        elif nans:
+            valid_indxs = ~_nans
+        else:
+            return
+
+        clean_coords = xr.DataArray(self.data.coords[self.coord_type].data[valid_indxs], dims=self.coord_type)
+        clean_data = xr.DataArray(name=self.name, data=self.data.data.magnitude[valid_indxs], coords={self.coord_type: clean_coords})
+        clean_data = clean_data.pint.quantify(
+            {self.name: self.units, self.coord_type: self.coord_units}
+        )
+        self.data = clean_data
+
+
+
     def smooth(self,
                window_len=None,
                method='median',
@@ -1613,34 +1637,34 @@ def _read_las(log_name, file_name, verbose=False, encoding='UTF8'):
     :return:
     """
     from blixt_utils.io.io import well_reader
-    from blixt_utils.io.io import (get_las_well_info, get_las_curve_info, get_las_header, get_las_names_units,
-                                   get_las_start_data_line as las_line)
+    # from blixt_utils.io.io import (get_las_well_info, get_las_curve_info, get_las_header, get_las_names_units,
+    #                                get_las_start_data_line as las_line)
     accepted_depth_keys = rud.rename_well_logs['depth']
 
-    # with open(file_name, "r", encoding=encoding) as f:
-    #     lines = f.readlines()
-    # null_val, generated_keys, well_dict = well_reader(lines, file_format='las')
+    with open(file_name, "r", encoding=encoding) as f:
+        lines = f.readlines()
+    null_val, generated_keys, well_dict = well_reader(lines, file_format='las')
 
     # Find and extract data
     data_units = None
     data_key = None
-    log_names, log_units = get_las_names_units(file_name, encoding)
-    # for _key in generated_keys:
-    #     if log_name.lower() == _key.lower():
-    #         data_key = _key
-    for _key, _units in zip(log_names, log_units):
+    # log_names, log_units = get_las_names_units(file_name, encoding)
+    for _key in generated_keys:
         if log_name.lower() == _key.lower():
             data_key = _key
-            data_units = _units
+    # for _key, _units in zip(log_names, log_units):
+    #     if log_name.lower() == _key.lower():
+    #         data_key = _key
+    #         data_units = _units
 
     if data_key is None:
         warn_txt = 'The parameter {} was not found in {}, which contains: {}'.format(
-            log_name, os.path.basename(file_name), ', '.join(log_names)
-            # log_name, os.path.basename(file_name), ', '.join(generated_keys)
+            # log_name, os.path.basename(file_name), ', '.join(log_names)
+            log_name, os.path.basename(file_name), ', '.join(generated_keys)
         )
         print_info(warn_txt, 'warning', logger)
-    # else:
-    #     data_units = well_dict['curve'][data_key]['unit']
+    else:
+        data_units = well_dict['curve'][data_key]['unit']
     if (data_units is None) or (data_units == ''):
         warn_txt = 'No valid data unit was found in {} for data key {}'.format(
             os.path.basename(file_name), data_key
@@ -1651,27 +1675,27 @@ def _read_las(log_name, file_name, verbose=False, encoding='UTF8'):
     depth_key = None
     coord_type = None
     coord_units = None
-    # for _key in generated_keys:
-    for _key, _units in zip(log_names, log_units):
+    for _key in generated_keys:
+    # for _key, _units in zip(log_names, log_units):
         if _key.lower() in [_x.lower() for _x in accepted_depth_keys]:
             depth_key = _key
             coord_type = 'md'
-            #coord_units = well_dict['curve'][_key]['unit']
-            coord_units = _units
+            coord_units = well_dict['curve'][_key]['unit']
+            # coord_units = _units
         elif _key.lower() == 'owt':
             depth_key = _key
             coord_type = 'owt'
-            # coord_units = well_dict['curve'][_key]['unit']
-            coord_units = _units
+            coord_units = well_dict['curve'][_key]['unit']
+            # coord_units = _units
         elif _key.lower() == 'twt':
             depth_key = _key
             coord_type = 'twt'
-            # coord_units = well_dict['curve'][_key]['unit']
-            coord_units = _units
+            coord_units = well_dict['curve'][_key]['unit']
+            # coord_units = _units
     if depth_key is None:
         warn_txt = 'No valid depth parameter was found in {}, which contains: {}'.format(
-            os.path.basename(file_name), ', '.join(log_names)
-            # os.path.basename(file_name), ', '.join(generated_keys)
+            # os.path.basename(file_name), ', '.join(log_names)
+            os.path.basename(file_name), ', '.join(generated_keys)
         )
         print_info(warn_txt, 'warning', logger)
     if (coord_units is None) or (coord_units == ''):
@@ -1680,11 +1704,11 @@ def _read_las(log_name, file_name, verbose=False, encoding='UTF8'):
         )
         print_info(warn_txt, 'warning', logger)
 
-    # return log_name.lower(), well_dict['data'][data_key], data_units, well_dict['data'][depth_key], \
-    #     coord_units, coord_type
-    data_line = las_line(file_name, encoding)
-    data, units = read_file(file_name, 'space', data_line, log_names, log_units, encoding)
-    return log_name.lower(), data[data_key], data_units, data[depth_key], coord_units, coord_type
+    return log_name.lower(), well_dict['data'][data_key], data_units, well_dict['data'][depth_key], \
+        coord_units, coord_type
+    # data_line = las_line(file_name, encoding)
+    # data, units = read_file(file_name, 'space', data_line, log_names, log_units, encoding)
+    # return log_name.lower(), data[data_key], data_units, data[depth_key], coord_units, coord_type
 
 
 def create_data_array(

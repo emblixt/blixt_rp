@@ -4,6 +4,7 @@ from pint import UnitRegistry
 ureg = UnitRegistry()
 Q_ = ureg.Quantity
 dim_file = os.path.join(os.path.dirname(__file__), 'units_to_pint.txt')
+print('Loaded: {}'.format(dim_file))
 ureg.load_definitions(dim_file)
 
 __version__ = "unknown"
