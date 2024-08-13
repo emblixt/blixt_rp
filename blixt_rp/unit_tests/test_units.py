@@ -14,7 +14,7 @@ class UnitsTestCase(unittest.TestCase):
 
         r1 = Q_(300., 'ohm')
         r2 = Q_(300., 'Ohm')
-        r3 = Q_(3000., 'ohmm')
+        r3 = Q_(3000., 'Ohmm')
         dist = 10 * ureg.meter
         r4 = r3 / dist
         print(f"{r1:~P}", f"{r2:~P}", r3, f"{r4:~#P}")

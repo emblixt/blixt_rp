@@ -14,8 +14,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pandas import DataFrame
 import xarray as xr
-import pint_xarray
-import pint
+# import pint
 # from pint import UnitRegistry
 from math import isclose
 
@@ -35,9 +34,9 @@ from blixt_utils.io.io import read_general_ascii_GENERAL as read_file, project_w
 
 
 from .. import ureg, Q_
+import pint_xarray
 
 logger = logging.getLogger(__name__)
-
 
 
 class LogCurve(object):
@@ -697,14 +696,23 @@ class LogCurve2dNew(object):
         diffs = np.diff(arr)
         return np.allclose(diffs, diffs[0])
 
-    @property
-    def step(self):
+    # @property
+    def step(self, ignore_gaps=False):
         """
-        If evenly spaced it returns the step in depth, else None
+        If evenly spaced it returns the step in depth/time, else None
+
+        :param ignore_gaps
+            bool
+            Finds the most likely step (increment in depth/time) of log data.
+            Useful if there are gaps in an evenly spaced data set
+            (e.g. it has been cleaned to remove NaN's).
         :return:
         """
         if self.is_evenly_spaced:
             return np.diff(self.coords)[0]
+        elif ignore_gaps:
+            steps, counts = np.unique(np.diff(self.coords), return_counts=True)
+            return steps[np.argmax(counts)]
         else:
             return None
 
@@ -852,10 +860,13 @@ class LogCurve2dNew(object):
 
         if nans & infinites:
             valid_indxs = ~_nans & ~_infs
+            info_txt = 'Cleaned data from Nans and Infinites'
         elif infinites:
             valid_indxs = ~_infs
+            info_txt = 'Cleaned data from Infinites'
         elif nans:
             valid_indxs = ~_nans
+            info_txt = 'Cleaned data from Nans'
         else:
             return
 
@@ -864,32 +875,105 @@ class LogCurve2dNew(object):
         clean_data = clean_data.pint.quantify(
             {self.name: self.units, self.coord_type: self.coord_units}
         )
+
+        # Modify header to capture changes
+        self.header.modification_date = datetime.now().isoformat()
+        self.header.modification_history += '\n{}'.format(info_txt)
+
         self.data = clean_data
 
 
-
     def smooth(self,
-               window_len=None,
+               window_len,
                method='median',
                discrete_intervals=None,
                mask=None,
                mask_desc=None,
                verbose=False,
                overwrite=False,
+               **kwargs
                ):
         """
+        NOTE
+        Smoothing irregularly sampled data will give strange results
 
         :param window_len:
+            int
+            Length of smoothing window (in number of cells)
         :param method:
         :param discrete_intervals:
+            list
+            list of depth values (same unit as depth in LogCurve) at which the smoothened log are allowed
+            discrete jumps.
+            Typically the depth of the boundaries between two intervals (formations) in a well.
         :param mask:
         :param mask_desc:
         :param verbose:
         :param overwrite:
+        :param kwargs:
+            keyword arguments passed on to _smooth
         :return:
+            Smoothened LogCurve2dNew object when overwrite is False, else
         """
-        #TODO
-        pass
+        # TODO
+        # make window length a float with units, in depth or time, and calculate the the
+        # window length based on the sampling length.
+        # if is_evenly_spaced is False -> raise warning and continue
+
+        if mask is not None:
+            raise NotImplementedError('Smoothing masked log curves is not yet implemented')
+        if method == 'median' and np.mod(window_len, 2) == 0:
+            window_len += 1  # avoid even length windows
+        if discrete_intervals is not None:
+            if not isinstance(discrete_intervals, list):
+                raise TypeError('Interval indexes must be provided as a list')
+
+            disc_txt = 'allowing discrete jumps at {} {} '.format(', '.join(discrete_intervals), self.coord_units)
+            # check if the proposed jump depths are within the depth range of the LogCurve
+
+            # calculate the indexes of where the smoothened log are allowed discrete jumps.
+            discrete_indexes = [np.argmin((self.coords - _z)**2) for _z in discrete_intervals]
+
+            out = np.zeros(0)
+            for i in range(len(discrete_intervals) + 1):  # always one more section than boundaries between them
+                if i == 0:  # first section
+                    out = np.append(out, _smooth(
+                        self.values[:discrete_indexes[i]], window_len, method=method, **kwargs
+                    )
+                                    )
+                elif len(discrete_intervals) == i:  # last section
+                    out = np.append(out, _smooth(
+                        self.values[discrete_indexes[-1]:], window_len, method=method, **kwargs
+                    )
+                                    )
+                else:
+                    out = np.append(out, _smooth(
+                        self.values[discrete_indexes[i-1]:discrete_indexes[i]],
+                        window_len, method=method, **kwargs))
+
+        else:
+            disc_txt = ''
+            out = _smooth(self.values, window_len, method=method, **kwargs)
+
+        # Create DataArray from result
+        smooth_coords = xr.DataArray(self.coords, dims=self.coord_type)
+        smooth_data = xr.DataArray(name=self.name, data=out, coords={self.coord_type: smooth_coords})
+        smooth_data = smooth_data.pint.quantify(
+            {self.name: self.units, self.coord_type: self.coord_units}
+        )
+
+        info_txt = 'Data smoothened {}using a {} window of length {}'.format(disc_txt, method, window_len)
+        if overwrite:
+            # Modify header to capture changes
+            self.header.modification_date = datetime.now().isoformat()
+            self.header.modification_history += '\n{}'.format(info_txt)
+            self.data = smooth_data
+        else:
+            output = self.copy('smooth')
+            output.data = smooth_data
+            output.header.modification_date = datetime.now().isoformat()
+            output.header.modification_history += '\n{}'.format(info_txt)
+            return output
 
     def calc_mask(self,
                   cutoffs,
@@ -1034,6 +1118,7 @@ class LogCurve2dNew(object):
         if file_format == 'las':
             self.data = create_data_array(*_read_las(log_name, file_name, verbose))
             self.name = log_name.lower()
+            self.header.orig_filename = file_name
 
 
 class LogCurve2D(object):
