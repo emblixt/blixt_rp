@@ -2,6 +2,7 @@ import unittest
 import os
 
 
+import pint
 from .. import ureg, Q_
 
 
@@ -15,13 +16,19 @@ class UnitsTestCase(unittest.TestCase):
         r1 = Q_(300., 'ohm')
         r2 = Q_(300., 'Ohm')
         r3 = Q_(3000., 'Ohmm')
+        r5 = Q_(3000., 'ohm m')
+        print(type(r3))
         dist = 10 * ureg.meter
         r4 = r3 / dist
-        print(f"{r1:~P}", f"{r2:~P}", r3, f"{r4:~#P}")
+        print(f"{r5:~P}", f"{r2:~P}", r3, f"{r4:~#P}")
 
         p1 = 1000. * ureg('pascal')
         p2 = p1 * dist**2
         print(f"{p2:~P}")
 
-        self.assertTrue(True)
+        l1 = Q_(1, 'ft')
+        l2 = Q_(1, 'FT')
+        print(l1, l2)
+
+        self.assertIsInstance(r4, pint.Quantity)
 

@@ -1,5 +1,6 @@
+ohmm = [resistivity] = ohm * meter = Ωm
+
 @alias degC = degc
 @alias ohm = Ohm
-
-ohmm = [resistivity] = ohm * meter = Ωm
 @alias ohmm = Ohmm
+@alias foot = FT

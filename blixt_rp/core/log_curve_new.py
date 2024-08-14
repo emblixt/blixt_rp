@@ -6,6 +6,7 @@ Module for handling LogCurve objects
     GNU Lesser General Public License, Version 3
     (https://www.gnu.org/copyleft/lesser.html)
 """
+import sys
 import os.path
 from datetime import datetime
 import logging
@@ -14,9 +15,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pandas import DataFrame
 import xarray as xr
-# import pint
+import pint
 # from pint import UnitRegistry
-from math import isclose
+from math import isclose, ceil
+
+# To test blixt_rp and blixt_utils libraries directly, without installation:
+project_dir = str(os.path.basename(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
+sys.path.append(os.path.join(project_dir, 'blixt_rp'))
+sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 
 from blixt_rp.core.param import Param
@@ -26,11 +32,11 @@ from blixt_utils.signal_analysis.signal_analysis import smooth as _smooth
 from blixt_utils.misc.curve_fitting import residuals, linear_function
 from blixt_rp.rp_utils.definitions import allowed_depth_formats
 from blixt_utils.misc.convert_data import convert
-import blixt_utils.misc.masks as msks
-import blixt_utils.misc.templates as tmplts
+from blixt_utils.misc import masks as msks
+from blixt_utils.misc import templates as tmplts
 import blixt_rp.rp_utils.definitions as rud
 from blixt_utils.utils import print_info
-from blixt_utils.io.io import read_general_ascii_GENERAL as read_file, project_wells_new
+# from blixt_utils.io.io import read_general_ascii_GENERAL as read_file, project_wells_new
 
 
 from .. import ureg, Q_
@@ -600,7 +606,7 @@ class LogCurve2dNew(object):
         :param header:
             Header object or dict
         """
-        self.data = data_array
+        self.d_arr = data_array
         self.name = None if (data_array is None) else str(data_array.name)
         self.well = well
 
@@ -632,7 +638,7 @@ class LogCurve2dNew(object):
                     info_txt = '{}: {}: Convert from {} to {}'.format(
                         self.well, self.name, str(data_array.data.units), self.style.units
                     )
-                    self.data = data_array.pint.to(self.style.units)
+                    self.d_arr = data_array.pint.to(self.style.units)
                     print_info(info_txt, 'info', logger)
                 except pint.DimensionalityError:
                     warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
@@ -658,27 +664,27 @@ class LogCurve2dNew(object):
                 self.log_type = log_type
 
     def __len__(self):
-        return None if (self.data is None) else len(self.data)
+        return None if (self.d_arr is None) else len(self.d_arr)
 
     @property
     def coord_type(self):
-        return None if (self.data is None) else list(self.data.coords.keys())[0]
+        return None if (self.d_arr is None) else list(self.d_arr.coords.keys())[0]
 
     @property
     def coord_units(self):
-        return None if (self.data is None) else str(self.data.coords[self.coord_type].units)
+        return None if (self.d_arr is None) else str(self.d_arr.coords[self.coord_type].units)
 
     @property
     def units(self):
-        return None if (self.data is None) else str(self.data.data.units)
+        return None if (self.d_arr is None) else str(self.d_arr.data.units)
 
     @property
     def coords(self):
-        return None if (self.data is None) else self.data.coords[self.coord_type].data
+        return None if (self.d_arr is None) else self.d_arr.coords[self.coord_type].data
 
     @property
     def values(self):
-        return None if (self.data is None) else self.data.data.magnitude
+        return None if (self.d_arr is None) else self.d_arr.data.magnitude
 
     @property
     def is_evenly_spaced(self):
@@ -717,31 +723,31 @@ class LogCurve2dNew(object):
             return None
 
     def __lt__(self, other):
-        if len(self.data) < len(other.data):
+        if len(self.d_arr) < len(other.d_arr):
             return True
         else:
             return False
 
     def __le__(self, other):
-        if len(self.data) <= len(other.data):
+        if len(self.d_arr) <= len(other.d_arr):
             return True
         else:
             return False
 
     def __gt__(self, other):
-        if len(self.data) > len(other.data):
+        if len(self.d_arr) > len(other.d_arr):
             return True
         else:
             return False
 
     def __eq__(self, other):
-        if len(self.data) == len(other.data):
+        if len(self.d_arr) == len(other.d_arr):
             return True
         else:
             return False
 
     def __ge__(self, other):
-        if len(self.data) >= len(other.data):
+        if len(self.d_arr) >= len(other.d_arr):
             return True
         else:
             return False
@@ -763,19 +769,19 @@ class LogCurve2dNew(object):
         """ Converts the data units to 'to_units', and changes the unit in the style too"""
         try:
             cnv_txt = 'Convert from {} to {}'.format(
-                str(self.data.data.units), to_units
+                str(self.d_arr.data.units), to_units
             )
             info_txt = '{}: {}: {}'.format(
                 self.well, self.name, cnv_txt
             )
-            self.data = self.data.pint.to(to_units)
+            self.d_arr = self.d_arr.pint.to(to_units)
             self.style.units = to_units
             print_info(info_txt, 'info', logger)
             self.header.modification_date = datetime.now().isoformat()
             self.header.modification_history += '\n{}'.format(cnv_txt)
         except pint.DimensionalityError:
             warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
-                self.well, self.name, str(self.data.data.units), to_units
+                self.well, self.name, str(self.d_arr.data.units), to_units
             )
             print_info(warn_txt, 'warning', logger)
 
@@ -783,18 +789,18 @@ class LogCurve2dNew(object):
         """ Converts the coordinate units to 'to_units'"""
         try:
             cnv_txt = 'Convert coordinates from {} to {}'.format(
-                str(self.data.coords[self.coord_type].units), to_units
+                str(self.d_arr.coords[self.coord_type].units), to_units
             )
             info_txt = '{}: {}: {}'.format(
                 self.well, self.name, cnv_txt
             )
-            self.data = self.data.pint.to({self.coord_type: to_units})
+            self.d_arr = self.d_arr.pint.to({self.coord_type: to_units})
             print_info(info_txt, 'info', logger)
             self.header.modification_date = datetime.now().isoformat()
             self.header.modification_history += '\n{}'.format(cnv_txt)
         except pint.DimensionalityError:
             warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
-                self.well, self.name, str(self.data.coords[self.coord_type].units), to_units
+                self.well, self.name, str(self.d_arr.coords[self.coord_type].units), to_units
             )
             print_info(warn_txt, 'warning', logger)
 
@@ -852,11 +858,11 @@ class LogCurve2dNew(object):
             header=header
         )
 
-    def clean_data(self, nans=True, infinites=True):
+    def clean_data(self, nans=True, infinites=True, overwrite=False):
         if nans:
-            _nans = np.isnan(self.data.data.magnitude)
+            _nans = np.isnan(self.d_arr.data.magnitude)
         if infinites:
-            _infs = np.isinf(self.data.data.magnitude)
+            _infs = np.isinf(self.d_arr.data.magnitude)
 
         if nans & infinites:
             valid_indxs = ~_nans & ~_infs
@@ -870,21 +876,60 @@ class LogCurve2dNew(object):
         else:
             return
 
-        clean_coords = xr.DataArray(self.data.coords[self.coord_type].data[valid_indxs], dims=self.coord_type)
-        clean_data = xr.DataArray(name=self.name, data=self.data.data.magnitude[valid_indxs], coords={self.coord_type: clean_coords})
+        clean_coords = xr.DataArray(self.d_arr.coords[self.coord_type].data[valid_indxs], dims=self.coord_type)
+        clean_data = xr.DataArray(name=self.name, data=self.d_arr.data.magnitude[valid_indxs], coords={self.coord_type: clean_coords})
         clean_data = clean_data.pint.quantify(
             {self.name: self.units, self.coord_type: self.coord_units}
         )
 
-        # Modify header to capture changes
-        self.header.modification_date = datetime.now().isoformat()
-        self.header.modification_history += '\n{}'.format(info_txt)
+        if overwrite:
+            # Modify header to capture changes
+            self.header.modification_date = datetime.now().isoformat()
+            self.header.modification_history += '\n{}'.format(info_txt)
+            self.d_arr = clean_data
+        else:
+            output = self.copy('clean')
+            output.header.modification_date = datetime.now().isoformat()
+            output.header.modification_history += '\n{}'.format(info_txt)
+            output.d_arr = clean_data
+            return output
 
-        self.data = clean_data
+    def fill_gaps(self, method=None, extrapolate=False, overwrite=False):
+        info_txt = 'Gaps have been filled using {}'.format(method)
+        if extrapolate:
+            info_txt += ' with extrapolation'
+        if method is None:
+            method = 'interpolate'
 
+        if method == 'interpolate':
+            fill_value = None
+            if extrapolate:
+                fill_value = 'extrapolate'
+            tmp = self.clean_data()
+            out = _interpolate(tmp.coords, tmp.values, self.coords, fill_value=fill_value)
+        else:
+            raise NotImplementedError("Only 'interpolate' has been implemented")
+
+        # Create DataArray from result
+        filled_coords = xr.DataArray(self.coords, dims=self.coord_type)
+        filled_data = xr.DataArray(name=self.name, data=out, coords={self.coord_type: filled_coords})
+        filled_data = filled_data.pint.quantify(
+            {self.name: self.units, self.coord_type: self.coord_units}
+        )
+
+        if overwrite:
+            self.header.modification_date = datetime.now().isoformat()
+            self.header.modification_history += '\n{}'.format(info_txt)
+            self.d_arr = filled_data
+        else:
+            output = self.copy('fill_gaps')
+            output.d_arr = filled_data
+            output.header.modification_date = datetime.now().isoformat()
+            output.header.modification_history += '\n{}'.format(info_txt)
+            return output
 
     def smooth(self,
-               window_len,
+               window_len: pint.Quantity,
                method='median',
                discrete_intervals=None,
                mask=None,
@@ -894,19 +939,18 @@ class LogCurve2dNew(object):
                **kwargs
                ):
         """
-        NOTE
-        Smoothing irregularly sampled data will give strange results
-
         :param window_len:
-            int
-            Length of smoothing window (in number of cells)
+            pint.Quantity
+            Length of smoothing window in depth or time
         :param method:
         :param discrete_intervals:
             list
-            list of depth values (same unit as depth in LogCurve) at which the smoothened log are allowed
-            discrete jumps.
+            list of depth values (pint.Quantities or same unit as depth in LogCurve)
+            at which the smoothened log are allowed discrete jumps.
             Typically the depth of the boundaries between two intervals (formations) in a well.
         :param mask:
+            np.ndarray bool
+            False values are masked out
         :param mask_desc:
         :param verbose:
         :param overwrite:
@@ -915,62 +959,79 @@ class LogCurve2dNew(object):
         :return:
             Smoothened LogCurve2dNew object when overwrite is False, else
         """
-        # TODO
-        # make window length a float with units, in depth or time, and calculate the the
-        # window length based on the sampling length.
-        # if is_evenly_spaced is False -> raise warning and continue
+        if not self.is_evenly_spaced:
+            warn_txt = 'Only evenly spaced data can be smoothened'
+            print_info(warn_txt, 'warning', logger)
+            return
+        if not isinstance(window_len, pint.Quantity):
+            # Simpy assume that it is given in the correct units
+            w_len = ceil(window_len / self.step())
+        else:
+            w_len = ceil(window_len.to(self.coord_units).magnitude / self.step())
 
-        if mask is not None:
-            raise NotImplementedError('Smoothing masked log curves is not yet implemented')
-        if method == 'median' and np.mod(window_len, 2) == 0:
-            window_len += 1  # avoid even length windows
+        #if mask is not None:
+        #    raise NotImplementedError('Smoothing masked log curves is not yet implemented')
+        if mask is None:
+            mask = np.array(np.ones(len(self.values)), dtype=bool)  # All True values -> all data is included
+
+        if method == 'median' and np.mod(w_len, 2) == 0:
+            w_len += 1  # avoid even length windows
         if discrete_intervals is not None:
             if not isinstance(discrete_intervals, list):
                 raise TypeError('Interval indexes must be provided as a list')
 
-            disc_txt = 'allowing discrete jumps at {} {} '.format(', '.join(discrete_intervals), self.coord_units)
+            if isinstance(discrete_intervals[0], pint.Quantity):
+                print('Discrete intervals identified as list of Quantities')
+                # Do unit conversion
+                discrete_intervals = [_x.to(self.coord_units).magnitude for _x in discrete_intervals]
+            else:
+                # assume the intervals are given in correct units
+                pass
+
+            disc_txt = 'allowing discrete jumps at {} {} '.format(
+                ', '.join('{:.2}'.format(_x) for _x in discrete_intervals), self.coord_units)
             # check if the proposed jump depths are within the depth range of the LogCurve
 
             # calculate the indexes of where the smoothened log are allowed discrete jumps.
-            discrete_indexes = [np.argmin((self.coords - _z)**2) for _z in discrete_intervals]
+            discrete_indexes = [np.argmin((self.coords[mask] - _z)**2) for _z in discrete_intervals]
 
             out = np.zeros(0)
             for i in range(len(discrete_intervals) + 1):  # always one more section than boundaries between them
                 if i == 0:  # first section
                     out = np.append(out, _smooth(
-                        self.values[:discrete_indexes[i]], window_len, method=method, **kwargs
+                        self.values[:discrete_indexes[i]], w_len, method=method, **kwargs
                     )
                                     )
                 elif len(discrete_intervals) == i:  # last section
                     out = np.append(out, _smooth(
-                        self.values[discrete_indexes[-1]:], window_len, method=method, **kwargs
+                        self.values[discrete_indexes[-1]:], w_len, method=method, **kwargs
                     )
                                     )
                 else:
                     out = np.append(out, _smooth(
                         self.values[discrete_indexes[i-1]:discrete_indexes[i]],
-                        window_len, method=method, **kwargs))
+                        w_len, method=method, **kwargs))
 
         else:
             disc_txt = ''
-            out = _smooth(self.values, window_len, method=method, **kwargs)
+            out = _smooth(self.values[mask], w_len, method=method, **kwargs)
 
         # Create DataArray from result
-        smooth_coords = xr.DataArray(self.coords, dims=self.coord_type)
+        smooth_coords = xr.DataArray(self.coords[mask], dims=self.coord_type)
         smooth_data = xr.DataArray(name=self.name, data=out, coords={self.coord_type: smooth_coords})
         smooth_data = smooth_data.pint.quantify(
             {self.name: self.units, self.coord_type: self.coord_units}
         )
 
-        info_txt = 'Data smoothened {}using a {} window of length {}'.format(disc_txt, method, window_len)
+        info_txt = 'Data smoothened {}using a {} window of length {}'.format(disc_txt, method, w_len)
         if overwrite:
             # Modify header to capture changes
             self.header.modification_date = datetime.now().isoformat()
             self.header.modification_history += '\n{}'.format(info_txt)
-            self.data = smooth_data
+            self.d_arr = smooth_data
         else:
             output = self.copy('smooth')
-            output.data = smooth_data
+            output.d_arr = smooth_data
             output.header.modification_date = datetime.now().isoformat()
             output.header.modification_history += '\n{}'.format(info_txt)
             return output
@@ -1032,7 +1093,7 @@ class LogCurve2dNew(object):
 
         mask_description = mask_string(cutoffs, None)
         if len(cutoffs) == 0:  # no cutoffs, mask is all true
-            final_mask = np.array(np.ones(len(self.data)))
+            final_mask = np.array(np.ones(len(self.d_arr)))
             mask_description = 'All true mask for empty cutoffs'
 
         if log_table is not None:  # See if this log curve matches the log table criteria
@@ -1116,7 +1177,8 @@ class LogCurve2dNew(object):
              verbose=False,
              **kwargs):
         if file_format == 'las':
-            self.data = create_data_array(*_read_las(log_name, file_name, verbose))
+            # print('test: ', Q_(100, 'Ohmm'))  # Works!
+            self.d_arr = create_data_array(*_read_las(log_name, file_name, verbose))
             self.name = log_name.lower()
             self.header.orig_filename = file_name
 
@@ -1853,9 +1915,33 @@ def create_data_array(
         str
         Either 'md', 'twt' or 'owt'
     """
+    # Make units understandable for pint-xarray
+    def translate_units_for_pint(unit):
+        """
+        I think there is a bug in pint-xarray, which stops it from taking custom units into account
+        To alleviate this, we do a simplistic translation here
+        :param unit:
+            str
+        :return:
+            str
+        """
+        if unit in ['FT']:
+            return 'ft'
+        elif unit in ['US/F']:
+            return 'us/ft'
+        elif unit in ['Ohmm', 'ohmm']:
+            return 'ohm m'
+        elif unit in ['']:
+            pass
+        else:
+            return unit
+
     coord_type = coord_type.lower()
     if coord_type not in ['md', 'twt', 'owt']:
         raise IOError('Dimension type must be either md, twt or owt. Not {}'.format(coord_type))
+
+    data_units = translate_units_for_pint(data_units)
+    coord_units = translate_units_for_pint(coord_units)
 
     # automatically convert the coordinate units to meter or ms
     if coord_type == 'md':
@@ -1969,4 +2055,4 @@ def test_take_sampling():
 
 
 if __name__ == '__main__':
-    test_2d()
+    test_interpolate()

@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
 
-from blixt_utils.misc.attribdict import AttribDict
+from ....blixt_utils.blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
 from blixt_utils.misc.templates import log_header_to_template as l2tmpl
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table

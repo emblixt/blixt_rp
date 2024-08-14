@@ -4,15 +4,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 import xarray as xr
-from pint import UnitRegistry
+import pint
+from .. import ureg, Q_
 
 from blixt_rp.core.param import Param
 
-from blixt_rp.core.log_curve_new import LogCurve, LogCurve2dNew, create_data_array, is_equivalent
+from blixt_rp.core.log_curve_new import LogCurve, LogCurve2dNew, create_data_array, is_equivalent, _interpolate
 from blixt_rp.core.template_new import Template
 from blixt_rp.core.header_new import Header
 
-ureg = UnitRegistry()
+test_file_dir = str(os.path.dirname(__file__).replace(
+    'blixt_rp\\unit_tests',
+    'test_data'))
+
+las_file1 = os.path.join(test_file_dir, "L-30.las")
+las_file2 = "T:\\ROKDOC\\PL936\\To Partners from Ikon\\To Partners\\las files\\6406_11_1s.las"
 
 n = 1500
 # create a regularly sampled data set
@@ -85,18 +91,18 @@ class WellTestCase(unittest.TestCase):
         print(lc.is_evenly_spaced)
         print(lc.step)
         # Try convert units of data
-        print(lc.data.data.max())
-        lc.data = lc.data.pint.to('s/feet')
-        print(lc.data.data.max())
+        print(lc.d_arr.data.max())
+        lc.d_arr = lc.d_arr.pint.to('s/feet')
+        print(lc.d_arr.data.max())
         lc = LogCurve2dNew(
             dp1,
             style={'units': 's/feet'}
         )
         print(lc.is_evenly_spaced)
         print(lc.step)
-        print(lc.data.data.max())
-        lc.data = lc.data.pint.to('s/m')
-        print(lc.data.data.max())
+        print(lc.d_arr.data.max())
+        lc.d_arr = lc.d_arr.pint.to('s/m')
+        print(lc.d_arr.data.max())
         print(lc.units)
         print(lc.values)
 
@@ -111,17 +117,17 @@ class WellTestCase(unittest.TestCase):
             dp2
         )
         print(lc.style)
-        print(lc.data.data.max())
+        print(lc.d_arr.data.max())
         lc.convert_to('us/m')
         print(lc.style)
-        print(lc.data.data.max())
+        print(lc.d_arr.data.max())
         print(lc.header)
-        print(lc.data.coords.values())
+        print(lc.d_arr.coords.values())
         lc.convert_coords_to('feet')
         print(lc.style)
-        print(lc.data.data.max())
+        print(lc.d_arr.data.max())
         print(lc.header)
-        print(lc.data.coords.values())
+        print(lc.d_arr.coords.values())
 
     def test_take_sampling(self):
         lc1 = LogCurve2dNew(dp1)
@@ -130,9 +136,9 @@ class WellTestCase(unittest.TestCase):
         print(lc1.step)
         print(lc3.step)
         print(lc_new.step)
-        lc1.data.plot()
-        lc3.data.plot()
-        lc_new.data.plot()
+        lc1.d_arr.plot()
+        lc3.d_arr.plot()
+        lc_new.d_arr.plot()
         plt.show()
 
     def test_LogCurve_copy(self):
@@ -250,4 +256,29 @@ class WellTestCase(unittest.TestCase):
         print(is_equivalent(nM, nmol_L))  # True
         print(is_equivalent(m, ft))  # False
 
+    def test_a_lot(self):
+        lc = LogCurve2dNew(None)
+        cutoffs = {'dt': ['>', 140.]}
+        # lc.read('dt', las_file1, 'las')
+        lc.read('temp', las_file2, 'las')
+        # lc_smooth10 = lc.smooth(Q_(10., 'm'))
+        # lc_smooth10.d_arr.plot()
+        # lc_smooth500 = lc.smooth(Q_(500., 'm'))
+        # lc_smooth500.d_arr.plot()
+        # lc_clean = lc_smooth500.clean_data()
+        # print(len(lc), len(lc_smooth500), len(lc_clean))
+        # lc_mask = lc.calc_mask(cutoffs, verbose=True)
+        # lc_smooth_with_mask = lc.smooth(Q_(10., 'm'), mask=lc_mask.values)
+        # lc_smooth_with_mask.d_arr.plot()
+        # lc_smooth10 = lc.smooth(Q_(500., 'ft'), discrete_intervals=[Q_(_z, 'km').to('m').magnitude for _z in [1., 2., 3.]])
+        # print(lc_smooth10.header)
+        # lc_smooth10.d_arr.plot()
+        lc_fill1 = lc.fill_gaps()
+        lc_fill2 = lc.fill_gaps(extrapolate=True)
+        lc_fill1.d_arr.plot()
+        lc.d_arr.plot()
+        # lc_fill2.d_arr.plot.line('k--')
+
+        plt.show()
+        self.assertTrue(True)
 
