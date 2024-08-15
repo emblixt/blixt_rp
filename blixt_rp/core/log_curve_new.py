@@ -24,7 +24,6 @@ project_dir = str(os.path.basename(__file__).replace('blixt_rp\\blixt_rp\\core',
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-
 from blixt_rp.core.param import Param
 from blixt_rp.core.template_new import Template
 from blixt_rp.core.header_new import Header

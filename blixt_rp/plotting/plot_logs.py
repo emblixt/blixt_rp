@@ -691,10 +691,10 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
     from blixt_utils.misc.curve_fitting import residuals, linear_function, depth_trend, exp_function
     from blixt_utils.utils import mask_string
 
-    target_function = exp_function
-    x0 = [3000., -1500., -0.1]
-    # target_function = linear_function
-    # x0 = [1., 1.]
+    # target_function = exp_function
+    # x0 = [1000., -1000., -0.001]
+    target_function = linear_function
+    x0 = [1., 1.]
     # TODO
     # We need a x0 for each log type
 

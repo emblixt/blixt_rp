@@ -22,11 +22,17 @@ import pandas as pd
 import logging
 import re
 import os
+import sys
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
 
-from ....blixt_utils.blixt_utils.misc.attribdict import AttribDict
+# To test blixt_rp and blixt_utils libraries directly, without installation:
+project_dir = str(os.path.basename(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
+sys.path.append(os.path.join(project_dir, 'blixt_rp'))
+sys.path.append(os.path.join(project_dir, 'blixt_utils'))
+
+from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
 from blixt_utils.misc.templates import log_header_to_template as l2tmpl
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
