@@ -834,28 +834,13 @@ class LogCurve2dNew(object):
         new_x = log_curve.coords
         new_y = _interpolate(old_x, old_y, new_x)
 
-        # Create a new xarray.DataArray using the new x (coords) and y
-        new_da = create_data_array(
-            name=self.name,
-            data=new_y,
-            data_units=self.units,
-            coords=new_x,
-            coord_units=log_curve.coord_units,
-            coord_type=log_curve.coord_type
-        )
-
-        # Modify header to capture changes
-        header = deepcopy(self.header)
-        header.modification_date = datetime.now().isoformat()
         info_txt = 'Resampled to match {}'.format(log_curve.name)
-        header.modification_history += '\n{}'.format(info_txt)
-
-        return LogCurve2dNew(
-            new_da,
-            log_type=self.log_type,
-            well=self.well,
-            style=self.style,
-            header=header
+        return replace_data_array(
+            self,
+            new_y,
+            new_x,
+            False,
+            info_txt
         )
 
     def clean_data(self, nans=True, infinites=True, overwrite=False):
@@ -876,25 +861,24 @@ class LogCurve2dNew(object):
         else:
             return
 
-        clean_coords = xr.DataArray(self.d_arr.coords[self.coord_type].data[valid_indxs], dims=self.coord_type)
-        clean_data = xr.DataArray(name=self.name, data=self.d_arr.data.magnitude[valid_indxs], coords={self.coord_type: clean_coords})
-        clean_data = clean_data.pint.quantify(
-            {self.name: self.units, self.coord_type: self.coord_units}
-        )
+        return replace_data_array(self,
+               self.values[valid_indxs],
+               self.coords[valid_indxs],
+               overwrite,
+               info_txt)
 
-        if overwrite:
-            # Modify header to capture changes
-            self.header.modification_date = datetime.now().isoformat()
-            self.header.modification_history += '\n{}'.format(info_txt)
-            self.d_arr = clean_data
-        else:
-            output = self.copy('clean')
-            output.header.modification_date = datetime.now().isoformat()
-            output.header.modification_history += '\n{}'.format(info_txt)
-            output.d_arr = clean_data
-            return output
+    def fill_gaps(self, method=None, extrapolate=False, overwrite=False,
+                  fill_values=None):
+        """
 
-    def fill_gaps(self, method=None, extrapolate=False, overwrite=False):
+        :param method:
+        :param extrapolate:
+        :param overwrite:
+        :param fill_values:
+            np.ndarray of same size as self.values
+            Only used when method is set to 'fill_with_values'
+        :return:
+        """
         info_txt = 'Gaps have been filled using {}'.format(method)
         if extrapolate:
             info_txt += ' with extrapolation'
@@ -907,26 +891,21 @@ class LogCurve2dNew(object):
                 fill_value = 'extrapolate'
             tmp = self.clean_data()
             out = _interpolate(tmp.coords, tmp.values, self.coords, fill_value=fill_value)
+        elif method == 'fill_with_values':
+            out = deepcopy(self.values)
+            nans = np.isnan(out)
+            out[nans] = fill_values[nans]
         else:
-            raise NotImplementedError("Only 'interpolate' has been implemented")
+            raise NotImplementedError("Method '{}' has not been implemented".format(method))
 
-        # Create DataArray from result
-        filled_coords = xr.DataArray(self.coords, dims=self.coord_type)
-        filled_data = xr.DataArray(name=self.name, data=out, coords={self.coord_type: filled_coords})
-        filled_data = filled_data.pint.quantify(
-            {self.name: self.units, self.coord_type: self.coord_units}
+        return replace_data_array(
+            self,
+            out,
+            self.coords,
+            overwrite,
+            info_txt,
+            suffix='fill_gaps'
         )
-
-        if overwrite:
-            self.header.modification_date = datetime.now().isoformat()
-            self.header.modification_history += '\n{}'.format(info_txt)
-            self.d_arr = filled_data
-        else:
-            output = self.copy('fill_gaps')
-            output.d_arr = filled_data
-            output.header.modification_date = datetime.now().isoformat()
-            output.header.modification_history += '\n{}'.format(info_txt)
-            return output
 
     def smooth(self,
                window_len: pint.Quantity,
@@ -1016,25 +995,15 @@ class LogCurve2dNew(object):
             disc_txt = ''
             out = _smooth(self.values[mask], w_len, method=method, **kwargs)
 
-        # Create DataArray from result
-        smooth_coords = xr.DataArray(self.coords[mask], dims=self.coord_type)
-        smooth_data = xr.DataArray(name=self.name, data=out, coords={self.coord_type: smooth_coords})
-        smooth_data = smooth_data.pint.quantify(
-            {self.name: self.units, self.coord_type: self.coord_units}
-        )
-
         info_txt = 'Data smoothened {}using a {} window of length {}'.format(disc_txt, method, w_len)
-        if overwrite:
-            # Modify header to capture changes
-            self.header.modification_date = datetime.now().isoformat()
-            self.header.modification_history += '\n{}'.format(info_txt)
-            self.d_arr = smooth_data
-        else:
-            output = self.copy('smooth')
-            output.d_arr = smooth_data
-            output.header.modification_date = datetime.now().isoformat()
-            output.header.modification_history += '\n{}'.format(info_txt)
-            return output
+        return replace_data_array(
+            self,
+            out,
+            self.coords[mask],
+            overwrite,
+            info_txt,
+            suffix='smooth'
+        )
 
     def calc_mask(self,
                   cutoffs,
@@ -1966,6 +1935,32 @@ def create_data_array(
     # attach units to the xarray
     log_values = log_values.pint.quantify({name: data_units, coord_type: coord_units})
     return log_values
+
+
+def replace_data_array(
+        logcurve_in: LogCurve2dNew,
+        data: np.ndarray,
+        coordinates: np.ndarray,
+        overwrite: bool,
+        info_txt,
+        suffix=''
+):
+    new_d_arr_coords = xr.DataArray(coordinates, dims=logcurve_in.coord_type)
+    new_d_arr = xr.DataArray(name=logcurve_in.name, data=data, coords={logcurve_in.coord_type: new_d_arr_coords})
+    new_d_arr = new_d_arr.pint.quantify(
+        {logcurve_in.name: logcurve_in.units, logcurve_in.coord_type: logcurve_in.coord_units}
+    )
+
+    output = None
+    if overwrite:
+        logcurve_in.header.modification_date = datetime.now().isoformat()
+        logcurve_in.header.modification_history += '\n{}'.format(info_txt)
+        logcurve_in.d_arr = new_d_arr
+    else:
+        output = logcurve_in.copy(suffix)
+        output.d_arr = new_d_arr
+        output.header.modification_date = datetime.now().isoformat()
+    return output
 
 
 def is_equivalent(first: pint.Unit, second: pint.Unit):

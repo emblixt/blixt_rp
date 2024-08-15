@@ -55,7 +55,7 @@ dp2 = create_data_array(
     'md')
 
 dp3 = create_data_array(
-    'DataPair1',
+    'DataPair3',
     data3,
     'us/feet',
     depth3,
@@ -63,7 +63,7 @@ dp3 = create_data_array(
     'md')
 
 dp4 = create_data_array(
-    'DataPair2',
+    'DataPair4',
     data4,
     's/m',
     depth4,
@@ -139,6 +139,7 @@ class WellTestCase(unittest.TestCase):
         lc1.d_arr.plot()
         lc3.d_arr.plot()
         lc_new.d_arr.plot()
+        print(lc1.name, len(lc1), lc3.name, len(lc3), lc_new.name, len(lc_new))
         plt.show()
 
     def test_LogCurve_copy(self):
@@ -260,24 +261,25 @@ class WellTestCase(unittest.TestCase):
         lc = LogCurve2dNew(None)
         cutoffs = {'dt': ['>', 140.]}
         # lc.read('dt', las_file1, 'las')
-        lc.read('temp', las_file2, 'las')
         # lc_smooth10 = lc.smooth(Q_(10., 'm'))
         # lc_smooth10.d_arr.plot()
         # lc_smooth500 = lc.smooth(Q_(500., 'm'))
         # lc_smooth500.d_arr.plot()
         # lc_clean = lc_smooth500.clean_data()
         # print(len(lc), len(lc_smooth500), len(lc_clean))
+        # lc.d_arr.plot(); lc_smooth500.d_arr.plot(); lc_clean.d_arr.plot()
         # lc_mask = lc.calc_mask(cutoffs, verbose=True)
+
+        lc.read('temp', las_file2, 'las')
         # lc_smooth_with_mask = lc.smooth(Q_(10., 'm'), mask=lc_mask.values)
         # lc_smooth_with_mask.d_arr.plot()
-        # lc_smooth10 = lc.smooth(Q_(500., 'ft'), discrete_intervals=[Q_(_z, 'km').to('m').magnitude for _z in [1., 2., 3.]])
-        # print(lc_smooth10.header)
+        lc_smooth10 = lc.smooth(Q_(500., 'ft'), discrete_intervals=[Q_(_z, 'km').to('m').magnitude for _z in [1., 2., 3.]])
+        print(lc_smooth10.header)
         # lc_smooth10.d_arr.plot()
         lc_fill1 = lc.fill_gaps()
-        lc_fill2 = lc.fill_gaps(extrapolate=True)
-        lc_fill1.d_arr.plot()
-        lc.d_arr.plot()
-        # lc_fill2.d_arr.plot.line('k--')
+        # lc_fill2 = lc.fill_gaps(extrapolate=True)
+        lc_fill2 = lc.fill_gaps('fill_with_values', fill_values=np.ones(len(lc)))
+        lc_fill1.d_arr.plot(); lc.d_arr.plot(); lc_fill2.d_arr.plot.line('k--')
 
         plt.show()
         self.assertTrue(True)
