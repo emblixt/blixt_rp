@@ -129,7 +129,12 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     width_ratios = None
     if source_rock_study:
         ax_names = ['gr_ax', 'md_ax', 'twt_ax', 'res_ax', 'dlr_ax', 'toc_ax', 'cpi_ax', 'ai_ax', 'synt_ax']
-        width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 1, 1.8]
+        width_ratios = [1, 0.2, 0.2, 1, 1, 1, 1, 1, 1]
+        try_these_log_types = {
+            ax_names[0]: ['Gamma ray', 'Caliper', 'Bit size', 'Inclination'],
+            ax_names[4]: ['Sonic', 'Resistivity'],
+            ax_names[5]: ['Saturation', 'Porosity'],
+        }
         raise NotImplementedError('2024-08-07: Need to fix support for log_table, but the main functionality is correct')
     else:
         ax_names = ['gr_ax', 'md_ax', 'twt_ax', 'res_ax', 'rho_ax', 'cpi_ax', 'ai_ax', 'synt_ax']
@@ -277,7 +282,8 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     if source_rock_study is not None:
         from blixt_rp.rp.rp_core import delta_log_r, toc_from_delta_log_r
         # Try DeltaLogR
-        log_types = ['Sonic', 'Resistivity']
+        this_ax = ax_names[4]
+        log_types = [x for x in try_these_log_types[this_ax] if (len(well.get_logs_of_type(x)) > 0)]
         for necessary_log_type in log_types:
             if necessary_log_type not in well.block[block_name].log_types():
                 raise IOError('{} log is missing in well {}'.format(necessary_log_type, well.well))
