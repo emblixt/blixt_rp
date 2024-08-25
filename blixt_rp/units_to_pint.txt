@@ -8,3 +8,4 @@ ohmm = [resistivity] = ohm * meter = Ωm
 @alias ohmm = Ohmm
 @alias foot = FT
 @alias us = US
+@alias meter = M

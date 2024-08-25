@@ -32,3 +32,13 @@ class UnitsTestCase(unittest.TestCase):
 
         self.assertIsInstance(r4, pint.Quantity)
 
+    def test_units(self):
+        from blixt_rp.core.log_curve_new import fix_units_for_pint, is_equivalent
+        print(fix_units_for_pint('m3'))
+        nM = ureg.Unit('nM')
+        nmol_L = ureg.Unit('nmol/L')
+        m = ureg.Unit('m')
+        ft = ureg.Unit('ft')
+        self.assertTrue(is_equivalent(nM, nmol_L))  # True
+        self.assertFalse(is_equivalent(m, ft))  # False
+

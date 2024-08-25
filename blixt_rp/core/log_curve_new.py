@@ -50,30 +50,46 @@ class Coordinate(object):
     Class handling depth or time data, that holds the "depth" of something along a well path
     It can either be 'md' or 'tvd' in depth domain, and 'twt' or 'owt' in time domain
     """
-    def __init__(self, data, units=None, coord_type='md', verbose=False):
+    def __init__(self, coords, units=None, coord_type='md', verbose=False):
         """
 
-        :param data:
+        :param coords:
 
         :param units:
         :param coord_type:
         :param verbose:
         """
 
-        _data = handle_coords(data, units, coord_type, verbose)
+        if verbose:
+            print(coord_type, units)
+        _coords = handle_coords(coords, coord_units=units, coord_type=coord_type, verbose=verbose)
 
+        self.coords = _coords
         self.coord_type = coord_type.lower()
-        self.data = _data
-        self.units = str(_data.units)
-
-        if self.coord_type in ['md', 'tvd']:
-            self.domain = 'depth'
-        else:
-            self.domain = 'time'
 
     @property
-    def values(self):
-        return self.data.magnitude
+    def data(self):
+        return self.coords.magnitude
+
+    @property
+    def units(self):
+        return str(self.coords.units)
+
+    @property
+    def domain(self):
+        if self.coord_type in ['md', 'tvd']:
+            return 'depth'
+        else:
+            return 'time'
+
+    # I'm trying to "protect" the coord_type from being updated, BUT that stops me from setting it in the first place!
+    # def __setattr__(self, key, value):
+    #     if key in ['coord_type']:
+    #         pass
+    #     elif key in ['coords']:
+    #         self.__setattr__(key, handle_coords(value, coord_type=self.coord_type, coord_units=self.units))
+    #     else:
+    #         self.__setattr__(key, value)
 
 
 class LogCurve(object):

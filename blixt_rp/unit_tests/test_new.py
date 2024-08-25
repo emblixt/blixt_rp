@@ -3,13 +3,15 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+
+import pint.errors
 import xarray as xr
 from math import isclose
 from .. import ureg, Q_
 
 from blixt_rp.core.param import Param
 
-from blixt_rp.core.log_curve_new import LogCurve, LogCurve2dNew, Coordinate, create_data_array, is_equivalent
+from blixt_rp.core.log_curve_new import LogCurve, LogCurve2dNew, create_data_array
 from blixt_rp.core.template_new import Template
 from blixt_rp.core.header_new import Header
 
@@ -252,16 +254,6 @@ class WellTestCase(unittest.TestCase):
         h.orig_filename = 'A TEST'
         print(h.orig_filename, h.creation_date, h.modification_date)
 
-    def test_units(self):
-        from blixt_rp.core.log_curve_new import fix_units_for_pint
-        nM = ureg.Unit('nM')
-        nmol_L = ureg.Unit('nmol/L')
-        m = ureg.Unit('m')
-        ft = ureg.Unit('ft')
-        print(is_equivalent(nM, nmol_L))  # True
-        print(is_equivalent(m, ft))  # False
-        print(fix_units_for_pint('m3'))
-
     def test_a_lot(self):
         lc = LogCurve2dNew(None)
         cutoffs = {'dt': ['>', 140.]}
@@ -290,29 +282,46 @@ class WellTestCase(unittest.TestCase):
         self.assertTrue(True)
 
     def test_coords(self):
-        coords_list = [10.0, (2., 3.), np.linspace(5., 10., 3)]
-        coord_units_list = ['s', 'FT', 'US', 'M']
-        coord_types_list = ['twt', 'md']
-        for coords in coords_list:
-            for coord_units in coord_units_list:
-                for coord_type in coord_types_list:
-                    # print(coord_type, coord_units)
-                    try:
-                        a = Coordinate(coords, coord_units, coord_type)
-                        if coord_type == 'twt':
-                            if isinstance(a.data, float):
-                                self.assertTrue(isclose(a.data, 10000.))
-                            else:
-                                self.assertTrue(isclose(a.data[0], coords[0] * 1000.))
-                        elif coord_units == 'FT':
-                            if isinstance(a.data, float):
-                                self.assertTrue(isclose(a.data, coords / 3.281, rel_tol=1.e-4))
-                            else:
-                                self.assertTrue(isclose(a.data[0], coords[0] / 3.281, rel_tol=1.e-4))
-                        elif coord_units == 'M':
-                            if isinstance(a.data, float):
-                                self.assertTrue(isclose(a.data, coords))
-                            else:
-                                self.assertTrue(isclose(a.data[0], coords[0]))
-                    except IOError as msg:
-                        print('ERROR:', msg)
+        from blixt_rp.core.log_curve_new import Coordinate
+        coords_list = [10.0, (2., 3.), np.linspace(5., 10., 3), 1.,
+                       10.0, (2., 3.), np.linspace(5., 10., 3), 1.,
+                       10.0, (2., 3.), np.linspace(5., 10., 3), 1.]
+        coord_units_list = ['s', 's', 's', 's',
+                            'FT', 'FT', 'FT', 'FT',
+                            'M', 'M', 'M', 'M']
+        coord_types_list = ['twt', 'md', 'owt', 'tvd',
+                            'twt', 'md', 'owt', 'tvd',
+                            'twt', 'md', 'owt', 'tvd']
+        successes = [True, False, True, False,
+                     False, True, False, True,
+                     False, True, False, True]
+
+        for i, coords in enumerate(coords_list):
+            coord_units = coord_units_list[i]
+            coord_type = coord_types_list[i]
+            success = successes[i]
+            if success:
+                print('{}: This should work'.format(i))
+                print(coord_type, coord_units)
+                a = Coordinate(coords, units=coord_units, coord_type=coord_type)
+                if coord_type == 'twt':
+                    if isinstance(a.data, float):
+                        self.assertTrue(isclose(a.data, coords * 1000.))
+                    else:
+                        self.assertTrue(isclose(a.data[0], coords[0] * 1000.))
+                    a.coord_type = 'TEST'
+                    a.coords = Q_(0.1, 'hours')
+                    print(a.coord_type, a.coords)
+                elif coord_units == 'FT':
+                    if isinstance(a.data, float):
+                        self.assertTrue(isclose(a.data, coords / 3.281, rel_tol=1.e-4))
+                    else:
+                        self.assertTrue(isclose(a.data[0], coords[0] / 3.281, rel_tol=1.e-4))
+                elif coord_units == 'M':
+                    if isinstance(a.data, float):
+                        self.assertTrue(isclose(a.data, coords))
+                    else:
+                        self.assertTrue(isclose(a.data[0], coords[0]))
+            else:
+                print('{}: This should fail'.format(i))
+                self.assertRaises(pint.errors.DimensionalityError, Coordinate, coords, coord_units, coord_type, True)
