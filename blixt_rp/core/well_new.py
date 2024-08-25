@@ -44,10 +44,31 @@ import blixt_rp.rp_utils.definitions as ud
 from blixt_rp.core.well import Block
 from blixt_rp.core.log_curve import LogCurve
 from blixt_rp.core.header import Header
+from blixt_rp.core.header_new import Header as HeaderNew
 
 # global variables
 supported_version = {2.0, 3.0}
 logger = logging.getLogger(__name__)
+
+
+class WellNew(object):
+    """
+    Class handling a well, with LogCurve2dNew LogCurve objects for each curve of well log data.
+    Main difference with earlier versions is that each LogCurve object contains its associated depth data, and units,
+    so that they don't have to be regularly sampled, or with the same sampling.
+    This also means that a LogCurve object can contain other data than typical log data, such as core samples.
+    """
+    def __init__(self,
+                 header=None,
+                 ):
+        if header is None:
+            self.header = HeaderNew({})
+        elif isinstance(header, dict):
+            self.header = HeaderNew(header=header)
+        elif isinstance(header, HeaderNew):
+            self.header = header
+        else:
+            raise TypeError('header must be either a dict or a Header, not {}'.format(type(header)))
 
 
 class Well(object):

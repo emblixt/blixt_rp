@@ -290,6 +290,7 @@ def calc_toc(
                 for interval in intervals:
                     for ax in [axes[x] for x in ax_names if x not in ['twt_ax']]:
                         ax.axhline(y=interval[0], color='k', lw=0.5)
+            plt.draw()
 
         return _dlr_picked, _toc_picked
 
@@ -347,7 +348,6 @@ def calc_toc(
         _r00, _ac00 = get_values(r.data, ac.data, md.data, event.ydata)
         print('At MD {:.2f}m, RDEP={:.2f}, AC={:.2f}'.format(event.ydata, _r00, _ac00))
         _, _, = re_plot(10**(0.02*_ac00 + np.log10(_r00)) / 10000., _r00, _ac00)
-        plt.show()
 
     if verbose:
         cid = fig.canvas.mpl_connect('button_press_event', on_press)

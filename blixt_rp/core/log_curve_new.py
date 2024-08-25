@@ -39,9 +39,41 @@ from blixt_utils.utils import print_info
 
 
 from .. import ureg, Q_
+import pint
 import pint_xarray
 
 logger = logging.getLogger(__name__)
+
+
+class Coordinate(object):
+    """
+    Class handling depth or time data, that holds the "depth" of something along a well path
+    It can either be 'md' or 'tvd' in depth domain, and 'twt' or 'owt' in time domain
+    """
+    def __init__(self, data, units=None, coord_type='md', verbose=False):
+        """
+
+        :param data:
+
+        :param units:
+        :param coord_type:
+        :param verbose:
+        """
+
+        _data = handle_coords(data, units, coord_type, verbose)
+
+        self.coord_type = coord_type.lower()
+        self.data = _data
+        self.units = str(_data.units)
+
+        if self.coord_type in ['md', 'tvd']:
+            self.domain = 'depth'
+        else:
+            self.domain = 'time'
+
+    @property
+    def values(self):
+        return self.data.magnitude
 
 
 class LogCurve(object):
@@ -625,7 +657,7 @@ class LogCurve2dNew(object):
         elif isinstance(header, Header):
             self.header = header
         else:
-            raise TypeError('header must be either a dict or a Header, not {}'.format(type(style)))
+            raise TypeError('header must be either a dict or a Header, not {}'.format(type(header)))
 
         # If the style Template contains a unit, which is not None, then we should convert the data to this
         # unit if it is not already using those units.
@@ -1826,6 +1858,168 @@ def _read_las(log_name, file_name, verbose=False, encoding='UTF8'):
     # return log_name.lower(), data[data_key], data_units, data[depth_key], coord_units, coord_type
 
 
+def fix_units_for_pint(unit):
+
+    if '^3' in unit:
+        pass
+    elif '3' in unit:
+        unit = unit.replace('3', '^3')
+    if '^2' in unit:
+        pass
+    elif '2' in unit:
+        unit = unit.replace('2', '^2')
+    if '_' in unit:
+        unit = unit.replace('_', ' ')
+
+    return unit
+
+
+def translate_units_for_pint(unit):
+    """
+    BECAUSE OF THE PROBLEMS WITH PINT-XARRAY AND UNITS. WE WILL STOP USING XARRAY AND THIS FUNCTION
+    Make units understandable for pint-xarray
+    I think there is a bug in pint-xarray, which stops it from taking custom units into account
+    To alleviate this, we do a simplistic translation here
+
+    You need to add the following lines to: "C:\<PATH TO site-packages>\pint\default_en.txt"
+
+        ## Additions
+        API = 1 * dimensionless = api
+
+        ohmm = [resistivity] = ohm * meter = Ωm
+
+        @alias degC = degc
+        @alias ohm = Ohm
+        @alias ohmm = Ohmm
+        @alias foot = FT
+
+    :param unit:
+        str
+    :return:
+        str
+    """
+    print_info('This function will be deprecated', 'warning', logger)
+    if '^3' in unit:
+        pass
+    elif '3' in unit:
+        unit = unit.replace('3', '^3')
+    if '^2' in unit:
+        pass
+    elif '2' in unit:
+        unit = unit.replace('2', '^2')
+    if '_' in unit:
+        unit = unit.replace('_', ' ')
+
+    # if unit in ['US/F']:
+    #     return 'us/ft'
+    # elif unit in ['Ohmm', 'ohmm']:
+    #     return 'ohm m'
+    # elif unit in ['']:
+    #     pass
+    # else:
+    #     return unit
+    return unit
+
+
+def handle_coords(coords, coord_type='md', coord_units=None, verbose=False):
+    """
+    Based on the input, handle_coords returns a pint.Quantity in the accepted
+    units
+
+    if coords is a pint.Quantity, coord_units are ignored.
+
+    if coords is not a pint.Quantity, and coord_units is None, an Error is raised
+
+    :param coords:
+        flt, int, np.ndarray or pint.Quantity
+    :param coord_type:
+        str
+        'md', 'tvd', 'owt', or 'twt'
+    :param coord_units:
+        str
+        Any unit handled by pint.
+        Extensions to pint default units should be added here:
+        blixt_rp/units_to_pint.txt
+        (jetbrains://pycharm/navigate/reference?project=PycharmProjects&path=blixt_rp/blixt_rp/units_to_pint.txt)
+    :param verbose:
+    :return:
+        pint.Quantity
+    """
+    if coord_type.lower() not in ['md', 'tvd', 'twt', 'owt']:
+        raise IOError('Coordinate type must be either md, tvd, twt or owt. Not {}'.format(coord_type))
+
+    if not isinstance(coords, pint.Quantity):
+        if coord_units is None:
+            raise IOError('Units must be specified')
+        coord_units = fix_units_for_pint(coord_units)
+        # Assign units to the data through pint.Quantity
+        coords = Q_(coords, coord_units)
+
+    # Convert coordinates to the accepted units of meter or millisecond
+    if coord_type.lower() in ['md', 'tvd']:
+        return coords.to('meter')
+    else:
+        return coords.to('millisecond')
+
+
+def handle_coords_old(coords, coord_units: str, coord_type: str, verbose=False):
+    """
+    Function that assures that coordinates are of the right unit and type
+    :param coords:
+        np.ndarray or float
+    :param coord_units:
+
+    :param coord_type:
+    :param verbose:
+        bool
+    :return:
+
+    """
+    coord_type = coord_type.lower()
+    if coord_type not in ['md', 'tvd', 'twt', 'owt']:
+        raise IOError('Dimension type must be either md, tvd, twt or owt. Not {}'.format(coord_type))
+
+    coord_units = translate_units_for_pint(coord_units)
+
+    # automatically convert the coordinate units to meter or ms
+    if coord_type in ['md', 'tvd']:
+        if coord_units.lower() in ['f', 'ft', 'feet', 'foot']:
+            # _coords = coords * ureg.foot  # attach units to the coordinates
+            # _coords = _coords.to(ureg.meter)  # convert to meter
+            _coords = Q_(coords, 'foot')  # attach units to the coordinates
+            _coords = _coords.to('meter')  # convert to meter
+            if verbose:
+                info_txt = 'Converting coords from {} to meter'.format(coord_units)
+                print_info(info_txt, 'info', logger)
+            coords = _coords.magnitude
+            coord_units = 'meter'
+            return coords, coord_units, coord_type
+        elif coord_units.lower() in ['m', 'meter']:
+            return coords, coord_units.lower(), coord_type
+        elif not is_equivalent(coord_units, 'meter'):
+            raise IOError('MD coordinate type not compatible with unit [{}]'.format(coord_units))
+        else:
+            raise IOError('Unknown combination of MD coordinate type and unit {}'.format(coord_units))
+    else:
+        if coord_units.lower() in ['s', 'sec', 'second']:
+            #_coords = coords * ureg.second  # attach units to the coordinates
+            # _coords = _coords.to(ureg.millisecond)  # convert to milliseconds
+            _coords = Q_(coords, 'second')  # attach units to the coordinates
+            _coords = _coords.to('millisecond')  # convert to milliseconds
+            if verbose:
+                info_txt = 'Converting coords from {} to ms'.format(coord_units)
+                print_info(info_txt, 'info', logger)
+            coords = _coords.magnitude
+            coord_units = 'millisecond'
+            return coords, coord_units, coord_type
+        elif coord_units.lower() in ['ms', 'millisecond']:
+            return coords, coord_units.lower(), coord_type
+        elif not is_equivalent(coord_units, 'millisecond'):
+            raise IOError('TWT or OWT coordinate type not compatible with unit [{}]'.format(coord_units))
+        else:
+            raise IOError('Unknown combination of TWT or OWT coordinate type and unit {}'.format(coord_units))
+
+
 def create_data_array(
         name: str,
         data: np.ndarray,
@@ -1883,51 +2077,10 @@ def create_data_array(
         str
         Either 'md', 'twt' or 'owt'
     """
-    # Make units understandable for pint-xarray
-    def translate_units_for_pint(unit):
-        """
-        I think there is a bug in pint-xarray, which stops it from taking custom units into account
-        To alleviate this, we do a simplistic translation here
-        :param unit:
-            str
-        :return:
-            str
-        """
-        if unit in ['FT']:
-            return 'ft'
-        elif unit in ['US/F']:
-            return 'us/ft'
-        elif unit in ['Ohmm', 'ohmm']:
-            return 'ohm m'
-        elif unit in ['']:
-            pass
-        else:
-            return unit
-
-    coord_type = coord_type.lower()
-    if coord_type not in ['md', 'twt', 'owt']:
-        raise IOError('Dimension type must be either md, twt or owt. Not {}'.format(coord_type))
 
     data_units = translate_units_for_pint(data_units)
-    coord_units = translate_units_for_pint(coord_units)
 
-    # automatically convert the coordinate units to meter or ms
-    if coord_type == 'md':
-        if coord_units in ['f', 'ft', 'feet', 'foot']:
-            _coords = coords * ureg.foot  # attach units to the coordinates
-            _coords = _coords.to(ureg.meter)  # convert to meter
-            info_txt = 'Converting coords from {} to meter'.format(coord_units)
-            print_info(info_txt, 'info', logger)
-            coords = _coords.magnitude
-            coord_units = 'meter'
-    else:
-        if coord_units in ['s', 'sec', 'second']:
-            _coords = coords * ureg.second  # attach units to the coordinates
-            _coords = _coords.to(ureg.millisecond)  # convert to milliseconds
-            info_txt = 'Converting coords from {} to ms'.format(coord_units)
-            print_info(info_txt, 'info', logger)
-            coords = _coords.magnitude
-            coord_units = 'millisecond'
+    coords, coord_units, coord_type = handle_coords_old(coords, coord_units, coord_type)
 
     coords_data = xr.DataArray(coords, dims=coord_type)
     log_values = xr.DataArray(name=name, data=data, dims=[coord_type], coords={coord_type: coords_data})

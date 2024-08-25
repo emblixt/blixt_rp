@@ -45,7 +45,7 @@ class MineralData:
 class Header(AttribDict):
     """
     Class for mineral set header information
-    A ``Hedaer`` object may contain all header information (also known as meta
+    A ``Header`` object may contain all header information (also known as meta
     data) of a MineralSet object. 
     Those headers may be
     accessed or modified either in the dictionary style or directly via a

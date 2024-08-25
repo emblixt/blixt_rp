@@ -4,18 +4,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 import xarray as xr
-import pint
+from math import isclose
 from .. import ureg, Q_
 
 from blixt_rp.core.param import Param
 
-from blixt_rp.core.log_curve_new import LogCurve, LogCurve2dNew, create_data_array, is_equivalent, _interpolate
+from blixt_rp.core.log_curve_new import LogCurve, LogCurve2dNew, Coordinate, create_data_array, is_equivalent
 from blixt_rp.core.template_new import Template
 from blixt_rp.core.header_new import Header
 
 test_file_dir = str(os.path.dirname(__file__).replace(
     'blixt_rp\\unit_tests',
     'test_data'))
+
+project_table = os.path.join(test_file_dir.replace('test_data', 'excels'), 'project_table.xlsx')
 
 las_file1 = os.path.join(test_file_dir, "L-30.las")
 las_file2 = "T:\\ROKDOC\\PL936\\To Partners from Ikon\\To Partners\\las files\\6406_11_1s.las"
@@ -51,7 +53,7 @@ dp2 = create_data_array(
     data2,
     's/m',
     depth2,
-    'feet',
+    'FT',
     'md')
 
 dp3 = create_data_array(
@@ -74,12 +76,13 @@ dp4 = create_data_array(
 class WellTestCase(unittest.TestCase):
 
     def test_data_pair(self):
-        print(type(dp1))
-        print(dp1.name)
-        if isinstance(dp1, xr.DataArray):
+        print(type(dp2))
+        print(dp2.name)
+        if isinstance(dp2, xr.DataArray):
             print('It is recognised as a DataArray')
         else:
             print('It is NOT recognized')
+        self.assertIsInstance(dp2, xr.DataArray, '')
 
     def test_LogCurve_new(self):
         lc = LogCurve2dNew(
@@ -236,7 +239,7 @@ class WellTestCase(unittest.TestCase):
         print(t.name, t.units)
         t = Template()
         print(t)
-        t.get_from_project("C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table.xlsx", 'Resistivity')
+        t.get_from_project(project_table, 'Resistivity')
         t['max'] = 999
         t.colormap = 'A GIANT COLOR'
         print(t)
@@ -250,12 +253,14 @@ class WellTestCase(unittest.TestCase):
         print(h.orig_filename, h.creation_date, h.modification_date)
 
     def test_units(self):
+        from blixt_rp.core.log_curve_new import fix_units_for_pint
         nM = ureg.Unit('nM')
         nmol_L = ureg.Unit('nmol/L')
         m = ureg.Unit('m')
         ft = ureg.Unit('ft')
         print(is_equivalent(nM, nmol_L))  # True
         print(is_equivalent(m, ft))  # False
+        print(fix_units_for_pint('m3'))
 
     def test_a_lot(self):
         lc = LogCurve2dNew(None)
@@ -270,7 +275,7 @@ class WellTestCase(unittest.TestCase):
         # lc.d_arr.plot(); lc_smooth500.d_arr.plot(); lc_clean.d_arr.plot()
         # lc_mask = lc.calc_mask(cutoffs, verbose=True)
 
-        lc.read('temp', las_file2, 'las')
+        lc.read('rdep', las_file2, 'las')
         # lc_smooth_with_mask = lc.smooth(Q_(10., 'm'), mask=lc_mask.values)
         # lc_smooth_with_mask.d_arr.plot()
         lc_smooth10 = lc.smooth(Q_(500., 'ft'), discrete_intervals=[Q_(_z, 'km').to('m').magnitude for _z in [1., 2., 3.]])
@@ -284,3 +289,30 @@ class WellTestCase(unittest.TestCase):
         plt.show()
         self.assertTrue(True)
 
+    def test_coords(self):
+        coords_list = [10.0, (2., 3.), np.linspace(5., 10., 3)]
+        coord_units_list = ['s', 'FT', 'US', 'M']
+        coord_types_list = ['twt', 'md']
+        for coords in coords_list:
+            for coord_units in coord_units_list:
+                for coord_type in coord_types_list:
+                    # print(coord_type, coord_units)
+                    try:
+                        a = Coordinate(coords, coord_units, coord_type)
+                        if coord_type == 'twt':
+                            if isinstance(a.data, float):
+                                self.assertTrue(isclose(a.data, 10000.))
+                            else:
+                                self.assertTrue(isclose(a.data[0], coords[0] * 1000.))
+                        elif coord_units == 'FT':
+                            if isinstance(a.data, float):
+                                self.assertTrue(isclose(a.data, coords / 3.281, rel_tol=1.e-4))
+                            else:
+                                self.assertTrue(isclose(a.data[0], coords[0] / 3.281, rel_tol=1.e-4))
+                        elif coord_units == 'M':
+                            if isinstance(a.data, float):
+                                self.assertTrue(isclose(a.data, coords))
+                            else:
+                                self.assertTrue(isclose(a.data[0], coords[0]))
+                    except IOError as msg:
+                        print('ERROR:', msg)

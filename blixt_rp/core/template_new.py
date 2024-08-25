@@ -13,6 +13,7 @@ sys.path.append(os.path.join(str(project_dir), 'blixt_utils'))
 from blixt_utils.utils import isnan
 from blixt_utils.misc.attribdict import AttribDict
 
+
 class Template(AttribDict):
     """
     Template class

@@ -1,6 +1,10 @@
+## Additions
+API = 1 * dimensionless = api
+us = 1e-6 * second
 ohmm = [resistivity] = ohm * meter = Ωm
 
 @alias degC = degc
 @alias ohm = Ohm
 @alias ohmm = Ohmm
 @alias foot = FT
+@alias us = US
