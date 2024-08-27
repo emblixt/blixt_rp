@@ -1897,7 +1897,7 @@ def translate_units_for_pint(unit):
     I think there is a bug in pint-xarray, which stops it from taking custom units into account
     To alleviate this, we do a simplistic translation here
 
-    You need to add the following lines to: "C:\<PATH TO site-packages>\pint\default_en.txt"
+    You need to add the following lines to: "<PATH TO site-packages>\\pint\\default_en.txt"
 
         ## Additions
         API = 1 * dimensionless = api

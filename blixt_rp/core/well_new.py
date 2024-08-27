@@ -22,7 +22,6 @@ Take inspiration from obspy and converter to create these objects
 import numpy as np
 import pandas as pd
 import logging
-import re
 import os
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
@@ -30,7 +29,7 @@ from matplotlib.font_manager import FontProperties
 
 from blixt_utils.misc.templates import log_header_to_template as l2tmpl
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
-from blixt_utils.utils import print_info
+from blixt_utils.utils import print_info, add_one
 import blixt_utils.io.io as uio
 from blixt_utils.io.io import well_reader
 import blixt_utils.misc.masks as msks
@@ -1315,16 +1314,6 @@ def _read_data(file):
         with open(file, "r", encoding='UTF8') as f:
             lines = f.readlines()
         return well_reader(lines, file_format=file_format)  # read all lines from data
-
-
-def add_one(instring):
-    trailing_nr = re.findall(r"\d+", instring)
-    if len(trailing_nr) > 0:
-        new_trail = str(int(trailing_nr[-1]) + 1)
-        instring = instring.replace(trailing_nr[-1], new_trail)
-    else:
-        instring = instring + ' 1'
-    return instring
 
 
 def add_headers(_header, _well_info, _ignore_keys, _note):
