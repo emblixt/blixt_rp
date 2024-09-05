@@ -6,6 +6,12 @@ ohmm = [resistivity] = ohm * meter = Ωm
 @alias degC = degc
 @alias ohm = Ohm
 @alias ohmm = Ohmm
+@alias ohmm = OHMM
 @alias foot = FT
+@alias foot = F
 @alias us = US
 @alias meter = M
+@alias inch = IN
+@alias cc = CC
+@alias gram = G
+@alias API = GAPI

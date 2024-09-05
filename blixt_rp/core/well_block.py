@@ -110,7 +110,7 @@ class WellBlock(object):
 
     def __len__(self):
         try:
-            return len(self.logs[self.log_names()[0]].data)  # all logs within a Block should have same length
+            return len(self.logs[self.log_names()[0]].values)  # all logs within a Block should have same length
         except:
             return 0
 
@@ -118,7 +118,7 @@ class WellBlock(object):
         return self.start.unit
 
     def get_md(self):
-        return self.logs['depth'].data
+        return self.logs['depth'].values
 
     def get_tvd(self, tvd_key=None):
         if tvd_key is None:
@@ -129,7 +129,7 @@ class WellBlock(object):
             print_info(warn_txt, 'warning', logger)
             tvd = self.get_md()
         else:
-            tvd = self.logs[tvd_key].data
+            tvd = self.logs[tvd_key].values
         return tvd
 
     def keys(self):
@@ -335,7 +335,7 @@ class WellBlock(object):
             repl = repl_vel
         if us_unit:
             repl = repl * 1e6
-        nan_mask = np.ma.masked_invalid(self.logs[log_name].data).mask
+        nan_mask = np.ma.masked_invalid(self.logs[log_name].values).mask
 
         # Smooth and despiked version of vp
         smooth_log = self.logs[log_name].despike(spike_threshold)
@@ -343,8 +343,8 @@ class WellBlock(object):
 
         if debug:
             fig, ax = plt.subplots()
-            ax.plot(self.logs['depth'].data, smooth_log, 'r', lw=2)
-            ax.plot(self.logs['depth'].data, self.logs[log_name].data, 'k', lw=0.5)
+            ax.plot(self.logs['depth'].values, smooth_log, 'r', lw=2)
+            ax.plot(self.logs['depth'].values, self.logs[log_name].values, 'k', lw=0.5)
             # ax.plot(self.logs['depth'].data[13000:14500]/3.2804, smooth_log[13000:14500]*3.2804, 'r', lw=2)
             # ax.plot(self.logs['depth'].data[13000:14500]/3.2804, self.logs[log_name].data[13000:14500]*3.2804, 'k', lw=0.5)
             ax.legend(['Smooth and despiked', 'Original'])
@@ -366,9 +366,9 @@ class WellBlock(object):
 
         if debug:
             fig, ax = plt.subplots()
-            ax.plot(self.logs['depth'].data, scaled_dt, 'b', lw=1)
+            ax.plot(self.logs['depth'].values, scaled_dt, 'b', lw=1)
             ax2 = ax
-            ax2.plot(self.logs['depth'].data, tdr, 'k', lw=1)
+            ax2.plot(self.logs['depth'].values, tdr, 'k', lw=1)
             plt.show()
 
         return tdr
@@ -396,7 +396,7 @@ class WellBlock(object):
             if ss not in self.log_names():
                 continue
             else:
-                din = self.logs[ss].data
+                din = self.logs[ss].values
                 success, dout = cnvrt(din, 'us/ft', 'm/s')
 
             self.add_log(
@@ -439,7 +439,7 @@ class WellBlock(object):
         else:
             fname = 'unknown file'
 
-        md = self.logs['depth'].data
+        md = self.logs['depth'].values
 
         # Calculate and write TVD to well
         if survey_points is None:
@@ -537,17 +537,17 @@ class WellBlock(object):
         else:
             fname = 'unknown file'
 
-        md = self.logs['depth'].data
+        md = self.logs['depth'].values
 
         if twt_points is None:
             # Use the first existing One-way time log to calculate a TWT log
             if 'One-way time' in self.log_types():
                 log_curve = self.get_logs_of_type('One-way time')[0]
-                new_twt = 2. * log_curve.data
+                new_twt = 2. * log_curve.values
                 fname = log_curve.name
                 _name = 'twt_from_owt'
                 _x = md
-                _y = 1000.0 * log_curve.data
+                _y = 1000.0 * log_curve.values
             else:
                 return None
         else:
@@ -634,7 +634,7 @@ class WellBlock(object):
                         mask_name, self.well)
                     print_info(warn_txt, 'warning', logger)
                 else:
-                    mask = self.masks[mask_name].data
+                    mask = self.masks[mask_name].values
                     mask_desc = self.masks[mask_name].header.desc
         toc_trend, toc_picked, dlr_trend, dlr_picked = calc_toc(self.logs[log_table['Resistivity']],
                                          self.logs[log_table['Sonic']],

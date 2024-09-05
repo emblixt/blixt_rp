@@ -11,7 +11,7 @@ from .. import ureg, Q_
 
 from blixt_rp.core.param import Param
 
-from blixt_rp.core.log_curve_new import LogCurve, LogCurve2dNew, create_data_array
+from blixt_rp.core.log_curve_new import LogCurve, LogCurve2dNew, Depth, is_equivalent, read_las
 from blixt_rp.core.template_new import Template
 from blixt_rp.core.header_new import Header
 
@@ -26,163 +26,167 @@ las_file2 = "T:\\ROKDOC\\PL936\\To Partners from Ikon\\To Partners\\las files\\6
 
 n = 1500
 # create a regularly sampled data set
-data1 = np.linspace(2, 4, n) + np.random.random(n)
-depth1 = np.linspace(24, 3430, n)
+data1 = Q_(np.linspace(2, 4, n) + np.random.random(n), 'us/feet')
+depth1 = Q_(np.linspace(24, 3430, n), 'm')
 
 # create an irregularly sampled data set
-data2 = np.linspace(6, 8, n) + np.random.random(n)
-depth2 = np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n)
+data2 = Q_(np.linspace(6, 8, n) + np.random.random(n), 's/m')
+depth2 = Q_(np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n), 'FT')
 
 n = 1400
 # create a shorter regularly sampled data set
-data3 = np.linspace(2, 4, n) + np.random.random(n)
-depth3 = np.linspace(24, 3430, n)
+data3 = Q_(np.linspace(2, 4, n) + np.random.random(n), 'us/feet')
+depth3 = Q_(np.linspace(24, 3430, n), 'm')
 
 # create a shorter irregularly sampled data set
-data4 = np.linspace(6, 8, n) + np.random.random(n)
-depth4 = np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n)
-
-dp1 = create_data_array(
-    'DataPair1',
-    data1,
-    'us/feet',
-    depth1,
-    'm',
-    'md')
-
-dp2 = create_data_array(
-    'DataPair2',
-    data2,
-    's/m',
-    depth2,
-    'FT',
-    'md')
-
-dp3 = create_data_array(
-    'DataPair3',
-    data3,
-    'us/feet',
-    depth3,
-    'm',
-    'md')
-
-dp4 = create_data_array(
-    'DataPair4',
-    data4,
-    's/m',
-    depth4,
-    'feet',
-    'md')
+data4 = Q_(np.linspace(6, 8, n) + np.random.random(n), 's/m')
+depth4 = Q_(np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n), 'feet')
 
 
 class WellTestCase(unittest.TestCase):
 
-    def test_data_pair(self):
-        print(type(dp2))
-        print(dp2.name)
-        if isinstance(dp2, xr.DataArray):
-            print('It is recognised as a DataArray')
-        else:
-            print('It is NOT recognized')
-        self.assertIsInstance(dp2, xr.DataArray, '')
+    def test_data_types(self):
+        print(type(data1))
+        self.assertIsInstance(data1, pint.Quantity, '')
+        d = Depth(depth1)
+        self.assertIsInstance(d, Depth, '')
+        print(depth2.units)
+        d = Depth(depth2)  # Automatically converts from feet to meter
+        print(d.units)
+        self.assertTrue(is_equivalent(d.units, pint.Unit('meter')))
 
     def test_LogCurve_new(self):
         lc = LogCurve2dNew(
-            dp2
+            'my_well_log',
+            data1,
+            Depth(depth1)
         )
-        print(lc.coord_type)
-        print(lc.coord_units)
-        print(lc.coords)
+        print(lc.depth_type)
+        print(lc.depth_units)
         print(lc.is_evenly_spaced)
-        print(lc.step)
+        print(lc.step())
         # Try convert units of data
-        print(lc.d_arr.data.max())
-        lc.d_arr = lc.d_arr.pint.to('s/feet')
-        print(lc.d_arr.data.max())
+        print(lc.data.max())
+        lc.data = lc.data.to('s/feet')
+        print(lc.data.max())
         lc = LogCurve2dNew(
-            dp1,
+            'my_well_log',
+            data1,
+            Depth(depth1),
             style={'units': 's/feet'}
         )
         print(lc.is_evenly_spaced)
-        print(lc.step)
-        print(lc.d_arr.data.max())
-        lc.d_arr = lc.d_arr.pint.to('s/m')
-        print(lc.d_arr.data.max())
+        print(lc.step())
+        print(lc.data.max())
+        lc.data = lc.data.to('s/m')
+        print(lc.data.max())
         print(lc.units)
-        print(lc.values)
 
     def test_failing_unit_convert(self):
-        # This should fail because the data pair has units us/ft, which can't be converted to 'kg' which the
-        # style asks for
+        # This should fail, and raise warning, because the data pair has units us/ft,
+        # which can't be converted to 'kg' which the # style asks for
         style = {'units': 'kg'}
-        self.assertRaises(ValueError, LogCurve2dNew, dp2, None, None, style, None)
+        lc = LogCurve2dNew('', data1, Depth(depth1), None, None, style, None)
 
     def test_built_in_unit_convert(self):
         lc = LogCurve2dNew(
-            dp2
+            'test',
+            data2,
+            Depth(depth2)
         )
-        print(lc.style)
-        print(lc.d_arr.data.max())
+        print(lc.style.units)
+        print('Original max of data: {}'.format(lc.data.max()))
         lc.convert_to('us/m')
-        print(lc.style)
-        print(lc.d_arr.data.max())
-        print(lc.header)
-        print(lc.d_arr.coords.values())
+        print(lc.style.units)
+        print('Max of data after conversion: {}'.format(lc.data.max()))
+        print(lc.header.modification_history)
+        print('Original depth {}'.format(lc.depth.values[0]))
         lc.convert_coords_to('feet')
-        print(lc.style)
-        print(lc.d_arr.data.max())
-        print(lc.header)
-        print(lc.d_arr.coords.values())
+        print(lc.header.modification_history)
+        print('Depth after conversion {}'.format(lc.depth.values[0]))
+
+    def test_calculate_velocity(self):
+        lc_p = LogCurve2dNew(
+            'test',
+            data1,
+            Depth(depth1),
+            log_type='Sonic')
+        lc_s = LogCurve2dNew(
+            'test',
+            data1,
+            Depth(depth1),
+            log_type='Shear sonic')
+
+        lc_vp = lc_p.velocity_from_sonic('Vp_from_sonic')
+        print(lc_vp.name)
+        print(lc_vp.log_type)
+        print(lc_vp.units)
+        lc_vs = lc_s.velocity_from_sonic('Vs_from_sonic')
+        print(lc_vs.name)
+        print(lc_vs.log_type)
+        print(lc_vs.units)
 
     def test_take_sampling(self):
-        lc1 = LogCurve2dNew(dp1)
-        lc3 = LogCurve2dNew(dp3)
+        lc1 = LogCurve2dNew(
+            'test',
+            data1,
+            Depth(depth1)
+        )
+        lc3 = LogCurve2dNew('test', data3, Depth(depth3))
         lc_new = lc1.take_sampling_from(lc3)
         print(lc1.step)
         print(lc3.step)
         print(lc_new.step)
-        lc1.d_arr.plot()
-        lc3.d_arr.plot()
-        lc_new.d_arr.plot()
+        lc1.plot(); lc3.plot(); lc_new.plot()
         print(lc1.name, len(lc1), lc3.name, len(lc3), lc_new.name, len(lc_new))
         plt.show()
 
     def test_LogCurve_copy(self):
         lc = LogCurve2dNew(
-            dp2
+            'test',
+            data1,
+            Depth(depth1)
         )
         lc2 = lc.copy()
+        print(lc2.header)
 
     def test_print(self):
         lc = LogCurve2dNew(
-            dp2,
-            header={'name': dp2.name}
+            'test',
+            data1,
+            Depth(depth1),
+            header={'name': 'Yalla'}
         )
         print(lc)
 
     def test_log_type(self):
         lc = LogCurve2dNew(
-            dp2,
-            header={'name': dp2.name, 'log_type': 'TEST'}
+            'My log',
+            data1,
+            Depth(depth1),
+            header={'log_type': 'TEST'}
         )
         print(lc.log_type)
         lc = LogCurve2dNew(
-            dp2,
-            header={'name': dp2.name}
+            'Another log',
+            data1,
+            Depth(depth1)
         )
         lc.log_type = 'TEST 2'
         print(lc.log_type)
 
     def test_failing_log_type(self):
         # This should raise an IOError because log type is not the same in header and initialization
-        header = {'name': dp2.name, 'log_type': 'TEST'}
-        self.assertRaises(IOError, LogCurve2dNew, dp2, 'FAIL', None,  None, header)
+        header = {'name': 'My log', 'log_type': 'TEST'}
+        self.assertRaises(IOError, LogCurve2dNew, 'Name', data1, Depth(depth1), 'FAIL', None, None, header)
         # Below works too. Don't understand why
         # self.assertRaises(OSError, LogCurve2dNew, dp2, 'FAIL', None, True, None, header)
 
     def test_masks(self):
         lc1 = LogCurve2dNew(
-            dp1,
+            'DataPair1',
+            data1,
+            Depth(depth1),
             log_type='TEST'
         )
         cutoffs1 = {'DataPair1': ['><', [2.9, 3.1]]}
@@ -203,12 +207,35 @@ class WellTestCase(unittest.TestCase):
         self.assertTrue(np.sum(lc1.calc_mask(cutoffs7, verbose=True).values) < 1)
 
     def test_read(self):
-        lc = LogCurve2dNew(None)
-        las_file = 'C:\\Users\\marte\\PycharmProjects\\blixt_rp\\test_data\\Well E_CPI.las'
-        lc.read('phie', las_file, 'las', True)
-        print(lc.name, np.nanmin(lc.values), np.nanmax(lc.values), lc.units, lc.coord_type, np.min(lc.coords),
-              np.max(lc.coords), lc.coord_units)
-        self.assertIsInstance(lc, LogCurve2dNew, '')
+        # las_file = 'C:\\Users\\marte\\PycharmProjects\\blixt_rp\\test_data\\Well E_CPI.las'
+        log_curves, well_info = read_las(las_file1)
+        print(len(log_curves))
+        lc = log_curves['grd']
+        print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
+              lc.depth.base, lc.depth_units)
+
+        print('\nNow using log_table')
+        log_table = {'Density': 'rhob', 'Sonic': 'dt'}
+        log_curves, well_info = read_las(las_file1, log_table=log_table)
+        print(len(log_curves))
+        lc = log_curves['dt']
+        print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
+              lc.depth.base, lc.depth_units)
+
+        print(lc.header)
+
+        print('\nNow using erroneous log_table')
+        log_table = {'Density': 'xxx', 'Sonic': 'yyy'}
+        log_curves, well_info = read_las(las_file1, log_table=log_table)
+        print(len(log_curves))
+
+        print('Reading a more complex las file')
+        log_table = {'Resistivity': 'rdep', 'Sonic': 'dt'}
+        log_curves, well_info = read_las(las_file2, log_table=log_table)
+        lc = log_curves['rdep']
+        print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
+              lc.depth.base, lc.depth_units)
+
 
     def test_LogCurve(self):
         lc = LogCurve(
@@ -255,34 +282,37 @@ class WellTestCase(unittest.TestCase):
         print(h.orig_filename, h.creation_date, h.modification_date)
 
     def test_a_lot(self):
-        lc = LogCurve2dNew(None)
+        fig, ax = plt.subplots()
+        log_table = {'Resistivity': 'rdep', 'Sonic': 'dt'}
+        log_curves, well_info = read_las(las_file2, log_table=log_table)
+        lc = log_curves['dt']
+        lc.plot(ax=ax)
         cutoffs = {'dt': ['>', 140.]}
-        # lc.read('dt', las_file1, 'las')
-        # lc_smooth10 = lc.smooth(Q_(10., 'm'))
-        # lc_smooth10.d_arr.plot()
+        lc_smooth10 = lc.smooth(Q_(10., 'm'))
+        lc_smooth10.plot(ax=ax)
         # lc_smooth500 = lc.smooth(Q_(500., 'm'))
-        # lc_smooth500.d_arr.plot()
+        # lc_smooth500.data.plot()
         # lc_clean = lc_smooth500.clean_data()
         # print(len(lc), len(lc_smooth500), len(lc_clean))
-        # lc.d_arr.plot(); lc_smooth500.d_arr.plot(); lc_clean.d_arr.plot()
+        # lc.data.plot(); lc_smooth500.data.plot(); lc_clean.data.plot()
         # lc_mask = lc.calc_mask(cutoffs, verbose=True)
 
-        lc.read('rdep', las_file2, 'las')
+        lc = log_curves['rdep']
         # lc_smooth_with_mask = lc.smooth(Q_(10., 'm'), mask=lc_mask.values)
-        # lc_smooth_with_mask.d_arr.plot()
-        lc_smooth10 = lc.smooth(Q_(500., 'ft'), discrete_intervals=[Q_(_z, 'km').to('m').magnitude for _z in [1., 2., 3.]])
-        print(lc_smooth10.header)
-        # lc_smooth10.d_arr.plot()
-        lc_fill1 = lc.fill_gaps()
+        # lc_smooth_with_mask.data.plot()
+        # lc_smooth10 = lc.smooth(Q_(500., 'ft'), discrete_intervals=[Q_(_z, 'km').to('m').magnitude for _z in [1., 2., 3.]])
+        # print(lc_smooth10.header)
+        # lc_smooth10.data.plot()
+        # lc_fill1 = lc.fill_gaps()
         # lc_fill2 = lc.fill_gaps(extrapolate=True)
-        lc_fill2 = lc.fill_gaps('fill_with_values', fill_values=np.ones(len(lc)))
-        lc_fill1.d_arr.plot(); lc.d_arr.plot(); lc_fill2.d_arr.plot.line('k--')
+        # lc_fill2 = lc.fill_gaps('fill_with_values', fill_values=np.ones(len(lc)))
+        # lc_fill1.data.plot(); lc.data.plot(); lc_fill2.data.plot.line('k--')
 
         plt.show()
         self.assertTrue(True)
 
     def test_coords(self):
-        from blixt_rp.core.log_curve_new import Coordinate
+        from blixt_rp.core.log_curve_new import Depth
         coords_list = [10.0, (2., 3.), np.linspace(5., 10., 3), 1.,
                        10.0, (2., 3.), np.linspace(5., 10., 3), 1.,
                        10.0, (2., 3.), np.linspace(5., 10., 3), 1.]
@@ -303,25 +333,25 @@ class WellTestCase(unittest.TestCase):
             if success:
                 print('{}: This should work'.format(i))
                 print(coord_type, coord_units)
-                a = Coordinate(coords, units=coord_units, coord_type=coord_type)
+                a = Depth(coords, units=coord_units, depth_type=coord_type)
                 if coord_type == 'twt':
-                    if isinstance(a.data, float):
-                        self.assertTrue(isclose(a.data, coords * 1000.))
+                    if isinstance(a.values, float):
+                        self.assertTrue(isclose(a.values, coords * 1000.))
                     else:
-                        self.assertTrue(isclose(a.data[0], coords[0] * 1000.))
+                        self.assertTrue(isclose(a.values[0], coords[0] * 1000.))
                     a.coord_type = 'TEST'
                     a.coords = Q_(0.1, 'hours')
                     print(a.coord_type, a.coords)
                 elif coord_units == 'FT':
-                    if isinstance(a.data, float):
-                        self.assertTrue(isclose(a.data, coords / 3.281, rel_tol=1.e-4))
+                    if isinstance(a.values, float):
+                        self.assertTrue(isclose(a.values, coords / 3.281, rel_tol=1.e-4))
                     else:
-                        self.assertTrue(isclose(a.data[0], coords[0] / 3.281, rel_tol=1.e-4))
+                        self.assertTrue(isclose(a.values[0], coords[0] / 3.281, rel_tol=1.e-4))
                 elif coord_units == 'M':
-                    if isinstance(a.data, float):
-                        self.assertTrue(isclose(a.data, coords))
+                    if isinstance(a.values, float):
+                        self.assertTrue(isclose(a.values, coords))
                     else:
-                        self.assertTrue(isclose(a.data[0], coords[0]))
+                        self.assertTrue(isclose(a.values[0], coords[0]))
             else:
                 print('{}: This should fail'.format(i))
-                self.assertRaises(pint.errors.DimensionalityError, Coordinate, coords, coord_units, coord_type, True)
+                self.assertRaises(pint.errors.DimensionalityError, Depth, coords, coord_units, coord_type, True)

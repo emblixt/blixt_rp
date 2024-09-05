@@ -465,7 +465,7 @@ class Well(object):
                         )
                         print_info(warn_txt, 'warning', logger)
                         continue
-                    this_fraction = self.block[block_name].logs[_name].data
+                    this_fraction = self.block[block_name].logs[_name].values
                 if param == 'k':
                     this_component = val[this_fm].k.value
                 elif param == 'mu':
@@ -730,7 +730,7 @@ class Well(object):
                 else:
                     # calculate mask
                     masks.append(msks.create_mask(
-                        self.block[lblock].logs[lname.lower()].data, cutoffs[lname][0], cutoffs[lname][1]
+                        self.block[lblock].logs[lname.lower()].values, cutoffs[lname][0], cutoffs[lname][1]
                     ))
             if len(masks) > 0:
                 # combine all masks for this Block
@@ -744,7 +744,7 @@ class Well(object):
                     # read in old mask
                     if append not in ['AND', 'OR']:
                         raise IOError("Parameter 'append' must be either 'AND' or 'OR'")
-                    old_mask = self.block[lblock].masks[name].data
+                    old_mask = self.block[lblock].masks[name].values
                     old_desc = self.block[lblock].masks[name].header.desc
                     # modify the new
                     block_mask = msks.combine_masks([old_mask, block_mask], combine_operator=append)
@@ -789,10 +789,10 @@ class Well(object):
         if name is not None:
             for lblock in list(self.block.keys()):
                 if name in list(self.block[lblock].masks.keys()):
-                    msk = self.block[lblock].masks[name].data
+                    msk = self.block[lblock].masks[name].values
                     desc = self.block[lblock].masks[name].header.desc
                     for lname in list(self.block[lblock].logs.keys()):
-                        self.block[lblock].logs[lname].data = self.block[lblock].logs[lname].data[msk]
+                        self.block[lblock].logs[lname].values = self.block[lblock].logs[lname].values[msk]
                         self.block[lblock].logs[lname].header.modification_history = 'Mask: {}'.format(desc)
                     del (self.block[lblock].masks[name])
 
@@ -885,8 +885,8 @@ class Well(object):
             if x_templ is None:
                 x_templ = l2tmpl(logcurve.header)
             # print(cnt, logcurve.name, xp.cnames[cnt], mask)
-            xdata = logcurve.data
-            ydata = self.block[logcurve.block].logs[y_log_name].data
+            xdata = logcurve.values
+            ydata = self.block[logcurve.block].logs[y_log_name].values
             legends.append(logcurve.name)
             xp.plot(
                 xdata,

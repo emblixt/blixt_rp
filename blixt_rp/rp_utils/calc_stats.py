@@ -639,16 +639,16 @@ def collect_data_for_this_interval_tops(
         )
 
         # Calculate mask
-        mask = well.block[block_name].masks[def_msk_name].data
+        mask = well.block[block_name].masks[def_msk_name].values
 
-        this_depth = well.block[block_name].logs['depth'].data[mask]
+        this_depth = well.block[block_name].logs['depth'].values[mask]
         test_depth(this_depth, interval, this_well_name)
 
         # calculate the depth from the top for each well
         depth_from_top[this_well_name] = this_depth - tops[this_well_name][interval['tops'][0].upper()]
 
         for key in logs:
-            this_data = well.block[block_name].logs[key].data[mask]
+            this_data = well.block[block_name].logs[key].values[mask]
             results[key] = np.append(results[key], this_data)
             results_per_well[this_well_name][key] = this_data
 
@@ -690,9 +690,9 @@ def collect_data_for_this_interval(
         )
 
         # Calculate mask
-        mask = well.block[block_name].masks[def_msk_name].data
+        mask = well.block[block_name].masks[def_msk_name].values
 
-        this_depth = well.block[block_name].logs['depth'].data[mask]
+        this_depth = well.block[block_name].logs['depth'].values[mask]
         test_depth(this_depth, wi_name, this_well_name)
 
         # calculate the depth from the top for each well
@@ -711,9 +711,9 @@ def collect_data_for_this_interval(
         if calculate_backus:
             info_txt = 'Calculating Backus averaged values of Vp, Vs and Rho'
             print_info(info_txt, 'warning', logger)
-            vp = well.block[block_name].logs[log_table['P velocity']].data
-            vs = well.block[block_name].logs[log_table['S velocity']].data
-            rho = well.block[block_name].logs[log_table['Density']].data
+            vp = well.block[block_name].logs[log_table['P velocity']].values
+            vs = well.block[block_name].logs[log_table['S velocity']].values
+            rho = well.block[block_name].logs[log_table['Density']].values
             try:
                 ba = bra.backus(vp, vs, rho, backus_length, well.block[block_name].step)
             except:
@@ -722,9 +722,9 @@ def collect_data_for_this_interval(
                 # create three arrays of nans
                 ba = [np.array([np.nan for i in range(len(vp))]) for j in range(3)]
 
-            well.block[block_name].logs[log_table['P velocity']].data = ba[0]
-            well.block[block_name].logs[log_table['S velocity']].data = ba[1]
-            well.block[block_name].logs[log_table['Density']].data = ba[2]
+            well.block[block_name].logs[log_table['P velocity']].values = ba[0]
+            well.block[block_name].logs[log_table['S velocity']].values = ba[1]
+            well.block[block_name].logs[log_table['Density']].values = ba[2]
         elif backus_length is not None:
             warn_txt = 'Calculation of Backus averaged values failed (missing logs?)'
             print_info(warn_txt, 'warning', logger)
@@ -732,7 +732,7 @@ def collect_data_for_this_interval(
         for key in logs:
             if key not in well.log_names():
                 continue
-            this_data = well.block[block_name].logs[key].data[mask]
+            this_data = well.block[block_name].logs[key].values[mask]
             results[key] = np.append(results[key], this_data)
             results_per_well[this_well_name][key] = this_data
 

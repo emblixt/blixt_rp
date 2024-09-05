@@ -447,7 +447,7 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             wavelet_plot(mini_ax, wavelet['time'], wavelet['wavelet'], orientation='down', show_ticks=False)
         mini_ax.tick_params(labelsize='small')
 
-    plot_outline = True
+    plot_outline = False
     if plot_outline:
         plot_quasi_2d(model, ax=ax, c='k', ls='--', lw=0.5)
 

@@ -77,9 +77,9 @@ def test_ixg_plot():
     with open('C:\\Users\\marten\\Downloads\\angle_traces.dat', 'rb') as input:
         twt, near_trace, mid_trace, far_trace = pickle.load(input)
 
-    i, g, q = avo_ig(np.array([near_trace.data.flatten(), \
-	mid_trace.data.flatten(), \
-	far_trace.data.flatten()]), [10., 18., 26.])
+    i, g, q = avo_ig(np.array([near_trace.values.flatten(), \
+                               mid_trace.values.flatten(), \
+                               far_trace.values.flatten()]), [10., 18., 26.])
 
     res = least_squares(
         mycf.residuals,
@@ -102,11 +102,11 @@ def test_ixg_plot():
 
     with open('C:\\Users\\marten\\Downloads\\angle_lines.dat', 'rb') as input:
         twt, near_line, mid_line, far_line = pickle.load(input)
-    print('Line shape: {}'.format(near_line.data.shape))
+    print('Line shape: {}'.format(near_line.values.shape))
     
-    i, g, q = avo_ig(np.array([near_line.data.flatten(), \
-	mid_line.data.flatten(), \
-	far_line.data.flatten()]), [10., 18., 26.])
+    i, g, q = avo_ig(np.array([near_line.values.flatten(), \
+                               mid_line.values.flatten(), \
+                               far_line.values.flatten()]), [10., 18., 26.])
 
     res = least_squares(
             mycf.residuals,
@@ -164,23 +164,23 @@ def test_plot_amp_vs_offset():
     xline = 27009
     t0 = 1245
     near_trace = near.sel(INLINE=inline, XLINE=xline)
-    near_max = np.max(np.abs(near_trace.data))
+    near_max = np.max(np.abs(near_trace.values))
     mid_trace = mid.sel(INLINE=inline, XLINE=xline)
-    mid_max = np.max(np.abs(mid_trace.data))
+    mid_max = np.max(np.abs(mid_trace.values))
     far_trace = far.sel(INLINE=inline, XLINE=xline)
-    far_max = np.max(np.abs(far_trace.data))
+    far_max = np.max(np.abs(far_trace.values))
     angs = np.array([10., 18., 26.])
     fig, axes = plt.subplots(nrows=1, ncols=2)
 
 
     for a, t in zip(angs, [near_trace, mid_trace, far_trace]):
-        wiggle_plot(axes[0], twt, t.data, zero_at=a, scaling=10./max([near_max, mid_max, far_max]))
+        wiggle_plot(axes[0], twt, t.values, zero_at=a, scaling=10. / max([near_max, mid_max, far_max]))
 
     axes[0].axhline(t0)
 
-    ind = np.argmin(abs(near_trace.TWT.data - t0))
+    ind = np.argmin(abs(near_trace.TWT.values - t0))
 
-    amps = np.array([near_trace.data[ind], mid_trace.data[ind], far_trace.data[ind]])
+    amps = np.array([near_trace.values[ind], mid_trace.values[ind], far_trace.values[ind]])
 
     i, g, q = avo_ig(amps, angs)
 
@@ -237,7 +237,7 @@ def test_amp_spectra():
     desired_freqs = np.linspace(1, 1./(2 * sr0), 10)
     # scales, fs = freq2scale(desired_freqs, waveletname, sr0)
     scales = np.arange(1, 128)
-    plot_cwt(twt/1000., this_trace.data, scales, waveletname=waveletname, cmap='jet')
+    plot_cwt(twt / 1000., this_trace.values, scales, waveletname=waveletname, cmap='jet')
     #plot_cwt(time/1000., signal, desired_freqs)
     # try extracting the scales corresponding to above frequencies
     #scales, fs = freq2scale(desired_freqs, 'morl', sr0)

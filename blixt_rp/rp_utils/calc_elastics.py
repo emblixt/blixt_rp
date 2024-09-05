@@ -86,7 +86,7 @@ def calc_ai_around_top(
     if buffer is None:
         buffer = 30.
     if mask is None:
-        mask = np.array(np.ones(len(vp.data)), dtype=bool)  # All True values -> all data is included
+        mask = np.array(np.ones(len(vp.values)), dtype=bool)  # All True values -> all data is included
     if (mask is not None) and (mask_desc is None):
         mask_desc = 'UNKNOWN'
     if templates is None:
@@ -126,7 +126,7 @@ def calc_ai_around_top(
     #         if n not in list(header_axes.keys()):
     #             raise IOError('The {} axis is missing among the provided header axes')
 
-    depth = md.data
+    depth = md.values
     # fig = None
     # if ref_logs is None:
     #     fig = plt.figure(figsize=(12, 10))
@@ -161,11 +161,11 @@ def calc_ai_around_top(
               for xx in log_types]
     legends = ['{} [{}]'.format(xx, templates[xx]['unit']) for xx in log_types]
 
-    _x1 = vp.data; _x1[~mask] = np.nan
-    _x2 = rho.data; _x2[~mask] = np.nan
+    _x1 = vp.values; _x1[~mask] = np.nan
+    _x2 = rho.values; _x2[~mask] = np.nan
 
     # A uniformly sampled array of time steps, from A to B
-    t = np.arange(np.nanmin(twt.data), np.nanmax(twt.data), wavelet['header']['Sample rate'])
+    t = np.arange(np.nanmin(twt.values), np.nanmax(twt.values), wavelet['header']['Sample rate'])
 
     def re_plot(_h_above, _h_below, _ref_logs, _ref_traces):
         print('Replotting using :', _h_above, _h_below)
@@ -181,8 +181,8 @@ def calc_ai_around_top(
         annotate_plot(axes['md_ax'], depth[mask], intervals=intervals, interval_names=interval_names,
                       ylim=[md_min, md_max])
 
-        above_mask = np.ma.masked_inside(md.data[mask], top - _h_above, top).mask
-        below_mask = np.ma.masked_inside(md.data[mask], top, top + _h_below).mask
+        above_mask = np.ma.masked_inside(md.values[mask], top - _h_above, top).mask
+        below_mask = np.ma.masked_inside(md.values[mask], top, top + _h_below).mask
         avg_vp_above = np.nanmedian(_x1[mask][above_mask])
         avg_vp_below = np.nanmedian(_x1[mask][below_mask])
         avg_rho_above = np.nanmedian(_x2[mask][above_mask])
@@ -210,8 +210,8 @@ def calc_ai_around_top(
                         this_mask = above_mask
                     else:
                         this_mask = below_mask
-                        _soft_below['{}_soft_below'.format(_log.name)] = _log.data[mask][this_mask][soft_below_mask]
-                    _results['{}_{}'.format(_log.name, pos)] = np.nanmedian(_log.data[mask][this_mask])
+                        _soft_below['{}_soft_below'.format(_log.name)] = _log.values[mask][this_mask][soft_below_mask]
+                    _results['{}_{}'.format(_log.name, pos)] = np.nanmedian(_log.values[mask][this_mask])
 
         if _ref_traces is not None:
             for _trace in _ref_traces:
@@ -220,8 +220,8 @@ def calc_ai_around_top(
                         this_mask = above_mask
                     else:
                         this_mask = below_mask
-                    _results['{}_max_{}'.format(_trace.name, pos)] = np.max(_trace.data[mask][this_mask])
-                    _results['{}_min_{}'.format(_trace.name, pos)] = np.min(_trace.data[mask][this_mask])
+                    _results['{}_max_{}'.format(_trace.name, pos)] = np.max(_trace.values[mask][this_mask])
+                    _results['{}_min_{}'.format(_trace.name, pos)] = np.min(_trace.values[mask][this_mask])
 
         xlims = axis_plot(axes['ai_ax'], depth, [_x1 * _x2, _x1, _x2],
                           limits, styles, yticks=False, ylim=[md_min, md_max])
@@ -238,13 +238,13 @@ def calc_ai_around_top(
         header_plot(header_axes['ai_ax'], xlims, legends, styles)
 
         # get the twt that corresponds to md_min and md_max
-        twt_min = twt.data[np.nanargmin((md.data - md_min)**2)]
+        twt_min = twt.values[np.nanargmin((md.values - md_min) ** 2)]
         if np.isnan(twt_min):
-            twt_min = np.nanmin(twt.data[mask])
-        twt_mid = twt.data[np.nanargmin((md.data - top)**2)]
-        twt_max = twt.data[np.nanargmin((md.data - md_max)**2)]
+            twt_min = np.nanmin(twt.values[mask])
+        twt_mid = twt.values[np.nanargmin((md.values - top) ** 2)]
+        twt_max = twt.values[np.nanargmin((md.values - md_max) ** 2)]
         if np.isnan(twt_max):
-            twt_max = np.nanmax(twt.data[mask])
+            twt_max = np.nanmax(twt.values[mask])
 
         # Build a model based on the average elastic properties
         build_model = True
@@ -264,20 +264,20 @@ def calc_ai_around_top(
             _twt, _layer_i, _vp, _vs, _rho, _z = m.realize_model(time_step)
             _reff = rp.reflectivity(_vp, None, _vs, None, _rho, None, along_wiggle=True)
             m_wiggle = bumw.convolve_with_refl(wavelet['wavelet'], _reff(0.), verbose=False)
-            t_to_d = [np.nanargmin((twt.data - _t)**2) for _t in _twt]
+            t_to_d = [np.nanargmin((twt.values - _t) ** 2) for _t in _twt]
             #  wiggle_plot(axes['synth_ax'], _twt, m_wiggle, ylim=[twt_min, twt_max], yticks=False, ls='--')
-            wiggle_plot(axes['synth_ax'], md.data[t_to_d], m_wiggle, ylim=[md_min, md_max], yticks=False, ls='--')
+            wiggle_plot(axes['synth_ax'], md.values[t_to_d], m_wiggle, ylim=[md_min, md_max], yticks=False, ls='--')
 
-        vp_t = np.interp(x=t, xp=twt.data, fp=vp.data)
-        rho_t = np.interp(x=t, xp=twt.data, fp=rho.data)
+        vp_t = np.interp(x=t, xp=twt.values, fp=vp.values)
+        rho_t = np.interp(x=t, xp=twt.values, fp=rho.values)
         # reflectivity as a function of incident angle, but this one is only valid at theta=0 as we don't
         # include vs in the calculation
         reff = rp.reflectivity(vp_t, None, vp_t, None, rho_t, None, along_wiggle=True)
         wiggle = bumw.convolve_with_refl(wavelet['wavelet'], reff(0.), verbose=False)
-        t_to_d = [np.nanargmin((twt.data - _t)**2) for _t in t]
+        t_to_d = [np.nanargmin((twt.values - _t) ** 2) for _t in t]
 
         # wiggle_plot(axes['synth_ax'], t, wiggle, ylim=[twt_min, twt_max], yticks=False)
-        wiggle_plot(axes['synth_ax'], md.data[t_to_d], wiggle, ylim=[md_min, md_max], yticks=False)
+        wiggle_plot(axes['synth_ax'], md.values[t_to_d], wiggle, ylim=[md_min, md_max], yticks=False)
 
         # for _md, _ls in zip([top - _h_above, top, top + _h_below], ['--', '-', '--']):
         #    this_twt = twt.data[np.argmin((md.data - _md)**2)]
@@ -294,25 +294,25 @@ def calc_ai_around_top(
                         ['Synthetics'], [{'color': 'k', 'ls': '-'}], title='Synthetics')
 
         header_plot(header_axes['twt_ax'], None, None, None, title='TWT [s]')
-        annotate_plot(axes['twt_ax'], twt.data, ylim=[twt_min, twt_max])
+        annotate_plot(axes['twt_ax'], twt.values, ylim=[twt_min, twt_max])
 
         if _ref_traces is not None:
             # for trace in _ref_traces:
             #     wiggle_plot(axes['ref_trace_ax'], depth, trace.data, ylim=[md_min, md_max], yticks=False)
             _, _ = rpp.plot_wiggles(
                 None, depth[mask], None,
-                scaling=10./np.nanmax(_ref_traces[0].data[mask]),
+                scaling=10./np.nanmax(_ref_traces[0].values[mask]),
                 ax=axes['ref_trace_ax'],
                 incident_angles=ref_incident_angles,
                 extract_at=None,
-                input_wiggles=[_x.data[mask] for _x in _ref_traces],
+                input_wiggles=[_x.values[mask] for _x in _ref_traces],
                 yticks=False,
                 ylim=[md_min, md_max]
             )
             header_plot(header_axes['ref_trace_ax'], None, None, None, title='Seismic traces')
 
         if _ref_logs is not None:
-            logs_to_plot = [xx.data for xx in _ref_logs]
+            logs_to_plot = [xx.values for xx in _ref_logs]
             _styles = [{'lw': templates[xx.log_type]['line width'],
                        'color': templates[xx.log_type]['line color'],
                        'ls': templates[xx.log_type]['line style']}

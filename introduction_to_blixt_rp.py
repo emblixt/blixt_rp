@@ -96,12 +96,12 @@ def main():
     w.depth_plot('P velocity', wis=wis)
 
     w.calc_mask({}, 'D sands', wis=wis, wi_name='SAND D')
-    mask = w.block['Logs'].masks['D sands'].data
+    mask = w.block['Logs'].masks['D sands'].values
     w.depth_plot('P velocity', wis=wis, mask=mask, show_masked=False)
 
     # If you instead are interested in a mask applied on values, use the following
     w.calc_mask(cutoffs_sands, 'sands')
-    mask = w.block['Logs'].masks['sands'].data
+    mask = w.block['Logs'].masks['sands'].values
     w.depth_plot('P velocity', wis=wis, mask=mask, show_masked=True)
     # If you're interested in one specific working interval, the command
     ppl.overview_plot(wells, log_table, wis, 'SAND E', templates, log_types=list(log_table.keys()))
@@ -110,11 +110,11 @@ def main():
     this_well.depth_plot('P velocity', wis=wis)
 
     this_well.calc_mask({}, 'D sands', wis=wis, wi_name='SAND D')
-    mask = this_well.block['Logs'].masks['D sands'].data
+    mask = this_well.block['Logs'].masks['D sands'].values
     this_well.depth_plot('P velocity', wis=wis, mask=mask, show_masked=False)
 
     this_well.calc_mask(cutoffs_sands, 'sands')
-    mask = this_well.block['Logs'].masks['sands'].data
+    mask = this_well.block['Logs'].masks['sands'].values
     this_well.depth_plot('P velocity', wis=wis, mask=mask, show_masked=True)
 
     prp.plot_rp(

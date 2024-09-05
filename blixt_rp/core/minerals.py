@@ -404,19 +404,19 @@ class MineralMix(object):
                                   '{} in interval {} in well {}, using the cutoff: {}'.format(
                                     mineral, wi_name, well_name, self.minerals[well_name][wi_name][mineral].cutoffs)
                             )
-                        vp = well.block[block_name].logs[log_table['P velocity']].data
-                        vs = well.block[block_name].logs[log_table['S velocity']].data
-                        rho = well.block[block_name].logs[log_table['Density']].data
+                        vp = well.block[block_name].logs[log_table['P velocity']].values
+                        vs = well.block[block_name].logs[log_table['S velocity']].values
+                        rho = well.block[block_name].logs[log_table['Density']].values
                         cutoffs = uio.interpret_cutoffs_string(self.minerals[well_name][wi_name][mineral].cutoffs)
                         well.calc_mask(cutoffs, 'this mask', wis=wis, wi_name=wi_name, log_type_input=False)
-                        mask = well.block[block_name].masks['this mask'].data
+                        mask = well.block[block_name].masks['this mask'].values
 
                         this_rho = np.nanmedian(rho[mask])
                         this_mu = np.nanmedian(rho[mask] * vs[mask]**2 * 1.E-6)  # GPa
                         this_k = np.nanmedian(rho[mask] * (vp[mask]**2 - (4./3.) * vs[mask]**2) * 1.E-6)
                         if debug:
                             print(this_k, this_mu, this_rho)
-                            this_depth = well.block[block_name].logs['depth'].data[mask]
+                            this_depth = well.block[block_name].logs['depth'].values[mask]
                             # TODO the axes indices will only work when plotting one mineral (_n = 1)
                             axes[well_name][wi_name][0].plot(rho[mask], this_depth)
                             axes[well_name][wi_name][0].set_xlabel('Density [{}]'.format(

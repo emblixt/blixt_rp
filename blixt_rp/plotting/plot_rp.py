@@ -153,29 +153,29 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
         # create mask based on cutoffs
         if cutoffs is not None:
             well.calc_mask(cutoffs, name='cmask', log_type_input=True, log_table=log_table)
-            mask = well.block[block_name].masks['cmask'].data
+            mask = well.block[block_name].masks['cmask'].values
             desc = well.block[block_name].masks['cmask'].header.desc
         else:
             mask = None
 
         # Collect data for plot, start with Vp, Vs and Rho
         # TODO check the units, and convert if necessary
-        rho = well.block[block_name].logs[log_table['Density'].lower()].data
+        rho = well.block[block_name].logs[log_table['Density'].lower()].values
         rho_unit = well.block[block_name].logs[log_table['Density'].lower()].header.unit
         if 'P velocity' in list(log_table.keys()):
-            vp = well.block[block_name].logs[log_table['P velocity'].lower()].data
+            vp = well.block[block_name].logs[log_table['P velocity'].lower()].values
             vp_unit = well.block[block_name].logs[log_table['P velocity'].lower()].header.unit
-            vs = well.block[block_name].logs[log_table['S velocity'].lower()].data
+            vs = well.block[block_name].logs[log_table['S velocity'].lower()].values
             vs_unit = well.block[block_name].logs[log_table['S velocity'].lower()].header.unit
         else:  # Assume we can use the sonic logs instead.
             vp_unit = 'm/s'
-            success, vp = cnvrt(well.block[block_name].logs[log_table['Sonic'].lower()].data,  # convert this data
-                       well.block[block_name].logs[log_table['Sonic'].lower()].header.unit,  # from this unit
-                       vp_unit)  # to this unit
+            success, vp = cnvrt(well.block[block_name].logs[log_table['Sonic'].lower()].values,  # convert this data
+                                well.block[block_name].logs[log_table['Sonic'].lower()].header.unit,  # from this unit
+                                vp_unit)  # to this unit
             vs_unit = 'm/s'
-            success, vs = cnvrt(well.block[block_name].logs[log_table['Shear sonic'].lower()].data,
-                       well.block[block_name].logs[log_table['Shear sonic'].lower()].header.unit,
-                       vs_unit)
+            success, vs = cnvrt(well.block[block_name].logs[log_table['Shear sonic'].lower()].values,
+                                well.block[block_name].logs[log_table['Shear sonic'].lower()].header.unit,
+                                vs_unit)
 
         # Apply Backus average if requested
         if backus is True:
@@ -237,7 +237,7 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
                 ytempl = {'full_name': 'TVD', 'unit': 'm'}
 
         elif plot_type == 'Phi-Vp':
-            x_data = well.block[block_name].logs[log_table['Porosity'].lower()].data
+            x_data = well.block[block_name].logs[log_table['Porosity'].lower()].values
             x_unit = '{}'.format(well.block[block_name].logs[log_table['Porosity'].lower()].header.unit)
             y_data = vp
             y_unit = '{}'.format(vp_unit)
@@ -246,7 +246,7 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
         elif plot_type in ['Phi-%AI', 'Phi-I', 'Phi-G']:
             if ref_val is None:
                 raise ValueError('Reference values for each well is needed')
-            x_data = well.block[block_name].logs[log_table['Porosity'].lower()].data
+            x_data = well.block[block_name].logs[log_table['Porosity'].lower()].values
             x_unit = '{}'.format(well.block[block_name].logs[log_table['Porosity'].lower()].header.unit)
             xtempl = {'full_name': 'Porosity', 'unit': x_unit}
             if plot_type == 'Phi-%AI':
@@ -289,7 +289,7 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
                     raise IOError('The desired log {} does not exist in this well {}'.format(
                         log_table[color_by], wname))
                 else:
-                    this_color = _color_logs[0].data
+                    this_color = _color_logs[0].values
                     # only draw colorbar for last well
                     ctempl = templates[color_by]
                     if counter == n_wells:
@@ -305,7 +305,7 @@ def plot_rp(wells, log_table, wis, wi_name, cutoffs=None, templates=None, legend
                     raise IOError('The desired log {} does not exist in this well {}'.format(
                         log_table[size_by], wname))
                 else:
-                    p_data = _size_logs[0].data
+                    p_data = _size_logs[0].values
                     ptempl = templates[size_by]
 
         # start plotting
@@ -618,7 +618,7 @@ def test():
     for well in wells.values():
         # calculate the mask for the given cut-offs, and for the given working interval
         well.calc_mask(cutoffs, wis=wis, wi_name=wi_name, name='this_mask', log_table=log_table)
-        mask = well.block['Logs'].masks['this_mask'].data
+        mask = well.block['Logs'].masks['this_mask'].values
 
         _rho_min = np.append(_rho_min, well.calc_vrh_bounds(mm, param='rho', wis=wis, method='Voigt')[wi_name][mask])
         _k_min = np.append(_k_min, well.calc_vrh_bounds(mm, param='k', wis=wis, method='Voigt-Reuss-Hill')[wi_name][mask])

@@ -34,7 +34,7 @@ from blixt_utils.misc.convert_data import convert
 from blixt_utils.misc import masks as msks
 from blixt_utils.misc import templates as tmplts
 import blixt_rp.rp_utils.definitions as rud
-from blixt_utils.utils import print_info
+from blixt_utils.utils import print_info, fix_well_name
 # from blixt_utils.io.io import read_general_ascii_GENERAL as read_file, project_wells_new
 
 
@@ -45,35 +45,43 @@ import pint_xarray
 logger = logging.getLogger(__name__)
 
 
-class Coordinate(object):
+class Depth(object):
     """
     Class handling depth or time data, that holds the "depth" of something along a well path
-    It can either be 'md' or 'tvd' in depth domain, and 'twt' or 'owt' in time domain
+    It can either be 'md' or 'tvd' in depth domain, and 'twt' or 'owt' in time domain.
+    Depth is counted positive downwards.
     """
-    def __init__(self, coords, units=None, coord_type='md', verbose=False):
+    def __init__(self,
+                 depth: float | np.ndarray | pint.Quantity,
+                 units: str | None = None,
+                 depth_type: str = 'md',
+                 verbose: bool = False):
         """
 
-        :param coords:
+        :param depth:
 
         :param units:
-        :param coord_type:
+        :param depth_type:
         :param verbose:
         """
 
         if verbose:
-            print(coord_type, units)
-        _coords = handle_coords(coords, coord_units=units, coord_type=coord_type, verbose=verbose)
+            print(depth_type, units)
+        _coords = handle_coords(depth, coord_units=units, coord_type=depth_type, verbose=verbose)
 
         self.coords = _coords
-        self.coord_type = coord_type.lower()
+        self.coord_type = depth_type.lower()
+
+    def __len__(self):
+        return len(self.coords)
 
     @property
-    def data(self):
+    def values(self):
         return self.coords.magnitude
 
     @property
-    def units(self):
-        return str(self.coords.units)
+    def units(self) -> pint.Unit:
+        return self.coords.units
 
     @property
     def domain(self):
@@ -82,12 +90,60 @@ class Coordinate(object):
         else:
             return 'time'
 
-    # I'm trying to "protect" the coord_type from being updated, BUT that stops me from setting it in the first place!
+    @property
+    def top(self) -> pint.Quantity:
+        return self.coords[0]
+
+    @property
+    def base(self) -> pint.Quantity:
+        return self.coords[-1]
+
+    @property
+    def mid(self) -> pint.Quantity:
+        return 0.5 * (self.top + self.base)
+
+    @property
+    def is_evenly_spaced(self) -> bool:
+        """
+        Tests if the dimension of a LogCurve is evenly spaced
+
+        :return:
+            bool
+            True if evenly sampled
+        """
+        arr = self.values
+        if len(arr) <= 2:
+            return True
+
+        diffs = np.diff(arr)
+        return np.allclose(diffs, diffs[0])
+
+    def step(self, ignore_gaps: bool = False) -> pint.Quantity | None:
+        """
+        If evenly spaced it returns the step in depth/time, else None
+
+        :param ignore_gaps
+            bool
+            Finds the most likely step (increment in depth/time) of log data.
+            Useful if there are gaps in an evenly spaced data set
+            (e.g. it has been cleaned to remove NaN's).
+        :return:
+        """
+        if self.is_evenly_spaced:
+            return self.coords[1] - self.coords[0]
+        elif ignore_gaps:
+            steps, counts = np.unique(np.diff(self.values), return_counts=True)
+            return Q_(steps[np.argmax(counts)], self.units)
+        else:
+            return None
+
+
+    # I'm trying to "protect" the depth_type from being updated, BUT that stops me from setting it in the first place!
     # def __setattr__(self, key, value):
-    #     if key in ['coord_type']:
+    #     if key in ['depth_type']:
     #         pass
-    #     elif key in ['coords']:
-    #         self.__setattr__(key, handle_coords(value, coord_type=self.coord_type, coord_units=self.units))
+    #     elif key in ['depth']:
+    #         self.__setattr__(key, handle_coords(value, depth_type=self.depth_type, coord_units=self.units))
     #     else:
     #         self.__setattr__(key, value)
 
@@ -597,51 +653,43 @@ class LogCurve(object):
 
 class LogCurve2dNew(object):
     """
-    This log curve object use the xarray library to create a log curve with a 1D dimensional coordinate (index)
-    attached to it. In combination with pint to take care of units
+    This log curve object contains a log data & depth pair
+    It uses pint to take care of units
 
-    Example:
-    > lc = LogCurve2dNew(
-    >     create_data_array(
-    >         name='TEST',
-    >         data=np.ndarray,
-    >         data_units='m/s',
-    >         coords=np.ndarray,
-    >         coord_units='m',
-    >         coord_type='md'
-    >     )
-    >     log_type='P velocity',
-    >     well='A Well',
-    >     style=None,
-    >     header=None
-    > )
-    > # Convert data to km/s
-    > lc.data = lc.data.pint.to('km/s')
-
-
-    The units of the coordinates will be automatically converted to m or ms, depending on if the log is in
+    The units of the depth will be automatically converted to m or ms, depending on if the log is in
     depth or time
 
-    If units are specified in the style, the LogCurve will automatically try to convert the data units
-    to this unit. So the example conversion above could have been carried out by specifying the style
+    If units are specified in the style, the LogCurve will automatically try to convert the log data units
+    to this unit.
+    So by specifying the style to:
     > style = {'units': 'km/s'}
+    when the log data is given in 'm/s', it will be automatically converted to 'km/s'
 
     """
 
     def __init__(self,
-                 data_array,
-                 log_type=None,
-                 well=None,
-                 style=None,
-                 header=None):
+                 name: str,
+                 log_data: pint.Quantity,
+                 depth: Depth,
+                 log_type: str | None = None,
+                 well: str | None = None,
+                 style: Template | dict | None = None,
+                 header: Header | dict | None = None):
         """
         The basic building block of all well related data.
         Should hold both regularly sampled log curves and irregularly sampled core data
 
-        :param data_array:
-            xr.DataArray
-            should contain an 1D DataArray with name, data and a coordinate dimension (index) which is either md, twt or owt
-            see _create_data_array for the basic construct
+        :param name:
+            str
+            Name of log
+        :param log_data:
+            pint.Quantity
+            np.ndarray inside a pint.Quantity
+        :param depth:
+            Depth
+            Contains the depth data, either 'md', 'tvd', 'owt' or 'twt'
+
+            Must be of same length as log_data
         :param log_type:
             str
             Name of the log type, e.g. "P velocity", as specified in the project table .xlsx file
@@ -653,8 +701,14 @@ class LogCurve2dNew(object):
         :param header:
             Header object or dict
         """
-        self.d_arr = data_array
-        self.name = None if (data_array is None) else str(data_array.name)
+        if len(log_data) != len(depth):
+            raise IOError('Length of log_data ({}) must equal length of depth ({})'.format(
+                len(log_data), len(depth)))
+        if not isinstance(depth, Depth):
+            raise IOError('Depth must be a Depth object')
+        self.name = name
+        self.data = log_data
+        self.depth = depth
         self.well = well
 
         if style is None:
@@ -679,27 +733,37 @@ class LogCurve2dNew(object):
         # unit if it is not already using those units.
         if self.style.units is not None:
             # print('Units in template is {}'.format(self.style.units))
-            if not is_equivalent(data_array.data.units, ureg.Unit(self.style.units)):
+            if not is_equivalent(self.data.units, ureg.Unit(self.style.units)):
                 # print('Units are not the same, try to convert')
                 try:
                     info_txt = '{}: {}: Convert from {} to {}'.format(
-                        self.well, self.name, str(data_array.data.units), self.style.units
+                        self.well, self.name, str(self.data.units), self.style.units
                     )
-                    self.d_arr = data_array.pint.to(self.style.units)
+                    self.data = self.data.to(self.style.units)
                     print_info(info_txt, 'info', logger)
                 except pint.DimensionalityError:
                     warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
-                        self.well, self.name, str(data_array.data.units), self.style.units
+                        self.well, self.name, str(self.data.units), self.style.units
                     )
                     print_info(warn_txt, 'warning', logger)
         else:
-            self.style.units = None if (data_array is None) else str(data_array.data.units)
+            self.style.units = str(self.data.units)
+
+        # Make sure the values of 'name' and 'well' are aligned.
+        if self.name is None and self.header.name is not None:
+            self.name = self.header.name
+        elif self.name is not None:
+            self.header.name = self.name  # self.name wins over self.header.name
+        if self.well is None and self.header.well is not None:
+            self.well = self.header.well
+        elif self.well is not None:
+            self.header.well = self.well  # self.well wins over self.header.well
 
         if log_type is None:
             if self.header.log_type is not None:
                 self.log_type = self.header.log_type
             else:
-                self.log_type = ''
+                self.log_type = None
         else:
             if (self.header.log_type is not None) and (self.header.log_type != log_type):
                 warn_txt = 'Log type in header ({}), does not match given log type ({})'.format(
@@ -709,92 +773,81 @@ class LogCurve2dNew(object):
                 raise IOError(warn_txt)
             else:
                 self.log_type = log_type
+                if self.header.log_type is None:
+                    self.header.log_type = log_type
 
     def __len__(self):
-        return None if (self.d_arr is None) else len(self.d_arr)
+        return len(self.data)
 
     @property
-    def coord_type(self):
-        return None if (self.d_arr is None) else list(self.d_arr.coords.keys())[0]
+    def depth_type(self):
+        return self.depth.coord_type
 
     @property
-    def coord_units(self):
-        return None if (self.d_arr is None) else str(self.d_arr.coords[self.coord_type].units)
+    def depth_units(self) -> pint.Unit:
+        return self.depth.units
 
     @property
-    def units(self):
-        return None if (self.d_arr is None) else str(self.d_arr.data.units)
-
-    @property
-    def coords(self):
-        return None if (self.d_arr is None) else self.d_arr.coords[self.coord_type].data
+    def units(self) -> pint.Unit:
+        return self.data.units
 
     @property
     def values(self):
-        return None if (self.d_arr is None) else self.d_arr.data.magnitude
+        return self.data.magnitude
 
     @property
     def is_evenly_spaced(self):
-        """
-        Tests if the dimension of a LogCurve is evenly spaced
+        return self.depth.is_evenly_spaced
 
-        :return:
-            bool
-            True if evenly sampled
-        """
-        arr = self.coords
-        if len(arr) <= 2:
-            return True
+    @property
+    def min(self):
+        return np.nanmin(self.data)
 
-        diffs = np.diff(arr)
-        return np.allclose(diffs, diffs[0])
+    @property
+    def max(self):
+        return np.nanmax(self.data)
 
-    # @property
+    @property
+    def mean(self):
+        return np.nanmean(self.data)
+
+    @property
+    def median(self):
+        return np.nanmedian(self.data)
+
+    @property
+    def std(self):
+        return np.nanstd(self.data)
+
     def step(self, ignore_gaps=False):
-        """
-        If evenly spaced it returns the step in depth/time, else None
-
-        :param ignore_gaps
-            bool
-            Finds the most likely step (increment in depth/time) of log data.
-            Useful if there are gaps in an evenly spaced data set
-            (e.g. it has been cleaned to remove NaN's).
-        :return:
-        """
-        if self.is_evenly_spaced:
-            return np.diff(self.coords)[0]
-        elif ignore_gaps:
-            steps, counts = np.unique(np.diff(self.coords), return_counts=True)
-            return steps[np.argmax(counts)]
-        else:
-            return None
+        return self.depth.step(ignore_gaps=ignore_gaps)
 
     def __lt__(self, other):
-        if len(self.d_arr) < len(other.d_arr):
+        if len(self.data) < len(other.data):
             return True
         else:
             return False
 
     def __le__(self, other):
-        if len(self.d_arr) <= len(other.d_arr):
+        if len(self.data) <= len(other.data):
             return True
         else:
             return False
 
     def __gt__(self, other):
-        if len(self.d_arr) > len(other.d_arr):
+        if len(self.data) > len(other.data):
             return True
         else:
             return False
 
     def __eq__(self, other):
-        if len(self.d_arr) == len(other.d_arr):
+        if len(self.data) == len(other.data):
             return True
         else:
             return False
 
     def __ge__(self, other):
-        if len(self.d_arr) >= len(other.d_arr):
+        if len(self.data) >= len(other.data):
             return True
         else:
             return False
@@ -813,22 +866,24 @@ class LogCurve2dNew(object):
         return copied_log_curve
 
     def convert_to(self, to_units):
-        """ Converts the data units to 'to_units', and changes the unit in the style too"""
+        """
+        Converts the log data units to 'to_units', and changes the unit in the style too
+        """
         try:
             cnv_txt = 'Convert from {} to {}'.format(
-                str(self.d_arr.data.units), to_units
+                str(self.data.units), to_units
             )
             info_txt = '{}: {}: {}'.format(
                 self.well, self.name, cnv_txt
             )
-            self.d_arr = self.d_arr.pint.to(to_units)
+            self.data = self.data.to(to_units)
             self.style.units = to_units
             print_info(info_txt, 'info', logger)
             self.header.modification_date = datetime.now().isoformat()
             self.header.modification_history += '\n{}'.format(cnv_txt)
         except pint.DimensionalityError:
             warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
-                self.well, self.name, str(self.d_arr.data.units), to_units
+                self.well, self.name, str(self.data.units), to_units
             )
             print_info(warn_txt, 'warning', logger)
 
@@ -836,20 +891,44 @@ class LogCurve2dNew(object):
         """ Converts the coordinate units to 'to_units'"""
         try:
             cnv_txt = 'Convert coordinates from {} to {}'.format(
-                str(self.d_arr.coords[self.coord_type].units), to_units
+                str(self.depth.units), to_units
             )
             info_txt = '{}: {}: {}'.format(
                 self.well, self.name, cnv_txt
             )
-            self.d_arr = self.d_arr.pint.to({self.coord_type: to_units})
+            self.depth.coords = self.depth.coords.to(to_units)
             print_info(info_txt, 'info', logger)
             self.header.modification_date = datetime.now().isoformat()
             self.header.modification_history += '\n{}'.format(cnv_txt)
         except pint.DimensionalityError:
             warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
-                self.well, self.name, str(self.d_arr.coords[self.coord_type].units), to_units
+                self.well, self.name, str(self.depth.coords.units), to_units
             )
             print_info(warn_txt, 'warning', logger)
+
+    def velocity_from_sonic(self, name: str | None = None):
+        if self.log_type not in ['Sonic', 'Shear sonic']:
+            warn_txt = 'Log type be "Sonic" or "Shear sonic" to calculate velocity'
+            print_info(warn_txt, 'warning', logger)
+            return
+        velocity = 1. / self.data.to('s/m')
+        if self.log_type == 'Sonic':
+            if name is None:
+                name = 'Vp'
+            log_type = 'P velocity'
+        else:
+            if name is None:
+                name = 'Vs'
+            log_type = 'S velocity'
+        return LogCurve2dNew(
+            name=name,
+            log_data=velocity,
+            depth=self.depth,
+            log_type=log_type,
+            well=self.well,
+            style=None,  # TODO modify and bring on the old style
+            header=None  # TODO modify and bring on the old header
+        )
 
     def take_sampling_from(self, log_curve, verbose=False):
         """
@@ -864,9 +943,9 @@ class LogCurve2dNew(object):
         :return
             LogCurve2dNew object
         """
-        if self.coord_type != log_curve.coord_type:
-            raise ValueError('The two depth formats (coord_type) are not the same: {} != {}'.format(
-                self.coord_type, log_curve.coord_type))
+        if self.depth_type != log_curve.depth_type:
+            raise ValueError('The two depth formats (depth_type) are not the same: {} != {}'.format(
+                self.depth_type, log_curve.depth_type))
 
         # # Create copy of original that we will modify
         # result = self.copy(suffix='')
@@ -876,25 +955,26 @@ class LogCurve2dNew(object):
         #     result.convert_coords_to(log_curve.coord_units)
 
         # Do the interpolation
-        old_x = self.coords
+        old_x = self.depth.values
         old_y = self.values
-        new_x = log_curve.coords
+        new_x = log_curve.depth.values
         new_y = _interpolate(old_x, old_y, new_x)
 
         info_txt = 'Resampled to match {}'.format(log_curve.name)
-        return replace_data_array(
-            self,
-            new_y,
-            new_x,
-            False,
-            info_txt
+        return LogCurve2dNew(
+            self.name + '_resampled',
+            Q_(new_y, self.units),
+            Depth(Q_(new_x, self.depth_units)),
+            self.log_type,
+            header=self.header,
+            style=self.style
         )
 
     def clean_data(self, nans=True, infinites=True, overwrite=False):
         if nans:
-            _nans = np.isnan(self.d_arr.data.magnitude)
+            _nans = np.isnan(self.data.values.magnitude)
         if infinites:
-            _infs = np.isinf(self.d_arr.data.magnitude)
+            _infs = np.isinf(self.data.values.magnitude)
 
         if nans & infinites:
             valid_indxs = ~_nans & ~_infs
@@ -908,7 +988,7 @@ class LogCurve2dNew(object):
         else:
             return
 
-        return replace_data_array(self,
+        return replace_data(self,
                self.values[valid_indxs],
                self.coords[valid_indxs],
                overwrite,
@@ -945,7 +1025,7 @@ class LogCurve2dNew(object):
         else:
             raise NotImplementedError("Method '{}' has not been implemented".format(method))
 
-        return replace_data_array(
+        return replace_data(
             self,
             out,
             self.coords,
@@ -991,9 +1071,9 @@ class LogCurve2dNew(object):
             return
         if not isinstance(window_len, pint.Quantity):
             # Simpy assume that it is given in the correct units
-            w_len = ceil(window_len / self.step())
+            w_len = ceil(window_len / self.step().magnitude)
         else:
-            w_len = ceil(window_len.to(self.coord_units).magnitude / self.step())
+            w_len = ceil(window_len.to(self.depth_units).magnitude / self.step().magnitude)
 
         #if mask is not None:
         #    raise NotImplementedError('Smoothing masked log curves is not yet implemented')
@@ -1009,13 +1089,13 @@ class LogCurve2dNew(object):
             if isinstance(discrete_intervals[0], pint.Quantity):
                 print('Discrete intervals identified as list of Quantities')
                 # Do unit conversion
-                discrete_intervals = [_x.to(self.coord_units).magnitude for _x in discrete_intervals]
+                discrete_intervals = [_x.to(self.depth_units).magnitude for _x in discrete_intervals]
             else:
                 # assume the intervals are given in correct units
                 pass
 
             disc_txt = 'allowing discrete jumps at {} {} '.format(
-                ', '.join('{:.2}'.format(_x) for _x in discrete_intervals), self.coord_units)
+                ', '.join('{:.2}'.format(_x) for _x in discrete_intervals), self.depth_units)
             # check if the proposed jump depths are within the depth range of the LogCurve
 
             # calculate the indexes of where the smoothened log are allowed discrete jumps.
@@ -1043,10 +1123,10 @@ class LogCurve2dNew(object):
             out = _smooth(self.values[mask], w_len, method=method, **kwargs)
 
         info_txt = 'Data smoothened {}using a {} window of length {}'.format(disc_txt, method, w_len)
-        return replace_data_array(
+        return replace_data(
             self,
-            out,
-            self.coords[mask],
+            Q_(out, self.units),
+            Depth(Q_(self.depth.values[mask], self.depth_units)),
             overwrite,
             info_txt,
             suffix='smooth'
@@ -1084,7 +1164,7 @@ class LogCurve2dNew(object):
             name of the mask
         :param log_table:
             dict
-            Dictionary of log type: log name key: value pairs that specify which log to use for each log type
+            Dictionary of log type: log name as "key: value" pairs that specify which log to use for each log type
             E.G.
                 log_table = {
                    'P velocity': 'vp',
@@ -1109,7 +1189,7 @@ class LogCurve2dNew(object):
 
         mask_description = mask_string(cutoffs, None)
         if len(cutoffs) == 0:  # no cutoffs, mask is all true
-            final_mask = np.array(np.ones(len(self.d_arr)))
+            final_mask = np.array(np.ones(len(self.data)))
             mask_description = 'All true mask for empty cutoffs'
 
         if log_table is not None:  # See if this log curve matches the log table criteria
@@ -1130,16 +1210,16 @@ class LogCurve2dNew(object):
                     this_lname = 'md'
                 else:
                     this_lname = lname.lower()
-                if self.coord_type.lower() == this_lname:
+                if self.depth_type.lower() == this_lname:
                     # True when coordinate type is same as in cutoffs
                     masks.append(
                         msks.create_mask(
-                            self.coords, cutoffs[lname][0], cutoffs[lname][1]
+                            self.depth.values, cutoffs[lname][0], cutoffs[lname][1]
                         )
                     )
                     if verbose:
                         info_txt = "Creating mask based on coordinate '{}', for well {}, based on {}".format(
-                            self.coord_type, self.well, mask_description
+                            self.depth_type, self.well, mask_description
                         )
                         print_info(info_txt, 'info', logger)
             if green_flag and (lname.lower() == self.name.lower()) or (lname.lower() == self.log_type.lower()):
@@ -1167,15 +1247,18 @@ class LogCurve2dNew(object):
             print_info(info_txt, 'info', logger)
 
         return LogCurve2dNew(
-            create_data_array(
-                name=name,
-                data=final_mask,
-                data_units=self.units,
-                coords=self.coords,
-                coord_units=self.coord_units,
-                coord_type=self.coord_type,
-                verbose=verbose
-            ),
+            # create_data_array(
+            #     name=name,
+            #     data=final_mask,
+            #     data_units=self.units,
+            #     depth=self.depth,
+            #     coord_units=self.coord_units,
+            #     depth_type=self.depth_type,
+            #     verbose=verbose
+            # ),
+            name,
+            Q_(final_mask, 'dimensionless'),
+            self.depth,
             log_type='Mask',
             well=self.well,
             header={
@@ -1186,17 +1269,17 @@ class LogCurve2dNew(object):
             }
         )
 
-    def read(self,
-             log_name,
-             file_name,
-             file_format,
-             verbose=False,
-             **kwargs):
-        if file_format == 'las':
-            # print('test: ', Q_(100, 'Ohmm'))  # Works!
-            self.d_arr = create_data_array(*_read_las(log_name, file_name, verbose))
-            self.name = log_name.lower()
-            self.header.orig_filename = file_name
+    def plot(self, ax=None):
+        set_active = False
+        if ax is None:
+            set_active = True
+            fig, ax = plt.subplots()
+        ax.plot(self.depth.values, self.values)
+        ax.set_xlabel('{} [{}]'.format(self.depth_type, str(self.depth_units)))
+        ax.set_ylabel('{} [{}]'.format(self.name, str(self.units)))
+        if set_active:
+            plt.show()
+
 
 
 class LogCurve2D(object):
@@ -1787,74 +1870,53 @@ def _take_sampling_from(log_curve1: LogCurve2D, log_curve2: LogCurve2D, verbose=
     return new_log_curve
 
 
-def _read_las(log_name, file_name, verbose=False, encoding='UTF8'):
+def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
+             log_table: dict | None = None) -> (dict, dict):
     """
-    Ineffecient and simple las reader that is used to populates a LogCurve2dNew object with data from
-    one log (log_name)
-    NOTE: no information about well and log type is used
+    Returns a LogCurve2dNew object for each, or selected, log in las file, packed in a dict
 
-    :param log_name:
     :param file_name:
     :param verbose:
     :param encoding:
+    :param log_table:
+            dict
+            Dictionary of log type: log name as "key: value" pairs that specify which log to use for each log type
+            When this is specified, we only load those logs that are listed among the log names in this dictionary
+
     :return:
+        tuple with two dicts
+        first dict contains a log_name: LogCurve2dNew "key: value" pair for log in the las file
+        second dict contains the standard info about the well and curves extracted from the las file
     """
     from blixt_utils.io.io import well_reader
-    # from blixt_utils.io.io import (get_las_well_info, get_las_curve_info, get_las_header, get_las_names_units,
-    #                                get_las_start_data_line as las_line)
     accepted_depth_keys = rud.rename_well_logs['depth']
 
     with open(file_name, "r", encoding=encoding) as f:
         lines = f.readlines()
     null_val, generated_keys, well_dict = well_reader(lines, file_format='las')
 
-    # Find and extract data
-    data_units = None
-    data_key = None
-    # log_names, log_units = get_las_names_units(file_name, encoding)
-    for _key in generated_keys:
-        if log_name.lower() == _key.lower():
-            data_key = _key
-    # for _key, _units in zip(log_names, log_units):
-    #     if log_name.lower() == _key.lower():
-    #         data_key = _key
-    #         data_units = _units
-
-    if data_key is None:
-        warn_txt = 'The parameter {} was not found in {}, which contains: {}'.format(
-            # log_name, os.path.basename(file_name), ', '.join(log_names)
-            log_name, os.path.basename(file_name), ', '.join(generated_keys)
-        )
-        print_info(warn_txt, 'warning', logger)
-    else:
-        data_units = well_dict['curve'][data_key]['unit']
-    if (data_units is None) or (data_units == ''):
-        warn_txt = 'No valid data unit was found in {} for data key {}'.format(
-            os.path.basename(file_name), data_key
-        )
-        print_info(warn_txt, 'warning', logger)
+    well_name = fix_well_name(well_dict['well_info']['well']['value'])
 
     # Find depth parameter
     depth_key = None
     coord_type = None
     coord_units = None
     for _key in generated_keys:
-    # for _key, _units in zip(log_names, log_units):
+        # for _key, _units in zip(log_names, log_units):
         if _key.lower() in [_x.lower() for _x in accepted_depth_keys]:
             depth_key = _key
             coord_type = 'md'
-            coord_units = well_dict['curve'][_key]['unit']
-            # coord_units = _units
+        elif _key.lower() == 'tvd':
+            depth_key = _key
+            coord_type = 'tvd'
         elif _key.lower() == 'owt':
             depth_key = _key
             coord_type = 'owt'
-            coord_units = well_dict['curve'][_key]['unit']
-            # coord_units = _units
         elif _key.lower() == 'twt':
             depth_key = _key
             coord_type = 'twt'
-            coord_units = well_dict['curve'][_key]['unit']
-            # coord_units = _units
+    coord_units = well_dict['curve'][depth_key]['unit']
+
     if depth_key is None:
         warn_txt = 'No valid depth parameter was found in {}, which contains: {}'.format(
             # os.path.basename(file_name), ', '.join(log_names)
@@ -1866,12 +1928,45 @@ def _read_las(log_name, file_name, verbose=False, encoding='UTF8'):
             os.path.basename(file_name), depth_key
         )
         print_info(warn_txt, 'warning', logger)
+    coord_units = fix_units_for_pint(coord_units)
 
-    return log_name.lower(), well_dict['data'][data_key], data_units, well_dict['data'][depth_key], \
-        coord_units, coord_type
-    # data_line = las_line(file_name, encoding)
-    # data, units = read_file(file_name, 'space', data_line, log_names, log_units, encoding)
-    # return log_name.lower(), data[data_key], data_units, data[depth_key], coord_units, coord_type
+    # Only read those logs we requested in the log_table
+    only_these_logs = generated_keys  # This contains all the logs
+    log_types = [None] * len(only_these_logs)
+    if log_table is not None:
+        only_these_logs = list(log_table.values())
+        log_types = list(log_table.keys())
+
+    # Find and extract data
+    data = well_dict.pop('data')
+    output = {}
+    for _key, _log_type in zip(only_these_logs, log_types):
+        try:
+            data_units = well_dict['curve'][_key]['unit']
+        except KeyError as e:
+            warn_txt = '{}: Log {} is not found in {}'.format(
+                e, _key, os.path.basename(file_name)
+            )
+            print_info(warn_txt, 'warning', logger)
+            continue
+        if (data_units is None) or (data_units == ''):
+            warn_txt = 'No valid data unit was found in {} for data key {}. Skipping reading it'.format(
+                os.path.basename(file_name), _key
+            )
+            print_info(warn_txt, 'warning', logger)
+            continue
+        data_units = fix_units_for_pint(data_units)
+
+        output[_key.lower()] = LogCurve2dNew(
+            _key.lower(),
+            Q_(data[_key], data_units),
+            Depth(Q_(data[depth_key], coord_units), depth_type=coord_type),
+            _log_type,
+            well_name,
+            None,
+            {'orig_filename': file_name})
+
+    return output, well_dict
 
 
 def fix_units_for_pint(unit):
@@ -1937,14 +2032,18 @@ def translate_units_for_pint(unit):
     return unit
 
 
-def handle_coords(coords, coord_type='md', coord_units=None, verbose=False):
+def handle_coords(
+        coords: int | float | np.ndarray | pint.Quantity,
+        coord_type: str = 'md',
+        coord_units: str | None = None,
+        verbose: bool = False) -> pint.Quantity:
     """
     Based on the input, handle_coords returns a pint.Quantity in the accepted
     units
 
-    if coords is a pint.Quantity, coord_units are ignored.
+    if depth is a pint.Quantity, coord_units are ignored.
 
-    if coords is not a pint.Quantity, and coord_units is None, an Error is raised
+    if depth is not a pint.Quantity, and coord_units is None, an Error is raised
 
     :param coords:
         flt, int, np.ndarray or pint.Quantity
@@ -1962,7 +2061,7 @@ def handle_coords(coords, coord_type='md', coord_units=None, verbose=False):
         pint.Quantity
     """
     if coord_type.lower() not in ['md', 'tvd', 'twt', 'owt']:
-        raise IOError('Coordinate type must be either md, tvd, twt or owt. Not {}'.format(coord_type))
+        raise IOError('Depth type must be either md, tvd, twt or owt. Not {}'.format(coord_type))
 
     if not isinstance(coords, pint.Quantity):
         if coord_units is None:
@@ -2000,12 +2099,12 @@ def handle_coords_old(coords, coord_units: str, coord_type: str, verbose=False):
     # automatically convert the coordinate units to meter or ms
     if coord_type in ['md', 'tvd']:
         if coord_units.lower() in ['f', 'ft', 'feet', 'foot']:
-            # _coords = coords * ureg.foot  # attach units to the coordinates
+            # _coords = depth * ureg.foot  # attach units to the coordinates
             # _coords = _coords.to(ureg.meter)  # convert to meter
             _coords = Q_(coords, 'foot')  # attach units to the coordinates
             _coords = _coords.to('meter')  # convert to meter
             if verbose:
-                info_txt = 'Converting coords from {} to meter'.format(coord_units)
+                info_txt = 'Converting depth from {} to meter'.format(coord_units)
                 print_info(info_txt, 'info', logger)
             coords = _coords.magnitude
             coord_units = 'meter'
@@ -2018,12 +2117,12 @@ def handle_coords_old(coords, coord_units: str, coord_type: str, verbose=False):
             raise IOError('Unknown combination of MD coordinate type and unit {}'.format(coord_units))
     else:
         if coord_units.lower() in ['s', 'sec', 'second']:
-            #_coords = coords * ureg.second  # attach units to the coordinates
+            #_coords = depth * ureg.second  # attach units to the coordinates
             # _coords = _coords.to(ureg.millisecond)  # convert to milliseconds
             _coords = Q_(coords, 'second')  # attach units to the coordinates
             _coords = _coords.to('millisecond')  # convert to milliseconds
             if verbose:
-                info_txt = 'Converting coords from {} to ms'.format(coord_units)
+                info_txt = 'Converting depth from {} to ms'.format(coord_units)
                 print_info(info_txt, 'info', logger)
             coords = _coords.magnitude
             coord_units = 'millisecond'
@@ -2051,7 +2150,7 @@ def create_data_array(
     is to use the pint_xarray library
 
     Returns a xarray.DataArray with units
-    > log_values = _create_data_array(name, data, data_units, coords, coord_units, coord_type)
+    > log_values = _create_data_array(name, data, data_units, depth, coord_units, depth_type)
 
     It automatically converts the coordinate units to meter or ms
 
@@ -2060,12 +2159,12 @@ def create_data_array(
     > log_values.data.magnitude  # returns the data without coordinates
     > print(log_values.data.units) # prints the units
 
-    The coord_type of the result is seen using
-    > print(list(log_values.coords.keys())[0])
+    The depth_type of the result is seen using
+    > print(list(log_values.depth.keys())[0])
     The units of the coordinates
-    > print(log_values.coords[coord_type].units)
+    > print(log_values.depth[depth_type].units)
     And the coordinate (index) themselves  can be accessed by
-    > log_values.coords[coord_type].data
+    > log_values.depth[depth_type].data
 
     And the data can be plotted using
     > log_value.plot()
@@ -2105,28 +2204,33 @@ def create_data_array(
     return log_values
 
 
-def replace_data_array(
+def replace_data(
         logcurve_in: LogCurve2dNew,
-        data: np.ndarray,
-        coordinates: np.ndarray,
+        log_data: pint.Quantity,
+        depth: Depth,
         overwrite: bool,
         info_txt,
         suffix=''
 ):
-    new_d_arr_coords = xr.DataArray(coordinates, dims=logcurve_in.coord_type)
-    new_d_arr = xr.DataArray(name=logcurve_in.name, data=data, coords={logcurve_in.coord_type: new_d_arr_coords})
-    new_d_arr = new_d_arr.pint.quantify(
-        {logcurve_in.name: logcurve_in.units, logcurve_in.coord_type: logcurve_in.coord_units}
-    )
+    if len(log_data) != len(depth):
+        raise IOError('Length of log_data ({}) must equal length of depth ({})'.format(
+            len(log_data), len(depth)))
+    # new_d_arr_coords = xr.DataArray(coordinates, dims=logcurve_in.depth_type)
+    # new_d_arr = xr.DataArray(name=logcurve_in.name, data=data, depth={logcurve_in.depth_type: new_d_arr_coords})
+    # new_d_arr = new_d_arr.pint.quantify(
+    #     {logcurve_in.name: logcurve_in.units, logcurve_in.depth_type: logcurve_in.coord_units}
+    # )
 
     output = None
     if overwrite:
         logcurve_in.header.modification_date = datetime.now().isoformat()
         logcurve_in.header.modification_history += '\n{}'.format(info_txt)
-        logcurve_in.d_arr = new_d_arr
+        logcurve_in.data = log_data
+        logcurve_in.depth = depth
     else:
         output = logcurve_in.copy(suffix)
-        output.d_arr = new_d_arr
+        output.data = log_data
+        output.depth = depth
         output.header.modification_date = datetime.now().isoformat()
     return output
 

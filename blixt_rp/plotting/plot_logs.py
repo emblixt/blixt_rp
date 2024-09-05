@@ -158,7 +158,7 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     # Start plotting data
     #
     tb = well.block[block_name]  # this log block
-    depth = tb.logs['depth'].data
+    depth = tb.logs['depth'].values
     if wi_names is not None:
         _md_min = 1E6
         _md_max = -1E6
@@ -184,7 +184,7 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
 
     if 'Two-way time' in tb.log_types():
         # Extract the first TWT log
-        twt = tb.get_logs_of_type('Two-way time')[0].data
+        twt = tb.get_logs_of_type('Two-way time')[0].values
         twt_min = np.nanmin(twt[mask])
         twt_max = np.nanmax(twt[mask])
         info_txt = 'Using real twt data'
@@ -208,8 +208,8 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
 
     # print(md_min, md_max)
     xlims = axis_plot(axes[this_ax], depth[mask],
-              [tb.logs[lognames[xx]].data[mask] for xx in log_types],
-              limits, styles, ylim=[md_min, md_max])
+                      [tb.logs[lognames[xx]].values[mask] for xx in log_types],
+                      limits, styles, ylim=[md_min, md_max])
     header_plot(header_axes[this_ax], xlims, legends, styles)
 
     #for ax in [axes[x] for x in ax_names if x not in ['twt_ax', 'synt_ax']]:
@@ -275,8 +275,8 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     styles = [{'lw': lws[i], 'color': cls[i], 'ls': lss[i]} for i in range(len(lognames['Resistivity']))]
     legends = ['{} [{}]'.format(x, templates['Resistivity']['unit']) for x in lognames['Resistivity']]
 
-    xlims = axis_log_plot(axes['res_ax'], depth[mask], [tb.logs[x].data[mask] for x in lognames['Resistivity']],
-                  limits, styles, yticks=False, ylim=[md_min, md_max])
+    xlims = axis_log_plot(axes['res_ax'], depth[mask], [tb.logs[x].values[mask] for x in lognames['Resistivity']],
+                          limits, styles, yticks=False, ylim=[md_min, md_max])
     header_plot(header_axes['res_ax'], xlims*len(legends), legends, styles)
 
     if source_rock_study is not None:
@@ -304,7 +304,7 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
         legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
 
         xlims = deltalogr_plot(axes['dlr_ax'], depth[mask],
-                               [tb.logs[lognames[xx]].data[mask] for xx in log_types],
+                               [tb.logs[lognames[xx]].values[mask] for xx in log_types],
                                limits, styles, yticks=False, ylim=[md_min, md_max])
         header_plot(header_axes['dlr_ax'], xlims, legends, styles)
 
@@ -327,8 +327,8 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
                        'color': templates['TOC']['line color'],
                        'ls': templates['TOC']['line style']}]
             dlr = delta_log_r(
-                well.block[block_name].logs[log_table['Resistivity']].data,
-                well.block[block_name].logs[log_table['Sonic']].data,
+                well.block[block_name].logs[log_table['Resistivity']].values,
+                well.block[block_name].logs[log_table['Sonic']].values,
                 *source_rock_study[well.well])
             toc = toc_from_delta_log_r(dlr, avg_lom)
             xlims = axis_plot(axes['toc_ax'], depth[mask],
@@ -373,10 +373,10 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
         legends = ['{} [{}]'.format(lognames[x], templates[x]['unit']) for x in log_types]
 
         xlims = axis_plot(axes[this_ax], depth[mask],
-                           [tb.logs[lognames[xx]].data[mask] for xx in log_types],
-                           limits, styles, yticks=False, ylim=[md_min, md_max],
-                           fill_betweens=fill_betweens
-                           )
+                          [tb.logs[lognames[xx]].values[mask] for xx in log_types],
+                          limits, styles, yticks=False, ylim=[md_min, md_max],
+                          fill_betweens=fill_betweens
+                          )
         header_plot(header_axes[this_ax], xlims, legends, styles)
 
     #
@@ -401,8 +401,8 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
         axis_plot(axes[this_ax], None, None, None, None, ylim=[md_min, md_max])
     else:
         xlims = axis_plot(axes[this_ax], depth[mask],
-                  [tb.logs[lognames[xx]].data[mask] for xx in log_types],
-                  limits, styles, yticks=False, ylim=[md_min, md_max])
+                          [tb.logs[lognames[xx]].values[mask] for xx in log_types],
+                          limits, styles, yticks=False, ylim=[md_min, md_max])
         header_plot(header_axes[this_ax], xlims, legends, styles)
 
     #
@@ -413,17 +413,17 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
         tt += log_table['Density']
         if 'P velocity' in list(log_table.keys()):
             try:
-                _vp = tb.logs[log_table['P velocity']].data
-                _vs = tb.logs[log_table['S velocity']].data
-                _rho = tb.logs[log_table['Density']].data
+                _vp = tb.logs[log_table['P velocity']].values
+                _vs = tb.logs[log_table['S velocity']].values
+                _rho = tb.logs[log_table['Density']].values
                 if backus_length is not None:
                     ba = bra.backus(_vp, _vs, _rho, backus_length, tb.step)
             except:
                 ba = None
-            ai = tb.logs[log_table['Density']].data * tb.logs[log_table['P velocity']].data
+            ai = tb.logs[log_table['Density']].values * tb.logs[log_table['P velocity']].values
             tt += '*{}'.format(log_table['P velocity'])
         elif 'Sonic' in list(log_table.keys()):
-            ai = tb.logs[log_table['Density']].data / tb.logs[log_table['Sonic']].data
+            ai = tb.logs[log_table['Density']].values / tb.logs[log_table['Sonic']].values
             tt += '/{}'.format(log_table['Sonic'])
         else:
             ai = None
@@ -465,24 +465,24 @@ def plot_logs(well, log_table, wis, wi_names, templates, buffer=None, block_name
     # Wiggles
     t = np.arange(np.nanmin(twt), np.nanmax(twt), time_step)  # A uniformly sampled array of time steps, from A to B
     if 'P velocity' in list(log_table.keys()):
-        vp_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['P velocity']].data)
+        vp_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['P velocity']].values)
     elif 'Sonic' in list(log_table.keys()):
-        vp_t = np.interp(x=t, xp=twt, fp=1./tb.logs[log_table['Sonic']].data)
+        vp_t = np.interp(x=t, xp=twt, fp=1./tb.logs[log_table['Sonic']].values)
     else:
         vp_t = None
     if 'S velocity' in list(log_table.keys()):
         try:
-            vs_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['S velocity']].data)
+            vs_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['S velocity']].values)
         except KeyError:
             warn_txt = 'No S velocity log in {}'.format(tb.well)
             print_info(warn_txt, 'warning', logger)
             vs_t = None
     elif 'Shear sonic' in list(log_table.keys()):
-        vs_t = np.interp(x=t, xp=twt, fp=1./tb.logs[log_table['Shear sonic']].data)
+        vs_t = np.interp(x=t, xp=twt, fp=1./tb.logs[log_table['Shear sonic']].values)
     else:
         vs_t = None
     if 'Density' in list(log_table.keys()):
-        rho_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['Density']].data)
+        rho_t = np.interp(x=t, xp=twt, fp=tb.logs[log_table['Density']].values)
     else:
         rho_t = None
 
@@ -590,7 +590,7 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
         else:
             try:
                 well.calc_mask({}, name='XXX', wis=wis, wi_name=wi_name)
-                mask = tb.masks['XXX'].data
+                mask = tb.masks['XXX'].values
                 int_exists = True
             except TypeError:
                 print('{} not present in well {}. Continue'.format(wi_name, well.well))
@@ -617,25 +617,25 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
                 if lname not in well.log_names():  # skip this log
                     missing_logs_txt += '{}\n'.format(lname)
                     continue
-                if np.isnan(tb.logs[lname].data[mask]).all(): # all nan's
+                if np.isnan(tb.logs[lname].values[mask]).all(): # all nan's
                     missing_logs_txt += '{}\n'.format(lname)
                     continue
-                x = uu.norm(tb.logs[lname].data[mask], method='median')
+                x = uu.norm(tb.logs[lname].values[mask], method='median')
                 styles = {'lw': templates[ltype]['line width'],
                           'color': templates[ltype]['line color'], 'ls': templates[ltype]['line style']}
-                ax.plot(i + x*pw, tb.logs[depth_key].data[mask], **styles)
+                ax.plot(i + x * pw, tb.logs[depth_key].values[mask], **styles)
             if len(missing_logs_txt) > 1:
-                ax.text(i, min(tb.logs[depth_key].data[mask]), 'Missing logs: \n'+missing_logs_txt[:-1],
-                    bbox = {'boxstyle': 'round', 'facecolor': 'orangered', 'alpha': 0.5},
-                    verticalalignment = 'bottom',
-                    horizontalalignment = 'center')
+                ax.text(i, min(tb.logs[depth_key].values[mask]), 'Missing logs: \n' + missing_logs_txt[:-1],
+                        bbox = {'boxstyle': 'round', 'facecolor': 'orangered', 'alpha': 0.5},
+                        verticalalignment = 'bottom',
+                        horizontalalignment = 'center')
             else:
-                ax.text(i, min(tb.logs[depth_key].data[mask]), 'No missing logs',
+                ax.text(i, min(tb.logs[depth_key].values[mask]), 'No missing logs',
                         bbox={'boxstyle': 'round', 'facecolor': 'lightgreen', 'alpha': 0.5},
                         verticalalignment='bottom',
                         horizontalalignment='center')
         else:
-            ax.text(i, np.nanmean(tb.logs[depth_key].data),
+            ax.text(i, np.nanmean(tb.logs[depth_key].values),
                     '{} is missing'.format(wi_name),
                     bbox = {'boxstyle': 'round', 'facecolor': 'orangered', 'alpha': 0.5},
                     rotation='vertical',
@@ -742,9 +742,9 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
             print_info('Well: {}'.format(well), '  *', None, verbose, False)
             wells[well].calc_mask(cutoffs, 'my_mask', log_table=log_table, wis=wis, wi_name=wi_name,
                                   log_type_input=log_type_input)
-            mask = wells[well].block[block_name].masks['my_mask'].data
+            mask = wells[well].block[block_name].masks['my_mask'].values
 
-            xdata = wells[well].block[block_name].logs[log_name].data[mask]
+            xdata = wells[well].block[block_name].logs[log_name].values[mask]
             # Index of NaN's
             nans = np.isnan(xdata)
             if len(xdata[~nans]) < 5:
@@ -753,7 +753,7 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
                 continue
             data_container = np.append(data_container, xdata[~nans])
 
-            ydata = wells[well].block[block_name].logs['tvd'].data[mask]
+            ydata = wells[well].block[block_name].logs['tvd'].values[mask]
 
             tvd_container = np.append(tvd_container, ydata[~nans])
 
@@ -890,19 +890,19 @@ def chi_rotation(well, log_tables, wis, wi_name, templates, buffer=None, chi_ang
                 raise IOError('Log type {} not included in log table'.format(log_type))
 
     tb = well.block[block_name]  # this log block
-    depth = tb.logs['depth'].data
+    depth = tb.logs['depth'].values
     mask = np.ma.masked_inside(depth, wis[well.well][wi_name][0] - buffer, wis[well.well][wi_name][1] + buffer).mask
 
     # Calculate the EEI for the different elastic logs specified in the log tables
     # First calculate common average values used in the normalization
-    vp0 = np.nanmean(tb.logs[log_tables[0]['P velocity']].data[mask])
-    vs0 = np.nanmean(tb.logs[log_tables[0]['S velocity']].data[mask])
-    rho0 = np.nanmean(tb.logs[log_tables[0]['Density']].data[mask])
+    vp0 = np.nanmean(tb.logs[log_tables[0]['P velocity']].values[mask])
+    vs0 = np.nanmean(tb.logs[log_tables[0]['S velocity']].values[mask])
+    rho0 = np.nanmean(tb.logs[log_tables[0]['Density']].values[mask])
     eeis = []
     for log_table in log_tables:
-        vp = tb.logs[log_table['P velocity']].data[mask]
-        vs = tb.logs[log_table['S velocity']].data[mask]
-        rho = tb.logs[log_table['Density']].data[mask]
+        vp = tb.logs[log_table['P velocity']].values[mask]
+        vs = tb.logs[log_table['S velocity']].values[mask]
+        rho = tb.logs[log_table['Density']].values[mask]
         eeis.append(rp.eei(vp, vs, rho, vp0=vp0, vs0=vs0, rho0=rho0))
 
     # Calculate all EEI's and find the common limits for all log types at each chi angle
@@ -934,7 +934,7 @@ def chi_rotation(well, log_tables, wis, wi_name, templates, buffer=None, chi_ang
     if ref_logtable is not None:
         ref_log_type = list(ref_logtable.keys())[0]
         ref_log_name = ref_logtable[ref_log_type]
-        ref_data = tb.logs[ref_log_name].data[mask]
+        ref_data = tb.logs[ref_log_name].values[mask]
         ref_template = templates[ref_log_type]
     else:
         ref_data = None

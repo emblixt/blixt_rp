@@ -60,8 +60,8 @@ class PlotTestCase(unittest.TestCase):
         ax = fig.add_subplot(2, 2, 1)
         log_types = ['Gamma ray', 'Caliper']
         limits = [[templ[x]['min'], templ[x]['max']] for x in log_types]
-        data = [PlotTestCase.w.get_logs_of_type(x)[0].data for x in log_types]
-        y = PlotTestCase.w.block['Logs'].logs['depth'].data
+        data = [PlotTestCase.w.get_logs_of_type(x)[0].values for x in log_types]
+        y = PlotTestCase.w.block['Logs'].logs['depth'].values
         styles = [{'lw': templ[x]['line width'],
                    'color': templ[x]['line color'],
                    'ls': templ[x]['line style']} for x in log_types]

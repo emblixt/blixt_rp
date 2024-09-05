@@ -148,7 +148,7 @@ def calc_toc(
     if lom is None:
         lom = 9.
     if mask is None:
-        mask = np.array(np.ones(len(r.data)), dtype=bool)  # All True values -> all data is included
+        mask = np.array(np.ones(len(r.values)), dtype=bool)  # All True values -> all data is included
     if (mask is not None) and (mask_desc is None):
         mask_desc = 'UNKNOWN'
     if templates is None:
@@ -168,7 +168,7 @@ def calc_toc(
     else:
         preset_axes = False
 
-    depth = md.data
+    depth = md.values
     if ylim is None:
         md_min = np.min(depth[mask])
         md_max = np.max(depth[mask])
@@ -200,7 +200,7 @@ def calc_toc(
 
     # find the linear trends matching the data. These are used as baseline in the DeltaLogR calculation
     fit_parameters_rdep = r.calc_depth_trend(
-        md.data,
+        md.values,
         mask=mask,
         down_weight_outliers=True,
         down_weight_intervals=down_weight_intervals,
@@ -208,13 +208,13 @@ def calc_toc(
         verbose=False
     )
     fitted_rdep = r.apply_trend_function(
-        md.data,
+        md.values,
         fit_parameters_rdep,
         discrete_intervals=discrete_intervals,
         verbose=False
     )
     fit_parameters_ac = ac.calc_depth_trend(
-        md.data,
+        md.values,
         mask=mask,
         down_weight_outliers=True,
         down_weight_intervals=down_weight_intervals,
@@ -222,17 +222,17 @@ def calc_toc(
         verbose=False
     )
     fitted_ac = ac.apply_trend_function(
-        md.data,
+        md.values,
         fit_parameters_ac,
         discrete_intervals=discrete_intervals,
         verbose=False
     )
 
-    dlr_trend = delta_log_r(r.data, ac.data, fitted_rdep, fitted_ac)
+    dlr_trend = delta_log_r(r.values, ac.values, fitted_rdep, fitted_ac)
     toc_trend = toc_from_delta_log_r(dlr_trend, lom)
 
     def re_plot(_sr, _r0, _ac0):
-        _dlr_picked = delta_log_r(r.data, ac.data, _r0, _ac0)
+        _dlr_picked = delta_log_r(r.values, ac.values, _r0, _ac0)
         _toc_picked = toc_from_delta_log_r(_dlr_picked, lom)
         if verbose or preset_axes:
             axes['dlr_ax'].clear()
@@ -249,8 +249,8 @@ def calc_toc(
             # xlims = deltalogr_plot(axes['dlr_ax'], depth[mask],
             #                        [ac.data[mask], r.data[mask]],
             #                        limits, styles, yticks=False, ylim=[md_min, md_max])
-            _x1 = ac.data; _x1[~mask] = np.nan
-            _x2 = r.data; _x2[~mask] = np.nan
+            _x1 = ac.values; _x1[~mask] = np.nan
+            _x2 = r.values; _x2[~mask] = np.nan
             xlims = deltalogr_plot(axes['dlr_ax'], depth,
                                    [_x1, _x2],
                                    limits, styles, yticks=False, ylim=[md_min, md_max])
@@ -310,9 +310,9 @@ def calc_toc(
         #                 fitted_rdep[mask],
         #                 ac.data[mask],
         #                 fitted_ac[mask]
-        _x1 = r.data; _x1[~mask] = np.nan
+        _x1 = r.values; _x1[~mask] = np.nan
         _x2 = fitted_rdep; _x2[~mask] = np.nan
-        _x3 = ac.data; _x3[~mask] = np.nan
+        _x3 = ac.values; _x3[~mask] = np.nan
         _x4 = fitted_ac; _x4[~mask] = np.nan
         logs_to_plot = [_x1, _x2, _x3, _x4 ]
 
@@ -345,7 +345,7 @@ def calc_toc(
 
     def on_press(event):
         # print('you pressed', event.button, event.xdata, event.ydata)
-        _r00, _ac00 = get_values(r.data, ac.data, md.data, event.ydata)
+        _r00, _ac00 = get_values(r.values, ac.values, md.values, event.ydata)
         print('At MD {:.2f}m, RDEP={:.2f}, AC={:.2f}'.format(event.ydata, _r00, _ac00))
         _, _, = re_plot(10**(0.02*_ac00 + np.log10(_r00)) / 10000., _r00, _ac00)
 

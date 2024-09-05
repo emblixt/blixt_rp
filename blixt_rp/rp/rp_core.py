@@ -1206,7 +1206,7 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
 
         # Variables constant through fluid substitution:
         k0_dict = well.calc_vrh_bounds(mm, param='k', wis=wis, method='Voigt-Reuss-Hill', block_name=block_name)
-        por = lb.logs[lnd['Porosity']].data
+        por = lb.logs[lnd['Porosity']].values
 
         # Initial fluids
         rho_f1_dict = well.calc_vrh_bounds(fm.fluids['initial'], param='rho', wis=wis, method='Voigt', block_name=block_name)
@@ -1231,11 +1231,11 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
 
             # calculate the mask for the given cut-offs, and for the given working interval
             well.calc_mask(cutoffs, wis=wis, wi_name=wi, name='this_mask', log_table=log_table)
-            mask = lb.masks['this_mask'].data
+            mask = lb.masks['this_mask'].values
 
             # Do the fluid substitution itself
             _v_p_2, _v_s_2, _rho_2, _k_2 = gassmann_vel(
-                v_p_1.data, v_s_1.data, rho_1.data, k_f1, rho_f1, k_f2, rho_f2, k0, por)
+                v_p_1.values, v_s_1.values, rho_1.values, k_f1, rho_f1, k_f2, rho_f2, k0, por)
 
             # Add the fluid substituted results to the well
             for xx, yy in zip([v_p_1, v_s_1, rho_1], [_v_p_2, _v_s_2, _rho_2]):
@@ -1251,7 +1251,7 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
                 mod_history += 'Final fluids: {}\n'.format(
                     fm.print_fluids('final', wname, wi))
                 new_header.modification_history = mod_history
-                new_data = deepcopy(xx.data)
+                new_data = deepcopy(xx.values)
                 new_data[mask] = yy[mask]
                 lb.add_log(new_data, new_name, xx.get_log_type(), new_header)
 

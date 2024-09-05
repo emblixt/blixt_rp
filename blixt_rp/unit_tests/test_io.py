@@ -22,7 +22,7 @@ def create_test_data(var_name):
         note='Test note')
 
     # extract the phie log, and apply a mask on it
-    return w, w.block[def_lb_name].logs[var_name].data
+    return w, w.block[def_lb_name].logs[var_name].values
 
 
 def read_las(lfile):

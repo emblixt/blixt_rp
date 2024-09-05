@@ -311,8 +311,8 @@ class GMTest(unittest.TestCase):
 
         well.depth_plot('P velocity', wis=wis)
         fig, ax = plt.subplots()
-        ax.plot(well.block['Logs'].logs['vp'].data)
-        ax.plot(well.block['Logs'].logs['vp_target_tt'].data)
+        ax.plot(well.block['Logs'].logs['vp'].values)
+        ax.plot(well.block['Logs'].logs['vp_target_tt'].values)
         plt.show()
 
 

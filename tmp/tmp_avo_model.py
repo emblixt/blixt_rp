@@ -214,10 +214,10 @@ def test_synt():
         0,
         block_name='Logs')
 
-    depth = w.block['Logs'].logs['depth'].data / 3.28084  # feet to m
-    rho_orig = w.block['Logs'].logs['rhob'].data * 1000.  # g/cm3 to kg/m3
-    success, vp_orig = ucd.convert(w.block['Logs'].logs['dt'].data, 'us/ft', 'm/s')
-    dt_orig = w.block['Logs'].logs['dt'].data * 3.2804  # convert usec/ft to usec/m
+    depth = w.block['Logs'].logs['depth'].values / 3.28084  # feet to m
+    rho_orig = w.block['Logs'].logs['rhob'].values * 1000.  # g/cm3 to kg/m3
+    success, vp_orig = ucd.convert(w.block['Logs'].logs['dt'].values, 'us/ft', 'm/s')
+    dt_orig = w.block['Logs'].logs['dt'].values * 3.2804  # convert usec/ft to usec/m
 
     #
     # Start of copying the notebook results:
@@ -458,10 +458,10 @@ def test_synt2():
     #succes, vp_orig = ucd.convert(w.block['Logs'].logs['dt'].data, 'us/ft', 'm/s')
     #dt_orig = w.block['Logs'].logs['dt'].data * 3.2804  # convert usec/ft to usec/m
     # else
-    depth = w.block['Logs'].logs['depth'].data
-    rho_orig = w.block['Logs'].logs[log_table['Density']].data * 1000.  # g/cm3 to kg/m3
-    vp_orig = w.block['Logs'].logs[log_table['P velocity']].data
-    vs_orig = w.block['Logs'].logs[log_table['S velocity']].data
+    depth = w.block['Logs'].logs['depth'].values
+    rho_orig = w.block['Logs'].logs[log_table['Density']].values * 1000.  # g/cm3 to kg/m3
+    vp_orig = w.block['Logs'].logs[log_table['P velocity']].values
+    vs_orig = w.block['Logs'].logs[log_table['S velocity']].values
 
     # when input is in feet and usec
     #rho = w.block['Logs'].logs['rhob'].despike(0.1) * 1000.  # g/cm3 to kg/m3

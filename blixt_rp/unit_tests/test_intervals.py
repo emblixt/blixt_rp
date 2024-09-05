@@ -13,42 +13,55 @@ sys.path.append(os.path.join(str(project_dir), 'blixt_utils'))
 
 from blixt_utils.utils import fix_well_name
 
+
 class TestCase(unittest.TestCase):
 
     def test_create_well(self):
         from blixt_rp.core.intervals import SingleInterval, IntervalInfo, Well, Intervals
         well = Well('TestWell', {})
-        interval1 = SingleInterval('Test FM', 'WrongWellName', 'Test FM', Q_(100., 'm'), Q_(200., 'm'))
-        interval2 = SingleInterval('Test FM', 'TestWell', 'Test FM', Q_(100., 'm'), Q_(200., 'm'))
-        well.add_interval(interval1)
-        well.add_interval(interval2)
-        well.add_interval(interval2)
-        interval_info = IntervalInfo('Test FM', level=-1, color='green')
-        wis = Intervals()
-        wis.add_interval(interval_info)
+        wis = Intervals(name='TEST')
         wis.add_well(well)
+        interval1 = SingleInterval('Test FM', 1, Q_(100., 'm'), Q_(200., 'm'), well='TestWell')
+        interval2 = SingleInterval('Test FM', 1, Q_(100., 'm'), Q_(200., 'm'), well='WrongWell')
+        interval3 = SingleInterval('Test FM', 1, Q_(100., 'm'), Q_(200., 'm'), well='TestWell')
+        wis.add_single_interval(interval1)
+        wis.add_single_interval(interval2)
+        wis.add_single_interval(interval3)
 
         print(wis)
         print('-x-')
-        print(well)
+        print(wis.well_names())
         print('-x-')
-        print(interval2)
+        print(wis.interval_names())
+        print('-x-')
+        for i in well.intervals.values():
+            print(i)
 
         self.assertIsInstance(wis, Intervals)
 
     def test_read(self):
         from blixt_rp.core.intervals import SingleInterval, IntervalInfo, Well, Intervals
-        f = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\\Sodir_well_tops_NorwegianSea.xlsx"
+        f = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\\Sodir_well_tops_BarentsSea.xlsx"
         wis = Intervals(name='Working intervals')
         wis.read_sodir_tops(f)
-        print(wis)
 
-        for well in wis.well_names():
-            print(wis.get_well(well))
+        # for well in wis.well_names():
+        #     print('Well: {}'.format(well))
+        #     print(' levels: {}'.format(wis.get_well(well).get_levels))
+        #     print(' depths: {}'.format(wis.get_well(well).get_depth_range))
+        #     for interval_uid in wis.get_well(well).interval_uids():
+        #         this_interval = wis.get_well(well).get_interval(interval_uid)
+        #         print('  Interval: {}: {} - {}'.format(this_interval.name, this_interval.top.magnitude,
+        #                                                this_interval.base.magnitude))
+        # print(wis.interval_names())
 
-        fig, ax = plt.subplots()
-        wis.get_well(well).plot_intervals(2, ax)
-        plt.show()
+        # fig, axs = plt.subplots(ncols=2)
+        # wis.get_well('6201_11_2').plot_intervals(3, axs[0])
+        # wis.get_well('6201_11_2').plot_intervals(2, axs[1], depth_range=(3000., 3800.))
+        # plt.show()
+
+        out_file = os.path.join(project_dir, 'test.xlsx')
+        test = wis.write_to_excel(out_file, 'Working intervals', 'Interval info')
+
+        print(test)
         self.assertIsInstance(wis, Intervals)
-
-

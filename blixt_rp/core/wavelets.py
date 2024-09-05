@@ -172,7 +172,7 @@ def test():
     sig1 = np.concatenate([y1b, y2b, y3b, y4b])
 
     # the synthetic signal become one item shorter than the input signal, so we need to shorten it
-    sig2 = trace.data[:-1]
+    sig2 = trace.values[:-1]
     ta = ta[:-1]
 
 
