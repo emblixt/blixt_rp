@@ -374,6 +374,17 @@ class WellTestCase(unittest.TestCase):
         plt.show()
         self.assertIsInstance(res, list)
 
+    def test_de_trend(self):
+        log_table = {'Resistivity': 'rdep', 'Sonic': 'dt'}
+        log_curves, well_info = read_las(las_file2, log_table=log_table)
+        lc = log_curves['dt']
+        res = lc.calc_depth_trend(verbose=True)
+        lc_de_trend = lc.de_trend(Q_(2., 'km'), None, *res[0], suffix='test')
+        lc_de_trend.plot()
+        plt.show()
+        print(lc_de_trend.header)
+        self.assertIsInstance(res, list)
+
     def test_coords(self):
         from blixt_rp.core.log_curve_new import Depth
         coords_list = [10.0, (2., 3.), np.linspace(5., 10., 3), 1.,
