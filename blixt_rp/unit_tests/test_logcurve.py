@@ -350,8 +350,7 @@ class WellTestCase(unittest.TestCase):
         log_curves, well_info = read_las(las_file2, log_table=log_table)
         lc = log_curves['dt']
         res = lc.calc_depth_trend(verbose=True)
-        lc_de_trend = lc.de_trend(Q_(2., 'km'), None, *res[0], suffix='test')
-        lc_de_trend.plot()
+        lc_de_trend = lc.de_trend(Q_(2., 'km'), None, *res[0], suffix='test', verbose=True)
         plt.show()
         print(lc_de_trend.header)
         self.assertIsInstance(res, list)

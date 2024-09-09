@@ -919,7 +919,7 @@ class LogCurve2dNew(object):
 
         return results
 
-    def de_trend(self, to_depth: pint.Quantity, trend_function, *params, suffix=None):
+    def de_trend(self, to_depth: pint.Quantity, trend_function, *params, suffix=None, verbose=False):
         """
         Projects the log data to the given 'to_depth' depth along the provided trend_function
         :param to_depth:
@@ -943,6 +943,14 @@ class LogCurve2dNew(object):
               trend_function(self.depth.values, *params)
         info_txt = 'Log de-trended to {} depth using {} with parameters [{}]'.format(
             to_depth, trend_function.__name__, ', '.join('{:}'.format(_x) for _x in params))
+
+        if verbose:
+            fig, ax = plt.subplots()
+            self.plot(ax=ax)
+            ax.plot(self.depth.values, out, 'k--')
+            ax.legend(['Original data', 'de-trended data'])
+            ax.vlines(to_depth.to(self.depth_units).magnitude, self.min.magnitude, self.max.magnitude, colors='b', ls='--')
+
         return replace_data(
             self,
             Q_(out, self.units),
