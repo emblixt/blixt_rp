@@ -5,13 +5,10 @@ import matplotlib.pyplot as plt
 import time
 
 import pint.errors
-import xarray as xr
 from math import isclose
-from .. import ureg, Q_
+from .. import Q_
 
-from blixt_rp.core.param import Param
-
-from blixt_rp.core.log_curve_new import LogCurve, LogCurve2dNew, Depth, is_equivalent, read_las
+from blixt_rp.core.log_curve_new import LogCurve2dNew, Depth, is_equivalent, read_las
 from blixt_rp.core.template_new import Template
 from blixt_rp.core.header_new import Header
 
@@ -252,32 +249,6 @@ class WellTestCase(unittest.TestCase):
         lc = log_curves['rdep']
         print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
               lc.depth.base, lc.depth_units)
-
-
-    def test_LogCurve(self):
-        lc = LogCurve(
-            name='test_data',
-            data=data1,
-            start=Param(name='start', value=24, unit='m'),
-            stop=Param(name='stop', value=3430, unit='m'),
-            style={'full_name': 'A test',
-                   'min': 1,
-                   'max': 10},
-            header={'unit': 'X'}
-        )
-        fig, ax = plt.subplots()
-        mask = np.ma.masked_inside(lc.get_depth(), 1000., 1750.).mask
-        # lc.depth_plot(mask=mask, mask_desc='Inside 1000 - 1750 m MD', ax=ax)
-        lc.smooth(window_len=50, overwrite=True)
-        # lc.depth_plot(ax=ax)
-        fit_parameters = lc.calc_depth_trend(
-            lc.get_depth(),
-            down_weight_outliers=True,
-            verbose=False
-        )
-        fitted_log = lc.apply_trend_function(lc.get_depth(), fit_parameters, verbose=False)
-        ax.plot(fitted_log, lc.get_depth(), '--')
-        return lc
 
     def test_Template(self):
         t = Template({'name': 'MY NAME', 'well': 'MY WELL', 'units': 'METER'})
