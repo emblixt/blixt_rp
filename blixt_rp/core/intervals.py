@@ -16,7 +16,7 @@ project_dir = os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core','')
 sys.path.append(os.path.join(str(project_dir), 'blixt_utils'))
 
 from blixt_utils.misc.attribdict import AttribDict
-from blixt_rp.core.log_curve_new import handle_coords
+from blixt_rp.core.log_curve_new import handle_depth
 from blixt_utils.utils import print_info, add_one, fix_well_name, cycle_colors
 
 
@@ -105,8 +105,8 @@ class SingleInterval(IntervalInfo):
             uid = name
         self.uid = uid
         self.well = well
-        self.top = handle_coords(top, coord_units=None, coord_type=coord_type)
-        self.base = handle_coords(base, coord_units=None, coord_type=coord_type)
+        self.top = handle_depth(top, coord_units=None, coord_type=coord_type)
+        self.base = handle_depth(base, coord_units=None, coord_type=coord_type)
 
         if self.top > self.base:
             raise ValueError('Top ({:.2}) must be smaller than Base ({:.2})'.format(

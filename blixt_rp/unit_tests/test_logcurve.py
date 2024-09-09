@@ -42,6 +42,9 @@ depth3 = Q_(np.linspace(24, 3430, n), 'm')
 data4 = Q_(np.linspace(6, 8, n) + np.random.random(n), 's/m')
 depth4 = Q_(np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n), 'feet')
 
+data5 = Q_(np.linspace(6, 8, n) + np.random.random(n), 'Ohmm')
+depth5 = Q_(np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n), 'feet')
+
 
 class WellTestCase(unittest.TestCase):
 
@@ -87,6 +90,8 @@ class WellTestCase(unittest.TestCase):
         # which can't be converted to 'kg' which the # style asks for
         style = {'units': 'kg'}
         lc = LogCurve2dNew('', data1, Depth(depth1), None, None, style, None)
+        print(lc.units)
+        print(lc.style)
 
     def test_built_in_unit_convert(self):
         lc = LogCurve2dNew(
@@ -101,7 +106,7 @@ class WellTestCase(unittest.TestCase):
         print('Max of data after conversion: {}'.format(lc.data.max()))
         print(lc.header.modification_history)
         print('Original depth {}'.format(lc.depth.values[0]))
-        lc.convert_coords_to('feet')
+        lc.convert_depth_to('feet')
         print(lc.header.modification_history)
         print('Depth after conversion {}'.format(lc.depth.values[0]))
 
@@ -113,8 +118,8 @@ class WellTestCase(unittest.TestCase):
             log_type='Sonic')
         lc_s = LogCurve2dNew(
             'test',
-            data1,
-            Depth(depth1),
+            data4,
+            Depth(depth4),
             log_type='Shear sonic')
 
         lc_vp = lc_p.velocity_from_sonic('Vp_from_sonic')
@@ -126,6 +131,17 @@ class WellTestCase(unittest.TestCase):
         print(lc_vs.log_type)
         print(lc_vs.units)
 
+        print(lc_vs.header)
+        print(lc_vs.style)
+
+        # Following should fail because data are not sonic even if we say so
+        lc_s_fail = LogCurve2dNew(
+            'Failes',
+            data5,
+            Depth(depth5),
+            log_type='Shear sonic')
+        self.assertRaises(pint.DimensionalityError, lc_s_fail.velocity_from_sonic, 'Test')
+
     def test_take_sampling(self):
         lc1 = LogCurve2dNew(
             'test',
@@ -134,10 +150,11 @@ class WellTestCase(unittest.TestCase):
         )
         lc3 = LogCurve2dNew('test', data3, Depth(depth3))
         lc_new = lc1.take_sampling_from(lc3)
-        print(lc1.step)
-        print(lc3.step)
-        print(lc_new.step)
-        lc1.plot(); lc3.plot(); lc_new.plot()
+        print(lc1.step())
+        print(lc3.step())
+        print(lc_new.step())
+        fig, ax = plt.subplots()
+        lc1.plot(ax=ax); lc_new.plot(ax=ax)
         print(lc1.name, len(lc1), lc3.name, len(lc3), lc_new.name, len(lc_new))
         plt.show()
 
@@ -173,7 +190,7 @@ class WellTestCase(unittest.TestCase):
             Depth(depth1)
         )
         lc.log_type = 'TEST 2'
-        print(lc.log_type)
+        print(lc.log_type, lc.header.log_type)
 
     def test_failing_log_type(self):
         # This should raise an IOError because log type is not the same in header and initialization
@@ -282,34 +299,80 @@ class WellTestCase(unittest.TestCase):
         print(h.orig_filename, h.creation_date, h.modification_date)
 
     def test_a_lot(self):
+        # fig, ax = plt.subplots()
+        log_table = {'Resistivity': 'rdep', 'Sonic': 'dt'}
+        log_curves, well_info = read_las(las_file2, log_table=log_table)
+        lc = log_curves['dt']
+        # lc.plot(ax=ax)
+        cutoffs = {'dt': ['>', 140.]}
+        # lc_smooth10 = lc.smooth(Q_(10., 'm'))
+        # lc_smooth10.plot(ax=ax)
+        # lc_smooth500 = lc.smooth(Q_(500., 'm'))
+        # lc_smooth500.plot(ax=ax)
+        # lc_clean = lc_smooth500.clean_data()
+        # print(len(lc), len(lc_smooth500), len(lc_clean))
+        # fig, ax = plt.subplots()
+        # lc.plot(ax=ax); lc_smooth500.plot(ax=ax); lc_clean.plot(ax=ax)
+        # lc_smooth500.clean_data(overwrite=True)
+        # fig, ax = plt.subplots()
+        # lc.plot(ax=ax); lc_smooth500.plot(ax=ax)
+        # print(lc_smooth500.header)
+        lc_mask = lc.calc_mask(cutoffs, verbose=True)
+
+        fig, ax = plt.subplots()
+        lc = log_curves['rdep']
+        lc_smooth_with_mask = lc.smooth(Q_(10., 'm'), mask=lc_mask.values)
+        lc_smooth_with_mask.plot(ax=ax)
+        lc_smooth10 = lc.smooth(Q_(500., 'ft'), discrete_intervals=[Q_(_z, 'km').to('m') for _z in [1., 2., 3.]])
+        print(lc_smooth10.header)
+        lc_smooth10.plot(ax=ax)
+
+        plt.show()
+        self.assertTrue(True)
+
+    def test_fill(self):
+        fig, ax = plt.subplots()
+        log_table = {'Resistivity': 'rdep', 'Sonic': 'dt'}
+        log_curves, well_info = read_las(las_file2, log_table=log_table)
+        lc = log_curves['dt']
+        # lc.plot(ax=ax)
+        cutoffs = {'dt': ['>', 140.]}
+        lc_mask = lc.calc_mask(cutoffs, verbose=True)
+
+        # lc = log_curves['rdep']
+        # lc_fill1 = lc.fill_gaps()
+        lc_fill1 = lc.fill_gaps(mask=lc_mask.values)
+        # lc_fill1.plot(ax=ax)
+        # lc_fill2 = lc.fill_gaps(extrapolate=True)
+        # lc_fill2 = lc.fill_gaps('fill_with_values', fill_values=np.ones(len(lc)))
+        # lc_fill2 = lc.fill_gaps('fill_with_values', fill_values=np.ones(len(lc)), mask=lc_mask.values)
+        lc_fill1.plot(ax=ax)
+        # ; lc.data.plot(); lc_fill2.data.plot.line('k--')
+        lc.plot(ax=ax)
+
+        plt.show()
+        self.assertTrue(True)
+
+    def test_despike(self):
         fig, ax = plt.subplots()
         log_table = {'Resistivity': 'rdep', 'Sonic': 'dt'}
         log_curves, well_info = read_las(las_file2, log_table=log_table)
         lc = log_curves['dt']
         lc.plot(ax=ax)
-        cutoffs = {'dt': ['>', 140.]}
-        lc_smooth10 = lc.smooth(Q_(10., 'm'))
-        lc_smooth10.plot(ax=ax)
-        # lc_smooth500 = lc.smooth(Q_(500., 'm'))
-        # lc_smooth500.data.plot()
-        # lc_clean = lc_smooth500.clean_data()
-        # print(len(lc), len(lc_smooth500), len(lc_clean))
-        # lc.data.plot(); lc_smooth500.data.plot(); lc_clean.data.plot()
-        # lc_mask = lc.calc_mask(cutoffs, verbose=True)
-
-        lc = log_curves['rdep']
-        # lc_smooth_with_mask = lc.smooth(Q_(10., 'm'), mask=lc_mask.values)
-        # lc_smooth_with_mask.data.plot()
-        # lc_smooth10 = lc.smooth(Q_(500., 'ft'), discrete_intervals=[Q_(_z, 'km').to('m').magnitude for _z in [1., 2., 3.]])
-        # print(lc_smooth10.header)
-        # lc_smooth10.data.plot()
-        # lc_fill1 = lc.fill_gaps()
-        # lc_fill2 = lc.fill_gaps(extrapolate=True)
-        # lc_fill2 = lc.fill_gaps('fill_with_values', fill_values=np.ones(len(lc)))
-        # lc_fill1.data.plot(); lc.data.plot(); lc_fill2.data.plot.line('k--')
-
+        lc_despiked = lc.despike(Q_(20, 'us/ft'), window_len=Q_(20., 'm'), suffix='despike')
+        lc_despiked.plot(ax=ax)
+        print(lc_despiked.header)
         plt.show()
         self.assertTrue(True)
+
+    def test_calc_trend(self):
+        log_table = {'Resistivity': 'rdep', 'Sonic': 'dt'}
+        log_curves, well_info = read_las(las_file2, log_table=log_table)
+        lc = log_curves['rdep']
+        res = lc.calc_depth_trend(verbose=True, discrete_intervals=[Q_(_z, 'km').to('m') for _z in [1., 2., 3.]])
+        res = lc.calc_depth_trend(verbose=True)
+        plt.show()
+        self.assertIsInstance(res, list)
 
     def test_coords(self):
         from blixt_rp.core.log_curve_new import Depth
