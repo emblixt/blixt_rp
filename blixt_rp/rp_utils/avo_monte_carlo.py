@@ -27,7 +27,7 @@ def straight_line(x, a, b):
     return a*x + b
 
 
-def plot_multi_interfaces(sums, intfs, fbase=None, templates=None, suffix=None):
+def half_space_mc(sums, intfs, fbase=None, templates=None, suffix=None):
     """
     :param sums: 
         dict
@@ -64,10 +64,6 @@ def plot_multi_interfaces(sums, intfs, fbase=None, templates=None, suffix=None):
     fig2, ax2 = plt.subplots(figsize=(8,6))  # for plotting reflectivity
 
     legends = ['{} on {}'.format(x[0], x[1]) for x in intfs]
-    legend_labels = []
-    for i, intf in enumerate(intfs):
-        legend_labels.append(Line2D([0], [0], marker='o', color=intf[2], label=legends[i],
-                          markerfacecolor=intf[2], lw=0, markersize=10))
 
     if (templates is not None) and ('Intercept' in list(templates.keys())):
         xmin = templates['Intercept']['min']
@@ -84,22 +80,27 @@ def plot_multi_interfaces(sums, intfs, fbase=None, templates=None, suffix=None):
         ymax = 0.75
 
     for interface in intfs:
-        plot_one_interface(sums, *interface, fig1, ax1, fig2, ax2, n_samps=1000)
+        plot_one_half_space(sums, *interface, fig1, ax1, fig2, ax2, n_samps=1000)
 
     ax1.plot([0, 0], [ymin, ymax], 'k--', lw=0.5, label='_nolegend_')
     ax1.plot([xmin, xmax], [0, 0], 'k--', lw=0.5, label='_nolegend_')
 
+    legend_labels = []
+    for i, intf in enumerate(intfs):
+        legend_labels.append(Line2D([0], [0], marker='o', color=intf[2], label=legends[i],
+                                    markerfacecolor=intf[2], lw=0, markersize=10))
     this_legend = ax1.legend(
         handles=legend_labels,
-        #legends,
         prop=FontProperties(size='smaller'),
-        #scatterpoints = 1,
-        #markerscale=1.5,
         loc=1
     )
 
+    legend_labels = []
+    for i, intf in enumerate(intfs):
+        legend_labels.append(Line2D([0], [0], color=intf[2], label=legends[i], lw=2))
     this_legend = ax2.legend(
-        legends,
+        handles=legend_labels,
+        # legends,
         prop=FontProperties(size='smaller'),
         loc=1
     )
@@ -128,7 +129,7 @@ def plot_multi_interfaces(sums, intfs, fbase=None, templates=None, suffix=None):
         plt.show()
 
 
-def plot_one_interface(sums, name1, name2, color, fig_ig, ax_ig, fig_refl, ax_refl, n_samps=1000):
+def plot_one_half_space(sums, name1, name2, color, fig_ig, ax_ig, fig_refl, ax_refl, n_samps=1000):
 
     # elastics_from_stats calculates the normally distributed variables, with correlations, given
     # the mean, std and correlation, using a multivariate function
@@ -156,7 +157,7 @@ def plot_one_interface(sums, name1, name2, color, fig_ig, ax_ig, fig_refl, ax_re
 
     # plot the mean reflectivity curve together with the uncertainty
     mypr.plot(theta, mean_refl(theta), c=color, yerror=refl_stds,
-              yerr_style='fill', fig=fig_refl, ax=ax_refl)
+              yerr_style='fill', ax=ax_refl)
 
     intercept = rp.intercept(vp1, vp2, rho1, rho2)
     gradient = rp.gradient(vp1, vp2, vs1, vs2, rho1, rho2)
@@ -177,7 +178,6 @@ def plot_one_interface(sums, name1, name2, color, fig_ig, ax_ig, fig_refl, ax_re
             intercept,
             gradient,
             cdata=color,
-            fig=fig_ig,
             ax=ax_ig,
             edge_color=None,
             alpha=0.2
@@ -186,15 +186,62 @@ def plot_one_interface(sums, name1, name2, color, fig_ig, ax_ig, fig_refl, ax_re
     #ax_ig.plot(x_new, straight_line(x_new, *res.x), c=color, label='_nolegend_')
 
     # Do AVO classification
-    c1 = len(gradient[(intercept>0.) & (gradient>-4*intercept) & (gradient<0.)])
-    c2p = len(gradient[(intercept>0.) & (gradient<-4*intercept)])
-    c2 = len(gradient[(intercept>-0.02) & (intercept<0.) & (gradient<0.)])
-    c3 = len(gradient[(intercept<-0.02) & (gradient<0.)])
-    c4 = len(gradient[(intercept<0.) & (gradient>0.)])
-    rest = len(gradient[(intercept>0.) & (gradient>0.)])
-    print('Class I: {:.0f}% \nClass IIp: {:.0f}% \nClass II: {:.0f}% \nClass III: {:.0f}% \nClass IV: {:.0f}%'.format(
+    c1 = len(gradient[(intercept > 0.) & (gradient > -4*intercept) & (gradient < 0.)])
+    c2p = len(gradient[(intercept > 0.) & (gradient < -4*intercept)])
+    c2 = len(gradient[(intercept > -0.02) & (intercept < 0.) & (gradient < 0.)])
+    c3 = len(gradient[(intercept < -0.02) & (gradient < 0.)])
+    c4 = len(gradient[(intercept < 0.) & (gradient > 0.)])
+    rest = len(gradient[(intercept > 0.) & (gradient > 0.)])
+    print('\n{} on {}:'.format(name1, name2))
+    print(' Class I: {:.0f}% \n Class IIp: {:.0f}% \n Class II: {:.0f}% \n Class III: {:.0f}% \n Class IV: {:.0f}%'.format(
             100.*c1/n_samps, 100.*c2p/n_samps, 100.*c2/n_samps, 100.*c3/n_samps, 100.*c4/n_samps))
-    print('Rest:  {:.0f}%'.format(100.*rest/n_samps))
+    print(' Rest: {:.0f}%'.format(100.*rest/n_samps))
+
+
+def layered_model(vp_target, vs_target, rho_target, target_thickness,
+                  vp_bg, vs_bg, rho_bg,
+                  wavelet, verbose=False):
+    """
+    Creates one simple 3 layered model, with a target of thickness 'target_thickness' embedded in
+    background
+
+    :param vp_target:
+        float
+        P velocity in m/s
+    :param vs_target:
+    :param rho_target:
+        float
+        Density in g/cm3
+    :param target_thickness:
+        float
+        twt thickness in ms
+    :param vp_bg:
+    :param vs_bg:
+    :param rho_bg:
+    :param wavelet:
+            dict
+            dictionary with three keys:
+                'wavelet': contains the wavelet amplitude
+                'time': contains the time data [s]
+                'header': a dictionary with info about the wavelet
+            see blixt_utils.io.io.read_petrel_wavelet() for example
+    :param verbose:
+    :return:
+    """
+    from blixt_rp.core.models import Model, Layer
+
+    dt = wavelet['header']['Sample rate']  # should be given in seconds
+    if dt > 0.1:
+        print("WARNING: Sample rate most likely given in milliseconds. Please check")
+    length = wavelet['time'][-1] - wavelet['time'][0]
+
+    bg_layer = Layer(length/4., vp=vp_bg, vs=vs_bg, rho=rho_bg)
+    target_layer = Layer(target_thickness, target=True, vp=vp_target, vs=vs_target, rho=rho_target)
+
+    model = Model(depth_to_top=2. - length/4., layers=[bg_layer, target_layer, bg_layer])
+
+    twt, layer_i, vp, vs, rho, this_z = model.realize_model(dt, voigt_reuss_hill=True)
+    ref = rp.reflectivity(vp, None, vs, None, rho, None, along_wiggle=True)
 
 
 def elastics_from_stats(layer_stats,  n_samps):

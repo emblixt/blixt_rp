@@ -137,6 +137,21 @@ class Depth(object):
         else:
             return None
 
+    def unique_depths(self, other):
+        """
+        Compare the depth values with the 'other' and returns a sorted Depth object with
+        only the unique depth values
+        """
+        if not is_equivalent(self.units, other.units):
+            raise IOError('Units of the two Depth objects are not the same: {}, {}'.format(
+                self.units, other.units
+            ))
+        all_depth_values = np.append(self.values, other.values)
+
+        unique_depth_values = np.array(list(set(list(all_depth_values))))
+        unique_depth_values.sort()
+        return Depth(Q_(unique_depth_values, self.units))
+
 
     # I'm trying to "protect" the depth_type from being updated, BUT that stops me from setting it in the first place!
     # def __setattr__(self, key, value):
@@ -1399,6 +1414,38 @@ def test_interpolate():
 
     plt.show()
 
+
+def test_xarray():
+    """
+    This is testing a new way of storing all the data from a Project (multiple wells) in a xarray. Sorted
+    so that it easy to perform calculations like depth trends and statistics on it.
+
+    It should basically consist of a DataSet with two DataArrays of dimension (n, i, w, l) where
+        n: number of unique depth values over all wells and intervals
+        i: number of working intervals / formations
+        w: number of wells
+        l: number of logs
+    One DataArray for log values, and one for depth values
+
+    BUT I think we need to drop this idea as the number of unique depth values can become very large when the number of
+    wells increase, and then most of the DataArray with log values should contain NaN's 
+    :return:
+    """
+    lc1 = LogCurve2dNew(
+        'log1',
+        Q_(np.random.rand(11), 'm/s'),
+        Depth(Q_(np.linspace(1000, 2000, 11)))
+    )
+    lc2 = LogCurve2dNew(
+        'log2',
+        Q_(np.random.rand(9), 'm/s'),
+        Depth(Q_(np.linspace(1000, 2000, 9)))
+    )
+
+    depths = lc1.depth.unique_depths(lc2.depth)
+
+    lc1_depth_indexes = [int(np.argmin(np.sqrt((depths.values - _x)**2))) for _x in lc1.depth.values]
+    lc2_depth_indexes = [int(np.argmin(np.sqrt((depths.values - _x)**2))) for _x in lc2.depth.values]
 
 if __name__ == '__main__':
     test_interpolate()

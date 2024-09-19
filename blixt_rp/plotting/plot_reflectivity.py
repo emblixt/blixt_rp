@@ -133,10 +133,13 @@ def plot(
             raise OSError('Length of mask must match input data')
 
     # set up plotting environment
-    if fig is None:
-        fig = plt.figure(figsize=(10,10))
+    if fig is not None:
+        print("WARNING: The fig parameter is deprecated, the figure instance is automatically picked from the ax object")
+
     if ax is None:
-        ax = fig.subplots()
+        fig, ax = plt.subplots(figsize=(10,10))
+    else:
+        fig = ax.get_figure()
 
     #
     # start plotting

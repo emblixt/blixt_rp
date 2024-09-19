@@ -6,6 +6,7 @@ import sys
 import os
 import logging
 import pint
+import pandas as pd
 
 from .. import ureg, Q_
 
@@ -77,7 +78,7 @@ class SingleInterval(IntervalInfo):
                  top: pint.Quantity, base: pint.Quantity,
                  desc=None, source=None, color=None,
                  uid=None, well=None,
-                 coord_type='md'):
+                 depth_type='md'):
         """
 
         :param uid:
@@ -96,7 +97,7 @@ class SingleInterval(IntervalInfo):
             float or pint.Quantity
         :param units:
             str
-        :param coord_type:
+        :param depth_type:
             str
         """
         super().__init__(name, level, desc, source, color)
@@ -105,8 +106,8 @@ class SingleInterval(IntervalInfo):
             uid = name
         self.uid = uid
         self.well = well
-        self.top = handle_depth(top, coord_units=None, coord_type=coord_type)
-        self.base = handle_depth(base, coord_units=None, coord_type=coord_type)
+        self.top = handle_depth(top, depth_units=None, depth_type=depth_type)
+        self.base = handle_depth(base, depth_units=None, depth_type=depth_type)
 
         if self.top > self.base:
             raise ValueError('Top ({:.2}) must be smaller than Base ({:.2})'.format(
@@ -325,8 +326,32 @@ class Intervals(object):
         this_well = self.get_well(interval.well)
         this_well.add_interval(interval)
 
-    def write_to_excel(self, file_name, intervals_sheet, interval_info_sheet):
-        import pandas as pd
+    def write_to_excel(self, file_name, intervals_sheet, interval_info_sheet, append: bool = False):
+        import openpyxl
+        int_rows = 0
+        int_info_rows = 0
+        int_header = True
+        info_header = True
+        if not os.path.isfile(file_name):
+            wb = openpyxl.Workbook()
+            wb.save(filename=file_name)
+        elif append:
+            # Figure out the row numbers where we can start appending data
+            wb = openpyxl.load_workbook(file_name)
+            try:
+                sheet = wb[intervals_sheet]
+                int_rows = sheet.max_row
+                int_header = False
+            except KeyError:   # this sheet doesn't exist, so we create it later
+                pass
+            try:
+                sheet = wb[interval_info_sheet]
+                int_info_rows = sheet.max_row
+                info_header = False
+            except KeyError:   # this sheet doesn't exist, so we create it later
+                pass
+            wb.close()
+
         # First collect and write the interval info
         interval_info_dict = {'name': [], 'level': [], 'desc': [], 'source': [], 'color': []}
         for i, interval in enumerate(self.intervals.values()):
@@ -335,7 +360,8 @@ class Intervals(object):
         df = pd.DataFrame(interval_info_dict)
         with pd.ExcelWriter(file_name, mode='a', if_sheet_exists='overlay', engine='openpyxl') as writer:
             df.to_excel(
-                writer, sheet_name=interval_info_sheet, startcol=0, startrow=0, index=False, header=True)
+                writer, sheet_name=interval_info_sheet, startcol=0, startrow=int_info_rows, index=False,
+                header=info_header)
 
         # Then the individual intervals in each well
         intervals_dict = {'well': [], 'name': [], 'top MD [m]': [], 'base MD [m]': [],
@@ -354,12 +380,12 @@ class Intervals(object):
         df = pd.DataFrame(intervals_dict)
         with pd.ExcelWriter(file_name, mode='a', if_sheet_exists='overlay', engine='openpyxl') as writer:
             df.to_excel(
-                writer, sheet_name=intervals_sheet, startcol=0, startrow=0, index=False, header=True)
+                writer, sheet_name=intervals_sheet, startcol=0, startrow=int_rows, index=False,
+                header=int_header)
 
         return intervals_dict
 
-    def read_sodir_tops(self, file_name):
-        import pandas as pd
+    def read_sodir_tops(self, file_name, testing=True):
         df = pd.read_excel(file_name, engine='openpyxl')
         for i, well_name in enumerate(df['Wellbore name']):
             well_name = fix_well_name(well_name)
@@ -379,8 +405,23 @@ class Intervals(object):
 
             self.add_single_interval(_interval)
 
-            if i > 40:
+            if testing and (i > 40):
                 break
+
+    def read_blixt_tops(self, file_name: str, intervals_sheet: str = 'Working intervals',
+                        interval_info_sheet: str = 'Interval info'):
+        df = pd.read_excel(file_name, engine='openpyxl', sheet_name=intervals_sheet)
+        for i, well_name in enumerate(df['well']):
+            _interval = SingleInterval(
+                df['name'][i],
+                df['level'][i],
+                Q_(float(df['top MD [m]'][i]), 'm'),
+                Q_(float(df['base MD [m]'][i]), 'm'),
+                uid=df['name'][i],
+                well=well_name
+            )
+
+            self.add_single_interval(_interval)
 
 
 def print_function(my_object):

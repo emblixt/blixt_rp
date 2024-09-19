@@ -79,7 +79,7 @@
     <Compile Include="utils\calc_stats.py" />
     <Compile Include="utils\convert_data.py" />
     <Compile Include="utils\curve_fitting.py" />
-    <Compile Include="utils\half_space_avo_monte_carlo.py" />
+    <Compile Include="utils\avo_monte_carlo.py" />
     <Compile Include="utils\harmonize_logs.py" />
     <Compile Include="utils\io.py" />
     <Compile Include="utils\masks.py" />

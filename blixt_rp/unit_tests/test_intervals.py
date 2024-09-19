@@ -8,8 +8,8 @@ import pint
 from .. import ureg, Q_
 
 # Add to path to avoid having to install libraries, useful in development
-project_dir = os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests','')
-sys.path.append(os.path.join(str(project_dir), 'blixt_utils'))
+project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
+sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 from blixt_utils.utils import fix_well_name
 
@@ -61,7 +61,28 @@ class TestCase(unittest.TestCase):
         # plt.show()
 
         out_file = os.path.join(project_dir, 'test.xlsx')
-        test = wis.write_to_excel(out_file, 'Working intervals', 'Interval info')
+        test = wis.write_to_excel(out_file, 'Working intervals', 'Interval info',
+                                  append=False)
 
         print(test)
         self.assertIsInstance(wis, Intervals)
+
+    def test_append(self):
+        from blixt_rp.core.intervals import SingleInterval, IntervalInfo, Well, Intervals
+        append_file = os.path.join(project_dir, 'test.xlsx')
+        well = Well('TestWell', {})
+        wis = Intervals(name='TEST')
+        wis.add_well(well)
+        interval1 = SingleInterval('Test FM', 1, Q_(100., 'm'), Q_(200., 'm'), well='TestWell')
+        interval2 = SingleInterval('Test FM', 1, Q_(100., 'm'), Q_(200., 'm'), well='WrongWell')
+        interval3 = SingleInterval('Test FM', 1, Q_(100., 'm'), Q_(200., 'm'), well='TestWell')
+        wis.add_single_interval(interval1)
+        wis.add_single_interval(interval2)
+        wis.add_single_interval(interval3)
+
+        wis.read_blixt_tops(append_file)
+
+        print(wis)
+        self.assertIsInstance(wis, Intervals)
+
+

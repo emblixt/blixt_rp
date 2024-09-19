@@ -74,7 +74,7 @@ class Template(AttribDict):
                     self.__setattr__(_key, ans)
                     self.__setitem__(_key, ans)
                 elif _key == 'units':
-                    # After starting to use XArray, we shifted from using 'unit' to 'units' to be more
+                    # After starting to use Pint, we shifted from using 'unit' to 'units' to be more
                     # similar to xarray in terminology
                     self.__setattr__(_key, None if isnan(table['unit'][i]) else table['unit'][i])
                     self.__setitem__(_key, None if isnan(table['unit'][i]) else table['unit'][i])

@@ -355,7 +355,7 @@ class WellTestCase(unittest.TestCase):
         print(lc_de_trend.header)
         self.assertIsInstance(res, list)
 
-    def test_coords(self):
+    def test_depth(self):
         from blixt_rp.core.log_curve_new import Depth
         coords_list = [10.0, (2., 3.), np.linspace(5., 10., 3), 1.,
                        10.0, (2., 3.), np.linspace(5., 10., 3), 1.,
@@ -399,3 +399,10 @@ class WellTestCase(unittest.TestCase):
             else:
                 print('{}: This should fail'.format(i))
                 self.assertRaises(pint.errors.DimensionalityError, Depth, coords, coord_units, coord_type, True)
+
+        dpth1 = Depth(Q_(np.linspace(10, 20, 11), 'm'))
+        dpth2 = Depth(Q_(np.linspace(10, 20, 9), 'm'))
+        dpth3 = Depth(Q_(np.linspace(10, 20, 11), 'feet'))
+        print(dpth1.unique_depths(dpth2).values)
+        self.assertRaises(IOError, dpth1.unique_depths, dpth3)
+
