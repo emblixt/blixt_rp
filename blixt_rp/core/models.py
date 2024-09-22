@@ -203,7 +203,8 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
 
 def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, color_by_gradient=False,
                  extract_avo_at=None, avo_angles=None, avo_plot_position=None,
-                 extract_amp_at=None, plot_domain=None, overburden_vel=3000., scaling=None, **kwargs):
+                 extract_amp_at=None, plot_domain=None, overburden_vel=3000.,
+                 extract_on='exact', scaling=None, **kwargs):
     """
 
     Args:
@@ -243,6 +244,10 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             depth (TWT or Z) values at which the seismic amplitude is extracted.
             Same length as number of traces in model.
             If given as a single float, it is repeated to yield a list
+        extract_on:
+            str
+            'exact', 'nearest min', 'nearest max'
+            Used by the function find_value() to extract amplitude values
         scaling:
             float
             Scaling parameter passed on to wiggle_plot
@@ -251,6 +256,8 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
     Returns:
         avo_curves, extracted_amplitudes, minimum amplitude, maximum amplitude, distance between min & max
     """
+    from blixt_utils.utils import find_value
+
     if avo_plot_position is None:
         avo_plot_position = [0.68, 0.02, 0.3, 0.3]
     if angle is None:
@@ -261,6 +268,8 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
     dist_min_max = None
     if extract_amp_at is not None:
         extracted_amplitudes = []
+    if extract_avo_at is not None and avo_angles is None:
+        avo_angles = [0, 10, 20, 30, 40]
 
     grad = None
     show = False
@@ -345,7 +354,9 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                     for _ang in avo_angles:
                         # tmp_wiggle = calc_wiggle(len(twt), wavelet, ref, _ang)
                         tmp_wiggle = bumw.convolve_with_refl(wavelet['wavelet'], ref(_ang))
-                        avo_curves[this_index].append(tmp_wiggle[twt_index - 1])
+                        wiggle_value, twt_index = find_value(tmp_wiggle, twt_index, snap_to=extract_on)
+                        avo_curves[this_index].append(wiggle_value)
+                    avo_positions[this_index] = (this_index, twt[twt_index])
 
     elif model.model_type == '1D' and avo_angles is not None:
         if eei:
@@ -366,10 +377,7 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             wiggle = bumw.convolve_with_refl(wavelet['wavelet'], ref(ang))
 
             wiggle_plot(ax, twt, wiggle, ang, scaling=80, color_by_gradient=grad, **kwargs)
-            # # Find out where there is a new layer (layer_i has a unit jump), and annotate it with a horizontal marker
-            # jumps = twt[np.diff(layer_i, prepend=[0]) != 0]
-            # for jump in jumps:
-            #     ax.axhline(jump, linestyle='--')
+            # wiggle_plot(ax, twt, wiggle, ang, scaling=1E-4, color_by_gradient=grad, **kwargs)
 
             # extract avo curves
             if avo_positions is not None:
@@ -390,12 +398,19 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                     for _ang in tmp_avo_angles:
                         # tmp_wiggle = calc_wiggle(len(twt), wavelet, tmp_ref, _ang)
                         tmp_wiggle = bumw.convolve_with_refl(wavelet['wavelet'], tmp_ref(_ang))
-                        avo_curves[this_index].append(tmp_wiggle[twt_index - 1])
+                        wiggle_value, twt_index = find_value(tmp_wiggle, twt_index, snap_to=extract_on)
+                        # avo_curves[this_index].append(tmp_wiggle[twt_index - 1])
+                        avo_curves[this_index].append(wiggle_value)
+                    avo_positions[this_index] = (this_index, twt[twt_index])
 
         ax.set_xlabel(my_x_label)
 
+    elif model.model_type == '1D' and avo_angles is None:
+        ref = rp.reflectivity(vp, None, vs, None, rho, None, eei=eei, along_wiggle=True)
+        wiggle = bumw.convolve_with_refl(wavelet['wavelet'], ref(0.))
+        wiggle_plot(ax, twt, wiggle, 0., scaling=80,  **kwargs)
     else:
-        warn_txt = 'Not possible to plot this model'
+        warn_txt = 'Not possible to plot these wiggles'
         print(warn_txt)
 
     # Add extra information to plots
@@ -966,6 +981,36 @@ class Layer:
         return np.array(this_vp), np.array(this_vs), np.array(this_rho)
 
 
+def build_layered_model(depth_to_target, overburden_thickness, target_thickness,
+                        overburden, target, underburden, domain='TWT') -> Model:
+    """
+    Returns a simple 1D model of three layers
+    :param depth_to_target:
+        float
+        depth in TWT [s] or Z [m] to top of target
+    :param overburden_thickness:
+        float
+        thickness in TWT [s] or Z [m] to top of wedge
+    :param target_thickness:
+    :param overburden:
+        dict
+        with keys: 'vp', 'vs', and 'rho', and the Vp, Vs, and density values as values
+    :param target:
+    :param underburden:
+    :param domain:
+    :return:
+        Model
+    """
+    top_layer = Layer(thickness=overburden_thickness, **overburden, domain=domain)
+    target_layer = Layer(thickness=target_thickness, **target, target=True, domain=domain)
+    base_layer = Layer(thickness=overburden_thickness, **underburden, domain=domain)
+    return Model(
+        depth_to_top=depth_to_target - overburden_thickness,
+        layers=[top_layer, target_layer, base_layer],
+        domain=domain
+    )
+
+
 def build_wedge(depth_to_wedge, from_thickness, to_thickness, n_traces, overburden, target, underburden, domain='TWT'):
     """
     Returns a simple wedge model with constant elastic properties in the three layers of the model
@@ -1088,6 +1133,7 @@ def tuning_wedge_analysis(depth_to_wedge, from_thickness, to_thickness, n_traces
     if savefig:
         fig.savefig(savefig)
 
+
 def laminar_model_analysis(
         model: Model,
         sample_rate: float,
@@ -1096,6 +1142,7 @@ def laminar_model_analysis(
         title=None, savefig=None,
         overburden_vel=3000.,
         extract_avo_at=None,
+        extract_on='exact',
         avo_plot_position=None,
         scaling=None):
     """
@@ -1103,6 +1150,7 @@ def laminar_model_analysis(
     """
 
     fig, axs = plt.subplots(1, 2, figsize=(8, 8), gridspec_kw={'width_ratios': [1, 0.4]})
+    # TODO Try using a shared y axis
     # axs[1, 1].set_axis_off()
     wiggle_ax = axs[0]
     model_ax = axs[1]
@@ -1111,12 +1159,12 @@ def laminar_model_analysis(
 
     avo_curves, amps, min_amps, max_amps, dist_min_max = plot_wiggles(
         model, sample_rate, wavelet, ax=wiggle_ax, extract_avo_at=extract_avo_at,
-        avo_plot_position=avo_plot_position,
+        avo_plot_position=avo_plot_position, extract_on=extract_on,
         plot_domain=plot_domain, overburden_vel=overburden_vel, scaling=scaling)
     if title is not None:
         fig.suptitle(title)
 
-    wiggle_ax.set_ylim(wiggle_ax.get_ylim()[::-1])
+    # wiggle_ax.set_ylim(wiggle_ax.get_ylim()[::-1])
     model[0].plot(ax=model_ax, kwargs1d={'yticks': False, 'legend': False})
     model_ax.autoscale(tight=True)
 
@@ -1124,167 +1172,3 @@ def laminar_model_analysis(
         fig.savefig(savefig)
 
 
-l1 = {'vp': 3000, 'vs': 1820, 'rho': 2.6}
-l2 = {'vp': 2000, 'vs': 1120, 'rho': 2.2}
-
-
-def test_1d_twt():
-    first_layer = Layer(thickness=0.1, **l1)
-    second_layer = Layer(thickness=0.04, **l2, target=True)
-    m = Model(depth_to_top=2.0, layers=[first_layer, second_layer])
-    m.append(first_layer)
-    m.plot()
-    return m
-
-
-def test_1d_z():
-    first_layer = Layer(thickness=150, **l1, domain='Z')
-    second_layer = Layer(thickness=40, **l2, target=True, domain='Z')
-    m = Model(depth_to_top=3000., layers=[first_layer, second_layer])
-    m.append(first_layer)
-    m.plot()
-    return m
-
-
-def test_wedge():
-    m = build_wedge(2.0, 0.02, 0.1, 51, l1, l2, l1)
-    # m = build_wedge(3000., 10.0, 40., 51, l1, l2, l1, domain='Z')
-    return m
-
-
-def test_plot():
-    import blixt_utils.misc.wavelets as bumw
-    # first_layer = Layer(thickness=0.1, vp=3300, vs=1500, rho=2.1)
-    # second_layer = Layer(thickness=0.2, vp=3500, vs=1600, rho=2.3, target=True, ntg=0.8)
-    m = test_1d_twt()
-
-    wavelet = bumw.ricker(0.096, 0.001, 25)
-    plot_wiggles(m, 0.001, wavelet, avo_angles=[0., 5., 10., 15.,  20., 25., 30., 35., 40.])
-    plot_wiggles(m, 0.001, wavelet, eei=True, avo_angles=[-90, -70., -50., -30., -15., 0., 15., 30., 50., 70., 90.],
-                 extract_avo_at=(-90, 1.99))
-
-
-def test_ntg():
-
-    thin_bed_factor = 3
-    net_vp = 3000.
-    resolution = 0.001
-    fig, axs = plt.subplots(nrows=11)
-    for i in range(11):
-        ntg = i/10.
-
-        ntg_layer = Layer(target=True, thickness=0.1, vp=net_vp, ntg=ntg, thin_bed_factor=thin_bed_factor)
-
-        m = Model(layers=[ntg_layer])
-
-        x, _, _ = m.layers[0].realize_layer(resolution)
-        net = len(x[x == net_vp])
-
-        print('Requested len: {}, returned len: {}'.format(int(m.layers[0].thickness / resolution), len(x)))
-        axs[i].set_title('NTG={}, tbf={}. Observed NTG {:.2f}'.format(ntg, thin_bed_factor, net/len(x)))
-        axs[i].plot(x)
-
-    plt.show()
-
-
-def test_realization():
-    # in TWT
-    first_layer = Layer(thickness=0.1, vp=3300, vs=1500, rho=2.1)
-    second_layer = Layer(thickness=0.1, vp=3500, vs=1600, rho=2.3, target=True, ntg=0.8)
-    m = Model(layers=[first_layer, second_layer])
-    m.append(first_layer)
-    m.plot()
-    twt, li, vp, _, _, _ = m.realize_model(0.001)
-    print(len(vp))
-    fig, ax = plt.subplots()
-    ax.plot(twt, vp / 1000., twt, li)
-
-    # in Z
-    first_layer = Layer(thickness=100, vp=3300, vs=1500, rho=2.1, domain='Z')
-    second_layer = Layer(thickness=20., vp=3500, vs=1600, rho=2.3, target=True, ntg=0.8, domain='Z')
-    m = Model(layers=[first_layer, second_layer])
-    m.append(first_layer)
-    m.plot()
-    twt, li, vp, _, _, _ = m.realize_model(0.001)
-    print(len(vp))
-    fig, ax = plt.subplots()
-    ax.plot(twt, vp / 1000., twt, li)
-    plt.show()
-
-
-def test_quasi2d():
-    import blixt_utils.misc.wavelets as bumw
-    from blixt_rp.rp.rp_core import constantcement, v_p, v_s
-    n_samplings = 51
-    # TODO
-    # At the moment, quasi2d models will likely fail when combining a varying thickness with NTG separate from 1
-    # when Voigt Reuss Hill average is set to False.
-
-    # for a wedge model to work, we need to counterweight the changing thickness of one layer with an extra layer
-    # so that the total height of the model is kept constant
-    def wedge(i):
-        return 0.1 - 0.1/50 * i
-
-    def reverse_wedge(i):
-        return 0.06 + 0.1/50 * i
-
-    def vp(i):
-        # phi = np.linspace(0.1, 0.4, n_samplings)
-        # k_eff, mu_eff = constantcement(37, 45, phi, apc=2)
-        # # print(k_eff, mu_eff)
-        # # print(v_p(k_eff[i], mu_eff[i], 2.3))
-        # return 1000. * v_p(k_eff[i], mu_eff[i], 2.3)
-
-        # gas lens (gas in the center, brine on the flanks):
-        if (i > 17) and (i < 34):
-            return 3600.
-        else:
-            return 3730.
-
-    def vs(i):
-        # phi = np.linspace(0.1, 0.4, n_samplings)
-        # k_eff, mu_eff = constantcement(37, 45, phi, apc=2)
-        # return 1000. * v_s(k_eff[i], 2.3)
-        # gas lens:
-        if (i > 17) and (i < 34):
-            return 2120.
-        else:
-            return 2070.
-
-    def rho(i):
-        # gas lens:
-        if (i > 17) and (i < 34):
-            return 2.2
-        else:
-            return 2.3
-
-    # wedge model
-    # first_layer = Layer(thickness=0.06, vp=2800., vs=1350, rho=2.46)
-    # second_layer = Layer(thickness=wedge, vp=3100, vs=1800, rho=2.3, target=True)
-    # third_layer = Layer(thickness=reverse_wedge, vp=2800, vs=1350, rho=2.46, target=False)
-
-    # gas lens model
-    first_layer = Layer(thickness=0.05, vp=3400., vs=1820., rho=2.6)
-    second_layer = Layer(thickness=0.03, vp=vp, vs=vs, rho=rho, target=True)
-    third_layer = Layer(thickness=0.05, vp=3400., vs=1820., rho=2.6)
-
-    m = Model(depth_to_top=1.94, layers=[first_layer, second_layer, third_layer],
-              trace_index_range=np.arange(n_samplings))
-    # m.plot()
-
-    wavelet = bumw.ricker(0.096, 0.001, 25)
-
-    plot_wiggles(m, 0.001, wavelet, angle=0., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
-    plot_wiggles(m, 0.001, wavelet, angle=15., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
-    plot_wiggles(m, 0.001, wavelet, angle=-90., eei=True, extract_avo_at=[(8, 1.99), (24, 1.99)])
-
-
-if __name__ == '__main__':
-    # test_1d_twt()
-    # test_1d_z()
-    test_wedge()
-    # test_realization()
-    # test_plot()
-    # test_ntg()
-    # test_quasi2d()
-    plt.show()
