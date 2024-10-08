@@ -210,7 +210,7 @@ class Project(object):
         if this_str != '':
             print_info('{}: {}'.format(this_str, value), 'info', logger)
 
-        super(Project, self).__setattr__(key, value)
+        super().__setattr__(key, value)
 
     def keys(self):
         return self.__dict__.keys()
@@ -440,7 +440,7 @@ class Header(AttribDict):
         """
         if header is None:
             header = {}
-        super(Header, self).__init__(header)
+        super().__init__(header)
 
     def __setitem__(self, key, value):
         """
@@ -448,7 +448,7 @@ class Header(AttribDict):
         # keys which shouldn't be modified
         if key in ['creation_date', 'modification_date']:
             pass
-        super(Header, self).__setitem__(
+        super().__setitem__(
             'modification_date',
             AttribDict(
                 {'value': datetime.now().isoformat(),
@@ -456,12 +456,12 @@ class Header(AttribDict):
 
         # all other keys
         if isinstance(value, dict):
-            super(Header, self).__setitem__(key, AttribDict(value))
+            super().__setitem__(key, AttribDict(value))
         elif key == 'well':
-            super(Header, self).__setitem__(
+            super().__setitem__(
                 key, value)
         else:
-            super(Header, self).__setitem__(
+            super().__setitem__(
                 key,
                 AttribDict(
                     {'value': value,
@@ -1129,7 +1129,7 @@ class Well(object):
                 self.block[lblock].masks[name] = LogCurve(
                     name=name,
                     well=self.well,
-                    data=np.array(np.ones(len(self.block[lblock])), dtype=bool),
+                    values=np.array(np.ones(len(self.block[lblock])), dtype=bool),
                     header={
                         'name': name,
                         'well': self.well,
@@ -1169,7 +1169,7 @@ class Well(object):
                 self.block[lblock].masks[name] = LogCurve(
                     name=name,
                     well=self.well,
-                    data=block_mask,
+                    values=block_mask,
                     header={
                         'name': name,
                         'well': self.well,
@@ -1583,7 +1583,7 @@ class Well(object):
                             name=_key,
                             block=_block_name,
                             well=_well_dict['well_info']['well']['value'],
-                            data=_data,
+                            values=_data,
                             header=this_header
                         )
                         these_logs[_key].header.orig_filename = filename
@@ -1601,7 +1601,7 @@ class Well(object):
                         name=_key,
                         block=_block_name,
                         well=_well_dict['well_info']['well']['value'],
-                        data=np.array(_well_dict['data'][_key]),
+                        values=np.array(_well_dict['data'][_key]),
                         header=_well_dict['curve'][_key]
                     )
                     these_logs[_key].header.orig_filename = filename
@@ -2050,7 +2050,7 @@ class Block(object):
             name=name,
             block=self.name,
             well=self.well,
-            data=data,
+            values=data,
             header=header)
 
         self.add_log_curve(log_curve)
@@ -2496,7 +2496,7 @@ class Block(object):
 
         self.add_log_curve(
             LogCurve(name=result_names[0] + post_fix,
-                     data=vp*rho,
+                     values=vp*rho,
                      header={
                          'unit': 'kPa s/m',  # TODO Make sure to test these units!
                          'log_type': 'Impedance',
@@ -2504,7 +2504,7 @@ class Block(object):
                      }))
         self.add_log_curve(
             LogCurve(name=result_names[1] + post_fix,
-                     data=vs*rho,
+                     values=vs*rho,
                      header={
                          'unit': 'kPa s/m',  # TODO Make sure to test these units!
                          'log_type': 'Impedance',
@@ -2512,7 +2512,7 @@ class Block(object):
                      }))
         self.add_log_curve(
             LogCurve(name=result_names[2] + post_fix,
-                     data=vp/vs,
+                     values=vp/vs,
                      header={
                          'unit': '-',
                          'log_type': 'VpVs',
@@ -2759,7 +2759,7 @@ def add_logs_to_block(_block, _well_dict, _block_name, _only_these_logs, _filena
                     name=_key,
                     block=_block_name,
                     well=_well_dict['well_info']['well']['value'],
-                    data=np.array(_well_dict['data'][_key]),
+                    values=np.array(_well_dict['data'][_key]),
                     header=this_header
                 )
                 these_logs[_key].header.orig_filename = _filename
@@ -2780,7 +2780,7 @@ def add_logs_to_block(_block, _well_dict, _block_name, _only_these_logs, _filena
                 name=_key,
                 block=_block_name,
                 well=_well_dict['well_info']['well']['value'],
-                data=np.array(_well_dict['data'][_key]),
+                values=np.array(_well_dict['data'][_key]),
                 header=_well_dict['curve'][_key]
             )
             these_logs[_key].header.orig_filename = _filename

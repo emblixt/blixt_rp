@@ -694,9 +694,11 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
     :return:
     """
     from scipy.optimize import least_squares
-    from blixt_utils.misc.curve_fitting import residuals, linear_function, depth_trend, exp_function
+    from blixt_utils.misc.curve_fitting import (residuals, linear_function, depth_trend, exp_function,
+                                                calculate_depth_trend)
     from blixt_utils.utils import mask_string
 
+    down_weight_outliers = kwargs.pop('down_weight_outliers', False)
     # target_function = exp_function
     # x0 = [1000., -1000., -0.001]
     target_function = linear_function
@@ -718,6 +720,10 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
         block_name = cw.def_lb_name
 
     depth_trends = {}
+    data = {}
+    tvd = {}
+    data_detrended = {}
+    tvd_detrended = {}
     # Start looping over the different log types
     print_info('START ANALYZING DEPTH TRENDS:', '', None, verbose, False)
     for log_type in log_table:
@@ -728,7 +734,7 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
         else:
             fig, ax = None, None
 
-        # Start looping over wells and plot the data in TVD domain
+        # Start looping over wells and collect the data in one container
         data_container = np.zeros(0)  # empty container
         tvd_container = np.zeros(0)
         legend_items = []
@@ -745,6 +751,16 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
             mask = wells[well].block[block_name].masks['my_mask'].values
 
             xdata = wells[well].block[block_name].logs[log_name].values[mask]
+            ydata = wells[well].block[block_name].logs['tvd'].values[mask]
+
+            if down_weight_outliers:
+                # Remove outliers here, 2 std out?
+                _f = 1.5
+                outlier_mask = (np.nanmedian(xdata) - _f * np.nanstd(xdata) < xdata) &\
+                               (xdata < np.nanmedian(xdata) + _f * np.nanstd(xdata))
+                xdata = xdata[outlier_mask]
+                ydata = ydata[outlier_mask]
+
             # Index of NaN's
             nans = np.isnan(xdata)
             if len(xdata[~nans]) < 5:
@@ -752,8 +768,6 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
                 print_info(warn_txt, 'warning', logger)
                 continue
             data_container = np.append(data_container, xdata[~nans])
-
-            ydata = wells[well].block[block_name].logs['tvd'].values[mask]
 
             tvd_container = np.append(tvd_container, ydata[~nans])
 
@@ -780,9 +794,14 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
         print_info('Finished adding all wells for log type {}'.format(log_type), ' -', None, verbose, False)
         print_info('Trying to fit {} to data'.format(target_function.__name__), ' - ', None, verbose, False)
         try:
-            res = least_squares(residuals, x0, args=(tvd_container, data_container),
-                                loss='soft_l1', f_scale=0.1,
-                                kwargs={'target_function': target_function}, verbose=verbosity_level)
+            # res = least_squares(residuals, x0, args=(tvd_container, data_container),
+            #                     loss='soft_l1', f_scale=0.1,
+            #                     kwargs={'target_function': target_function}, verbose=verbosity_level)
+            # it doesn't work well to use the down_weight_outliers in calculate_depth_trend() when collecting data
+            # over multiple wells
+            res = calculate_depth_trend(data_container, tvd_container, target_function, x0, loss='soft_l1',
+                                        down_weight_outliers=False,
+                                        verbose=False)[0]  # There is only one interval in this case
 
         except ValueError as error:
             warn_txt = 'Depth trend could not calculated for {} for all wells'.format(log_type)
@@ -794,12 +813,26 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
         )
         print_info(info_txt, '', None, verbose, False)
         depth_trends[log_name] = res['x']
+        data[log_name] = data_container
+        tvd[log_name] = tvd_container
 
         new_tvd = np.linspace(tvd_min, tvd_max)
         if verbose:
             ax.plot(target_function(new_tvd, *res['x']), new_tvd)
             legend_items.append('{}, {}'.format(log_name, target_function.__name__))
             # legend_items.append('{} = {:.3}xTVD + {:.3}'.format(log_name, res.x[0], res.x[1]))
+
+            de_trended_tvd = np.random.normal(loc=2400, scale=200, size=len(data_container))
+
+            def detrend(_z, _y, new_z):
+                return _y + target_function(new_z, *res['x']) - target_function(_z, *res['x'])
+            de_trended_data = detrend(tvd_container, data_container, de_trended_tvd)
+            data_detrended[log_name] = de_trended_data
+            tvd_detrended[log_name] = de_trended_tvd
+
+            ax.scatter(de_trended_data, de_trended_tvd, c='gray', alpha=0.2,
+                       edgecolors='none')
+            legend_items.append('De-trended data')
 
             ax.set_title('{}: {}. {} {}'.format(log_type, log_name, mask_string(cutoffs, wi_name), suffix))
             ax.set_ylim(tvd_max, tvd_min)
@@ -819,7 +852,7 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
                 )))
             else:
                 plt.show()
-    return depth_trends
+    return depth_trends, data, tvd, data_detrended, tvd_detrended
 
 
 def chi_rotation(well, log_tables, wis, wi_name, templates, buffer=None, chi_angles=None,

@@ -918,6 +918,9 @@ class LogCurve2dNew(object):
             disc_txt = 'allowing discrete jumps at {} {} '.format(
                 ', '.join('{:.2}'.format(_x) for _x in discrete_intervals), self.depth_units)
 
+        if True:
+            raise NotImplementedError("calculate_depth_trend() has changed its output, It now returns the whole 'res' instead of 'res.x'")
+
         results = calculate_depth_trend(
             self.values,
             self.depth.values,

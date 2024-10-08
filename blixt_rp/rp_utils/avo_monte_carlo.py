@@ -23,7 +23,8 @@ from blixt_rp.core.models import build_layered_model, laminar_model_analysis
 import blixt_utils.misc.wavelets as bumw
 from blixt_utils.utils import find_value
 
-msymbols = np.array(['o','s','v','^','<','>','p','*','h','H','+','x','D','d','|','_','.','1','2','3','4','8'])
+msymbols = np.array(['o', 's', 'v', '^', '<', '>', 'p', '*', 'h', 'H', '+', 'x',
+                     'D', 'd', '|', '_', '.', '1', '2', '3', '4', '8'])
 cnames = list(np.roll([str(u) for u in colors.cnames.keys()], 10))  # the first 10 elements have poor colors
 
 # Global avo angle parameter, assuming 50 samples from 0 to 40 deg incidence angle
@@ -34,7 +35,10 @@ def straight_line(x, a, b):
     return a*x + b
 
 
-def half_space_mc(sums, intfs, fbase=None, templates=None, suffix=None):
+def main(sums, intfs, fbase=None, templates=None, suffix=None,
+         n_iter: int = 1000, thickness: tuple | None = None, wavelet: dict | None = None,
+         extract_at: float = 2.0, extract_on: str = 'exact',
+         model_type: str = 'half_space', verbose = False):
     """
     :param sums: 
         dict
@@ -66,7 +70,7 @@ def half_space_mc(sums, intfs, fbase=None, templates=None, suffix=None):
         suffix = ''
     else:
         suffix = '_' + suffix
-    
+
     fig1, ax1 = plt.subplots(figsize=(8,6))  # for plotting intercept vs gradient
     fig2, ax2 = plt.subplots(figsize=(8,6))  # for plotting reflectivity
 
@@ -88,10 +92,22 @@ def half_space_mc(sums, intfs, fbase=None, templates=None, suffix=None):
 
     for interface in intfs:
         #  plot_one_half_space(sums, *interface, fig1, ax1, fig2, ax2, n_iter=1000)
-        avos, intercepts, gradients = execute_monte_carlo(sums, interface[1], interface[0], None, 1000,
-                                                          model_type='half_space')
+        print('Running {} Monte Carlo for {} on {}'.format(model_type, interface[0], interface[1]))
+        print(' Iterations: {}'.format(n_iter))
+        print(' Thickness: {}'.format(thickness))
+        if wavelet is not None:
+            print(' Wavelet: {}'.format(wavelet['header']))
+        print(' Extract at: {}'.format(extract_at))
+        print(' Extract on: {}'.format(extract_on))
+        result = execute_monte_carlo(sums, interface[1], interface[0], n_iter,
+                                                          thickness=thickness, wavelet=wavelet,
+                                                          extract_at=extract_at, extract_on=extract_on,
+                                                          model_type=model_type, verbose=verbose)
+        # print('XX1:', avos.shape, intercepts.shape, gradients.shape)  # XXX
+        # print('XX2:', np.max(avos), np.max(intercepts), np.max(gradients))  # XXX
+
         _legend = '{} on {}'.format(interface[0], interface[1])
-        plot_one_mc_result(avos, intercepts, gradients, _legend, interface[2], ax1, ax2)
+        plot_one_mc_result(result, _legend, interface[2], ax1, ax2)
 
     ax1.plot([0, 0], [ymin, ymax], 'k--', lw=0.5, label='_nolegend_')
     ax1.plot([xmin, xmax], [0, 0], 'k--', lw=0.5, label='_nolegend_')
@@ -140,76 +156,10 @@ def half_space_mc(sums, intfs, fbase=None, templates=None, suffix=None):
         plt.show()
 
 
-def plot_one_half_space(sums, name1, name2, color, fig_ig, ax_ig, fig_refl, ax_refl, n_iter=1000):
-
-    # elastics_from_stats calculates the normally distributed variables, with correlations, given
-    # the mean, std and correlation, using a multivariate function
-    vp1, vs1, rho1 = elastics_from_stats(sums[name1], n_iter)
-    vp2, vs2, rho2 = elastics_from_stats(sums[name2], n_iter)
-
-    refs = np.full((n_iter, 50), np.nan)
-    # calculate the reflectivity as a function of theta for all variations of the elastic properties
-    for i, params in enumerate(zip(vp1, vp2, vs1, vs2, rho1, rho2)):
-        refs[i, :] = rp.reflectivity(*params)(theta)
-
-    refl_stds = np.std(refs, 0)
-
-    # Calculate the mean reflectivity curve
-    mean_refl = rp.reflectivity(
-        sums[name1]['VpMean'],
-        sums[name2]['VpMean'],
-        sums[name1]['VsMean'],
-        sums[name2]['VsMean'],
-        sums[name1]['RhoMean'],
-        sums[name2]['RhoMean'],
-    )
-
-    # plot the mean reflectivity curve together with the uncertainty
-    mypr.plot(theta, mean_refl(theta), c=color, yerror=refl_stds,
-              yerr_style='fill', ax=ax_refl)
-
-    intercept = rp.intercept(vp1, vp2, rho1, rho2)
-    gradient = rp.gradient(vp1, vp2, vs1, vs2, rho1, rho2)
-
-    #res = least_squares(
-    #        mycf.residuals,
-    #        [1.,1.],
-    #        args=(intercept, gradient),
-    #        kwargs={'target_function': straight_line}
-    #)
-    #print('{} on {}: WS = {:.4f}*I {:.4f} - G'.format(name1, name2, *res.x))
-    #print(res.status)
-    #print(res.message)
-    #print(res.success)
-
-    
-    myxp.plot(
-            intercept,
-            gradient,
-            cdata=color,
-            ax=ax_ig,
-            edge_color=None,
-            alpha=0.2
-            )
-    #x_new = np.linspace(-0.75, 0.75, 50)
-    #ax_ig.plot(x_new, straight_line(x_new, *res.x), c=color, label='_nolegend_')
-
-    # Do AVO classification
-    c1 = len(gradient[(intercept > 0.) & (gradient > -4*intercept) & (gradient < 0.)])
-    c2p = len(gradient[(intercept > 0.) & (gradient < -4*intercept)])
-    c2 = len(gradient[(intercept > -0.02) & (intercept < 0.) & (gradient < 0.)])
-    c3 = len(gradient[(intercept < -0.02) & (gradient < 0.)])
-    c4 = len(gradient[(intercept < 0.) & (gradient > 0.)])
-    rest = len(gradient[(intercept > 0.) & (gradient > 0.)])
-    print('\n{} on {}:'.format(name1, name2))
-    print(' Class I: {:.0f}% \n Class IIp: {:.0f}% \n Class II: {:.0f}% \n Class III: {:.0f}% \n Class IV: {:.0f}%'.format(
-            100.*c1/n_iter, 100.*c2p/n_iter, 100.*c2/n_iter, 100.*c3/n_iter, 100.*c4/n_iter))
-    print(' Rest: {:.0f}%'.format(100.*rest/n_iter))
-
-
-def execute_monte_carlo(sums_avg: dict, target_name:str, bg_name:str,
-                        thickness: float | None, n_iter: int = 1000,
-                        model_type: str = 'half_space') -> (np.ndarray, np.ndarray, np.ndarray):
+def execute_monte_carlo(sums_avg: dict, target_name: str, bg_name: str, n_iter: int = 1000,
+                        thickness: tuple | None = None, wavelet: dict | None = None,
+                        extract_at: float = 2.0, extract_on: str = 'exact',
+                        model_type: str = 'half_space', verbose=False) -> dict:
     """
 
     :param sums_avg:
@@ -223,15 +173,36 @@ def execute_monte_carlo(sums_avg: dict, target_name:str, bg_name:str,
     :param bg_name:
         str
         Name that identifies which member of the sums_avg dictionary we should use as background
-    :param thickness:
-        float
-        Only used when model_type is NOT 'half_space'
     :param n_iter:
         Number of iterations
+    :param thickness:
+        tuple
+        two tuple with mean thickness and std of thickness variation
+        IGNORED when model_type is 'half_space'
+    :param wavelet:
+        dict
+        dictionary with three keys:
+            'wavelet': contains the wavelet amplitude
+            'time': contains the time data [s]
+            'header': a dictionary with info about the wavelet
+        see blixt_utils.io.io.read_petrel_wavelet() for example
+        IGNORED when model_type is 'half_space'
+    :param extract_at:
+        float
+        IGNORED when model_type is 'half_space'
+        TWT in seconds to where the amplitudes are to be extracted.
+        Depending on 'extract_on' this depth can be slightly shifted to find the nearest min or max
+    :param extract_on:
+        str
+        IGNORED when model_type is 'half_space'
+        Used as input to find_value() to determine if the amplitudes extracted 'exact' at given 'extract_at' depth,
+        or on the nearest min or max
     :param model_type:
         What kind of model we use to extract the AVO attributes
         'half_space'
         'layered_model'
+    :param verbose:
+        bool
 
     :return:
     """
@@ -239,41 +210,69 @@ def execute_monte_carlo(sums_avg: dict, target_name:str, bg_name:str,
     # the mean, std and correlation, using a multivariate function
     vp_t, vs_t, rho_t = elastics_from_stats(sums_avg[target_name], n_iter)
     vp_bg, vs_bg, rho_bg = elastics_from_stats(sums_avg[bg_name], n_iter)
+    avos = np.full((n_iter, 50), np.nan)
 
     if model_type == 'half_space':
-        refs = np.full((n_iter, 50), np.nan)
         # calculate the reflectivity as a function of theta for all variations of the elastic properties
         for i, params in enumerate(zip(vp_bg, vp_t, vs_bg, vs_t, rho_bg, rho_t)):
-            refs[i, :] = rp.reflectivity(*params)(theta)
+            avos[i, :] = rp.reflectivity(*params)(theta)
 
         intercepts = rp.intercept(vp_bg, vp_t, rho_bg, rho_t)
         gradients = rp.gradient(vp_bg, vp_t, vs_bg, vs_t, rho_bg, rho_t)
 
-        return refs, intercepts, gradients
+        return {'amplitude': avos,
+                'intercept': intercepts,
+                'gradient': gradients}
+
+    elif model_type == 'layered_model':
+        thicknesses = np.random.normal(loc=thickness[0], scale=thickness[1], size=n_iter)
+        nn = int(n_iter/2)
+        intercepts = []
+        gradients = []
+        for i in range(n_iter):
+            if verbose:
+                _verbose = np.mod(i, nn) == 0
+            else:
+                _verbose = False
+            target = {'vp': vp_t[i], 'vs': vs_t[i], 'rho': rho_t[i]}
+            background = {'vp': vp_bg[i], 'vs': vs_bg[i], 'rho': rho_bg[i]}
+            m = layered_model(thicknesses[i], target, background, wavelet, verbose=False)
+            # _avo, _int, _grad = evaluate_layered_model(m, wavelet, extract_at, extract_on, _verbose)
+            result = evaluate_layered_model(m, wavelet, extract_at, extract_on, _verbose)
+            avos[i, :] = result['amplitude']
+            intercepts.append(result['intercept'])
+            gradients.append(result['gradient'])
+
+        return {'amplitude': avos,
+                'intercept': np.array(intercepts),
+                'gradient': np.array(gradients),
+                'thickness': thicknesses}
+
     else:
         raise NotImplementedError('Model type {} not implemented'.format(model_type))
 
 
-def plot_one_mc_result(avos, intercepts, gradients, legend, color, ax_ig, ax_refl):
+def plot_one_mc_result(mc_results, legend, color, ax_ig, ax_refl):
     """
     A generalization of 'plot_one_half_space' which is meant to replace it.
 
     Takes the Monte Carlo results from one model, extracted at one depth, and plots the result
 
-    :param avos:
-        np.ndarray
-        size (n_iterations, n_theta)
-        Contains the reflectivity (when using a half-space model) or AVO amplitude, extracted at one depth,
-         as a function of theta for all iterations of the Monte Carlo simulation
-
-    :param intercepts:
-        np.ndarray
-        size (n_iterations)
-        Contains the intercept values extracted at one depth for all iterations of the Monte Carlo simulation
-    :param gradients:
-        np.ndarray
-        size (n_iterations)
-        Contains the gradient values extracted at one depth for all iterations of the Monte Carlo simulation
+    :param mc_results:
+        dict
+        key = 'amplitude':
+            np.ndarray
+            size (n_iterations, n_theta)
+            Contains the reflectivity (when using a half-space model) or AVO amplitude, extracted at one depth,
+             as a function of theta for all iterations of the Monte Carlo simulation
+        key = 'intercept':
+            np.ndarray
+            size (n_iterations)
+            Contains the intercept values extracted at one depth for all iterations of the Monte Carlo simulation
+        key = 'gradient':
+            np.ndarray
+            size (n_iterations)
+            Contains the gradient values extracted at one depth for all iterations of the Monte Carlo simulation
     :param legend:
         str
         String that identifies this Monte Carlo simulation from others
@@ -288,20 +287,27 @@ def plot_one_mc_result(avos, intercepts, gradients, legend, color, ax_ig, ax_ref
         Axes that plots the reflectivity, or amplitude, as a function of incidence angle theta
     :return:
     """
+    intercepts = mc_results['intercept']
+    gradients = mc_results['gradient']
     n_iter = intercepts.shape[0]
 
-    mean_avo = np.mean(avos, 0)
-    std_avo = np.std(avos, 0)
+    mean_avo = np.mean(mc_results['amplitude'], 0)
+    std_avo = np.std(mc_results['amplitude'], 0)
 
     # plot the mean avo curve together with the uncertainty
     mypr.plot(theta, mean_avo, c=color, yerror=std_avo,
               yerr_style='fill', ax=ax_refl)
 
     # plot all intercept and gradient values in a IxG plot
+    if 'thickness' in list(mc_results.keys()):
+        point_size = mc_results['thickness']
+    else:
+        point_size = None
     myxp.plot(
         intercepts,
         gradients,
         cdata=color,
+        pdata = point_size,
         ax=ax_ig,
         edge_color=None,
         alpha=0.2
@@ -321,7 +327,7 @@ def plot_one_mc_result(avos, intercepts, gradients, legend, color, ax_ig, ax_ref
 
 
 def layered_model(target_thickness, target,  background,
-                  wavelet, verbose=False):
+                  wavelet, depth_to_target=2.0, verbose=False):
     """
     Creates one simple 3 layered model, with a target of thickness 'target_thickness' embedded in
     background
@@ -342,6 +348,9 @@ def layered_model(target_thickness, target,  background,
                 'time': contains the time data [s]
                 'header': a dictionary with info about the wavelet
             see blixt_utils.io.io.read_petrel_wavelet() for example
+    :param depth_to_target:
+        float
+        TWT value in seconds to top of target
     :param verbose:
     :return:
     """
@@ -352,7 +361,7 @@ def layered_model(target_thickness, target,  background,
     length = wavelet['time'][-1] - wavelet['time'][0]
     top_thickness = length / 2.
 
-    model = build_layered_model(2., top_thickness, target_thickness,
+    model = build_layered_model(depth_to_target, top_thickness, target_thickness,
                                 background, target, background, domain='TWT')
 
     if verbose:
@@ -363,26 +372,56 @@ def layered_model(target_thickness, target,  background,
 
 
 def evaluate_layered_model(model, wavelet, extract_at, extract_on='exact', verbose=False):
+    """
+
+    :param model:
+    :param wavelet:
+    :param extract_at:
+        float
+        TWT in seconds to where the amplitudes are to be extracted.
+        Depending on 'extract_on' this depth can be slightly shifted to find the nearest min or max
+    :param extract_on:
+        str
+        Used as input to find_value() to determine if the amplitudes extracted 'exact' at given 'extract_at' depth,
+        or on the nearest min or max
+    :param verbose:
+    :return:
+    """
+    def signed_max_amplitude(_x, _center, _width):
+        _data = _x[_center - _width:_center + _width]
+        _max = np.max(_data)
+        _min = np.min(_data)
+        if np.abs(_max) > np.abs(_min):
+            return _max
+        else:
+            return _min
 
     dt = wavelet['header']['Sample rate']  # should be given in seconds
 
     twt, layer_i, vp, vs, rho, this_z = model.realize_model(dt, voigt_reuss_hill=True)
     twt_index = np.argmin((twt - extract_at) ** 2)
     ref = rp.reflectivity(vp, None, vs, None, rho, None, along_wiggle=True)
-    wiggle = bumw.convolve_with_refl(wavelet['wavelet'], ref(0))
-    wiggle_value, twt_index = find_value(wiggle, twt_index, snap_to=extract_on)
+    wiggles = [bumw.convolve_with_refl(wavelet['wavelet'], ref(_theta)) for _theta in theta]
+
+    wiggle_value, twt_index = find_value(wiggles[0], twt_index, snap_to=extract_on)
+
+    wiggle_values = np.array([this_wiggle[twt_index] for this_wiggle in wiggles])
 
     grad = rp.gradient(vp, None, vs, None, rho, None, along_wiggle=True)
     intercept = rp.intercept(vp, None,  rho, None,  along_wiggle=True)
+    # print('XX3:', intercept[twt_index-2:twt_index+2], grad[twt_index-2:twt_index+2])
+    # print('XX4:', signed_max_amplitude(intercept, twt_index, 2), signed_max_amplitude(grad, twt_index, 2))
 
     if verbose:
         laminar_model_analysis(model, dt, wavelet, extract_avo_at=(0., extract_at), extract_on=extract_on)
         plt.show()
 
-    return intercept[twt_index], grad[twt_index]
+    return {'amplitude': wiggle_values,
+            'intercept': signed_max_amplitude(intercept, twt_index, 2),
+            'gradient': signed_max_amplitude(grad, twt_index, 2)}
 
 
-def elastics_from_stats(layer_stats,  n_iter):
+def elastics_from_stats(layer_stats, n_iter: int):
     """
     For the given statistical properties (mean, standard deviation and correlation coefficient) of the
     elastic variables (Vp, Vs and Rho) it returns normally
@@ -399,12 +438,14 @@ def elastics_from_stats(layer_stats,  n_iter):
              'VpVsCorrCoef': XX,
              'VpRhoCorrCoef': XX,
              'VsRhoCorrCoef': XX}
+    :param n_iter:
+        int
+        Number of iterations in the Monte Carlo simulation
     """
     # Take a look at the following:
     # https://www.linkedin.com/pulse/probabilistic-analysis-python-andre-cebastiant/?articleId=6465522109379633152
     # to investigate the effect of dependent variables
-    
-    
+
     vp_mean = layer_stats['VpMean']
     vs_mean = layer_stats['VsMean']
     rho_mean = layer_stats['RhoMean']
@@ -423,12 +464,12 @@ def elastics_from_stats(layer_stats,  n_iter):
                [vp_std*vs_std*r_vp_vs,    vs_std**2,                        vs_std*rho_std*r_vs_rho],
             #
                [vp_std*rho_std*r_vp_rho,  vs_std*rho_std*r_vs_rho,      rho_std**2 ]]
-    
+
     mvn = scipy.stats.multivariate_normal.rvs(
             [vp_mean, vs_mean, rho_mean], covar, n_iter)
 
-    vp = mvn[:,0].reshape((n_iter))
-    vs = mvn[:,1].reshape((n_iter))
-    rho = mvn[:,2].reshape((n_iter))
+    vp = mvn[:, 0].reshape((n_iter))
+    vs = mvn[:, 1].reshape((n_iter))
+    rho = mvn[:, 2].reshape((n_iter))
 
     return vp, vs, rho

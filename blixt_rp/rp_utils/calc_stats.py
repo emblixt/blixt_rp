@@ -1130,6 +1130,20 @@ def save_rokdoc_output(rokdoc_output, results, wi_name, log_table, cutoffs_str, 
         log_table_str += '{}: {}, '.format(key, log_table[key])
     log_table_str = log_table_str.rstrip(', ')
 
+    # To calculate correlation coefficients, the results for P-, and S- velocity, and Density, must
+    # be equal in length.
+    # Create a naive fix by cutting the data to the shortest
+    min_len = min([len(results[log_table['P velocity'].lower()]),
+                   len(results[log_table['S velocity'].lower()]),
+                   len(results[log_table['Density'].lower()])
+                   ])
+    cc_p_s = nan_corrcoef(results[log_table['P velocity'].lower()][:min_len],
+                 results[log_table['S velocity'].lower()][:min_len])[0, 1]
+    cc_p_d = nan_corrcoef(results[log_table['P velocity'].lower()][:min_len],
+                 results[log_table['Density'].lower()][:min_len])[0, 1]
+    cc_s_d = nan_corrcoef(results[log_table['S velocity'].lower()][:min_len],
+                 results[log_table['Density'].lower()][:min_len])[0, 1]
+
     if rokdoc_output is not None:
         # for param in ['P velocity', 'S velocity', 'Density', 'Porosity']:
         #     print('  - save_rokdoc_output: {}, len: {}'.format(param, len(results[log_table[param].lower()])))
@@ -1173,12 +1187,12 @@ def save_rokdoc_output(rokdoc_output, results, wi_name, log_table, cutoffs_str, 
                                         -999.25,
                                         -999.25,
                                         -999.25,
-                                        nan_corrcoef(results[log_table['P velocity'].lower()],
-                                                     results[log_table['S velocity'].lower()])[0, 1],
-                                        nan_corrcoef(results[log_table['P velocity'].lower()],
-                                                     results[log_table['Density'].lower()])[0, 1],
-                                        nan_corrcoef(results[log_table['S velocity'].lower()],
-                                                     results[log_table['Density'].lower()])[0, 1],
+                                        cc_p_s,  # nan_corrcoef(results[log_table['P velocity'].lower()],
+                                                 #     results[log_table['S velocity'].lower()])[0, 1],
+                                        cc_p_d,  # nan_corrcoef(results[log_table['P velocity'].lower()],
+                                                 #    results[log_table['Density'].lower()])[0, 1],
+                                        cc_s_d,  # nan_corrcoef(results[log_table['S velocity'].lower()],
+                                                 #    results[log_table['Density'].lower()])[0, 1],
                                         -999.25,
                                         -999.25,
                                         -999.25,

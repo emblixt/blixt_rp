@@ -220,19 +220,67 @@ def v_s(mu, rho):
     return np.sqrt(mu / rho)
 
 
-def k_from_v(v_p, v_s, rho):
-    return rho * (v_p**2 - 4. * v_s**2 / 3.)
+def k_from_v(vp, vs, rho):
+    return rho * (vp**2 - 4. * vs**2 / 3.)
 
 
-def mu_from_v(v_s, rho):
-    return rho * v_s**2
+def k_dry(_k_sat, _k_min, _k_fluid, _phi):
+    """
+    Equation 1.11 in Avseth
+
+    :param _k_sat:
+        Bulk modulus of saturated rock (e.g. from k_from_v())
+    :param _k_min:
+        Bulk modulus of mineral (mixture)
+    :param _k_fluid:
+        Bulk modulus of pore fluid (mixture)
+    :param _phi:
+        porosity
+    :return:
+        Dry rock bulk modulus
+    """
+    _a = _k_sat / (_k_min - _k_sat)
+    _c = _k_fluid / (_phi * (_k_min - _k_fluid))
+    return _k_min / ((1. / (_a - _c)) + 1)
 
 
-def han_castagna(v_p, method=None):
+def k_sat(_k_dry, _k_min, _k_fluid, _phi):
+    """
+    :return:
+    """
+
+    # This is reworked version of eq. 1.11 in Avseth (2011)
+    # _b = _k_dry / (_k_min - _k_dry)
+    # _c = _k_fluid / (_phi * (_k_min - _k_fluid))
+    # return _k_min * (_b + _c) / (1. + _b + _c)
+
+    # This is Eq. 6.3.3 in Rock physics handbook ed. 3, 2020
+    return _k_dry + (1 - _k_dry / _k_min) ** 2 / ((_phi / _k_fluid) + ((1 - _phi) / _k_min) - (_k_dry / _k_min ** 2))
+
+
+def mu_from_v(vs, rho):
+    return rho * vs**2
+
+
+def mu_dry(vs, rho):
+    """
+    Equation 1.12 in Avseth
+
+    :param vs:
+        km/s
+    :param rho:
+        g/cm3
+    :return:
+        mu_dry in GPa
+    """
+    return mu_from_v(vs, rho)
+
+
+def han_castagna(vp, method=None):
     """
     Calculates Vs based on the Han (1986) and Castagna et al (1993) regressions.
 
-    :param v_p:
+    :param vp:
         Param
         P velocity [m/s]
     :param method
@@ -243,29 +291,29 @@ def han_castagna(v_p, method=None):
         Param
         Estimated shear velocity
     """
-    v_p = test_value(v_p, 'm/s')
+    vp = test_value(vp, 'm/s')
 
     if method == 'Castagna':
-        v_s = 0.8042*v_p.value - 855.9
+        vs = 0.8042*vp.value - 855.9
     elif method == 'mudrock':
-        v_s = 0.8621*v_p.value - 1172.4
+        vs = 0.8621*vp.value - 1172.4
     else:
-        v_s = 0.7936*v_p.value - 786.8
+        vs = 0.7936*vp.value - 786.8
 
     return Param(
         name='v_s',
-        value=v_s,
+        value=vs,
         unit='m/s',
         desc='Shear velocity'
     )
 
 
-def greenberg_castagna(v_p, f, mono_mins, gc_coeffs=None):
+def greenberg_castagna(vp, f, mono_mins, gc_coeffs=None):
     """
     Estimates Vs in a L-component multimineral brine saturated rock based on p. 246 in Rock physics handbook (Mavko et al. 1999)
     which is based on Greenberg & Castagna (1992).
 
-    :param v_p:
+    :param vp:
         Param
         P velocity [m/s]
         float, or ndarray of floats
@@ -294,14 +342,14 @@ def greenberg_castagna(v_p, f, mono_mins, gc_coeffs=None):
     for key in list(gc_coeffs.keys()):
         gc_coeffs[key.lower()] = gc_coeffs.pop(key)
 
-    v_p = test_value(v_p, 'm/s')
+    vp = test_value(vp, 'm/s')
 
     def calc_vs(_vp, _coeffs):
         # convert to km/s
         _vp = _vp/1000.
         return _coeffs[0]*_vp**2 + _coeffs[1]*_vp + _coeffs[2]
 
-    m = [calc_vs(v_p.value, gc_coeffs[this_mono.lower()]) for this_mono in mono_mins]
+    m = [calc_vs(vp.value, gc_coeffs[this_mono.lower()]) for this_mono in mono_mins]
 
     return Param(
         name='v_s',
@@ -360,9 +408,9 @@ def k_and_rho_o(oil_gravity, gas_gravity, g_o_ratio, p, t):
         rho_o = roog + (0.00277*pv - 1.71e-7*pv**3) * (roog - 1.15)**2 + 3.49e-4*pv
         rho0 = rho0/(B0*(1.0 + 0.001*gorv))
 
-    v_p_o = 2096*np.sqrt(rho0/(2.6-rho0))-3.7*tv+4.64*pv+0.0115*(4.12*np.sqrt(1.08/rho0-1)-1)*tv*pv
-    v_p_o = v_p_o/1000
-    k_o = v_p_o*v_p_o*rho_o
+    vp_o = 2096*np.sqrt(rho0/(2.6-rho0))-3.7*tv+4.64*pv+0.0115*(4.12*np.sqrt(1.08/rho0-1)-1)*tv*pv
+    vp_o = vp_o/1000
+    k_o = vp_o*vp_o*rho_o
 
     return Param(name='k_o',
                  value=k_o,
@@ -525,13 +573,13 @@ def v_p_w(p, t):
     pv = p.value
     tv = t.value
 
-    _v_p_w = sum(
+    _vp_w = sum(
         [mwp[i][j] * tv**i * pv**j for i in range(5) for j in range(4)]
     )
 
     return Param(
         name='v_p_w',
-        value=_v_p_w,
+        value=_vp_w,
         unit='m/s',
         desc='Sound velocity in water'
     )
@@ -579,11 +627,11 @@ def v_p_b(s, p, t, giib=None):
     vpb0 = v_p_w(p, t).value + sv*(1170. - 9.6*tv + 0.055*tv**2 - 8.5e-5*tv**3 + 2.6*pv -
                                    0.0029*tv*pv-0.0476*pv**2) + sv**1.5*(
             780. - 10.*pv + 0.16*pv**2) - 1820.*sv**2
-    _v_p_b = vpb0 / (np.sqrt(1. + 0.0494*gwr))
+    _vp_b = vpb0 / (np.sqrt(1. + 0.0494*gwr))
 
     return Param(
         name='v_p_b',
-        value=_v_p_b,
+        value=_vp_b,
         unit='m/s',
         desc='Sound velocity in brine'
     )
@@ -626,8 +674,15 @@ def vrh_bounds(f, m):
     #M_Voigt = f * m1 + (1. - f) * m2
     M_Voigt = sum([x*y for x, y in zip(f, m)])
     #M_Reuss = 1. / (f / m1 + (1. - f) / m2)
-    M_Reuss = 1. / sum([x/y for x, y in zip(f, m)])
-    M_VRH = (M_Voigt + M_Reuss) / 2.
+    try:
+        M_Reuss = 1. / sum([x/y for x, y in zip(f, m)])
+    except ZeroDivisionError:
+        M_Reuss = None
+
+    try:
+        M_VRH = (M_Voigt + M_Reuss) / 2.
+    except TypeError:
+        M_VRH = None
     return [M_Voigt, M_Reuss, M_VRH]
 
 
@@ -644,6 +699,53 @@ def por_from_mass_balance(rho, rho_m, rho_f):
         Porosity
     """
     return (rho_m - rho)/(rho_m - rho_f)
+
+
+def hashin_shtrikman(f, k, mu, modulus='bulk'):
+    """
+    Hashin-Shtrikman bounds for a mixture of two constituents.
+    The best bounds for an isotropic elastic mixture, which give
+    the narrowest possible range of elastic modulus without
+    specifying anything about the geometries of the constituents.
+
+    Args:
+        f: list or array of volume fractions (must sum to 1.00 or 100%).
+        k: bulk modulus of constituents (list or array).
+        mu: shear modulus of constituents (list or array).
+        modulus: A string specifying whether to return either the
+            'bulk' or 'shear' HS bound.
+
+    Returns:
+        namedtuple: The Hashin Shtrikman (lower, upper) bounds.
+
+    :source: Berryman, J.G., 1993, Mixture theories for rock properties
+             Mavko, G., 1993, Rock Physics Formulas.
+
+    : Written originally by Xingzhou 'Frank' Liu, in MATLAB
+    : modified by Isao Takahashi, 4/27/99,
+    : Translated into Python by Evan Bianco
+    """
+    def z_bulk(_k, _mu):
+        return (4/3.) * _mu
+
+    def z_shear(_k, _mu):
+        return _mu * (9 * _k + 8 * _mu) / (_k + 2 * _mu) / 6
+
+    def bound(_f, _k, _z):
+        return 1 / sum(_f / (_k + _z)) - _z
+
+    f = np.array(f)
+    if sum(f) == 100:
+        f /= 100.0
+
+    func = {'shear': z_shear,
+            'bulk': z_bulk}
+
+    k, mu = np.array(k), np.array(mu)
+    z_min = func[modulus](np.amin(k), np.amin(mu))
+    z_max = func[modulus](np.amax(k), np.amax(mu))
+
+    return bound(f, k, z_min), bound(f, k, z_max)
 
 
 def critpor(k0, g0, phi, phi_c=None):
@@ -824,7 +926,7 @@ def contactcement(k0, g0, phi, phi_c=None, c_n=None, k_c=None, g_c=None, scheme=
     t2 = (0.0573 * p_r0 ** 2 + 0.0937 * p_r0 + 0.202) * lambda_t ** (0.0274 * p_r0 ** 2 + 0.0529 * p_r0 - 0.8765)
     t3 = 10 ** -4 * (9.654 * p_r0 ** 2 + 4.945 * p_r0 + 3.1) * lambda_t ** (0.01867 * p_r0 ** 2 + 0.4011 * p_r0 - 1.8186)
     s_t = t1 * alpha ** 2 + t2 * alpha + t3
-    m_c = k_c + (4 / 3) * g_c  # rho_cement * v_p_cement**2, eq. 5.5.108
+    m_c = k_c + (4 / 3) * g_c  # rho_cement * vp_cement**2, eq. 5.5.108
     k_eff = 1 / 6 * c_n * (1 - phi_c) * m_c * s_n  # eq. 5.5.106
     #k_eff = 1 / 6 * c_n * (1 - phi_c) * (k_c + (4 / 3) * g_c) * s_n
     g_eff = 3 / 5 * k_eff + 3 / 20 * c_n * (1 - phi_c) * g_c * s_t  # eq. 5.5.107
@@ -1000,17 +1102,17 @@ def toc_from_delta_log_r(deltalogr, lom, a=None, b=None):
     )
 
 
-def gassmann_vel(v_p_1, v_s_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
+def gassmann_vel(vp_1, vs_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
     """
     Gassmann fluid substitution with velocity and density as input and output, following the
     recipe in chapter 1.31. of Avseth et. al 2011
 
-    :param v_p_1:
+    :param vp_1:
         np.array
-        Rock v_p with initial fluid [m/s]
-    :param v_s_1:
+        Rock vp with initial fluid [m/s]
+    :param vs_1:
         np.array
-        Rock v_s with initial fluid [m/s]
+        Rock vs with initial fluid [m/s]
     :param rho_1:
         np.array
         Rock density with initial fluid [g/cm3]
@@ -1037,10 +1139,10 @@ def gassmann_vel(v_p_1, v_s_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
     if isinstance(por, np.ndarray):  # when input is an array
         por[por < 7E-3] = 7E-3
 
-    # Extract the initial bulk and shear modulus from v_p_1, v_s_1 and rho_1
-    mu_1 = rho_1 * v_s_1**2 * 1E-6  # GPa
-    #k_1 = rho_1 * (v_p_1**2 - (4/3.)*v_s_1**2)*1E-6  # GPa
-    k_1 = rho_1 * v_p_1**2 * 1E-6 - (4/3.)*mu_1  # GPa
+    # Extract the initial bulk and shear modulus from vp_1, vs_1 and rho_1
+    mu_1 = rho_1 * vs_1**2 * 1E-6  # GPa
+    #k_1 = rho_1 * (vp_1**2 - (4/3.)*vs_1**2)*1E-6  # GPa
+    k_1 = rho_1 * vp_1**2 * 1E-6 - (4/3.)*mu_1  # GPa
 
     # Apply Gassmann's relation to transform the bulk modulus
     #a = k_1/(k0 - k_1) + (k_f2/(k0 - k_f2) - k_f1/(k0-k_f1))/por
@@ -1054,10 +1156,10 @@ def gassmann_vel(v_p_1, v_s_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
     mu_2 = mu_1  # GPa
 
     # Calculate the new velocities
-    v_p_2 = np.sqrt((k_2+(4/3)*mu_2) / rho_2) * 1E3  # m/s
-    v_s_2 = np.sqrt(mu_2 / rho_2) * 1E3  # m/s
+    vp_2 = np.sqrt((k_2+(4/3)*mu_2) / rho_2) * 1E3  # m/s
+    vs_2 = np.sqrt(mu_2 / rho_2) * 1E3  # m/s
 
-    return v_p_2, v_s_2, rho_2, k_2
+    return vp_2, vs_2, rho_2, k_2
 
 
 def gassmann_a(_k1, _k0, _k_f1, _k_f2, _por):
@@ -1078,21 +1180,24 @@ def gassmann_a(_k1, _k0, _k_f1, _k_f2, _por):
     return _k1/(_k0 - _k1) + (_k_f2/(_k0 - _k_f2) - _k_f1/(_k0-_k_f1))/_por
 
 
-def vels(k_dry, g_dry, k_min, rho_min, k_f, rho_f, phi):
+def vels(_k_dry, _mu_dry, _k_min, _rho_min, _k_fluid, _rho_fluid, _phi):
     '''
-    Calculates velocities and densities of saturated rock via Gassmann equation, (C) aadm 2015
+    Calculates velocities and densities of saturated rock via Gassmann equation,
+    Eq. 6.3.3 in Rock Physics Handbook 2020
 
     INPUT
-    k_dry,g_dry: dry rock bulk & shear modulus in GPa
+    k_dry,mu_dry: dry rock bulk & shear modulus in GPa
     k_min, rho_min: mineral bulk modulus and density in GPa
-    k_f, rho_f: fluid bulk modulus and density in GPa
+    k_f, rho_f: fluid bulk modulus and density in GPa and g/cm3
     phi: porosity
     '''
-    rho = rho_min * (1 - phi) + rho_f * phi
-    k = k_dry + (1 - k_dry / k_min) ** 2 / ((phi / k_f) + ((1 - phi) / k_min) - (k_dry / k_min ** 2))
-    vp = np.sqrt((k + 4. / 3 * g_dry) / rho) * 1e3
-    vs = np.sqrt(g_dry / rho) * 1e3
-    return vp, vs, rho, k
+    _rho = _rho_min * (1 - _phi) + _rho_fluid * _phi
+    _k = k_sat(_k_dry, _k_min, _k_fluid, _phi)
+    # vp = np.sqrt((k + 4. / 3 * _mu_dry) / rho) * 1e3
+    _vp = v_p(_k, _mu_dry, _rho) * 1e3
+    # vs = np.sqrt(_mu_dry / rho) * 1e3
+    _vs = v_s(_mu_dry, _rho) * 1e3
+    return _vp, _vs, _rho, _k
 
 
 def linear_gassmann(_phi, _phi_r, _delta_k_fl):
@@ -1213,8 +1318,8 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
         k_f1_dict = well.calc_vrh_bounds(fm.fluids['initial'], param='k', wis=wis, method='Reuss', block_name=block_name)
 
         # Initial elastic logs as LogCurve objects
-        v_p_1 = lb.logs[lnd['P velocity']]
-        v_s_1 = lb.logs[lnd['S velocity']]
+        vp_1 = lb.logs[lnd['P velocity']]
+        vs_1 = lb.logs[lnd['S velocity']]
         rho_1 = lb.logs[lnd['Density']]
 
         # Final fluids
@@ -1234,11 +1339,11 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
             mask = lb.masks['this_mask'].values
 
             # Do the fluid substitution itself
-            _v_p_2, _v_s_2, _rho_2, _k_2 = gassmann_vel(
-                v_p_1.values, v_s_1.values, rho_1.values, k_f1, rho_f1, k_f2, rho_f2, k0, por)
+            _vp_2, _vs_2, _rho_2, _k_2 = gassmann_vel(
+                vp_1.values, vs_1.values, rho_1.values, k_f1, rho_f1, k_f2, rho_f2, k0, por)
 
             # Add the fluid substituted results to the well
-            for xx, yy in zip([v_p_1, v_s_1, rho_1], [_v_p_2, _v_s_2, _rho_2]):
+            for xx, yy in zip([vp_1, vs_1, rho_1], [_vp_2, _vs_2, _rho_2]):
                 new_name = deepcopy(xx.name)
                 new_name += '{}'.format(tag.lower())
                 new_header = deepcopy(xx.header)
@@ -1309,15 +1414,68 @@ def plot_model(model, k0, g0, _phi, rho, _ax, **kwargs):
     _ax.legend(['k0: {:.1f}, mu0: {:.1f}, rho: {:.1f}'.format(k0, g0, rho)])
 
 
+def rpt_parameters(params: dict, verbose: bool = False) -> dict:
+    """
+    Returns a dictionary with default rock physics parameters which can modified using the input 'params' dictionary
+    :param params:
+    :param verbose:
+    :return:
+    """
+    def_params = {
+        'vsh': 0.2, 'phi_c': 0.4, 'c_n': 8, 'p_conf': 45, 'smcf': 0.3,
+        'rho_hc': 0.2, 'k_hc': 0.06,
+        'rho_b': 1.02, 'k_b': 2.8,
+        'rho_qz': 2.6, 'k_qz': 37, 'mu_qz': 45,
+        'rho_sh': 2.6, 'k_sh': 20, 'mu_sh': 10,
+        'apc': 10,
+        'plot_type': 'AI-VpVs', '_ref_val': None,
+        'model': 'stiffsand'
+    }
+    for _key, _value in params.items():
+        if _key in list(def_params.keys()):
+            def_params[_key] = _value
+
+    def_params['k_min'] = vrh_bounds(  # Mineral bulk modulus
+        [def_params['vsh'], 1 - def_params['vsh']], [def_params['k_sh'], def_params['k_qz']])[2]
+    if verbose:
+        print('k_min: {}'.format(def_params['k_min']))
+    def_params['mu_min'] = vrh_bounds(  # Mineral shear modulus
+        [def_params['vsh'], 1 - def_params['vsh']], [def_params['mu_sh'], def_params['mu_qz']])[2]
+    if verbose:
+        print('mu_min: {}'.format(def_params['mu_min']))
+    def_params['rho_min'] = vrh_bounds(  # Density of minerals
+        [def_params['vsh'], 1 - def_params['vsh']], [def_params['rho_sh'], def_params['rho_qz']])[0]
+
+    # TODO
+    # Make below notes a unit test!
+    # And / or return the  dry rock bulk and shear moduli using critpor()?
+    # From perplexity.ai:
+    # This The well log-derived moduli represent the bulk rock properties. To estimate mineral moduli, you need to account for porosity:
+    # Obtain porosity data from neutron, density, or sonic porosity logs
+    # Use rock physics models like the Hashin-Shtrikman bounds or Hertz-Mindlin theory to back-calculate mineral moduli from the bulk rock properties and porosity
+    # RokDoc claim their Blocky Fluid Sub use Gassmann, 1951, to calculate the effect fom changing fluids based on measured log Vp, Vs & Rho
+    # the then Graul et al. to calculate the effect of changing porosity
+    # But how to they calculate k_dry, mu_dry and rho_dry?
+    # 1. our k_dry calculated using k_from_v() is around 10% higher than what RokDoc gets when using log values as input
+    # 2. Well! mu_dry fits exactly with the mu_dry we calculate using mu_from_v() with the log values as input.
+    # 3. Their rho_dry lies inbetween our Reuss and Voigt-Reuss-Hill average of rho assuming a porosity calculated from
+    # mass balance (our mass_balance calculation of porosity match RokDoc's with 4% margin)
+    #
+    # If I try to use crit_por or hertz_mindlin deduce k_dry and mu_dry I'm an order of magnitude wrong
+
+
+    return def_params
+
+
 if __name__ == '__main__':
     # 'rho_b': 1.02, 'k_b': 2.8,
     # 'rho_qz': 2.6, 'k_qz': 37, 'mu_qz': 45,
     # 'rho_sh': 2.6, 'k_sh': 15, 'mu_sh': 6,
     fig, ax = plt.subplots()
-    phi = np.linspace(0.1, 0.4, 6)
-    plot_model(contactcement, 37, 45, phi, 2.6, ax)
-    plot_model(constantcement, 37, 45, phi, 2.6, ax, apc=2)
-    plot_model(hertz_mindlin, 37, 45, phi, 2.6, ax)
+    _phi = np.linspace(0.1, 0.4, 6)
+    plot_model(contactcement, 37, 45, _phi, 2.6, ax)
+    plot_model(constantcement, 37, 45, _phi, 2.6, ax, apc=2)
+    plot_model(hertz_mindlin, 37, 45, _phi, 2.6, ax)
     plt.show()
 
 

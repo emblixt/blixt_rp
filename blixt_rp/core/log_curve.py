@@ -90,9 +90,9 @@ class LogCurve(object):
                  name=None,
                  block=None,
                  well=None,
-                 data=np.array([]),
+                 values=np.array([]),
                  header=None):
-        _data_sanity_checks(data)
+        _data_sanity_checks(values)
         self.name = name
         self.block = block
         self.well = well
@@ -113,11 +113,11 @@ class LogCurve(object):
             self.header = header
         else:
             raise IOError('Input header is neither dictionary nor Header')
-        #super(LogCurve, self).__setattr__('data', data)
-        self.data = data
+        #super(LogCurve, self).__setattr__('values', values)
+        self.values = values
 
     def __len__(self):
-        return len(self.data)
+        return len(self.values)
 
     def get_log_type(self):
         log_type = None
@@ -153,26 +153,26 @@ class LogCurve(object):
             for i in range(len(discrete_intervals) + 1):  # always one more section than boundaries between them
                 if i == 0:  # first section
                     out = np.append(out, _smooth(
-                            self.data[:discrete_intervals[i]], window_len, method=method, **kwargs
+                            self.values[:discrete_intervals[i]], window_len, method=method, **kwargs
                         )
                     )
                 elif len(discrete_intervals) == i:  # last section
                     out = np.append(out, _smooth(
-                            self.data[discrete_intervals[-1]:], window_len, method=method, **kwargs
+                            self.values[discrete_intervals[-1]:], window_len, method=method, **kwargs
                         )
                     )
                 else:
                     out = np.append(out, _smooth(
-                            self.data[discrete_intervals[i-1]:discrete_intervals[i]],
+                            self.values[discrete_intervals[i-1]:discrete_intervals[i]],
                             window_len, method=method, **kwargs))
 
         else:
-            out = _smooth(self.data, window_len, method=method, **kwargs)
+            out = _smooth(self.values, window_len, method=method, **kwargs)
 
         if verbose:
-            print('Max diff between smoothed and original version:', np.nanmax(self.data - out))
+            print('Max diff between smoothed and original version:', np.nanmax(self.values - out))
             fig, ax = plt.subplots()
-            ax.plot(self.data, c='black', label='Original')
+            ax.plot(self.values, c='black', label='Original')
             ax.plot(out, c='r', label='{}, window length {}'.format(method, window_len))
             if discrete_intervals is not None:
                 for xx in discrete_intervals:
@@ -183,7 +183,7 @@ class LogCurve(object):
             self.header.modification_date = datetime.now().isoformat()
             self.header.modification_history += \
                 '\nSmoothened using {}, with window length {}'.format(method, window_len)
-            self.data = out
+            self.values = out
             return None
         else:
             return out
@@ -192,9 +192,9 @@ class LogCurve(object):
         if window_len is None:
             window_len = 13  # Around 2 meters in most wells
         smooth = self.smooth(window_len)
-        spikes = np.where(self.data - smooth > max_clip)[0]
-        spukes = np.where(smooth - self.data > max_clip)[0]
-        out = deepcopy(self.data)
+        spikes = np.where(self.values - smooth > max_clip)[0]
+        spukes = np.where(smooth - self.values > max_clip)[0]
+        out = deepcopy(self.values)
         out[spikes] = smooth[spikes] + max_clip  # Clip at the max allowed diff
         out[spukes] = smooth[spukes] - max_clip  # Clip at the min allowed diff
         return out
@@ -225,7 +225,7 @@ class LogCurve(object):
         :param trend_function:
             function
             Function to calculate the residual against
-                residual = target_function(depth, *x) - self.data
+                residual = target_function(depth, *x) - self.values
             trend_function takes x as arguments, and depth as independent variable,
             E.G. for a linear target function:
             def trend_function(depth, a, b):
@@ -285,7 +285,7 @@ class LogCurve(object):
         if loss is None:
             loss = 'cauchy'
         if mask is None:
-            mask = np.array(np.ones(len(self.data)), dtype=bool)  # All True values -> all data is included
+            mask = np.array(np.ones(len(self.values)), dtype=bool)  # All True values -> all data is included
         if (mask is not None) and (mask_descr is None):
             mask_descr = 'UNKNOWN'
         verbosity_level = 0
@@ -294,7 +294,7 @@ class LogCurve(object):
         if verbose:
             verbosity_level = 2
             fig, ax = plt.subplots(figsize=(8, 10))
-            ax.plot(self.data, depth, lw=0.5, c='grey')
+            ax.plot(self.values, depth, lw=0.5, c='grey')
             if discrete_intervals is not None:
                 for i in discrete_intervals:
                     ax.axhline(i, 0, 1, ls='--')
@@ -304,15 +304,15 @@ class LogCurve(object):
             # fig1, ax1 = plt.subplots(nrows=2)
 
             # Test if there are NaN values in input data, which needs to be masked out
-            if np.any(np.isnan(self.data[_mask])):
-                nan_mask = np.isnan(self.data)
+            if np.any(np.isnan(self.values[_mask])):
+                nan_mask = np.isnan(self.values)
                 _mask = msks.combine_masks([~nan_mask, _mask])
 
             # TODO
             #  do a similar test for infinite data: if np.any(np.isinf(_data))
 
             if down_weight_outliers:
-                weights = 1. - np.sqrt((self.data[_mask] - np.median(self.data[_mask])) ** 2)
+                weights = 1. - np.sqrt((self.values[_mask] - np.median(self.values[_mask])) ** 2)
                 weights[weights < 0] = 0.
                 # ax1[0].plot(weights)
 
@@ -322,13 +322,13 @@ class LogCurve(object):
                         raise IOError('down_weight_intervals must contain lists with 3 items')
                 else:
                     raise IOError('down_weight_intervals must be a list')
-                interval_weights = np.ones(len(self.data[_mask]))
+                interval_weights = np.ones(len(self.values[_mask]))
                 for int_weight in down_weight_intervals:
                     interval_weights[
                         np.argmin(np.sqrt((depth[_mask] - int_weight[0])**2)):\
                         np.argmin(np.sqrt((depth[_mask] - int_weight[1])**2))
                     ] = int_weight[2]
-                # interval_weights = np.ones(len(self.data))
+                # interval_weights = np.ones(len(self.values))
                 if weights is None:
                     # weights = interval_weights[mask]
                     weights = interval_weights
@@ -336,7 +336,7 @@ class LogCurve(object):
                     weights = weights * interval_weights
                 # ax1[1].plot(weights)
 
-            return least_squares(residuals, x0, args=(depth[_mask], self.data[_mask]),
+            return least_squares(residuals, x0, args=(depth[_mask], self.values[_mask]),
                                  kwargs={'target_function': trend_function, 'weight': weights},
                                  loss=loss, verbose=verbosity_level)
 
@@ -357,14 +357,14 @@ class LogCurve(object):
                 results.append(res.x)
                 if verbose:
                     this_depth = np.linspace(depth[this_depth_mask][0], depth[this_depth_mask][-1], 10)
-                    ax.plot(self.data[combined_mask], depth[combined_mask])
+                    ax.plot(self.values[combined_mask], depth[combined_mask])
                     ax.plot(trend_function(this_depth, *res.x), this_depth, c='b')
         else:
             res = do_the_fit(mask)
             results.append(res.x)
             if verbose:
                 this_depth = np.linspace(depth[0], depth[-1], 10)
-                ax.plot(self.data[mask], depth[mask])
+                ax.plot(self.values[mask], depth[mask])
                 ax.plot(trend_function(this_depth, *res.x), this_depth, c='b')
 
         if verbose:
@@ -400,7 +400,7 @@ class LogCurve(object):
         :param trend_function:
             function
             Function to calculate the residual against
-                residual = target_function(depth, *x) - self.data
+                residual = target_function(depth, *x) - self.values
             trend_function takes x as arguments, and depth as independent variable,
             E.G. for a linear target function:
             def trend_function(depth, a, b):
@@ -425,7 +425,7 @@ class LogCurve(object):
         output = np.zeros(0)
         if verbose:
             fig, ax = plt.subplots(figsize=(8, 10))
-            ax.plot(self.data, depth, lw=0.5, c='grey')
+            ax.plot(self.values, depth, lw=0.5, c='grey')
             if discrete_intervals is not None:
                 for i in discrete_intervals:
                     ax.axhline(depth[i], 0, 1, ls='--')
@@ -459,7 +459,7 @@ class LogCurve(object):
                                  true_twt,
                                  time_step):
         t = np.arange(np.nanmin(true_twt), np.nanmax(true_twt), time_step)
-        return t, np.interp(x=t, xp=true_twt, fp=self.data)
+        return t, np.interp(x=t, xp=true_twt, fp=self.values)
 
     #def get_log_name(self):
     #    log_name = None
@@ -472,13 +472,13 @@ class LogCurve(object):
     
 def _data_sanity_checks(value):
     """
-    Check if a given input is suitable to be used for LogCurve.data. Raises the
+    Check if a given input is suitable to be used for LogCurve.values. Raises the
     corresponding exception if it is not, otherwise silently passes.
     """
     if not isinstance(value, np.ndarray):
-        msg = "LogCurve.data must be a NumPy array."
+        msg = "LogCurve.values must be a NumPy array."
         raise ValueError(msg)
     if value.ndim != 1:
-        msg = ("NumPy array for LogCurve.data has bad shape ('%s'). Only 1-d "
+        msg = ("NumPy array for LogCurve.values has bad shape ('%s'). Only 1-d "
                "arrays are allowed for initialization.") % str(value.shape)
         raise ValueError(msg)

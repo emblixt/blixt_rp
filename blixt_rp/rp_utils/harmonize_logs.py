@@ -55,9 +55,8 @@ def harmonize_logs(well_dict, start, stop, step, orig_len, debug=False):
     info_txt = 'Actual length versus desired length: {} - {}'.format(len(input_md), len(true_md))
     if debug:
         print_info(info_txt, 'debug', logger)
-        lname = 'tvd'
+        lname = list(well_dict['data'].keys())[0]
         fig, ax = plt.subplots()
-        print(info_txt)
         ax.plot(input_md, well_dict['data'][lname], 'o', lw=0, c='y')
         ax.axvline(start)
         ax.axvline(stop)
