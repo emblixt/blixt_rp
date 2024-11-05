@@ -667,7 +667,7 @@ def overview_plot(wells, log_table, wis, wi_name, templates, log_types=None, blo
 
 def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
                       block_name=None, results_folder=None, verbose=True, suffix=None,
-                      log_type_input=True, **kwargs):
+                      log_type_input=True, de_trend_loc=None, de_trend_scale=None, **kwargs):
     """
     Plots the depth trends (TVD) for each individual log within the given working interval, for all wells
 
@@ -690,6 +690,14 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
     :param suffix:
         str
         String used in title and in saved figure names, to distinguish different cases
+    :param de_trend_loc:
+        float
+        When de-trending the data, 'loc' and 'scale' (below) are used to create a
+        normal distributed tvd array covers the tvd range of the de-trended data
+            de_trended_tvd = np.random.normal(loc=de_trend_loc, scale=de_trend_scale, ...)
+    :param de_trend_scale:
+        float
+
     :param kwargs:
     :return:
     """
@@ -817,25 +825,33 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
         tvd[log_name] = tvd_container
 
         new_tvd = np.linspace(tvd_min, tvd_max)
+
+        if de_trend_loc is not None:
+            de_trended_tvd = np.random.normal(
+                loc=de_trend_loc,
+                scale=de_trend_scale,
+                size=len(data_container))
+
+            def detrend(_z, _y, new_z):
+                return _y + target_function(new_z, *res['x']) - target_function(_z, *res['x'])
+
+            de_trended_data = detrend(tvd_container, data_container, de_trended_tvd)
+            data_detrended[log_name] = de_trended_data
+            tvd_detrended[log_name] = de_trended_tvd
+
         if verbose:
             ax.plot(target_function(new_tvd, *res['x']), new_tvd)
             legend_items.append('{}, {}'.format(log_name, target_function.__name__))
             # legend_items.append('{} = {:.3}xTVD + {:.3}'.format(log_name, res.x[0], res.x[1]))
 
-            de_trended_tvd = np.random.normal(loc=2400, scale=200, size=len(data_container))
-
-            def detrend(_z, _y, new_z):
-                return _y + target_function(new_z, *res['x']) - target_function(_z, *res['x'])
-            de_trended_data = detrend(tvd_container, data_container, de_trended_tvd)
-            data_detrended[log_name] = de_trended_data
-            tvd_detrended[log_name] = de_trended_tvd
-
-            ax.scatter(de_trended_data, de_trended_tvd, c='gray', alpha=0.2,
+            if de_trend_loc is not None:
+                ax.scatter(de_trended_data, de_trended_tvd, c='gray', alpha=0.2,
                        edgecolors='none')
-            legend_items.append('De-trended data')
+                legend_items.append('De-trended data')
 
             ax.set_title('{}: {}. {} {}'.format(log_type, log_name, mask_string(cutoffs, wi_name), suffix))
-            ax.set_ylim(tvd_max, tvd_min)
+            buffer = 0.05 * (tvd_max - tvd_min)
+            ax.set_ylim(tvd_max + buffer, tvd_min - buffer)
             this_legend = ax.legend(
                 legend_items,
                 prop=FontProperties(size='smaller'),

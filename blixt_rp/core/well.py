@@ -862,7 +862,7 @@ class Well(object):
 
             for this_fm in list(val.keys()):  # loop over each fluid / mineral component
                 print(' {} {}: {}, volume frac: {}'.format(fm_type, param, this_fm, val[this_fm].volume_fraction))
-                tmp_frac = val[this_fm].volume_fraction
+                tmp_frac = uio.my_float(val[this_fm].volume_fraction)
                 if tmp_frac == 'complement':  # Calculated as 1. - the others
                     if complement is not None:
                         raise IOError('Only one complement log is allowed')
@@ -1279,6 +1279,7 @@ class Well(object):
 
         y_log_name = kwargs.pop('y_log_name', 'depth')
         show_masked = kwargs.pop('show_masked', False)
+        set_ylim = kwargs.pop('set_ylim', None)
 
         if y_log_name not in self.log_names():
             info_txt = 'No log named {} in {}, plotting data against depth instead'.format(y_log_name, self.well)
@@ -1355,7 +1356,12 @@ class Well(object):
                     ax.text(ax.get_xlim()[0], top_md[0], top_name, fontsize=FontProperties(size='smaller').get_size())
                     ax.axhline(top_md[1], c='r', lw=0.5, label='_nolegend_')
 
-        ax.set_ylim(ax.get_ylim()[::-1])
+        if set_ylim is None:
+            ax.set_ylim(ax.get_ylim()[::-1])
+        elif isinstance(set_ylim, list):
+            ax.set_ylim(set_ylim)
+        else:
+            print_info('Keyword set_ylim is not correctly set: {}'.format(set_ylim), 'warning', logger, True)
         this_legend = ax.legend(
             legends,
             prop=FontProperties(size='smaller'),

@@ -246,7 +246,7 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             If given as a single float, it is repeated to yield a list
         extract_on:
             str
-            'exact', 'nearest min', 'nearest max'
+            'exact', 'nearest_min', 'nearest_max'
             Used by the function find_value() to extract amplitude values
         scaling:
             float
@@ -341,6 +341,7 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             # extract avo curves
             if avo_positions is not None:
                 for _i, _t in list(avo_positions.items()):
+                    # print('XXX', _i, _t[0], trace_i, avo_positions[_i])
                     if trace_i == _t[0]:
                         calculate_here = True
                         this_index = _i
@@ -356,7 +357,8 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
                         tmp_wiggle = bumw.convolve_with_refl(wavelet['wavelet'], ref(_ang))
                         wiggle_value, twt_index = find_value(tmp_wiggle, twt_index, snap_to=extract_on)
                         avo_curves[this_index].append(wiggle_value)
-                    avo_positions[this_index] = (this_index, twt[twt_index])
+                    # avo_positions[this_index] = (this_index, twt[twt_index])
+                    avo_positions[this_index] = (trace_i, twt[twt_index])
 
     elif model.model_type == '1D' and avo_angles is not None:
         if eei:
@@ -429,6 +431,8 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
         for _i, avo in list(avo_curves.items()):
             if plot_domain == 'TWT':
                 ax.annotate('{}'.format(_i + 1), avo_positions[_i], bbox={'boxstyle': 'circle', 'color': cnames[_i]})
+                # print('XXX2', avo_positions[_i])
+                # ax.annotate('{}'.format(_i + 1), (10, 2.), bbox={'boxstyle': 'circle', 'color': cnames[_i]})
             else:
                 # TODO
                 # The Z position is not entirely correct, as we have hard-coded it to use the first
@@ -1070,10 +1074,12 @@ def build_wedge(depth_to_wedge, from_thickness, to_thickness, n_traces, overburd
 
 def tuning_wedge_analysis(depth_to_wedge, from_thickness, to_thickness, n_traces, overburden, target, underburden,
                           sample_rate, wavelet, plot_domain='TWT', title=None, savefig=None, overburden_vel=3000.,
-                          extract_avo_at=None):
+                          extract_avo_at=None, scaling=None):
     """
     Tuning wedge is always done on a model in time domain, but the result can be plotted in depth domain
     """
+    if scaling is None:
+        scaling = 40.
 
     if from_thickness > to_thickness:  # Wedge pointing rightwards
         loc = 'lower left'
@@ -1104,7 +1110,7 @@ def tuning_wedge_analysis(depth_to_wedge, from_thickness, to_thickness, n_traces
                     overburden, target, underburden, domain='TWT')
     avo_curves, amps, min_amps, max_amps, dist_min_max = plot_wiggles(
         m, sample_rate, wavelet, ax=wiggle_ax, extract_avo_at=extract_avo_at,
-        plot_domain=plot_domain, overburden_vel=overburden_vel)
+        plot_domain=plot_domain, overburden_vel=overburden_vel, scaling=scaling)
     if title is not None:
         fig.suptitle(title)
 

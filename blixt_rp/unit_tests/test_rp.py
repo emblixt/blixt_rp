@@ -203,7 +203,8 @@ class RpTestCase(unittest.TestCase):
         # Calculate k_dry
         k_sat = rp.k_from_v(vp_in, vs_in, rho_in)
         print('K_sat (sat):\t None \t {:.3}'.format(k_sat))
-        k_dry = rp.k_dry(k_sat, k_qz, k_brine, phi)
+        k_dry = rp.k_dry(k_sat, k_qz, k_brine, phi)  # This is the proper k_dry according to eq. 1.11 in Avseth
+        # k_dry = rp.vrh_bounds([1. - phi, phi], [k_qz, 0.])[0]  # Voigt mean. THIS IS TEST AND IS WRONG
         print('K_dry:\t {:.3}\t {:.3}'.format(k_dry_rd, k_dry))
 
         # Calculate fluid substituted properties
@@ -220,11 +221,6 @@ class RpTestCase(unittest.TestCase):
         print('Rho_2:\t {:.3} \t {:.3}'.format(rho_rd, rho))
 
         print('Perturb porosity to {:.3}:'.format(phi_pert))
-        # rho = rho_qz * (1 - phi_pert) + rho_fl_2 * phi_pert
-        # k_sat = rp.k_from_v(vp/1000., vs/1000., rho)
-        # vp = rp.v_p(k_sat, mu_dry, rho)
-        # vs = rp.v_s(mu_dry, rho)
-        # k_dry = rp.k_dry(k_sat, k_qz, k_fl_2, phi_pert)
         vp, vs, rho, _k = rp.vels(k_dry, mu_dry, k_qz, rho_qz, k_fl_2, rho_fl_2, phi_pert)
         print('Vp_3:\t {:.3} \t {:.3}\t Blixt vp decrease with decreasing phi +!'.format(vp_rd_pert, vp/1000.))
         print('Vs_3:\t {:.3} \t {:.3}'.format(vs_rd_pert, vs/1000.))

@@ -9,13 +9,16 @@ import matplotlib.pyplot as plt
 import logging
 # from dataclasses import dataclass
 from copy import deepcopy
+import sys
 
 import bruges.rockphysics.rockphysicsmodels as brr
 
 import blixt_rp.rp_utils.definitions as ud
+from blixt_rp.core.param import Param
+
+sys.path.append('C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_utils')
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.utils import print_info
-from blixt_rp.core.param import Param
 
 logger = logging.getLogger(__name__)
 
@@ -1105,7 +1108,7 @@ def toc_from_delta_log_r(deltalogr, lom, a=None, b=None):
 def gassmann_vel(vp_1, vs_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
     """
     Gassmann fluid substitution with velocity and density as input and output, following the
-    recipe in chapter 1.31. of Avseth et. al 2011
+    recipe in chapter 1.3.1 of Avseth et. al 2011
 
     :param vp_1:
         np.array
@@ -1216,7 +1219,8 @@ def linear_brine_elastics():
     pass
 
 
-def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_intervals, tag, templates=None, block_name=None):
+def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_intervals, tag,
+                  templates=None, block_name=None, log_type_input=True):
     """
     Run fluid substitution using the defined fluids and minerals given in mineral_mix and fluid_mix, and only for the
     wells where they have been defined.
@@ -1266,6 +1270,9 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
     :param block_name:
         str
         Name of the log block which should contain the logs to fluid substitute
+    :param log_type_input:
+        bool
+        if set to True, the keys in the cutoffs dictionary refer to log types, and not log names
     :return:
     """
     log_table = small_log_table(log_table)
@@ -1299,11 +1306,11 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
 
         # Extract log block
         lb = well.block[block_name]
-        # test if necessary log types are present in the well
+        # test if necessary logs are present in the well
         skip_this_well = False
         for xx in ['Porosity', 'Density', 'P velocity', 'S velocity']:
-            if xx not in lb.log_types():
-                warn_txt = 'Log type {} not present in well {}'.format(xx, wname)
+            if log_table[xx] not in lb.log_names():
+                warn_txt = 'Log name {} not present in well {}: SKIPPING'.format(log_table[xx], wname)
                 print_info(warn_txt, 'warning', logger)
                 skip_this_well = True
         if skip_this_well:
@@ -1335,7 +1342,8 @@ def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_int
             k0 = k0_dict[wi]
 
             # calculate the mask for the given cut-offs, and for the given working interval
-            well.calc_mask(cutoffs, wis=wis, wi_name=wi, name='this_mask', log_table=log_table)
+            well.calc_mask(cutoffs, wis=wis, wi_name=wi, name='this_mask', log_table=log_table,
+                           log_type_input=log_type_input)
             mask = lb.masks['this_mask'].values
 
             # Do the fluid substitution itself

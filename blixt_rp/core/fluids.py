@@ -95,9 +95,9 @@ class Fluid(object):
             mu=None,  # Shear modulus in GPa
             rho=None,  # Density in g/cm3
             temp_gradient=None,
-            temp_ref=None,
+            temp_ref=None,  # at seafloor
             pressure_gradient=None,
-            pressure_ref=None,
+            pressure_ref=None,  # at seafloor
             salinity=None,
             gor=None,
             oil_api=None,

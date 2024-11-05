@@ -325,7 +325,8 @@ def calc_toc(
         if reference_logs is not None:
             if isinstance(reference_logs, LogCurve):
                 reference_logs = [reference_logs]
-            logs_to_plot = [xx.data for xx in reference_logs]
+            # logs_to_plot = [xx.data for xx in reference_logs]
+            logs_to_plot = [xx.values for xx in reference_logs]
             styles = [{'lw': templates[xx.log_type]['line width'],
                        'color': templates[xx.log_type]['line color'],
                        'ls': templates[xx.log_type]['line style']}
@@ -359,7 +360,8 @@ def calc_toc(
 
     out_toc_trend = LogCurve(
         name=toc_trend.name.lower() + '_trend',
-        data=toc_trend.value,
+        # data=toc_trend.value,
+        values=toc_trend.value,
         header={
             'unit': toc_trend.unit,
             'log_type': 'TOC',
@@ -369,7 +371,8 @@ def calc_toc(
     )
     out_toc_picked = LogCurve(
         name=toc_picked.name.lower() + '_picked',
-        data=toc_picked.value,
+        # data=toc_picked.value,
+        values=toc_picked.value,
         header={
             'unit': toc_picked.unit,
             'log_type': 'TOC',
@@ -379,7 +382,8 @@ def calc_toc(
     )
     out_dlr_trend = LogCurve(
         name=dlr_trend.name.lower() + '_trend',
-        data=dlr_trend.value,
+        # data=dlr_trend.value,
+        values=dlr_trend.value,
         header={
             'unit': dlr_trend.unit,
             'log_type': 'Delta log R',
@@ -389,7 +393,8 @@ def calc_toc(
     )
     out_dlr_picked = LogCurve(
         name=dlr_picked.name.lower() + '_picked',
-        data=dlr_picked.value,
+        # data=dlr_picked.value,
+        values=dlr_picked.value,
         header={
             'unit': dlr_picked.unit,
             'log_type': 'Delta log R',
