@@ -341,7 +341,7 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             # extract avo curves
             if avo_positions is not None:
                 for _i, _t in list(avo_positions.items()):
-                    # print('XXX', _i, _t[0], trace_i, avo_positions[_i])
+                    # print('XXX2', _i, _t[0], trace_i, avo_positions[_i])
                     if trace_i == _t[0]:
                         calculate_here = True
                         this_index = _i
@@ -443,6 +443,7 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             if tmp_avo_angles:
                 avo_ax.plot(tmp_avo_angles, avo, c=cnames[_i], label='{}'.format(_i + 1))
             else:
+                # print('XXX1', avo_angles, avo)
                 avo_ax.plot(avo_angles, avo, c=cnames[_i], label='{}'.format(_i + 1))
         # avo_ax.legend()
         avo_ax.tick_params(direction='in', labelsize='small')
@@ -1066,6 +1067,88 @@ def build_wedge(depth_to_wedge, from_thickness, to_thickness, n_traces, overburd
 
     return Model(
         depth_to_top=depth_to_wedge - top_thickness,
+        layers=[top_layer, wedge_layer, base_layer],
+        trace_index_range=np.arange(n_traces),
+        domain=domain
+    )
+
+
+def build_saturation_wedge(depth_to_wedge, thickness, to_hc_saturation, n_traces, overburden, brine_target,
+                           underburden, poro: float | None = None, rpt_parameters: dict | None = None, domain='TWT'):
+    """
+    Returns a simple "saturation" wedge model where the HC saturation in the target goes from 0 to 'to_hc_saturation'
+
+    :param depth_to_wedge:
+        float
+        depth in TWT [s] or Z [m] to top of wedge
+    :param thickness:
+        float
+        Thickness, in TWT [s] or Z [m] of the target
+    :param to_hc_saturation:
+        float
+        Fractional HC saturation in the right side of the 'wedge'
+    :param n_traces:
+        int
+        Number of traces
+    :param overburden:
+        dict
+        with keys: 'vp', 'vs', and 'rho'
+    :param brine_target:
+        dict
+        with keys: 'vp', 'vs', and 'rho'
+        This should represent the brine filled target where the brine is gradually replaced with HC towards the right
+        of the 'wedge'
+    :param underburden:
+        dict
+        with keys: 'vp', 'vs', and 'rho'
+    :param poro:
+        float
+        Porosity, fractional
+    :param rpt_parameters:
+        dict
+        Dictionary with the rock physics parameters we will use in the Gassmann fluid subsitution.
+        See rp_core.rpt_parameters() for more info
+
+    """
+    from blixt_rp.rp.rp_core import gassmann_vel
+    if 1 >= to_hc_saturation > 0:
+        pass
+    else:
+        raise IOError("'to_hc_saturation' must be larger than 0 and less or equal to 1")
+
+    def replace_fluid(i):
+        def s_hc(_i):
+            return to_hc_saturation * _i / (n_traces - 1)
+
+        k_f2 = (1. - s_hc(i)) * rpt_parameters['k_b'] + s_hc(i) * rpt_parameters['k_hc']
+        rho_f2 = (1. - s_hc(i)) * rpt_parameters['rho_b'] + s_hc(i) * rpt_parameters['rho_hc']
+        # print('XXX1', k_f2, rho_f2, s_hc(i))
+        return gassmann_vel(
+            brine_target['vp'],
+            brine_target['vs'],
+            brine_target['rho'],
+            rpt_parameters['k_b'],
+            rpt_parameters['rho_b'],
+            k_f2,
+            rho_f2,
+            rpt_parameters['k_min'], poro
+        )
+
+    def vp(i):
+        return replace_fluid(i)[0]
+
+    def vs(i):
+        return replace_fluid(i)[1]
+
+    def rho(i):
+        return replace_fluid(i)[2]
+
+    top_layer = Layer(thickness=0.5 * thickness, **overburden, domain=domain)
+    wedge_layer = Layer(thickness=thickness, vp=vp, vs=vs, rho=rho, target=True, domain=domain)
+    base_layer = Layer(thickness=0.5 * thickness, **underburden, domain=domain)
+
+    return Model(
+        depth_to_top=depth_to_wedge - 0.5 * thickness,
         layers=[top_layer, wedge_layer, base_layer],
         trace_index_range=np.arange(n_traces),
         domain=domain

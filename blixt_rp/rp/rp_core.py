@@ -1148,8 +1148,8 @@ def gassmann_vel(vp_1, vs_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
     k_1 = rho_1 * vp_1**2 * 1E-6 - (4/3.)*mu_1  # GPa
 
     # Apply Gassmann's relation to transform the bulk modulus
-    #a = k_1/(k0 - k_1) + (k_f2/(k0 - k_f2) - k_f1/(k0-k_f1))/por
-    a = gassmann_a(k_1, k0, k_f1, k_f2, por)
+    a = k_1/(k0 - k_1) + (k_f2/(k0 - k_f2) - k_f1/(k0-k_f1))/por
+    # a = gassmann_a(k_1, k0, k_f1, k_f2, por)
     k_2 = k0*a / (1.+a)  # GPa
 
     # Correct the bulk density for the fluid change
@@ -1422,7 +1422,7 @@ def plot_model(model, k0, g0, _phi, rho, _ax, **kwargs):
     _ax.legend(['k0: {:.1f}, mu0: {:.1f}, rho: {:.1f}'.format(k0, g0, rho)])
 
 
-def rpt_parameters(params: dict, verbose: bool = False) -> dict:
+def rpt_parameters(params: dict | None = None, verbose: bool = False) -> dict:
     """
     Returns a dictionary with default rock physics parameters which can modified using the input 'params' dictionary
     :param params:
@@ -1439,9 +1439,10 @@ def rpt_parameters(params: dict, verbose: bool = False) -> dict:
         'plot_type': 'AI-VpVs', '_ref_val': None,
         'model': 'stiffsand'
     }
-    for _key, _value in params.items():
-        if _key in list(def_params.keys()):
-            def_params[_key] = _value
+    if params is not None:
+        for _key, _value in params.items():
+            if _key in list(def_params.keys()):
+                def_params[_key] = _value
 
     def_params['k_min'] = vrh_bounds(  # Mineral bulk modulus
         [def_params['vsh'], 1 - def_params['vsh']], [def_params['k_sh'], def_params['k_qz']])[2]
@@ -1453,24 +1454,6 @@ def rpt_parameters(params: dict, verbose: bool = False) -> dict:
         print('mu_min: {}'.format(def_params['mu_min']))
     def_params['rho_min'] = vrh_bounds(  # Density of minerals
         [def_params['vsh'], 1 - def_params['vsh']], [def_params['rho_sh'], def_params['rho_qz']])[0]
-
-    # TODO
-    # Make below notes a unit test!
-    # And / or return the  dry rock bulk and shear moduli using critpor()?
-    # From perplexity.ai:
-    # This The well log-derived moduli represent the bulk rock properties. To estimate mineral moduli, you need to account for porosity:
-    # Obtain porosity data from neutron, density, or sonic porosity logs
-    # Use rock physics models like the Hashin-Shtrikman bounds or Hertz-Mindlin theory to back-calculate mineral moduli from the bulk rock properties and porosity
-    # RokDoc claim their Blocky Fluid Sub use Gassmann, 1951, to calculate the effect fom changing fluids based on measured log Vp, Vs & Rho
-    # the then Graul et al. to calculate the effect of changing porosity
-    # But how to they calculate k_dry, mu_dry and rho_dry?
-    # 1. our k_dry calculated using k_from_v() is around 10% higher than what RokDoc gets when using log values as input
-    # 2. Well! mu_dry fits exactly with the mu_dry we calculate using mu_from_v() with the log values as input.
-    # 3. Their rho_dry lies inbetween our Reuss and Voigt-Reuss-Hill average of rho assuming a porosity calculated from
-    # mass balance (our mass_balance calculation of porosity match RokDoc's with 4% margin)
-    #
-    # If I try to use crit_por or hertz_mindlin deduce k_dry and mu_dry I'm an order of magnitude wrong
-
 
     return def_params
 

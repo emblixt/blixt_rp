@@ -8,7 +8,7 @@ import pint.errors
 from math import isclose
 from .. import Q_
 
-from blixt_rp.core.log_curve_new import LogCurve2dNew, Depth, is_equivalent, read_las
+from blixt_rp.core.log_curve_new import LogCurve, Depth, is_equivalent, read_las
 from blixt_rp.core.template_new import Template
 from blixt_rp.core.header_new import Header
 
@@ -43,7 +43,7 @@ data5 = Q_(np.linspace(6, 8, n) + np.random.random(n), 'Ohmm')
 depth5 = Q_(np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n), 'feet')
 
 
-class WellTestCase(unittest.TestCase):
+class LogCurveTestCase(unittest.TestCase):
 
     def test_data_types(self):
         print(type(data1))
@@ -54,9 +54,10 @@ class WellTestCase(unittest.TestCase):
         d = Depth(depth2)  # Automatically converts from feet to meter
         print(d.units)
         self.assertTrue(is_equivalent(d.units, pint.Unit('meter')))
+        self.assertFalse(is_equivalent(d.units, pint.Unit('feet')))
 
     def test_LogCurve_new(self):
-        lc = LogCurve2dNew(
+        lc = LogCurve(
             'my_well_log',
             data1,
             Depth(depth1)
@@ -69,7 +70,7 @@ class WellTestCase(unittest.TestCase):
         print(lc.data.max())
         lc.data = lc.data.to('s/feet')
         print(lc.data.max())
-        lc = LogCurve2dNew(
+        lc = LogCurve(
             'my_well_log',
             data1,
             Depth(depth1),
@@ -86,12 +87,12 @@ class WellTestCase(unittest.TestCase):
         # This should fail, and raise warning, because the data pair has units us/ft,
         # which can't be converted to 'kg' which the # style asks for
         style = {'units': 'kg'}
-        lc = LogCurve2dNew('', data1, Depth(depth1), None, None, style, None)
+        lc = LogCurve('', data1, Depth(depth1), None, None, style, None)
         print(lc.units)
         print(lc.style)
 
     def test_built_in_unit_convert(self):
-        lc = LogCurve2dNew(
+        lc = LogCurve(
             'test',
             data2,
             Depth(depth2)
@@ -108,12 +109,12 @@ class WellTestCase(unittest.TestCase):
         print('Depth after conversion {}'.format(lc.depth.values[0]))
 
     def test_calculate_velocity(self):
-        lc_p = LogCurve2dNew(
+        lc_p = LogCurve(
             'test',
             data1,
             Depth(depth1),
             log_type='Sonic')
-        lc_s = LogCurve2dNew(
+        lc_s = LogCurve(
             'test',
             data4,
             Depth(depth4),
@@ -132,7 +133,7 @@ class WellTestCase(unittest.TestCase):
         print(lc_vs.style)
 
         # Following should fail because data are not sonic even if we say so
-        lc_s_fail = LogCurve2dNew(
+        lc_s_fail = LogCurve(
             'Failes',
             data5,
             Depth(depth5),
@@ -140,12 +141,12 @@ class WellTestCase(unittest.TestCase):
         self.assertRaises(pint.DimensionalityError, lc_s_fail.velocity_from_sonic, 'Test')
 
     def test_take_sampling(self):
-        lc1 = LogCurve2dNew(
+        lc1 = LogCurve(
             'test',
             data1,
             Depth(depth1)
         )
-        lc3 = LogCurve2dNew('test', data3, Depth(depth3))
+        lc3 = LogCurve('test', data3, Depth(depth3))
         lc_new = lc1.take_sampling_from(lc3)
         print(lc1.step())
         print(lc3.step())
@@ -156,7 +157,7 @@ class WellTestCase(unittest.TestCase):
         plt.show()
 
     def test_LogCurve_copy(self):
-        lc = LogCurve2dNew(
+        lc = LogCurve(
             'test',
             data1,
             Depth(depth1)
@@ -165,7 +166,7 @@ class WellTestCase(unittest.TestCase):
         print(lc2.header)
 
     def test_print(self):
-        lc = LogCurve2dNew(
+        lc = LogCurve(
             'test',
             data1,
             Depth(depth1),
@@ -174,14 +175,14 @@ class WellTestCase(unittest.TestCase):
         print(lc)
 
     def test_log_type(self):
-        lc = LogCurve2dNew(
+        lc = LogCurve(
             'My log',
             data1,
             Depth(depth1),
             header={'log_type': 'TEST'}
         )
         print(lc.log_type)
-        lc = LogCurve2dNew(
+        lc = LogCurve(
             'Another log',
             data1,
             Depth(depth1)
@@ -192,12 +193,12 @@ class WellTestCase(unittest.TestCase):
     def test_failing_log_type(self):
         # This should raise an IOError because log type is not the same in header and initialization
         header = {'name': 'My log', 'log_type': 'TEST'}
-        self.assertRaises(IOError, LogCurve2dNew, 'Name', data1, Depth(depth1), 'FAIL', None, None, header)
+        self.assertRaises(IOError, LogCurve, 'Name', data1, Depth(depth1), 'FAIL', None, None, header)
         # Below works too. Don't understand why
-        # self.assertRaises(OSError, LogCurve2dNew, dp2, 'FAIL', None, True, None, header)
+        # self.assertRaises(OSError, LogCurve, dp2, 'FAIL', None, True, None, header)
 
     def test_masks(self):
-        lc1 = LogCurve2dNew(
+        lc1 = LogCurve(
             'DataPair1',
             data1,
             Depth(depth1),
@@ -211,11 +212,11 @@ class WellTestCase(unittest.TestCase):
         cutoffs5 = {'TEST': ['><', [2.9, 3.1]], 'Depth': ['><', [1000., 2000.]]}
         cutoffs6 = {'DataPair1': ['<',  5]}  # all should be included
         cutoffs7 = {'DataPair1': ['>',  5]}  # all should be excluded
-        self.assertIsInstance(lc1.calc_mask(cutoffs1, verbose=True), LogCurve2dNew, '')
-        self.assertIsInstance(lc1.calc_mask(cutoffs2, verbose=True), LogCurve2dNew, '')
-        self.assertIsInstance(lc1.calc_mask(cutoffs3, verbose=True), LogCurve2dNew, '')
-        self.assertIsInstance(lc1.calc_mask(cutoffs4, verbose=True, log_table=log_table1), LogCurve2dNew, '')
-        self.assertIsInstance(lc1.calc_mask(cutoffs5, verbose=True, log_table=log_table1), LogCurve2dNew, '')
+        self.assertIsInstance(lc1.calc_mask(cutoffs1, verbose=True), LogCurve, '')
+        self.assertIsInstance(lc1.calc_mask(cutoffs2, verbose=True), LogCurve, '')
+        self.assertIsInstance(lc1.calc_mask(cutoffs3, verbose=True), LogCurve, '')
+        self.assertIsInstance(lc1.calc_mask(cutoffs4, verbose=True, log_table=log_table1), LogCurve, '')
+        self.assertIsInstance(lc1.calc_mask(cutoffs5, verbose=True, log_table=log_table1), LogCurve, '')
         self.assertLessEqual(np.max(lc1.values[lc1.calc_mask(cutoffs1, verbose=True).values]), 3.1, '')
         self.assertTrue(lc1.calc_mask(cutoffs6, verbose=True).values.all())
         self.assertTrue(np.sum(lc1.calc_mask(cutoffs7, verbose=True).values) < 1)
@@ -350,7 +351,7 @@ class WellTestCase(unittest.TestCase):
         log_curves, well_info = read_las(las_file2, log_table=log_table)
         lc = log_curves['dt']
         res = lc.calc_depth_trend(verbose=True)
-        lc_de_trend = lc.de_trend(Q_(2., 'km'), None, *res[0], suffix='test', verbose=True)
+        lc_de_trend = lc.de_trend(Q_(2., 'km'), None, *res[0].x, suffix='test', verbose=True)
         plt.show()
         print(lc_de_trend.header)
         self.assertIsInstance(res, list)
@@ -402,7 +403,8 @@ class WellTestCase(unittest.TestCase):
 
         dpth1 = Depth(Q_(np.linspace(10, 20, 11), 'm'))
         dpth2 = Depth(Q_(np.linspace(10, 20, 9), 'm'))
-        dpth3 = Depth(Q_(np.linspace(10, 20, 11), 'feet'))
+        dpth3 = Depth(Q_(np.linspace(10, 20, 11), 'feet'))  # Automatically converts to meters
         print(dpth1.unique_depths(dpth2).values)
-        self.assertRaises(IOError, dpth1.unique_depths, dpth3)
+        print(dpth1.unique_depths(dpth3).values)
+        self.assertTrue(is_equivalent(dpth1.units, dpth3.units))
 

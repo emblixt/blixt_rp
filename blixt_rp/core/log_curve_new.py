@@ -163,7 +163,7 @@ class Depth(object):
     #         self.__setattr__(key, value)
 
 
-class LogCurve2dNew(object):
+class LogCurve(object):
     """
     This log curve object contains a log data & depth pair
     It uses pint to take care of units
@@ -374,6 +374,14 @@ class LogCurve2dNew(object):
     def __str__(self):
         return '{}: {}'.format(self.name, str(self.header))
 
+    def rename_to(self, new_name):
+        """
+        Renames the log to 'new_name'
+        :param new_name:
+        :return:
+        """
+        raise NotImplementedError('TODO')
+
     def copy(self, suffix='copy'):
         copied_log_curve = deepcopy(self)
         if suffix is not None and len(suffix) > 0:
@@ -446,7 +454,7 @@ class LogCurve2dNew(object):
                 name = 'Vs'
             log_type = 'S velocity'
             header.log_type = 'S velocity'
-        return LogCurve2dNew(
+        return LogCurve(
             name=name,
             log_data=velocity,
             depth=self.depth,
@@ -462,12 +470,12 @@ class LogCurve2dNew(object):
         and returns a new log_curve
 
         :param log_curve:
-            LogCurve2dNew object
+            LogCurve object
         :param verbose:
             Bool
 
         :return
-            LogCurve2dNew object
+            LogCurve object
         """
         if self.depth_type != log_curve.depth_type:
             raise ValueError('The two depth formats (depth_type) are not the same: {} != {}'.format(
@@ -487,7 +495,7 @@ class LogCurve2dNew(object):
         new_y = _interpolate(old_x, old_y, new_x)
 
         info_txt = 'Resampled to match {}'.format(log_curve.name)
-        return LogCurve2dNew(
+        return LogCurve(
             self.name + '_resampled',
             Q_(new_y, self.units),
             Depth(Q_(new_x, self.depth_units)),
@@ -610,7 +618,7 @@ class LogCurve2dNew(object):
         :param kwargs:
             keyword arguments passed on to _smooth
         :return:
-            Smoothened LogCurve2dNew object when overwrite is False, else
+            Smoothened LogCurve object when overwrite is False, else
         """
         if not self.is_evenly_spaced:
             warn_txt = 'Only evenly spaced data can be smoothened'
@@ -754,7 +762,7 @@ class LogCurve2dNew(object):
             bool
 
         :return:
-            LogCurve2dNew object
+            LogCurve object
         """
         from blixt_utils.utils import mask_string
 
@@ -824,7 +832,7 @@ class LogCurve2dNew(object):
             )
             print_info(info_txt, 'info', logger)
 
-        return LogCurve2dNew(
+        return LogCurve(
             # create_data_array(
             #     name=name,
             #     data=final_mask,
@@ -918,7 +926,7 @@ class LogCurve2dNew(object):
             disc_txt = 'allowing discrete jumps at {} {} '.format(
                 ', '.join('{:.2}'.format(_x) for _x in discrete_intervals), self.depth_units)
 
-        if True:
+        if False:
             raise NotImplementedError("calculate_depth_trend() has changed its output, It now returns the whole 'res' instead of 'res.x'")
 
         results = calculate_depth_trend(
@@ -953,7 +961,7 @@ class LogCurve2dNew(object):
         :param suffix:
             str
         :return:
-            LogCurve2dNew object with de-trended data
+            LogCurve object with de-trended data
         """
         if trend_function is None:
             trend_function = linear_function
@@ -1022,9 +1030,9 @@ def _interpolate(x: np.ndarray, y: np.ndarray, x_new: np.ndarray, **kwargs):
 
 
 def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
-             log_table: dict | None = None) -> (dict, dict):
+             log_table: dict | None = None, inv_log_table: dict | None = None) -> (dict, dict):
     """
-    Returns a LogCurve2dNew object for each, or selected, log in las file, packed in a dict
+    Returns a LogCurve object for each, or selected, log in las file, packed in a dict
 
     :param file_name:
     :param verbose:
@@ -1032,11 +1040,20 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
     :param log_table:
             dict
             Dictionary of log type: log name as "key: value" pairs that specify which log to use for each log type
+            When this is specified, we only load those logs that are listed among the log names in this dictionary.
+            E.G. {'P velocity': 'vp_brine'}
+            'log_table' always takes precedence over 'inv_log_table'
+
+    :param inv_log_table:
+            dict
+            Dictionary of log name : log type as "key: value" pairs that specify which log type to use for each log.
+            The main difference to when 'log_table' is specified is that we can load specific logs of the same log type.
+            E.G. vp_brine, vp_oil, vp_gas which all are "P velocity" log types {'vp_brine': 'P velocity', 'vp_oil': 'P velocity'}
             When this is specified, we only load those logs that are listed among the log names in this dictionary
 
     :return:
         tuple with two dicts
-        first dict contains a log_name: LogCurve2dNew "key: value" pair for log in the las file
+        first dict contains a log_name: LogCurve "key: value" pair for log in the las file
         second dict contains the standard info about the well and curves extracted from the las file
     """
     from blixt_utils.io.io import well_reader
@@ -1085,8 +1102,12 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
     only_these_logs = generated_keys  # This contains all the logs
     log_types = [None] * len(only_these_logs)
     if log_table is not None:
+        inv_log_table = None
         only_these_logs = list(log_table.values())
         log_types = list(log_table.keys())
+    if inv_log_table is not None:
+        only_these_logs = list(inv_log_table.keys())
+        log_types = list(inv_log_table.values())
 
     # Find and extract data
     data = well_dict.pop('data')
@@ -1108,7 +1129,7 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
             continue
         data_units = fix_units_for_pint(data_units)
 
-        output[_key.lower()] = LogCurve2dNew(
+        output[_key.lower()] = LogCurve(
             _key.lower(),
             Q_(data[_key], data_units),
             Depth(Q_(data[depth_key], depth_units), depth_type=depth_type),
@@ -1356,7 +1377,7 @@ def create_data_array(
 
 
 def replace_data(
-        logcurve_in: LogCurve2dNew,
+        logcurve_in: LogCurve,
         log_data: pint.Quantity,
         depth: Depth,
         overwrite: bool,
@@ -1434,12 +1455,12 @@ def test_xarray():
     wells increase, and then most of the DataArray with log values should contain NaN's 
     :return:
     """
-    lc1 = LogCurve2dNew(
+    lc1 = LogCurve(
         'log1',
         Q_(np.random.rand(11), 'm/s'),
         Depth(Q_(np.linspace(1000, 2000, 11)))
     )
-    lc2 = LogCurve2dNew(
+    lc2 = LogCurve(
         'log2',
         Q_(np.random.rand(9), 'm/s'),
         Depth(Q_(np.linspace(1000, 2000, 9)))

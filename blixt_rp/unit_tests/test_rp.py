@@ -272,7 +272,10 @@ class RpTestCase(unittest.TestCase):
         plt.show()
         self.assertTrue(True)
 
-
+    def test_rpt_parameters(self):
+        rpt_params = rp.rpt_parameters(verbose=True)
+        for key, item in rpt_params.items():
+            print(key, item)
 
 
 

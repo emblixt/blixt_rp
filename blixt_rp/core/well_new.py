@@ -27,61 +27,59 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
 
-from blixt_utils.misc.templates import log_header_to_template as l2tmpl
-from blixt_utils.utils import log_table_in_smallcaps as small_log_table
-from blixt_utils.utils import print_info, add_one
-import blixt_utils.io.io as uio
-from blixt_utils.io.io import well_reader
-import blixt_utils.misc.masks as msks
-from blixt_utils.utils import arrange_logging
-from blixt_rp.rp_utils.harmonize_logs import harmonize_logs as fixlogs
-from blixt_utils.plotting import crossplot as xp
-from blixt_rp.core.minerals import MineralMix
-import blixt_rp.rp.rp_core as rp
-from blixt_utils.misc.convert_data import convert as cnvrt
-import blixt_rp.rp_utils.definitions as ud
-from blixt_rp.core.well import Block
-from blixt_rp.core.log_curve import LogCurve
-from blixt_rp.core.header import Header
-from blixt_rp.core.header_new import Header as HeaderNew
+from blixt_rp.core.header_new import Header
 
 # global variables
 supported_version = {2.0, 3.0}
 logger = logging.getLogger(__name__)
 
 
-class WellNew(object):
+class Well(object):
     """
-    Class handling a well, with LogCurve2dNew LogCurve objects for each curve of well log data.
+    Class handling a well, with LogCurve (from log_curve_new) objects for each curve of well log data.
     Main difference with earlier versions is that each LogCurve object contains its associated depth data, and units,
     so that they don't have to be regularly sampled, or with the same sampling.
     This also means that a LogCurve object can contain other data than typical log data, such as core samples.
     """
     def __init__(self,
-                 header: HeaderNew | None = None,
+                 header: Header | None = None,
                  logs: list | None = None
                  ):
         """
 
         :param header:
-            HeaderNew
+            Header
             dict type which contains
         :param logs:
         """
         if header is None:
-            self.header = HeaderNew({})
+            self.header = Header({})
         elif isinstance(header, dict):
-            self.header = HeaderNew(header=header)
-        elif isinstance(header, HeaderNew):
+            self.header = Header(header=header)
+        elif isinstance(header, Header):
             self.header = header
         else:
             raise TypeError('header must be either a dict or a Header, not {}'.format(type(header)))
         self.logs = logs
 
     def read_las(self, file_name: str, verbose: bool = False, encoding: str = 'UTF8',
-                 log_table: dict | None = None, ignore_header: bool = False):
+                 log_table: dict | None = None, inv_log_table: dict | None = None, ignore_header: bool = False):
+        """
+        Uses the log_curve_new.py function 'read_las()' to read a las file
+
+        :param file_name:
+        :param verbose:
+        :param encoding:
+        :param log_table:
+            dict
+            Dictionary of log type: log name as "key: value" pairs that specify which log to use for each log type
+            When this is specified, we only load those logs that are listed among the log names in this dictionary
+        :param ignore_header:
+        :return:
+        """
         from blixt_rp.core.log_curve_new import read_las as _read_las
-        log_curves, well_dict = _read_las(file_name, verbose=verbose, encoding=encoding, log_table=log_table)
+        log_curves, well_dict = _read_las(file_name, verbose=verbose, encoding=encoding, log_table=log_table,
+                                          inv_log_table=inv_log_table)
         if self.logs is None:
             self.logs = list(log_curves.values())
         else:
@@ -89,7 +87,6 @@ class WellNew(object):
 
         if not ignore_header:
             self.header = add_headers(self.header, well_dict, [], None)
-
 
 
 def add_headers(_header, _well_info, _ignore_keys, _note):

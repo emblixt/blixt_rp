@@ -8,11 +8,12 @@ import numpy as np
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from blixt_rp.core.models import Model, Layer, build_wedge, plot_wiggles, build_layered_model, laminar_model_analysis
+from blixt_rp.core.models import (Model, Layer, build_wedge, plot_wiggles, build_layered_model, laminar_model_analysis,
+                                  build_saturation_wedge)
 import blixt_utils.misc.wavelets as bumw
 
 l1 = {'vp': 3000, 'vs': 1820, 'rho': 2.6}
-l2 = {'vp': 2000, 'vs': 1120, 'rho': 2.2}
+l2 = {'vp': 2900, 'vs': 1620, 'rho': 2.2}
 
 
 class TestCase(unittest.TestCase):
@@ -165,4 +166,38 @@ class TestCase(unittest.TestCase):
         top_thickness = length / 2.
         m = build_layered_model(2., top_thickness, 0.05, l1, l2, l1, domain='TWT')
         laminar_model_analysis(m, dt, wavelet, extract_avo_at=(0, 2.01), extract_on='nearest max')
+        plt.show()
+
+    def test_saturation_wedge(self):
+        from blixt_rp.rp.rp_core import rpt_parameters
+        wavelet = bumw.ricker(0.096, 0.001, 25)
+        dt = wavelet['header']['Sample rate']  # should be given in seconds
+        rpts = rpt_parameters()
+        m = build_saturation_wedge(
+            2.0, 0.05, 0.9, 10,
+            l1, l2, l1, 0.2, rpts)
+
+        hc_sat = np.linspace(0, 0.9, 10)
+
+        # for i in m.trace_index_range:
+        #     print(i, m.layers[1].vp(i), m.layers[1].vs(i), m.layers[1].rho(i))
+        fig, axs = plt.subplots(2, 2, figsize=(8, 8), gridspec_kw={'height_ratios': [2, 1], 'width_ratios': [1, 0.2]})
+        axs[1, 1].set_axis_off()
+        wiggle_ax = axs[0, 0]
+        model_ax = axs[0, 1]
+        wedge_ax = axs[1, 0]
+        fig.subplots_adjust(wspace=0.)
+        extract_avo_at = (1, 2.)
+        plot_domain = 'TWT'
+        overburden_vel = 3000.
+        scaling = 10.
+        avo_curves, amps, min_amps, max_amps, dist_min_max = plot_wiggles(
+            m, dt, wavelet, ax=wiggle_ax, extract_avo_at=extract_avo_at,
+            plot_domain=plot_domain, overburden_vel=overburden_vel, scaling=scaling)
+        wiggle_ax.set_ylim(wiggle_ax.get_ylim()[::-1])
+        m[0].plot(ax=model_ax, kwargs1d={'yticks': False, 'legend': False})
+        wedge_ax.plot(hc_sat, np.abs(np.array(min_amps)), label='|Min|')
+        wedge_ax.set_ylabel('Amplitude')
+        wedge_ax.set_xlabel('HC saturation')
+        wedge_ax.legend(loc='upper left')
         plt.show()
