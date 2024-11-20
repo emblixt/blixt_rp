@@ -62,6 +62,10 @@ class Well(object):
             raise TypeError('header must be either a dict or a Header, not {}'.format(type(header)))
         self.logs = logs
 
+    @property
+    def name(self):
+        return self.header.name
+
     def read_las(self, file_name: str, verbose: bool = False, encoding: str = 'UTF8',
                  log_table: dict | None = None, inv_log_table: dict | None = None, ignore_header: bool = False):
         """
@@ -80,6 +84,7 @@ class Well(object):
         from blixt_rp.core.log_curve_new import read_las as _read_las
         log_curves, well_dict = _read_las(file_name, verbose=verbose, encoding=encoding, log_table=log_table,
                                           inv_log_table=inv_log_table)
+        print('XXX', list(well_dict.keys()))
         if self.logs is None:
             self.logs = list(log_curves.values())
         else:

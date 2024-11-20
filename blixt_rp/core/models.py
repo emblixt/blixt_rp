@@ -1074,7 +1074,7 @@ def build_wedge(depth_to_wedge, from_thickness, to_thickness, n_traces, overburd
 
 
 def build_saturation_wedge(depth_to_wedge, thickness, to_hc_saturation, n_traces, overburden, brine_target,
-                           underburden, poro: float | None = None, rpt_parameters: dict | None = None, domain='TWT'):
+                           underburden, poro, rpt_parameters: dict | None = None, domain='TWT'):
     """
     Returns a simple "saturation" wedge model where the HC saturation in the target goes from 0 to 'to_hc_saturation'
 
@@ -1223,17 +1223,53 @@ def tuning_wedge_analysis(depth_to_wedge, from_thickness, to_thickness, n_traces
         fig.savefig(savefig)
 
 
+def saturation_wedge_analysis(depth_to_wedge, thickness, to_hc_saturation, n_traces, overburden, brine_target,
+                              underburden, sample_rate, wavelet, poro, plot_domain='TWT', title=None, savefig=None,
+                              overburden_vel=3000., extract_avo_at=None, scaling=None,
+                              rpt_parameters: dict | None = None, ):
+    if scaling is None:
+        scaling = 10.
+
+    fig, axs = plt.subplots(2, 2, figsize=(8, 8), gridspec_kw={'height_ratios': [2, 1], 'width_ratios': [1, 0.2]})
+    axs[1, 1].set_axis_off()
+    wiggle_ax = axs[0, 0]
+    model_ax = axs[0, 1]
+    wedge_ax = axs[1, 0]
+    fig.subplots_adjust(wspace=0.)
+
+    m = build_saturation_wedge(
+        depth_to_wedge, thickness, to_hc_saturation, n_traces,
+        overburden, brine_target, underburden, poro, rpt_parameters)
+
+    hc_sat = np.linspace(0, to_hc_saturation, n_traces)
+
+    avo_curves, amps, min_amps, max_amps, dist_min_max = plot_wiggles(
+        m, sample_rate, wavelet, ax=wiggle_ax, extract_avo_at=extract_avo_at,
+        plot_domain=plot_domain, overburden_vel=overburden_vel, scaling=scaling)
+    # wiggle_ax.set_ylim(wiggle_ax.get_ylim()[::-1])
+    m[0].plot(ax=model_ax, kwargs1d={'yticks': False, 'legend': False})
+    wedge_ax.plot(hc_sat, np.abs(np.array(min_amps)), label='|Min|')
+    wedge_ax.set_ylabel('Amplitude')
+    wedge_ax.set_xlabel('HC saturation')
+    wedge_ax.legend(loc='upper left')
+    wedge_ax.grid(True)
+    if title is not None:
+        fig.suptitle(title)
+    if savefig:
+        fig.savefig(savefig)
+
+
 def laminar_model_analysis(
-        model: Model,
-        sample_rate: float,
-        wavelet: dict,
-        plot_domain='TWT',
-        title=None, savefig=None,
-        overburden_vel=3000.,
-        extract_avo_at=None,
-        extract_on='exact',
-        avo_plot_position=None,
-        scaling=None):
+    model: Model,
+    sample_rate: float,
+    wavelet: dict,
+    plot_domain='TWT',
+    title=None, savefig=None,
+    overburden_vel=3000.,
+    extract_avo_at=None,
+    extract_on='exact',
+    avo_plot_position=None,
+    scaling=None):
     """
     Plot a model together with wiggles and more
     """

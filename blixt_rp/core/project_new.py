@@ -14,7 +14,7 @@ from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
-project_dir = str(os.path.basename(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
+project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
@@ -36,10 +36,9 @@ class Project(object):
     def __init__(self,
                  load_from=None,
                  name=None,
+                 wells: list | None = None,
                  working_dir=None,
                  project_table=None,
-                 tops_file=None,
-                 tops_type=None,
                  log_to_stdout=False,
                  ):
         """
@@ -52,24 +51,24 @@ class Project(object):
         :param name:
             str
             Name of the project
+        :param wells:
+            list
+            List of Well objects
         :param working_dir:
             str
             folder name of the project
         :param project_table:
             str
             full pathname of .xlsx file that store information of which wells and logs, ... to use
-        :param tops_file:
-            str
-            full pathname of .xlsx file that contains the tops used in this project
-        :param tops_type:
-            str
-            'petrel', 'npd' or 'rokdoc' depending on which source the tops_file comes from
         :param log_to_stdout:
             bool
             If True, the logging information is sent to standard output and not to file
         """
 
         logging_level = logging.INFO
+
+        if wells is None:
+            wells = []
 
         if load_from is not None:
             self.load_logfile(load_from)
@@ -96,6 +95,7 @@ class Project(object):
             self.name = name
             self.working_dir = working_dir
             self.logging_file = logging_file
+            self.wells = wells
 
             if project_table is None:
                 self.project_table = os.path.join(self.working_dir, 'excels', 'project_table.xlsx')
@@ -108,9 +108,6 @@ class Project(object):
                 warn_txt = 'The provided project table {}, does not exist'.format(self.project_table)
                 print_info(warn_txt, 'warning', logger)
                 raise Warning(warn_txt)
-
-            self.tops_file = tops_file
-            self.tops_type = tops_type
 
     def __setattr__(self, key, value):
         """
@@ -146,6 +143,13 @@ class Project(object):
         head = [pattern % (k, self.__dict__[k]) for k in keys]
         return "\n".join(head)
 
+    def __len__(self):
+        return len(self.wells)
+
+    @property
+    def get_well_names(self):
+        return [_well.name for _well in self.wells]
+
     def load_logfile(self, file_name):
         if not os.path.isfile(file_name):
             warn_txt = 'The provided log file {}, does not exist'.format(file_name)
@@ -180,6 +184,18 @@ class Project(object):
         arrange_logging(False, file_name, logging.INFO)
 
         print_info('Loaded project settings from: {}'.format(file_name), 'info', logger)
+
+    def load_all_wells(self):
+        """
+        Load all logs and well data that are listed in the project table where "Use" == "Yes"
+        :param self:
+        :return:
+        """
+        result = uio.project_wells_new(self.project_table, self.working_dir)
+        for _key in list(result.keys()):
+            print('-', _key)
+            print('  -', result[_key])
+        return None
 
     def return_dict(self, wells: list | None = None, intervals: list | None = None, logs: list | None = None):
         """

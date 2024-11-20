@@ -28,7 +28,7 @@ from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
-project_dir = str(os.path.basename(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
+project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
@@ -319,7 +319,7 @@ class Project(object):
             To rename the VSH log to VCL upon import (not in the las files) the rename_logs dict should be set to
                 {<Well E las file name path>: 'VCL': ['VSH']}}
 
-            If None, it uses the defined renaming rules used in the project table:W
+            If None, it uses the defined renaming rules used in the project table
 
         :param include_these_wells:
             string, or list of strings

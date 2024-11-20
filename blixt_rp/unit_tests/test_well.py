@@ -69,3 +69,4 @@ class WellTestCase(unittest.TestCase):
         for log in w.logs:
             print(log.name, log.log_type)
 
+        print(w.name)
