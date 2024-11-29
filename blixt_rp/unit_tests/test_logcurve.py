@@ -6,7 +6,7 @@ import time
 
 import pint.errors
 from math import isclose
-from .. import Q_
+from .. import ureg, Q_
 
 from blixt_rp.core.log_curve_new import LogCurve, Depth, is_equivalent, read_las
 from blixt_rp.core.template_new import Template
@@ -83,13 +83,36 @@ class LogCurveTestCase(unittest.TestCase):
         print(lc.data.max())
         print(lc.units)
 
-    def test_failing_unit_convert(self):
+    def test_unit_convert_using_style(self):
         # This should fail, and raise warning, because the data pair has units us/ft,
         # which can't be converted to 'kg' which the # style asks for
+        print('This should fail:')
         style = {'units': 'kg'}
         lc = LogCurve('', data1, Depth(depth1), None, None, style, None)
-        print(lc.units)
-        print(lc.style)
+        print(lc.units, type(lc.units))
+        print(lc.style.units, type(lc.style.units))
+        self.assertTrue(is_equivalent(lc.units, ureg.Unit(lc.style.units)))
+
+        print('This should work:')
+        style = {'units': 'us/m'}
+        lc = LogCurve('', data1, Depth(depth1), None, None, style, None)
+        print(lc.units, type(lc.units))
+        print(lc.style.units, type(lc.style.units))
+        self.assertTrue(is_equivalent(lc.units, ureg.Unit(lc.style.units)))
+
+        print('And now this works too :-)')
+        style = {'units': 's/m'}
+        lc.style = Template(style)
+        print(lc.units, type(lc.units))
+        print(lc.style.units, type(lc.style.units))
+        self.assertTrue(is_equivalent(lc.units, ureg.Unit(lc.style.units)))
+
+        print('And this also')
+        style = {'units': 's/feet'}
+        lc.style = Template(style)
+        print(lc.units, type(lc.units))
+        print(lc.style.units, type(lc.style.units))
+        self.assertTrue(is_equivalent(lc.units, ureg.Unit(lc.style.units)))
 
     def test_built_in_unit_convert(self):
         lc = LogCurve(
@@ -99,12 +122,14 @@ class LogCurveTestCase(unittest.TestCase):
         )
         print(lc.style.units)
         print('Original max of data: {}'.format(lc.data.max()))
-        lc.convert_to('us/m')
+        lc.units = 'us/m'
+        #  lc.convert_to('us/m')
         print(lc.style.units)
         print('Max of data after conversion: {}'.format(lc.data.max()))
         print(lc.header.modification_history)
         print('Original depth {}'.format(lc.depth.values[0]))
-        lc.convert_depth_to('feet')
+        lc.depth_units = 'feet'
+        # lc.convert_depth_to('feet')
         print(lc.header.modification_history)
         print('Depth after conversion {}'.format(lc.depth.values[0]))
 
@@ -262,14 +287,6 @@ class LogCurveTestCase(unittest.TestCase):
         t.colormap = 'A GIANT COLOR'
         print(t)
 
-    def test_Header(self):
-        h = Header({'name': 'MY NAME', 'well': 'MY WELL'})
-        print(h.keys())
-        print(h.name, h.creation_date)
-        time.sleep(1)
-        h.orig_filename = 'A TEST'
-        print(h.orig_filename, h.creation_date, h.modification_date)
-
     def test_a_lot(self):
         # fig, ax = plt.subplots()
         log_table = {'Resistivity': 'rdep', 'Sonic': 'dt'}
@@ -407,4 +424,17 @@ class LogCurveTestCase(unittest.TestCase):
         print(dpth1.unique_depths(dpth2).values)
         print(dpth1.unique_depths(dpth3).values)
         self.assertTrue(is_equivalent(dpth1.units, dpth3.units))
+
+    def test_rename(self):
+        lc = LogCurve(
+            'test',
+            data2,
+            Depth(depth2)
+        )
+        print('Original header:\n', lc.header)
+
+        lc.name = 'renamed log curve'
+        lc.well = 'renamed well name'
+        print('Modified header:\n', lc.header)
+        print('Well and log curve names: ', lc.well, lc.name)
 

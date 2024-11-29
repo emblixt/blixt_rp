@@ -18,6 +18,7 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', 
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
+from blixt_rp.core.well_new import Well
 from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
 from blixt_utils.misc.templates import log_header_to_template as l2tmpl
@@ -150,6 +151,56 @@ class Project(object):
     def get_well_names(self):
         return [_well.name for _well in self.wells]
 
+    def get_well(self, name):
+        for _well in self.wells:
+            if _well.name == name:
+                return _well
+        return None
+
+    def add_well(self, well: Well, if_well_exists: str = 'append', if_log_exists: str = 'overwrite'):
+        """
+        Adds a Well object to the Project
+        :param well:
+        :param if_well_exists:
+            str
+            Describes what to do if the well exists from before
+            'append': app
+            'overwrite': Overwrite old well
+            'ask': Ask to overwrite or ignore
+            'ignore': new well is ignored if a log of same name exists from before
+        :param if_log_exists:
+            str
+            Describes what to do if the log exists from before
+            'overwrite': Overwrite old log
+            'ask': Ask to overwrite or ignore
+            'ignore': new log is ignored if a log of same name exists from before
+        :return:
+        """
+        well_name_list = self.get_well_names
+        if self.wells is None:
+            self.wells = [well]
+        elif well.name in well_name_list:
+            _index = well_name_list.index(well.name)
+            if if_well_exists == 'append':
+                for _log in well.logs:
+                    self.wells[_index].add_log(_log, if_log_exists=if_log_exists)
+                if well.header.note is not None:
+                    self.wells[_index].header.note += well.header.note
+                self.wells[_index].header.modification_history += "Appended logs: {}, using '{}'".format(
+                    ', '.join([_l.name for _l in well.logs]), if_log_exists)
+            elif if_well_exists == 'overwrite':
+                self.wells[_index] = well
+            elif if_well_exists == 'ask':
+                response = input('Well ({}) exists! Overwrite? ["No"]:'.format(well.name)) or "No"
+                if response != "No":
+                    self.wells[_index] = well
+            elif if_well_exists == 'ignore':
+                pass
+            else:
+                raise IOError("Unknown value ({}) of 'if_well_exists'".format(if_well_exists))
+        else:
+            self.wells.append(well)
+
     def load_logfile(self, file_name):
         if not os.path.isfile(file_name):
             warn_txt = 'The provided log file {}, does not exist'.format(file_name)
@@ -185,17 +236,66 @@ class Project(object):
 
         print_info('Loaded project settings from: {}'.format(file_name), 'info', logger)
 
-    def load_all_wells(self):
+    def load_all_wells(self, if_well_exists: str = 'append', if_log_exists: str = 'overwrite'):
         """
         Load all logs and well data that are listed in the project table where "Use" == "Yes"
         :param self:
+        :param if_well_exists:
+            str
+            Describes what to do if the well exists from before
+            'append': app
+            'overwrite': Overwrite old well
+            'ask': Ask to overwrite or ignore
+            'ignore': new well is ignored if a log of same name exists from before
+        :param if_log_exists:
+            str
+            Describes what to do if the log exists from before
+            'overwrite': Overwrite old log
+            'ask': Ask to overwrite or ignore
+            'ignore': new log is ignored if a log of same name exists from before
         :return:
         """
+        from blixt_rp.core.template_new import Template
         result = uio.project_wells_new(self.project_table, self.working_dir)
-        for _key in list(result.keys()):
-            print('-', _key)
-            print('  -', result[_key])
-        return None
+        templates_dataframe = pd.read_excel(self.project_table, header=1, sheet_name='Templates', engine='openpyxl')
+
+        for _key in list(result.keys()):  # _key is the name of the file to read
+            translate_dict = None
+            if 'Translate log names' in list(result[_key].keys()):
+                translate_dict = uio.interpret_rename_string(result[_key]['Translate log names'])
+            w = Well()
+            if uio.filetype(_key) == 'las':
+                w.read_las(_key, inv_log_table=result[_key]['logs'])
+                if translate_dict is not None:
+                    for _new_name, _old_name in translate_dict.items():
+                        this_log = w.get_log_curve(_old_name)
+                        if this_log is not None:
+                            this_log.name = _new_name
+            elif uio.filetype(_key) in ['txt', 'dat', 'ascii']:
+                var_names = list(result[_key]['logs'].keys())
+                var_columns = [result[_key]['columns'][_var] for _var in var_names]
+                var_units = [result[_key]['units'][_var] for _var in var_names]
+                var_types = [result[_key]['logs'][_var] for _var in var_names]
+                w.read_general_ascii(
+                    file_name=_key,
+                    separator=result[_key]['Separator'],
+                    data_begins_on_row=result[_key]['Data begins on line'],
+                    var_names=var_names,
+                    var_columns=var_columns,
+                    var_units=var_units,
+                    var_types=var_types
+                )
+                w.name = result[_key]['Given well name']
+                w.header.note = result[_key]['Note']
+
+            if w.logs is not None:
+                for _lc in w.logs:
+                    if _lc.log_type is None:
+                        continue
+                    t = Template()
+                    t.get_from_table(templates_dataframe, _lc.log_type)
+                    _lc.style = t
+                self.add_well(w, if_well_exists=if_well_exists, if_log_exists=if_log_exists)
 
     def return_dict(self, wells: list | None = None, intervals: list | None = None, logs: list | None = None):
         """

@@ -64,6 +64,9 @@ class Template(AttribDict):
         :return:
         """
         table = pd.read_excel(project_file, header=1, sheet_name='Templates', engine='openpyxl')
+        self.get_from_table(table, log_type)
+
+    def get_from_table(self, table: pd.DataFrame | dict, log_type: str):
         for i, ans in enumerate(table['Log type']):
             if not isinstance(ans, str):
                 continue

@@ -35,7 +35,7 @@ from blixt_utils.misc import masks as msks
 from blixt_utils.misc import templates as tmplts
 import blixt_rp.rp_utils.definitions as rud
 from blixt_utils.utils import print_info, fix_well_name
-# from blixt_utils.io.io import read_general_ascii_GENERAL as read_file, project_wells_new
+from blixt_utils.io.io import read_general_ascii_GENERAL as read_file
 
 
 from .. import ureg, Q_
@@ -218,17 +218,21 @@ class LogCurve(object):
                 len(log_data), len(depth)))
         if not isinstance(depth, Depth):
             raise IOError('Depth must be a Depth object')
-        self.name = name
+        # self.name = name
+        self._name = name
         self.data = log_data
         self.depth = depth
-        self.well = well
+        # self.well = well
+        self._well = well
 
         if style is None:
-            self.style = Template(template={})
+            style = Template(template={})
         elif isinstance(style, dict):
-            self.style = Template(template=style)
+            style = Template(template=style)
         elif isinstance(style, Template):
-            self.style = style
+            pass
+            # Continues later in init()
+            # self._style = style
         else:
             raise TypeError('style must be either a dict or a Template, not {}'.format(type(style)))
 
@@ -241,37 +245,11 @@ class LogCurve(object):
         else:
             raise TypeError('header must be either a dict or a Header, not {}'.format(type(header)))
 
-        # If the style Template contains a unit, which is not None, then we should convert the data to this
-        # unit if it is not already using those units.
-        if self.style.units is not None:
-            # print('Units in template is {}'.format(self.style.units))
-            if not is_equivalent(self.data.units, ureg.Unit(self.style.units)):
-                # print('Units are not the same, try to convert')
-                try:
-                    info_txt = '{}: {}: Convert from {} to {}'.format(
-                        self.well, self.name, str(self.data.units), self.style.units
-                    )
-                    self.data = self.data.to(self.style.units)
-                    print_info(info_txt, 'info', logger)
-                except pint.DimensionalityError:
-                    warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
-                        self.well, self.name, str(self.data.units), self.style.units
-                    )
-                    print_info(warn_txt, 'warning', logger)
-                    #  Then continue using the original unit
-                    self.style.units = str(self.units)
-        else:
-            self.style.units = str(self.data.units)
-
         # Make sure the values of 'name' and 'well' are aligned.
-        if self.name is None and self.header.name is not None:
-            self.name = self.header.name
-        elif self.name is not None:
-            self.header.name = self.name  # self.name wins over self.header.name
-        if self.well is None and self.header.well is not None:
-            self.well = self.header.well
-        elif self.well is not None:
-            self.header.well = self.well  # self.well wins over self.header.well
+        if self._name is not None:
+            self.header.name = self._name  # self.name wins over self.header.name
+        if self._well is not None:
+            self.header.well = self._well  # self.well wins over self.header.well
 
         if log_type is None:
             if self.header.log_type is not None:
@@ -290,13 +268,72 @@ class LogCurve(object):
                 if self.header.log_type is None:
                     self.header.log_type = log_type
 
+        # If the style Template contains a unit, which is not None, then we should convert the data to this
+        # unit if it is not already using those units.
+        if style.units is not None:
+            # print('Units in template is {}'.format(log_curve.style.units))
+            if not is_equivalent(self.data.units, ureg.Unit(style.units)):
+                # print('Units are not the same, try to convert')
+                try:
+                    info_txt = '{}: {}: Convert from {} to {}'.format(
+                        self.well, self.name, str(self.data.units), style.units
+                    )
+                    self.data = self.data.to(style.units)
+                    print_info(info_txt, 'info', logger)
+                except pint.DimensionalityError:
+                    warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
+                        self.well, self.name, str(self.data.units), style.units
+                    )
+                    print_info(warn_txt, 'warning', logger)
+                    #  Then continue using the original unit
+                    style.units = str(self.units)
+        else:
+            style.units = str(self.data.units)
+        self._style = style
+
     def __len__(self):
         return len(self.data)
 
     def __setattr__(self, key, value):
+        # Wanted the units of the log curve to be updated if the style contain units, but the code doesn't work
+        # if key == 'style':
+        #     if 'units' in list(value.keys()):
+        #         if value['units'] is not None:
+        #             # self.units = value['units']
+        #             print('SEEING UNITS')
         if key == 'log_type':
             self.header.log_type = value
         super().__setattr__(key, value)
+
+    @property
+    def name(self):
+        if self._name is not None:
+            self.header.name = self._name
+        return self.header.name
+
+    @name.setter
+    def name(self, value):
+        old_name = self._name
+        self._name = value
+        self.header.name = value
+        self.header.modification_date = datetime.now().isoformat()
+        self.header.modification_history += '\nLog name changed from {} to {}'.format(
+            old_name, value)
+
+    @property
+    def well(self):
+        if self._well is not None:
+            self.header.well = self._well
+        return self.header.well
+
+    @well.setter
+    def well(self, value):
+        old_name = self._well
+        self._well = value
+        self.header.well = value
+        self.header.modification_date = datetime.now().isoformat()
+        self.header.modification_history += '\nWell name changed from {} to {}'.format(
+            old_name, value)
 
     @property
     def depth_type(self):
@@ -306,9 +343,52 @@ class LogCurve(object):
     def depth_units(self) -> pint.Unit:
         return self.depth.units
 
+    @depth_units.setter
+    def depth_units(self, to_units):
+        """ Converts the depth units to 'to_units'"""
+        try:
+            cnv_txt = 'Convert depth from {} to {}'.format(
+                str(self.depth.units), to_units
+            )
+            info_txt = '{}: {}: {}'.format(
+                self.well, self.name, cnv_txt
+            )
+            self.depth.depth = self.depth.depth.to(to_units)
+            print_info(info_txt, 'info', logger)
+            self.header.modification_date = datetime.now().isoformat()
+            self.header.modification_history += '\n{}'.format(cnv_txt)
+        except pint.DimensionalityError:
+            warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
+                self.well, self.name, str(self.depth.depth.units), to_units
+            )
+            print_info(warn_txt, 'warning', logger)
+
     @property
     def units(self) -> pint.Unit:
         return self.data.units
+
+    @units.setter
+    def units(self, to_units):
+        """
+        Converts the log data units to 'to_units', and changes the unit in the style too
+        """
+        try:
+            cnv_txt = 'Convert from {} to {}'.format(
+                str(self.data.units), to_units
+            )
+            info_txt = '{}: {}: {}'.format(
+                self.well, self.name, cnv_txt
+            )
+            self.data = self.data.to(to_units)
+            self.style.units = to_units
+            print_info(info_txt, 'info', logger)
+            self.header.modification_date = datetime.now().isoformat()
+            self.header.modification_history += '\n{}'.format(cnv_txt)
+        except pint.DimensionalityError:
+            warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
+                self.well, self.name, str(self.data.units), to_units
+            )
+            print_info(warn_txt, 'warning', logger)
 
     @property
     def values(self):
@@ -337,6 +417,25 @@ class LogCurve(object):
     @property
     def std(self):
         return np.nanstd(self.data)
+
+    @property
+    def style(self):
+        return self._style
+
+    @style.setter
+    def style(self, style_template: Template | dict | None):
+        if style_template is None:
+            self._style = Template(template={})
+        elif isinstance(style_template, dict):
+            self._style = Template(template=style)
+        elif isinstance(style_template, Template):
+            self._style = style_template
+        else:
+            raise TypeError('style must be either a dict or a Template, not {}'.format(type(style)))
+        if 'units' in list(self._style.keys()):
+            if self._style['units'] is not None:
+                self.units = self._style['units']
+
 
     def step(self, ignore_gaps=False):
         return self.depth.step(ignore_gaps=ignore_gaps)
@@ -374,13 +473,8 @@ class LogCurve(object):
     def __str__(self):
         return '{}: {}'.format(self.name, str(self.header))
 
-    def rename_to(self, new_name):
-        """
-        Renames the log to 'new_name'
-        :param new_name:
-        :return:
-        """
-        raise NotImplementedError('TODO')
+    # def take_units_from_style(self):
+    #     take_units_from_style(self)
 
     def copy(self, suffix='copy'):
         copied_log_curve = deepcopy(self)
@@ -391,47 +485,6 @@ class LogCurve(object):
         copied_log_curve.header.modification_history += \
             '\nCopy of {}'.format(self.name)
         return copied_log_curve
-
-    def convert_to(self, to_units):
-        """
-        Converts the log data units to 'to_units', and changes the unit in the style too
-        """
-        try:
-            cnv_txt = 'Convert from {} to {}'.format(
-                str(self.data.units), to_units
-            )
-            info_txt = '{}: {}: {}'.format(
-                self.well, self.name, cnv_txt
-            )
-            self.data = self.data.to(to_units)
-            self.style.units = to_units
-            print_info(info_txt, 'info', logger)
-            self.header.modification_date = datetime.now().isoformat()
-            self.header.modification_history += '\n{}'.format(cnv_txt)
-        except pint.DimensionalityError:
-            warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
-                self.well, self.name, str(self.data.units), to_units
-            )
-            print_info(warn_txt, 'warning', logger)
-
-    def convert_depth_to(self, to_units):
-        """ Converts the depth units to 'to_units'"""
-        try:
-            cnv_txt = 'Convert depth from {} to {}'.format(
-                str(self.depth.units), to_units
-            )
-            info_txt = '{}: {}: {}'.format(
-                self.well, self.name, cnv_txt
-            )
-            self.depth.depth = self.depth.depth.to(to_units)
-            print_info(info_txt, 'info', logger)
-            self.header.modification_date = datetime.now().isoformat()
-            self.header.modification_history += '\n{}'.format(cnv_txt)
-        except pint.DimensionalityError:
-            warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
-                self.well, self.name, str(self.depth.depth.units), to_units
-            )
-            print_info(warn_txt, 'warning', logger)
 
     def velocity_from_sonic(self, name: str | None = None):
         if self.log_type not in ['Sonic', 'Shear sonic']:
@@ -1029,6 +1082,29 @@ def _interpolate(x: np.ndarray, y: np.ndarray, x_new: np.ndarray, **kwargs):
         return _out
 
 
+def find_depth_parameter(parameters, only_md=False):
+    accepted_depth_keys = rud.rename_well_logs['depth']
+    # Find depth parameter
+    depth_key = None
+    depth_type = None
+    for _key in parameters:
+        # for _key, _units in zip(log_names, log_units):
+        if _key.lower() in [_x.lower() for _x in accepted_depth_keys]:
+            depth_key = _key
+            depth_type = 'md'
+        elif _key.lower() == 'tvd' and not only_md:
+            depth_key = _key
+            depth_type = 'tvd'
+        elif _key.lower() == 'owt' and not only_md:
+            depth_key = _key
+            depth_type = 'owt'
+        elif _key.lower() == 'twt' and not only_md:
+            depth_key = _key
+            depth_type = 'twt'
+
+    return depth_key, depth_type
+
+
 def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
              log_table: dict | None = None, inv_log_table: dict | None = None) -> (dict, dict):
     """
@@ -1057,7 +1133,6 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
         second dict contains the standard info about the well and curves extracted from the las file
     """
     from blixt_utils.io.io import well_reader
-    accepted_depth_keys = rud.rename_well_logs['depth']
 
     with open(file_name, "r", encoding=encoding) as f:
         lines = f.readlines()
@@ -1066,23 +1141,8 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
     well_name = fix_well_name(well_dict['well_info']['well']['value'])
 
     # Find depth parameter
-    depth_key = None
-    depth_type = None
-    depth_units = None
-    for _key in generated_keys:
-        # for _key, _units in zip(log_names, log_units):
-        if _key.lower() in [_x.lower() for _x in accepted_depth_keys]:
-            depth_key = _key
-            depth_type = 'md'
-        elif _key.lower() == 'tvd':
-            depth_key = _key
-            depth_type = 'tvd'
-        elif _key.lower() == 'owt':
-            depth_key = _key
-            depth_type = 'owt'
-        elif _key.lower() == 'twt':
-            depth_key = _key
-            depth_type = 'twt'
+    depth_key, depth_type = find_depth_parameter(generated_keys)
+
     depth_units = well_dict['curve'][depth_key]['unit']
 
     if depth_key is None:
@@ -1139,6 +1199,47 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
             {'orig_filename': file_name})
 
     return output, well_dict
+
+
+def read_general_ascii(file_name: str,
+                       separator: str,
+                       data_begins_on_row: int,
+                       var_names=None,
+                       var_columns=None,
+                       var_units=None,
+                       var_types: list | None = None,
+                       verbose: bool = False,
+                       encoding: str = 'UTF8') -> None | dict:
+
+    output = {}
+    data, units = read_file(file_name,
+                            separator,
+                            data_begins_on_row,
+                            var_names,
+                            var_columns,
+                            var_units,
+                            encoding)
+    if var_types is None:
+        var_types = [None] * len(data)
+    # Find and locate necessary measured depth (MD) parameter
+    depth_key, depth_type = find_depth_parameter(list(data.keys()), only_md=True)
+    if depth_key is None:
+        print_info('No MD log is identified', 'warning', logger)
+        return None
+
+    depth_units = fix_units_for_pint(units[depth_key])
+    # print('XXX1', depth_key, depth_type, depth_units)
+    depth = Depth(Q_(data[depth_key], depth_units), depth_type=depth_type, verbose=False)
+
+    for i, _key in enumerate(list(data)):
+        output[_key] = LogCurve(
+            _key.lower(),
+            Q_(data[_key], fix_units_for_pint(units[_key])),
+            depth,
+            header={'orig_filename': file_name, 'log_type': var_types[i]}
+        )
+
+    return output
 
 
 def fix_units_for_pint(unit):
@@ -1420,6 +1521,31 @@ def is_equivalent(first: pint.Unit, second: pint.Unit):
     except pint.DimensionalityError:
         return False
     return isclose(factor, 1)
+
+
+# def take_units_from_style(log_curve: LogCurve):
+#     # If the style Template contains a unit, which is not None, then we should convert the data to this
+#     # unit if it is not already using those units.
+#     if 'style' in list(log_curve.__dict__.keys()):
+#         if log_curve.style.units is not None:
+#             # print('Units in template is {}'.format(log_curve.style.units))
+#             if not is_equivalent(log_curve.data.units, ureg.Unit(log_curve.style.units)):
+#                 # print('Units are not the same, try to convert')
+#                 try:
+#                     info_txt = '{}: {}: Convert from {} to {}'.format(
+#                         log_curve.well, log_curve.name, str(log_curve.data.units), log_curve.style.units
+#                     )
+#                     log_curve.data = log_curve.data.to(log_curve.style.units)
+#                     print_info(info_txt, 'info', logger)
+#                 except pint.DimensionalityError:
+#                     warn_txt = '{}: {}: Pint cant convert from {} to {}'.format(
+#                         log_curve.well, log_curve.name, str(log_curve.data.units), log_curve.style.units
+#                     )
+#                     print_info(warn_txt, 'warning', logger)
+#                     #  Then continue using the original unit
+#                     log_curve.style.units = str(log_curve.units)
+#         else:
+#             log_curve.style.units = str(log_curve.data.units)
 
 
 def test_interpolate():

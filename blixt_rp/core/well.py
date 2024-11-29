@@ -575,7 +575,7 @@ class Well(object):
         :param templates:
             dict
             templates that can contain the desired information for wells
-            templates = rp_utils.io.project_tempplates(wp.project_table)
+            templates = rp_utils.io.project_templates(wp.project_table)
         :param search_keys:
             list
             List of strings that can be the key for the desired information in the well header

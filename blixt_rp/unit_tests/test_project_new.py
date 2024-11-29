@@ -20,7 +20,16 @@ class ProjectTestCase(unittest.TestCase):
         wp = Project(name='MyProject',
                      project_table = 'excels\project_table_new.xlsx',
                      log_to_stdout=True)
-        wells = wp.load_all_wells()
+        wp.load_all_wells()
+        for _w in wp.wells:
+            print('-', _w.name, _w.header)
+            for _l in _w.logs:
+                print('  -', _l.name, _l.units, _l.depth_units)
+                print('  -', _l.is_evenly_spaced, len(_l))
+                if _l.style is None:
+                    print('  - STYLE IS LACKING')
+                else:
+                    print('  -', _l.style.units)
         #  for _, well in wells.items():
         #     with self.subTest():
         #         self.assertTrue(well, Well)

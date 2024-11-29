@@ -2,6 +2,7 @@
 API = 1 * dimensionless = api
 us = 1e-6 * second
 ohmm = [resistivity] = ohm * meter = Ωm
+fract = 1 * dimensionless
 
 @alias degC = degc
 @alias ohm = Ohm

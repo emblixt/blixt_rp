@@ -28,6 +28,7 @@ from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
 
 from blixt_rp.core.header_new import Header
+from blixt_rp.core.log_curve_new import LogCurve
 
 # global variables
 supported_version = {2.0, 3.0}
@@ -61,13 +62,68 @@ class Well(object):
         else:
             raise TypeError('header must be either a dict or a Header, not {}'.format(type(header)))
         self.logs = logs
+        if self.header.name is None:
+            if 'well_info' in list(self.header.__dict__.keys()):
+                self.header.name = self.header.well_info.well.value
 
     @property
     def name(self):
         return self.header.name
 
+    @name.setter
+    def name(self, value):
+        self.header.name = value
+        self.header.well = value
+        if self.logs is not None:
+            for _lc in self.logs:
+                _lc.well = value
+
+    @property
+    def get_log_names(self):
+        return [_lc.name for _lc in self.logs]
+
+    def get_log_curve(self, name):
+        for _log in self.logs:
+            if _log.name == name:
+                return _log
+        return None
+
+    def get_logs_of_type(self, log_type):
+        return [_lc for _lc in self.logs if _lc.log_type == log_type]
+
+    def add_log(self, log_curve: LogCurve, if_log_exists: str = 'overwrite'):
+        """
+        Adds a LogCurve object to the well
+        :param log_curve:
+        :param if_log_exists:
+            str
+            Describes what to do if the log exists from before
+            'overwrite': Overwrite old log
+            'ask': Ask to overwrite or ignore
+            'ignore': new log is ignored if a log of same name exists from before
+        :return:
+        """
+        log_name_list = self.get_log_names
+        if self.logs is None:
+            self.logs = [log_curve]
+        elif log_curve.name in log_name_list:
+            _index = log_name_list.index(log_curve.name)
+            if if_log_exists == 'overwrite':
+                self.logs[_index] = log_curve
+            elif if_log_exists == 'ask':
+                response = input('Log curve ({}) exists! Overwrite? ["No"]:'.format(log_curve.name)) or "No"
+                if response != "No":
+                    self.logs[_index] = log_curve
+            elif if_log_exists == 'ignore':
+                pass
+            else:
+                raise IOError("Unknown value ({}) of 'if_log_exists'".format(if_log_exists))
+        else:
+            self.logs.append(log_curve)
+
     def read_las(self, file_name: str, verbose: bool = False, encoding: str = 'UTF8',
-                 log_table: dict | None = None, inv_log_table: dict | None = None, ignore_header: bool = False):
+                 log_table: dict | None = None, inv_log_table: dict | None = None, ignore_header: bool = False,
+                 if_log_exists: str = 'overwrite'):
         """
         Uses the log_curve_new.py function 'read_las()' to read a las file
 
@@ -79,19 +135,48 @@ class Well(object):
             Dictionary of log type: log name as "key: value" pairs that specify which log to use for each log type
             When this is specified, we only load those logs that are listed among the log names in this dictionary
         :param ignore_header:
+        :param if_log_exists:
+            str
+            Describes what to do if the log exists from before
+            'overwrite': Overwrite old log
+            'ask': Ask to overwrite or ignore
+            'ignore': new log is ignored if a log of same name exists from before
         :return:
         """
         from blixt_rp.core.log_curve_new import read_las as _read_las
         log_curves, well_dict = _read_las(file_name, verbose=verbose, encoding=encoding, log_table=log_table,
                                           inv_log_table=inv_log_table)
-        print('XXX', list(well_dict.keys()))
         if self.logs is None:
             self.logs = list(log_curves.values())
         else:
-            self.logs.append(list(log_curves.values()))
+            for _val in list(log_curves.values()):
+                self.add_log(_val, if_log_exists=if_log_exists)
 
         if not ignore_header:
             self.header = add_headers(self.header, well_dict, [], None)
+
+        if self.header.name is None:
+            self.header.name = well_dict['well_info']['well']['value']
+
+    def read_general_ascii(self,
+                           file_name: str,
+                           separator: str,
+                           data_begins_on_row: int,
+                           var_names: int | list | None = None,
+                           var_columns: list | None = None,
+                           var_units: int | list | None = None,
+                           var_types: list | None = None,
+                           if_log_exists: str = 'overwrite',
+                           verbose: bool = False,
+                           encoding: str = 'UTF8'):
+        from blixt_rp.core.log_curve_new import read_general_ascii as _read_general_ascii
+        log_curves = _read_general_ascii(file_name, separator, data_begins_on_row, var_names, var_columns, var_units,
+                                         var_types, verbose, encoding)
+        if self.logs is None:
+            self.logs = list(log_curves.values())
+        else:
+            for _val in list(log_curves.values()):
+                self.add_log(_val, if_log_exists=if_log_exists)
 
 
 def add_headers(_header, _well_info, _ignore_keys, _note):

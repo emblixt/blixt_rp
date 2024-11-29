@@ -30,6 +30,7 @@ class Header(AttribDict):
         'orig_filename': None,
         'modification_date': None,
         'modification_history': '',
+        'note': '',
         'log_type': None
     }
 

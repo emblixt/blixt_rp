@@ -57,6 +57,9 @@ class WellTestCase(unittest.TestCase):
                 break
         for log in w.logs:
             print(log.name, log.log_type)
+
+        this_log = w.get_log_curve('cals')
+        print('\nFetched this log: ', this_log.name)
         print(' -x-')
 
         w = Well()
@@ -70,3 +73,26 @@ class WellTestCase(unittest.TestCase):
             print(log.name, log.log_type)
 
         print(w.name)
+
+        w.name = 'TEST'
+        print(w.name)
+
+    def test_add_log(self):
+        w = Well()
+        w.read_las(las_file1, True, log_table={'Sonic': 'dt'})
+        for log in w.logs:
+            print(log.name, log.log_type)
+        mod_date1 = w.get_log_curve('dt').header.modification_date
+        w.read_las(las_file1, True, log_table={'Sonic': 'dt', 'Caliper': 'cald'}, if_log_exists='overwrite')
+        for log in w.logs:
+            print(log.name, log.log_type)
+        mod_date2 = w.get_log_curve('dt').header.modification_date
+        w.read_las(las_file1, True, log_table={'Sonic': 'dt', 'Caliper': 'cald'}, if_log_exists='ignore')
+        for log in w.logs:
+            print(log.name, log.log_type)
+        mod_date3 = w.get_log_curve('dt').header.modification_date
+        w.read_las(las_file1, True, log_table={'Sonic': 'dt', 'Caliper': 'cald'}, if_log_exists='ask')
+        for log in w.logs:
+            print(log.name, log.log_type)
+        print(mod_date1, mod_date2, mod_date3)
+
