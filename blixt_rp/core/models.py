@@ -256,6 +256,9 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
     Returns:
         avo_curves, extracted_amplitudes, minimum amplitude, maximum amplitude, distance between min & max
     """
+    # TODO
+    # We can make the 'distance between min & max' more robust, so that it works more correctly for "non-symmetric"
+    # wedge models
     from blixt_utils.utils import find_value
 
     if avo_plot_position is None:
@@ -265,7 +268,7 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
     extracted_amplitudes = None
     min_amp = None
     max_amp = None
-    dist_min_max = None
+    apparent_thickness = None
     if extract_amp_at is not None:
         extracted_amplitudes = []
     if extract_avo_at is not None and avo_angles is None:
@@ -299,7 +302,7 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
     if model.model_type == 'quasi 2D' and model.trace_index_range is not None:
         min_amp = []
         max_amp = []
-        dist_min_max = {'twt': [], 'z': []}
+        apparent_thickness = {'twt': [], 'z': []}
         if avo_angles is None:
             avo_angles = [0, 10, 20, 30, 40]
 
@@ -321,8 +324,8 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             # print('plot_wiggles: {}, {}'.format(np.min(wiggle), np.max(wiggle)))
             min_amp.append(np.min(wiggle))
             max_amp.append(np.max(wiggle))
-            dist_min_max['twt'].append(np.abs(twt[wiggle.argmin()] - twt[wiggle.argmax()]))
-            dist_min_max['z'].append(np.abs(z[i, wiggle.argmin()] - z[i, wiggle.argmax()]))
+            apparent_thickness['twt'].append(np.abs(twt[wiggle.argmin()] - twt[wiggle.argmax()]))
+            apparent_thickness['z'].append(np.abs(z[i, wiggle.argmin()] - z[i, wiggle.argmax()]))
 
             if extract_amp_at is not None:
                 if isinstance(extract_amp_at, float):
@@ -474,7 +477,7 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
     if show:
         plt.show()
 
-    return avo_curves, extracted_amplitudes, min_amp, max_amp, dist_min_max
+    return avo_curves, extracted_amplitudes, min_amp, max_amp, apparent_thickness
 
 
 class Model:
@@ -1042,7 +1045,7 @@ def build_wedge(depth_to_wedge, from_thickness, to_thickness, n_traces, overburd
 
     """
     if from_thickness > to_thickness:
-        top_thickness = 0.5 * from_thickness
+        top_thickness = 1.0 * from_thickness
 
         def wedge(i):
             return from_thickness - (from_thickness - to_thickness) * i / (n_traces - 1)
@@ -1050,7 +1053,7 @@ def build_wedge(depth_to_wedge, from_thickness, to_thickness, n_traces, overburd
         def reverse_wedge(i):
             return top_thickness + (from_thickness - to_thickness) * i / (n_traces - 1)
     else:
-        top_thickness = 0.5 * to_thickness
+        top_thickness = 1.0 * to_thickness
 
         def wedge(i):
             return from_thickness + (to_thickness - from_thickness) * i / (n_traces - 1)
@@ -1156,13 +1159,15 @@ def build_saturation_wedge(depth_to_wedge, thickness, to_hc_saturation, n_traces
 
 
 def tuning_wedge_analysis(depth_to_wedge, from_thickness, to_thickness, n_traces, overburden, target, underburden,
-                          sample_rate, wavelet, plot_domain='TWT', title=None, savefig=None, overburden_vel=3000.,
+                          sample_rate, wavelet, angle=None, plot_domain='TWT', title=None, savefig=None, overburden_vel=3000.,
                           extract_avo_at=None, scaling=None):
     """
     Tuning wedge is always done on a model in time domain, but the result can be plotted in depth domain
     """
     if scaling is None:
         scaling = 40.
+    if angle is None:
+        angle = 0.
 
     if from_thickness > to_thickness:  # Wedge pointing rightwards
         loc = 'lower left'
@@ -1189,10 +1194,12 @@ def tuning_wedge_analysis(depth_to_wedge, from_thickness, to_thickness, n_traces
         wedge_thickness = np.linspace(from_thickness, to_thickness, n_traces) * target['vp'] * 0.5  # m
         wedge_xlabel = 'Wedge thickness [m]'
 
+    # TODO
+    # Double check that it should be 'TWT' below!
     m = build_wedge(depth_to_wedge, from_thickness, to_thickness, n_traces,
                     overburden, target, underburden, domain='TWT')
-    avo_curves, amps, min_amps, max_amps, dist_min_max = plot_wiggles(
-        m, sample_rate, wavelet, ax=wiggle_ax, extract_avo_at=extract_avo_at,
+    avo_curves, amps, min_amps, max_amps, apparent_thickness = plot_wiggles(
+        m, sample_rate, wavelet, angle=angle, ax=wiggle_ax, extract_avo_at=extract_avo_at,
         plot_domain=plot_domain, overburden_vel=overburden_vel, scaling=scaling)
     if title is not None:
         fig.suptitle(title)
@@ -1212,10 +1219,10 @@ def tuning_wedge_analysis(depth_to_wedge, from_thickness, to_thickness, n_traces
     ax2 = wedge_ax.twinx()
     color = 'tab:green'
     if plot_domain == 'TWT':
-        ax2.plot(wedge_thickness, np.array(dist_min_max['twt']) * 1000., color=color)
+        ax2.plot(wedge_thickness, np.array(apparent_thickness['twt']) * 1000., color=color)
         ax2.set_ylabel('Apparent thickness [ms]', color=color)
     else:
-        ax2.plot(wedge_thickness, np.array(dist_min_max['z']), color=color)
+        ax2.plot(wedge_thickness, np.array(apparent_thickness['z']), color=color)
         ax2.set_ylabel('Apparent thickness [m]', color=color)
     ax2.tick_params(axis='y', labelcolor=color)
 
@@ -1243,7 +1250,7 @@ def saturation_wedge_analysis(depth_to_wedge, thickness, to_hc_saturation, n_tra
 
     hc_sat = np.linspace(0, to_hc_saturation, n_traces)
 
-    avo_curves, amps, min_amps, max_amps, dist_min_max = plot_wiggles(
+    avo_curves, amps, min_amps, max_amps, apparent_thickness = plot_wiggles(
         m, sample_rate, wavelet, ax=wiggle_ax, extract_avo_at=extract_avo_at,
         plot_domain=plot_domain, overburden_vel=overburden_vel, scaling=scaling)
     # wiggle_ax.set_ylim(wiggle_ax.get_ylim()[::-1])
@@ -1282,7 +1289,7 @@ def laminar_model_analysis(
 
     fig.subplots_adjust(wspace=0.)
 
-    avo_curves, amps, min_amps, max_amps, dist_min_max = plot_wiggles(
+    avo_curves, amps, min_amps, max_amps, apparent_thickness = plot_wiggles(
         model, sample_rate, wavelet, ax=wiggle_ax, extract_avo_at=extract_avo_at,
         avo_plot_position=avo_plot_position, extract_on=extract_on,
         plot_domain=plot_domain, overburden_vel=overburden_vel, scaling=scaling)

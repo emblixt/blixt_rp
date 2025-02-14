@@ -191,7 +191,7 @@ class TestCase(unittest.TestCase):
         plot_domain = 'TWT'
         overburden_vel = 3000.
         scaling = 10.
-        avo_curves, amps, min_amps, max_amps, dist_min_max = plot_wiggles(
+        avo_curves, amps, min_amps, max_amps, apparent_thickness = plot_wiggles(
             m, dt, wavelet, ax=wiggle_ax, extract_avo_at=extract_avo_at,
             plot_domain=plot_domain, overburden_vel=overburden_vel, scaling=scaling)
         wiggle_ax.set_ylim(wiggle_ax.get_ylim()[::-1])

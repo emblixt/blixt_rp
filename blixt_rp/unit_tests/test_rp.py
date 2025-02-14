@@ -9,9 +9,34 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_te
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 from blixt_rp.core.well import Well
+import blixt_utils.io.io as uio
 from blixt_rp.core.well import Project
 from blixt_utils.misc.convert_data import convert as cnvrt
 import blixt_rp.rp.rp_core as rp
+
+
+def return_well_table():
+    return uio.project_wells_new(TestData.wp.project_table, TestData.wp.working_dir)
+
+def return_template():
+    return TestData.wp.load_all_templates()
+
+def return_wells():
+    return TestData.wp.load_all_wells(unit_convert_using_template=True)
+
+def return_wis():
+    return TestData.wp.load_all_wis()
+
+class TestData(unittest.TestCase):
+    wp = Project(
+        name='TestProject',
+        project_table=os.path.join(project_dir, 'blixt_rp\\excels\\project_table.xlsx'),
+        log_to_stdout=True)
+    def test_data(self):
+        print(TestData.wp.project_table)
+
+    def test_wells(self):
+        print(return_wells())
 
 
 class RpTestCase(unittest.TestCase):
@@ -44,6 +69,18 @@ class RpTestCase(unittest.TestCase):
     #     well_table,
     #     0,
     #     block_name='Logs')
+
+    def test_mixes(self):
+        import blixt_rp.core.fluids as flds
+        import blixt_rp.core.minerals as mnrls
+
+        fluid_mix = flds.FluidMix()
+        fluid_mix.read_excel(TestData.wp.project_table)
+        fluid_mix.calc_elastics(return_wells(), return_wis(), return_template(), debug=True)
+        print(fluid_mix.print_all_fluids())
+
+        # mineral_mix = mnrls.MineralMix()
+        # mineral_mix.read_excel(TestData.wp.project_table)
 
     def test_step(self):
         i = 5
