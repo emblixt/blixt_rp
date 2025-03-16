@@ -108,6 +108,15 @@ class RpTestCase(unittest.TestCase):
             print('Wiggle based refl. coeff. at i {} at {} deg.: {}'.format(i, theta, func2(theta)[i]))
             self.assertTrue(True)
 
+    def test_return_value_from_intercept(self):
+        x1 = np.linspace(1, 10, 10)
+        x2 = np.linspace(2, 11, 10)
+        x3 = np.linspace(3, 12, 10)
+        x4 = np.linspace(4, 13, 10)
+        incept1 = float(rp.intercept(x1, x2, x3, x4))
+        print(dict(data=incept1))
+        self.assertTrue(True)
+
     def test_intercept(self):
         """
         Should test if the intercept calculation returns the same result when using 'along_wiggle' as for single layer

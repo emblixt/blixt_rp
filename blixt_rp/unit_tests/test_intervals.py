@@ -11,22 +11,20 @@ from .. import ureg, Q_
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from blixt_utils.utils import fix_well_name
+from blixt_rp.core.intervals import Interval, StratUnit, Intervals
+
+fm1 = StratUnit('Test1 FM', 1)
+fm2 = StratUnit('Test2 FM', 1)
+gp1 = StratUnit('Test1 GP', 2)
+interval1 = Interval('TestWell', Q_(100., 'm'), Q_(200., 'm'), fm1)
+interval2 = Interval('TestWell', Q_(200., 'm'), Q_(300., 'm'), fm2)
+interval3 = Interval('TestWell', Q_(100., 'm'), Q_(300., 'm'), gp1)
 
 
 class TestCase(unittest.TestCase):
 
-    def test_create_well(self):
-        from blixt_rp.core.intervals import SingleInterval, IntervalInfo, Well, Intervals
-        well = Well('TestWell', {})
-        wis = Intervals(name='TEST')
-        wis.add_well(well)
-        interval1 = SingleInterval('Test FM', 1, Q_(100., 'm'), Q_(200., 'm'), well='TestWell')
-        interval2 = SingleInterval('Test FM', 1, Q_(100., 'm'), Q_(200., 'm'), well='WrongWell')
-        interval3 = SingleInterval('Test FM', 1, Q_(100., 'm'), Q_(200., 'm'), well='TestWell')
-        wis.add_single_interval(interval1)
-        wis.add_single_interval(interval2)
-        wis.add_single_interval(interval3)
+    def test_create_intervals(self):
+        wis = Intervals('TEST', [interval1, interval2, interval3])
 
         print(wis)
         print('-x-')
@@ -34,55 +32,61 @@ class TestCase(unittest.TestCase):
         print('-x-')
         print(wis.interval_names())
         print('-x-')
-        for i in well.intervals.values():
-            print(i)
+        print(wis.get_well_depth_range('TestWell'))
+        print('-x-')
+        _i = wis.get_interval('Test1 FM', 'TestWell')
+        print(_i.thickness)
+        print('-x-')
+        print(_i.mid)
+        print('-x-')
+        print(_i.distance_to_top(Q_(0, 'm')))
+        print('-x-')
 
         self.assertIsInstance(wis, Intervals)
 
     def test_read(self):
-        from blixt_rp.core.intervals import SingleInterval, IntervalInfo, Well, Intervals
         f = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\\Sodir_well_tops_BarentsSea.xlsx"
         wis = Intervals(name='Working intervals')
         wis.read_sodir_tops(f)
 
-        # for well in wis.well_names():
-        #     print('Well: {}'.format(well))
-        #     print(' levels: {}'.format(wis.get_well(well).get_levels))
-        #     print(' depths: {}'.format(wis.get_well(well).get_depth_range))
-        #     for interval_uid in wis.get_well(well).interval_uids():
-        #         this_interval = wis.get_well(well).get_interval(interval_uid)
-        #         print('  Interval: {}: {} - {}'.format(this_interval.name, this_interval.top.magnitude,
-        #                                                this_interval.base.magnitude))
-        # print(wis.interval_names())
+        for well in wis.well_names():
+            print('Well: {}'.format(well))
+            print(' depths: {}'.format(wis.get_well_depth_range(well)))
+            print(' Number of intervals: {}'.format(len(wis.get_well_intervals(well))))
+            for _interval in wis.get_well_intervals(well):
+                print('  Interval: {}: {} - {}'.format(_interval.name, _interval.top.magnitude,
+                                                       _interval.base.magnitude))
+        print(wis.interval_names())
 
         # fig, axs = plt.subplots(ncols=2)
-        # wis.get_well('6201_11_2').plot_intervals(3, axs[0])
-        # wis.get_well('6201_11_2').plot_intervals(2, axs[1], depth_range=(3000., 3800.))
+        # wis.get_well('7119_7_1').plot_intervals(3, axs[0])
+        # wis.get_well('7119_7_1').plot_intervals(2, axs[1], depth_range=(3000., 3800.))
         # plt.show()
 
-        out_file = os.path.join(project_dir, 'test.xlsx')
-        test = wis.write_to_excel(out_file, 'Working intervals', 'Interval info',
-                                  append=False)
+        # out_file = os.path.join(project_dir, 'test.xlsx')
+        # test = wis.write_to_excel(out_file, 'Working intervals', 'Interval info',
+        #                           append=False)
+        # print(test)
 
-        print(test)
         self.assertIsInstance(wis, Intervals)
 
-    def test_append(self):
-        from blixt_rp.core.intervals import SingleInterval, IntervalInfo, Well, Intervals
-        append_file = os.path.join(project_dir, 'test.xlsx')
-        well = Well('TestWell', {})
-        wis = Intervals(name='TEST')
-        wis.add_well(well)
-        interval1 = SingleInterval('Test FM', 1, Q_(100., 'm'), Q_(200., 'm'), well='TestWell')
-        interval2 = SingleInterval('Test FM', 1, Q_(100., 'm'), Q_(200., 'm'), well='WrongWell')
-        interval3 = SingleInterval('Test FM', 1, Q_(100., 'm'), Q_(200., 'm'), well='TestWell')
-        wis.add_single_interval(interval1)
-        wis.add_single_interval(interval2)
-        wis.add_single_interval(interval3)
+    def test_read_project_intervals(self):
+        project_file = os.path.join(project_dir,"blixt_rp\\excels\\project_table_new.xlsx")
+        wis = Intervals()
+        wis.read_blixt_tops(project_file)
+        print(wis)
+        for _i in wis.intervals:
+            print(_i)
 
-        wis.read_blixt_tops(append_file)
+    def test_append(self):
+        append_file = os.path.join(project_dir, 'test.xlsx')
+        wis = Intervals(name='TEST', intervals=[interval1, interval2])
+        wis.add_interval(interval3)
+
+        #wis.read_blixt_tops(append_file)
 
         print(wis)
         self.assertIsInstance(wis, Intervals)
 
-
+    def test_plot(self):
+        wis = Intervals(name='TEST', intervals=[interval1, interval2, interval3])
