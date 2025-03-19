@@ -44,9 +44,10 @@ class StratUnit(object):
         :param name:
         :param level:
             int
-            High number indicates that high up in the hierarchy (e.g. "Era" or "Group") while lower (even negative)
-            numbers indicate that is a sub interval (e.g. "Stage" or "Member")
-            Set it to None when unknown or uncertain
+            High number indicates higher order intervals (e.g. a sub interval, "Stage" or "Member"), while lower number indicate
+            lower order hierarchies (e.g. "Era" or "Group")
+            Set it to 0 when unknown or uncertain
+            This integer is used in log_plotter.py to draw rectangles to represent the stratigraphic unit
         :param desc:
         :param source:
             str
@@ -308,11 +309,11 @@ class Intervals(object):
             _name = df['Lithostrat. unit'][i]
             _level = df['Level'][i]
             if _level == 'GROUP':
-                l = 3
-            elif _level == 'FORMATION':
-                l = 2
-            else:
                 l = 0
+            elif _level == 'FORMATION':
+                l = 1
+            else:
+                l = 2
 
             _interval_info = StratUnit(_name, l, source='SoDir')
             _interval = Interval(well_name, Q_(float(_top), 'm'), Q_(float(_base), 'm'),
@@ -363,11 +364,11 @@ def print_function(my_object):
 def get_level_from_name(_name: str, source: str | None = None) -> int:
     if source is None:
         source = 'sodir'  # Norwegian "Sokkel direktoratet"
-    this_level = 0
+    this_level = 2
     if source == 'sodir':
         # Try to extract level based on name of interval
         if ' gp' in _name.lower():
-            this_level = 2
+            this_level = 0
         elif ' fm' in _name.lower():
             this_level = 1
     return this_level
