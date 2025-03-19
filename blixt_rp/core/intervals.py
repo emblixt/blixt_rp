@@ -348,6 +348,7 @@ class Intervals(object):
     def bokeh_plot(self,
                    well_name: str,
                    p: figure):
+        pass
 
 
 def print_function(my_object):
@@ -360,6 +361,7 @@ def print_function(my_object):
     pattern = "%%%ds: %%s" % (i)
     head = [pattern % (k, str(my_object.__dict__[k])) for k in keys]
     return "\n".join(head)
+
 
 def get_level_from_name(_name: str, source: str | None = None) -> int:
     if source is None:
