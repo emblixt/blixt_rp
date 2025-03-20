@@ -38,6 +38,10 @@ tools = [
     SaveTool()
 ]
 
+# Global avo angle parameter, assuming n_angles samples from 0 to 40 deg incidence angle
+n_angles = 20
+theta = np.linspace(0, 40, n_angles)
+
 def clean_name(in_string: str) -> str:
         return in_string.lower().replace(' ', '_').replace('-', '_')
 
@@ -247,7 +251,6 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
     multiple half-space models (interfaces)
     :return:
     """
-    n_iter = 1000
     if sums_average_file is None:
         litho_fluids_list = []
         for _name in ['shale', 'brine_sst', 'oil_sst', 'gas_sst']:
@@ -260,6 +263,7 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
 
 
     p = figure(width=600, height=600, tools=tools)
+    p2 = figure(width=700, height=400, tools=tools)
     h = figure(width=600, height=200, tools='')
     lf_table = create_litho_fluids_table(litho_fluids_list, 800)
     interface_table = create_interface_table(lf_table, 600)
@@ -288,21 +292,26 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
     def calc_eei(_intercept, _gradient, chi_angle):
         return _intercept * np.cos(chi_angle * np.pi / 180.) + _gradient * np.sin(chi_angle * np.pi / 180.)
 
-    def return_data_dict():
+    def return_data_dicts():
         _active_interfaces = get_active_interfaces(interface_table)
-        data_dict = None
+        eei_dict = None
+        amp_dict = None
         for i, _interface in enumerate(_active_interfaces):
-            # print('Interface: {}'.format(_interface))
+            print('Interface: {}'.format(_interface))
             interface_dict = get_interface_litho_fluids(_interface, interface_table, lf_table)
             vp_t, vs_t, rho_t = havo.elastics_from_stats(interface_dict['base'], n_iter_input.value)
             vp_bg, vs_bg, rho_bg = havo.elastics_from_stats(interface_dict['top'], n_iter_input.value)
             intercepts = rp.intercept(vp_bg, vp_t, rho_bg, rho_t)
             gradients = rp.gradient(vp_bg, vp_t, vs_bg, vs_t, rho_bg, rho_t)
             eei = calc_eei(intercepts, gradients, chi_input.value)
-            print('XXX', chi_input.value, eei[:10])
+            # print('XXX', chi_input.value, eei[:10])
+            # Calculate reflection coefficient as a function of theta for all simulated half-space results
+            avos = np.full((n_iter_input.value, n_angles), np.nan)
+            for j, params in enumerate(zip(vp_bg, vp_t, vs_bg, vs_t, rho_bg, rho_t)):
+                avos[j, :] = rp.reflectivity(*params)(theta)
 
             if i == 0:
-                data_dict = dict(
+                eei_dict = dict(
                     x=intercepts,
                     y=gradients,
                     eei=eei,
@@ -311,20 +320,38 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
                     color=[interface_dict['color']] * len(intercepts),
                     marker=[interface_dict['marker']] * len(intercepts)
                 )
+                amp_dict = dict(
+                    amp=np.mean(avos, axis=0),
+                    std=np.std(avos, axis=0),
+                    label=[_interface] * n_angles,
+                    size=[interface_dict['size']] * n_angles,
+                    color=[interface_dict['color']] * n_angles,
+                    marker=[interface_dict['marker']] * n_angles,
+                    theta=theta
+                )
             else:
-                data_dict['x'] = np.append(data_dict['x'], intercepts)
-                data_dict['y'] = np.append(data_dict['y'], gradients)
-                data_dict['eei'] = np.append(data_dict['eei'], eei)
-                data_dict['label'] = data_dict['label'] + [_interface] * len(intercepts)
-                data_dict['size'] = data_dict['size'] + [interface_dict['size']] * len(intercepts)
-                data_dict['color'] = data_dict['color'] + [interface_dict['color']] * len(intercepts)
-                data_dict['marker'] = data_dict['marker'] + [interface_dict['marker']] * len(intercepts)
-        return data_dict
+                eei_dict['x'] = np.append(eei_dict['x'], intercepts)
+                eei_dict['y'] = np.append(eei_dict['y'], gradients)
+                eei_dict['eei'] = np.append(eei_dict['eei'], eei)
+                eei_dict['label'] = eei_dict['label'] + [_interface] * len(intercepts)
+                eei_dict['size'] = eei_dict['size'] + [interface_dict['size']] * len(intercepts)
+                eei_dict['color'] = eei_dict['color'] + [interface_dict['color']] * len(intercepts)
+                eei_dict['marker'] = eei_dict['marker'] + [interface_dict['marker']] * len(intercepts)
+                amp_dict['amp'] = np.append(amp_dict['amp'], np.mean(avos, axis=0))
+                amp_dict['std'] = np.append(amp_dict['std'], np.std(avos, axis=0))
+                amp_dict['theta'] = np.append(amp_dict['theta'], theta)
+                amp_dict['label'] = amp_dict['label'] + [_interface] * n_angles
+                amp_dict['size'] = amp_dict['size'] + [interface_dict['size']] * n_angles
+                amp_dict['color'] = amp_dict['color'] + [interface_dict['color']] * n_angles
+                amp_dict['marker'] = amp_dict['marker'] + [interface_dict['marker']] * n_angles
+        return eei_dict, amp_dict
 
     # Instantiate the plot with the first active interface
-    data = return_data_dict()
+    data, amps = return_data_dicts()
+    # data = return_data_dicts()
 
-    source=ColumnDataSource(data)
+    source = ColumnDataSource(data)
+    amp_source = ColumnDataSource(amps)
     # Calculate histogram
     bins = np.linspace(-0.3, 0.3, 40)
     def draw_histogram():
@@ -334,7 +361,6 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
         # colors = list(set(source.data['color']))
         groups = list(dict.fromkeys(source.data['label']))
         colors = list(dict.fromkeys(source.data['color']))
-        print('XXX', groups, colors)
         for i, group in enumerate(groups):
             _x = source.data['eei'][[_l == group for _l in source.data['label']]]
             hist, edges = np.histogram(_x, density=True, bins=bins)
@@ -361,13 +387,30 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
     for span in ['width', 'height']:
         p.add_layout(Span(location=0., dimension=span, line_width=1, line_color='black', line_dash='dashed'))
 
+    p2.scatter(
+        x='theta',
+        y='amp',
+        source=amp_source,
+        legend_field='label',
+        size='size',
+        color='color',
+        marker='marker',
+        alpha=0.7)
+    p2.xaxis.axis_label = 'Incident angle [deg.]'
+    p2.yaxis.axis_label = '(Mean) reflectivity'
+    p2.add_layout(Span(location=0., dimension='width', line_width=1, line_color='black', line_dash='dashed'))
+
+    # p2.legend.click_policy = 'hide'
+
     def callback():
-        _data = return_data_dict()
+        # _data = return_data_dicts()
+        _data, _amps = return_data_dicts()
         source.data = _data
-        source.data.label = _data['label']
+        # source.data.label = _data['label']
+        amp_source.data = _amps
+        # amp_source.data.label = _amps['label']
         draw_histogram()
 
-    # p.legend.click_policy = 'hide'  # this does not work ok when using 'legend_group'
 
     run_button = Button(label="Run", button_type="success")
     run_button.on_click(callback)
@@ -397,7 +440,7 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
 
     chi_input.on_change('value', chi_callback)
 
-    return h, p, interface_table, lf_table, run_button, chi_input, n_iter_input
+    return h, p, p2, interface_table, lf_table, run_button, chi_input, n_iter_input
 
 
 

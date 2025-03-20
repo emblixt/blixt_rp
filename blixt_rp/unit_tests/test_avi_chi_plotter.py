@@ -105,6 +105,6 @@ class SomeTests(unittest.TestCase):
         return interface_table, lf_table, button
 
     def test_create_mc_avo_plot(self):
-        h, p, it, lt, b, c, n = brap.create_mc_avo_plot()
-        show(column([h, p, row(it, c), lt]))  #, sizing_mode='stretch_height'))
+        h, p, p2, it, lt, b, c, n = brap.create_mc_avo_plot()
+        # show(column([h, row(p, p2), row(it, c), lt]))  #, sizing_mode='stretch_height'))
         self.assertTrue(True)
