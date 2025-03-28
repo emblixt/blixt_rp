@@ -22,12 +22,17 @@ Take inspiration from obspy and converter to create these objects
 import numpy as np
 import pandas as pd
 import logging
-import os
+import os, sys
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
 
-from blixt_rp.core.header_new import Header
+# To test blixt_rp and blixt_utils libraries directly, without installation:
+project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
+sys.path.append(os.path.join(project_dir, 'blixt_rp'))
+sys.path.append(os.path.join(project_dir, 'blixt_utils'))
+
+from blixt_rp.core.core import Header, LogTable
 from blixt_rp.core.log_curve_new import LogCurve
 
 # global variables
@@ -122,7 +127,7 @@ class Well(object):
             self.logs.append(log_curve)
 
     def read_las(self, file_name: str, verbose: bool = False, encoding: str = 'UTF8',
-                 log_table: dict | None = None, inv_log_table: dict | None = None, ignore_header: bool = False,
+                 log_table: LogTable | None = None, ignore_header: bool = False,
                  if_log_exists: str = 'overwrite'):
         """
         Uses the log_curve_new.py function 'read_las()' to read a las file
@@ -131,9 +136,9 @@ class Well(object):
         :param verbose:
         :param encoding:
         :param log_table:
-            dict
-            Dictionary of log type: log name as "key: value" pairs that specify which log to use for each log type
-            When this is specified, we only load those logs that are listed among the log names in this dictionary
+            LogTable
+            Object which contains which log types, and associated and which log(s) to use for each log type
+            When this is specified, we only load those logs that are listed
         :param ignore_header:
         :param if_log_exists:
             str
@@ -144,8 +149,7 @@ class Well(object):
         :return:
         """
         from blixt_rp.core.log_curve_new import read_las as _read_las
-        log_curves, well_dict = _read_las(file_name, verbose=verbose, encoding=encoding, log_table=log_table,
-                                          inv_log_table=inv_log_table)
+        log_curves, well_dict = _read_las(file_name, verbose=verbose, encoding=encoding, log_table=log_table)
         if self.logs is None:
             self.logs = list(log_curves.values())
         else:

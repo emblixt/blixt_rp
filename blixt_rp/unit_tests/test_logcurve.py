@@ -9,8 +9,7 @@ from math import isclose
 from .. import ureg, Q_
 
 from blixt_rp.core.log_curve_new import LogCurve, Depth, is_equivalent, read_las
-from blixt_rp.core.template_new import Template
-from blixt_rp.core.header_new import Header
+from blixt_rp.core.core import Template, CutoffRule, Cutoffs, LogTable, Header
 
 test_file_dir = str(os.path.dirname(__file__).replace(
     'blixt_rp\\unit_tests',
@@ -41,6 +40,17 @@ depth4 = Q_(np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n), 'feet')
 
 data5 = Q_(np.linspace(6, 8, n) + np.random.random(n), 'Ohmm')
 depth5 = Q_(np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n), 'feet')
+
+# cut off rules:
+cr1 = CutoffRule('DataPair1', '><', [Q_(2.9, 'us/feet'), Q_(3.1, 'us/feet')])
+cr2 = CutoffRule('Depth', '><', [Q_(1000., 'm'), Q_(2000., 'm')])
+cr3 = CutoffRule('TEST', '><', [Q_(2.9, 'us/feet'), Q_(3.1, 'us/feet')])
+cr4 = CutoffRule('DataPair1', '<', Q_(5, 'us/feet'))  # all should be included
+cr5 = CutoffRule('DataPair1', '>', Q_(5, 'us/feet'))  # all should be excluded
+
+# Useful log table
+log_table1 = LogTable({'Density': 'rhob', 'Sonic': 'dt'})
+log_table2 = LogTable({'Resistivity': 'rdep', 'Sonic': 'dt'})
 
 
 class LogCurveTestCase(unittest.TestCase):
@@ -82,34 +92,35 @@ class LogCurveTestCase(unittest.TestCase):
         lc.data = lc.data.to('s/m')
         print(lc.data.max())
         print(lc.units)
+        print(lc.get_line().min, lc.get_line().max, lc.get_line().x_range)
 
     def test_unit_convert_using_style(self):
         # This should fail, and raise warning, because the data pair has units us/ft,
         # which can't be converted to 'kg' which the # style asks for
         print('This should fail:')
         style = {'units': 'kg'}
-        lc = LogCurve('', data1, Depth(depth1), None, None, style, None)
+        lc = LogCurve('', data1, Depth(depth1), None, None, Template(**style), None)
         print(lc.units, type(lc.units))
         print(lc.style.units, type(lc.style.units))
         self.assertTrue(is_equivalent(lc.units, ureg.Unit(lc.style.units)))
 
         print('This should work:')
         style = {'units': 'us/m'}
-        lc = LogCurve('', data1, Depth(depth1), None, None, style, None)
+        lc = LogCurve('', data1, Depth(depth1), None, None, Template(**style), None)
         print(lc.units, type(lc.units))
         print(lc.style.units, type(lc.style.units))
         self.assertTrue(is_equivalent(lc.units, ureg.Unit(lc.style.units)))
 
         print('And now this works too :-)')
         style = {'units': 's/m'}
-        lc.style = Template(style)
+        lc.style = Template(**style)
         print(lc.units, type(lc.units))
         print(lc.style.units, type(lc.style.units))
         self.assertTrue(is_equivalent(lc.units, ureg.Unit(lc.style.units)))
 
         print('And this also')
         style = {'units': 's/feet'}
-        lc.style = Template(style)
+        lc.style = Template(**style)
         print(lc.units, type(lc.units))
         print(lc.style.units, type(lc.style.units))
         self.assertTrue(is_equivalent(lc.units, ureg.Unit(lc.style.units)))
@@ -229,22 +240,45 @@ class LogCurveTestCase(unittest.TestCase):
             Depth(depth1),
             log_type='TEST'
         )
-        cutoffs1 = {'DataPair1': ['><', [2.9, 3.1]]}
-        cutoffs2 = {'Depth': ['><', [1000., 2000.]]}
-        cutoffs3 = {'DataPair1': ['><', [2.9, 3.1]], 'Depth': ['><', [1000., 2000.]]}
-        log_table1 = {'TEST': 'DataPair1'}
-        cutoffs4 = {'TEST': ['><', [2.9, 3.1]]}
-        cutoffs5 = {'TEST': ['><', [2.9, 3.1]], 'Depth': ['><', [1000., 2000.]]}
-        cutoffs6 = {'DataPair1': ['<',  5]}  # all should be included
-        cutoffs7 = {'DataPair1': ['>',  5]}  # all should be excluded
+        # cutoffs1 = {'DataPair1': ['><', [2.9, 3.1]]}
+        # cutoffs2 = {'Depth': ['><', [1000., 2000.]]}
+        # cutoffs3 = {'DataPair1': ['><', [2.9, 3.1]], 'Depth': ['><', [1000., 2000.]]}
+        # log_table1 = {'TEST': 'DataPair1'}
+        # cutoffs4 = {'TEST': ['><', [2.9, 3.1]]}
+        # cutoffs5 = {'TEST': ['><', [2.9, 3.1]], 'Depth': ['><', [1000., 2000.]]}
+        # cutoffs6 = {'DataPair1': ['<',  5]}  # all should be included
+        # cutoffs7 = {'DataPair1': ['>',  5]}  # all should be excluded
+
+        # log tables
+        log_table1 = LogTable('my log table', {'TEST': 'DataPair1'})
+
+        # cut offs
+        cutoffs1 = Cutoffs(cutoffs=[cr1])
+        cutoffs2 = Cutoffs(cutoffs=[cr2])
+        cutoffs3 = Cutoffs(cutoffs=[cr1, cr2])
+        cutoffs4 = Cutoffs(log_table=log_table1, cutoffs=[cr3])
+        cutoffs5 = Cutoffs(log_table=log_table1, cutoffs=[cr2, cr3])
+        cutoffs6 = Cutoffs(cutoffs=[cr4])
+        cutoffs7 = Cutoffs(cutoffs=[cr5])
+
+
         self.assertIsInstance(lc1.calc_mask(cutoffs1, verbose=True), LogCurve, '')
         self.assertIsInstance(lc1.calc_mask(cutoffs2, verbose=True), LogCurve, '')
         self.assertIsInstance(lc1.calc_mask(cutoffs3, verbose=True), LogCurve, '')
-        self.assertIsInstance(lc1.calc_mask(cutoffs4, verbose=True, log_table=log_table1), LogCurve, '')
-        self.assertIsInstance(lc1.calc_mask(cutoffs5, verbose=True, log_table=log_table1), LogCurve, '')
+        self.assertIsInstance(lc1.calc_mask(cutoffs4, verbose=True), LogCurve, '')
+        self.assertIsInstance(lc1.calc_mask(cutoffs5, verbose=True), LogCurve, '')
         self.assertLessEqual(np.max(lc1.values[lc1.calc_mask(cutoffs1, verbose=True).values]), 3.1, '')
         self.assertTrue(lc1.calc_mask(cutoffs6, verbose=True).values.all())
         self.assertTrue(np.sum(lc1.calc_mask(cutoffs7, verbose=True).values) < 1)
+
+        # self.assertIsInstance(lc1.calc_mask(cutoffs1, verbose=True), LogCurve, '')
+        # self.assertIsInstance(lc1.calc_mask(cutoffs2, verbose=True), LogCurve, '')
+        # self.assertIsInstance(lc1.calc_mask(cutoffs3, verbose=True), LogCurve, '')
+        # self.assertIsInstance(lc1.calc_mask(cutoffs4, verbose=True, log_table=log_table1), LogCurve, '')
+        # self.assertIsInstance(lc1.calc_mask(cutoffs5, verbose=True, log_table=log_table1), LogCurve, '')
+        # self.assertLessEqual(np.max(lc1.values[lc1.calc_mask(cutoffs1, verbose=True).values]), 3.1, '')
+        # self.assertTrue(lc1.calc_mask(cutoffs6, verbose=True).values.all())
+        # self.assertTrue(np.sum(lc1.calc_mask(cutoffs7, verbose=True).values) < 1)
 
     def test_read(self):
         # las_file = 'C:\\Users\\marte\\PycharmProjects\\blixt_rp\\test_data\\Well E_CPI.las'
@@ -255,8 +289,7 @@ class LogCurveTestCase(unittest.TestCase):
               lc.depth.base, lc.depth_units)
 
         print('\nNow using log_table')
-        log_table = {'Density': 'rhob', 'Sonic': 'dt'}
-        log_curves, well_info = read_las(las_file1, log_table=log_table)
+        log_curves, well_info = read_las(las_file1, log_table=log_table1)
         print(len(log_curves))
         lc = log_curves['dt']
         print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
@@ -265,35 +298,33 @@ class LogCurveTestCase(unittest.TestCase):
         print(lc.header)
 
         print('\nNow using erroneous log_table')
-        log_table = {'Density': 'xxx', 'Sonic': 'yyy'}
+        log_table = LogTable({'Density': 'xxx', 'Sonic': 'yyy'})
         log_curves, well_info = read_las(las_file1, log_table=log_table)
         print(len(log_curves))
 
         print('Reading a more complex las file')
-        log_table = {'Resistivity': 'rdep', 'Sonic': 'dt'}
-        log_curves, well_info = read_las(las_file2, log_table=log_table)
+        log_curves, well_info = read_las(las_file2, log_table=log_table2)
         lc = log_curves['rdep']
         print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
               lc.depth.base, lc.depth_units)
 
     def test_Template(self):
-        t = Template({'name': 'MY NAME', 'well': 'MY WELL', 'units': 'METER'})
+        t = Template(**{'name': 'MY NAME', 'well': 'MY WELL', 'units': 'METER'})
         print(list(t.keys()))
         print(t.name, t.units)
         t = Template()
         print(t)
         t.get_from_project(project_table, 'Resistivity')
-        t['max'] = 999
+        t.max = 999
         t.colormap = 'A GIANT COLOR'
         print(t)
 
     def test_a_lot(self):
         # fig, ax = plt.subplots()
-        log_table = {'Resistivity': 'rdep', 'Sonic': 'dt'}
-        log_curves, well_info = read_las(las_file2, log_table=log_table)
+        log_curves, well_info = read_las(las_file2, log_table=log_table2)
         lc = log_curves['dt']
         # lc.plot(ax=ax)
-        cutoffs = {'dt': ['>', 140.]}
+        cutoffs = Cutoffs([CutoffRule('dt', '>', Q_(140., 'us/feet'))])
         # lc_smooth10 = lc.smooth(Q_(10., 'm'))
         # lc_smooth10.plot(ax=ax)
         # lc_smooth500 = lc.smooth(Q_(500., 'm'))
@@ -321,11 +352,10 @@ class LogCurveTestCase(unittest.TestCase):
 
     def test_fill(self):
         fig, ax = plt.subplots()
-        log_table = {'Resistivity': 'rdep', 'Sonic': 'dt'}
-        log_curves, well_info = read_las(las_file2, log_table=log_table)
+        log_curves, well_info = read_las(las_file2, log_table=log_table2)
         lc = log_curves['dt']
         # lc.plot(ax=ax)
-        cutoffs = {'dt': ['>', 140.]}
+        cutoffs = Cutoffs([CutoffRule('dt', '>', Q_(140., 'us/feet'))])
         lc_mask = lc.calc_mask(cutoffs, verbose=True)
 
         # lc = log_curves['rdep']
@@ -344,8 +374,7 @@ class LogCurveTestCase(unittest.TestCase):
 
     def test_despike(self):
         fig, ax = plt.subplots()
-        log_table = {'Resistivity': 'rdep', 'Sonic': 'dt'}
-        log_curves, well_info = read_las(las_file2, log_table=log_table)
+        log_curves, well_info = read_las(las_file2, log_table=log_table2)
         lc = log_curves['dt']
         lc.plot(ax=ax)
         lc_despiked = lc.despike(Q_(20, 'us/ft'), window_len=Q_(20., 'm'), suffix='despike')
@@ -355,17 +384,16 @@ class LogCurveTestCase(unittest.TestCase):
         self.assertTrue(True)
 
     def test_calc_trend(self):
-        log_table = {'Resistivity': 'rdep', 'Sonic': 'dt'}
-        log_curves, well_info = read_las(las_file2, log_table=log_table)
+        log_curves, well_info = read_las(las_file2, log_table=log_table2)
         lc = log_curves['rdep']
         res = lc.calc_depth_trend(verbose=True, discrete_intervals=[Q_(_z, 'km').to('m') for _z in [1., 2., 3.]])
         res = lc.calc_depth_trend(verbose=True)
         plt.show()
+        # print(res)
         self.assertIsInstance(res, list)
 
     def test_de_trend(self):
-        log_table = {'Resistivity': 'rdep', 'Sonic': 'dt'}
-        log_curves, well_info = read_las(las_file2, log_table=log_table)
+        log_curves, well_info = read_las(las_file2, log_table=log_table2)
         lc = log_curves['dt']
         res = lc.calc_depth_trend(verbose=True)
         lc_de_trend = lc.de_trend(Q_(2., 'km'), None, *res[0].x, suffix='test', verbose=True)

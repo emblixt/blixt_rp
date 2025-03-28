@@ -10,11 +10,11 @@ from typing import Literal
 from IPython.core.magics.code import extract_code_ranges
 from bokeh.plotting import figure, show
 from bokeh.layouts import row, column, Spacer
-from bokeh.models import (Slider, ColorPicker, Range1d, LinearAxis, Span, Legend, ColumnDataSource, Text,
-                          CustomJS, LinearColorMapper, NumberFormatter, Button)
+from bokeh.models import (Slider, ColorPicker, Line, LinearAxis, Span, Legend, ColumnDataSource, Text,
+                          CustomJS, LinearColorMapper, NumberFormatter, Button, CheckboxGroup)
 from bokeh.models import PanTool,WheelZoomTool, ResetTool, SaveTool, CrosshairTool, HoverTool, ColorBar, LogColorMapper
 from bokeh.models import (DataTable, NumberEditor, SelectEditor, StringEditor, StringFormatter,
-                          IntEditor, TableColumn, CheckboxEditor, NumericInput)
+                          IntEditor, TableColumn, CheckboxEditor, NumericInput, VArea)
 from bokeh.io import output_file, curdoc
 from bokeh.layouts import gridplot
 
@@ -263,8 +263,11 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
 
 
     p = figure(width=600, height=600, tools=tools)
+    p.toolbar.logo = None
     p2 = figure(width=700, height=400, tools=tools)
-    h = figure(width=600, height=200, tools='')
+    p2.toolbar.logo = None
+    h = figure(width=600, height=200, tools=[PanTool(), WheelZoomTool()])
+    h.toolbar.logo = None
     lf_table = create_litho_fluids_table(litho_fluids_list, 800)
     interface_table = create_interface_table(lf_table, 600)
 
@@ -273,6 +276,8 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
 
     n_iter_input = NumericInput(value=400, low=10, high=1000, title="Iterations:",
                              description='Number of iterations in the Monte Carlo simulation')
+
+    show_std = CheckboxGroup(labels=['Show uncertainty area (1 std)', 'Show uncertainty lines (1 std)'], active=[1])
 
     def return_chi_line(y_half_range, chi):
         """
@@ -299,6 +304,7 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
         for i, _interface in enumerate(_active_interfaces):
             print('Interface: {}'.format(_interface))
             interface_dict = get_interface_litho_fluids(_interface, interface_table, lf_table)
+            print(interface_dict['color'])
             vp_t, vs_t, rho_t = havo.elastics_from_stats(interface_dict['base'], n_iter_input.value)
             vp_bg, vs_bg, rho_bg = havo.elastics_from_stats(interface_dict['top'], n_iter_input.value)
             intercepts = rp.intercept(vp_bg, vp_t, rho_bg, rho_t)
@@ -322,7 +328,8 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
                 )
                 amp_dict = dict(
                     amp=np.mean(avos, axis=0),
-                    std=np.std(avos, axis=0),
+                    top=np.mean(avos, axis=0) + np.std(avos, axis=0),
+                    base=np.mean(avos, axis=0) - np.std(avos, axis=0),
                     label=[_interface] * n_angles,
                     size=[interface_dict['size']] * n_angles,
                     color=[interface_dict['color']] * n_angles,
@@ -338,7 +345,8 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
                 eei_dict['color'] = eei_dict['color'] + [interface_dict['color']] * len(intercepts)
                 eei_dict['marker'] = eei_dict['marker'] + [interface_dict['marker']] * len(intercepts)
                 amp_dict['amp'] = np.append(amp_dict['amp'], np.mean(avos, axis=0))
-                amp_dict['std'] = np.append(amp_dict['std'], np.std(avos, axis=0))
+                amp_dict['top'] = np.append(amp_dict['top'], np.mean(avos, axis=0) + np.std(avos, axis=0))
+                amp_dict['base'] = np.append(amp_dict['base'], np.mean(avos, axis=0) - np.std(avos, axis=0))
                 amp_dict['theta'] = np.append(amp_dict['theta'], theta)
                 amp_dict['label'] = amp_dict['label'] + [_interface] * n_angles
                 amp_dict['size'] = amp_dict['size'] + [interface_dict['size']] * n_angles
@@ -387,6 +395,10 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
     for span in ['width', 'height']:
         p.add_layout(Span(location=0., dimension=span, line_width=1, line_color='black', line_dash='dashed'))
 
+    glyph = VArea(x="theta", y1="top", y2="base", fill_color='gray', fill_alpha= 0.3)
+    p2.add_glyph(amp_source, glyph)
+    top_lines = p2.scatter(x='theta', y='top', source=amp_source, color='color', marker='dash')
+    base_lines = p2.scatter(x='theta', y='base', source=amp_source, color='color', marker='dash')
     p2.scatter(
         x='theta',
         y='amp',
@@ -400,7 +412,15 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
     p2.yaxis.axis_label = '(Mean) reflectivity'
     p2.add_layout(Span(location=0., dimension='width', line_width=1, line_color='black', line_dash='dashed'))
 
-    # p2.legend.click_policy = 'hide'
+    show_std_callback = CustomJS(args=dict(vareas=glyph, top_line=top_lines, base_line=base_lines, checkbox=show_std), code="""
+        const show_area = checkbox.active.includes(0) === true ? 1.0 : 0.0
+        vareas.fill_alpha = show_area * 0.3
+        top_line.visible = checkbox.active.includes(1)
+        base_line.visible = checkbox.active.includes(1)
+        console.log('Data changed:', show_area, checkbox.active.includes(1))
+    """)
+
+    show_std.js_on_change('active', show_std_callback)
 
     def callback():
         # _data = return_data_dicts()
@@ -410,6 +430,7 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
         amp_source.data = _amps
         # amp_source.data.label = _amps['label']
         draw_histogram()
+        print(source.data['color'][0], source.data['color'][-1])
 
 
     run_button = Button(label="Run", button_type="success")
@@ -440,7 +461,7 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
 
     chi_input.on_change('value', chi_callback)
 
-    return h, p, p2, interface_table, lf_table, run_button, chi_input, n_iter_input
+    return h, p, p2, interface_table, lf_table, run_button, chi_input, n_iter_input, show_std
 
 
 

@@ -20,13 +20,12 @@ import pint
 from math import isclose, ceil
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
-project_dir = str(os.path.basename(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
+project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 from blixt_rp.core.param import Param
-from blixt_rp.core.template_new import Template
-from blixt_rp.core.header_new import Header
+from blixt_rp.core.core import Template, LogTable, Cutoffs, CutoffRule, Header
 from blixt_utils.signal_analysis.signal_analysis import smooth as _smooth
 from blixt_utils.misc.curve_fitting import residuals, linear_function, calculate_depth_trend
 from blixt_rp.rp_utils.definitions import allowed_depth_formats
@@ -77,6 +76,10 @@ class Depth(object):
 
     @property
     def values(self):
+        return self.depth.magnitude
+
+    @property
+    def magnitude(self):
         return self.depth.magnitude
 
     @property
@@ -226,9 +229,9 @@ class LogCurve(object):
         self._well = well
 
         if style is None:
-            style = Template(template={})
+            style = Template()
         elif isinstance(style, dict):
-            style = Template(template=style)
+            style = Template(**style)
         elif isinstance(style, Template):
             pass
             # Continues later in init()
@@ -400,23 +403,23 @@ class LogCurve(object):
 
     @property
     def min(self):
-        return np.nanmin(self.data)
+        return np.nanmin(self.data.magnitude)
 
     @property
     def max(self):
-        return np.nanmax(self.data)
+        return np.nanmax(self.data.magnitude)
 
     @property
     def mean(self):
-        return np.nanmean(self.data)
+        return np.nanmean(self.data.magnitude)
 
     @property
     def median(self):
-        return np.nanmedian(self.data)
+        return np.nanmedian(self.data.magnitude)
 
     @property
     def std(self):
-        return np.nanstd(self.data)
+        return np.nanstd(self.data.magnitude)
 
     @property
     def style(self):
@@ -425,16 +428,16 @@ class LogCurve(object):
     @style.setter
     def style(self, style_template: Template | dict | None):
         if style_template is None:
-            self._style = Template(template={})
+            self._style = Template()
         elif isinstance(style_template, dict):
-            self._style = Template(template=style)
+            self._style = Template(**style_template)
         elif isinstance(style_template, Template):
             self._style = style_template
         else:
-            raise TypeError('style must be either a dict or a Template, not {}'.format(type(style)))
+            raise TypeError('style must be either a dict or a Template, not {}'.format(type(style_template)))
         if 'units' in list(self._style.keys()):
-            if self._style['units'] is not None:
-                self.units = self._style['units']
+            if self._style.units is not None:
+                self.units = self._style.units
 
 
     def step(self, ignore_gaps=False):
@@ -789,7 +792,7 @@ class LogCurve(object):
         with 'twt' as depth_type)
 
         :param cutoffs:
-            dict
+            CutOffs object
             dictionary with log name as keys, and list with mask operator and limits as values
             E.G. {'md': ['><', [2100, 2200]], 'phie': ['>', 0.1]}
                 OR
@@ -823,17 +826,19 @@ class LogCurve(object):
         final_mask = None
         masks = []
 
-        if not isinstance(cutoffs, dict):
-            raise IOError('Cutoffs must be specified as dict, not {}'.format(type(cutoffs)))
+        if not isinstance(cutoffs, Cutoffs):
+            raise IOError('Cutoffs must be specified as CutOffs() object, not {}'.format(type(cutoffs)))
 
-        mask_description = mask_string(cutoffs, None)
+        # mask_description = mask_string(cutoffs, None)
+        mask_description = str(cutoffs)
         if len(cutoffs) == 0:  # no cutoffs, mask is all true
             final_mask = np.array(np.ones(len(self.data)))
             mask_description = 'All true mask for empty cutoffs'
 
         if log_table is not None:  # See if this log curve matches the log table criteria
             green_flag = False
-            for _log_type, _log_name in log_table.items():
+            # for _log_type, _log_name in log_table.items():
+            for _log_type, _log_name in zip(log_table.log_types, log_table.log_names):
                 if (_log_type.lower() == self.log_type.lower()) and (_log_name.lower() == self.name.lower()):
                     green_flag = True
             if (not green_flag) and verbose:
@@ -843,7 +848,10 @@ class LogCurve(object):
                 )
                 print_info(warn_txt, 'warning', logger)
 
-        for lname in list(cutoffs.keys()):
+        # for lname in list(cutoffs.keys()):
+        # for lname in cutoffs.cutoff_names:
+        for _cutoff in cutoffs.cutoffs:
+            lname = _cutoff.param
             if lname.lower() in ['depth', 'md', 'twt', 'owt']:  # Create mask on Depth
                 if lname.lower() == 'depth':  # For the special case of using Depth instead of md in the cutoffs
                     this_lname = 'md'
@@ -853,7 +861,8 @@ class LogCurve(object):
                     # True when depth type is same as in cutoffs
                     masks.append(
                         msks.create_mask(
-                            self.depth.values, cutoffs[lname][0], cutoffs[lname][1]
+                            # self.depth.values, cutoffs[lname][0], cutoffs[lname][1]
+                            self.depth, _cutoff.operator, _cutoff.limit
                         )
                     )
                     if verbose:
@@ -864,7 +873,8 @@ class LogCurve(object):
             if green_flag and (lname.lower() == self.name.lower()) or (lname.lower() == self.log_type.lower()):
                 masks.append(
                     msks.create_mask(
-                        self.values, cutoffs[lname][0], cutoffs[lname][1])
+                        # self.values, cutoffs[lname][0], cutoffs[lname][1])
+                        self.data, _cutoff.operator, _cutoff.limit)
                 )
                 if verbose:
                     info_txt = "Creating mask based on '{}', for well {}, based on {}".format(
@@ -991,7 +1001,8 @@ class LogCurve(object):
             mask,
             discrete_intervals,
             down_weight_outliers,
-            True,
+            ax=None,
+            verbose=verbose,
             xlabel='{} [{}]'.format(self.name, str(self.units)),
             ylabel='{} [{}]'.format(self.depth_type, str(self.depth_units))
         )
@@ -1024,11 +1035,14 @@ class LogCurve(object):
             to_depth, trend_function.__name__, ', '.join('{:}'.format(_x) for _x in params))
 
         if verbose:
+            # TODO Here the self.min & max function have lost their units?!
+            x0 = self.min.magnitude if isinstance(self.min, pint.Quantity) else self.min
+            x1 = self.max.magnitude if isinstance(self.max, pint.Quantity) else self.max
             fig, ax = plt.subplots()
             self.plot(ax=ax)
             ax.plot(self.depth.values, out, 'k--')
             ax.legend(['Original data', 'de-trended data'])
-            ax.vlines(to_depth.to(self.depth_units).magnitude, self.min.magnitude, self.max.magnitude, colors='b', ls='--')
+            ax.vlines(to_depth.to(self.depth_units).magnitude, x0, x1, colors='b', ls='--')
 
         return replace_data(
             self,
@@ -1050,8 +1064,28 @@ class LogCurve(object):
         if set_active:
             plt.show()
 
-    def return_dataframe(self):
+    def get_dataframe(self):
         return DataFrame({'depth': self.depth.values, 'data': self.values})
+
+    def get_line(self):
+        """
+        Returns a (blixt_utils specific) Line object, which can be directly used in plot_logs_new.py
+        :return:
+        """
+        from blixt_utils.plotting.log_plotter import Line
+        self.style.name = self.name
+        return Line(
+            x=self.data.magnitude,
+            y=self.depth.magnitude,
+            style=self.style
+            # line_args = {
+            #     'line_color': 'blue' if self.style.line_color is None else self.style.line_color,
+            #     'line_dash': 'solid' if self.style.line_style is None else self.style.line_style,
+            #     'line_width': 1. if self.style.line_width is None else self.style.line_width,
+            #     'legend_label': self.name
+            # }
+        )
+
 
 
 def _interpolate(x: np.ndarray, y: np.ndarray, x_new: np.ndarray, **kwargs):
@@ -1106,7 +1140,7 @@ def find_depth_parameter(parameters, only_md=False):
 
 
 def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
-             log_table: dict | None = None, inv_log_table: dict | None = None) -> (dict, dict):
+             log_table: LogTable | None = None) -> (dict, dict):
     """
     Returns a LogCurve object for each, or selected, log in las file, packed in a dict
 
@@ -1114,19 +1148,9 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
     :param verbose:
     :param encoding:
     :param log_table:
-            dict
-            Dictionary of log type: log name as "key: value" pairs that specify which log to use for each log type
-            When this is specified, we only load those logs that are listed among the log names in this dictionary.
-            E.G. {'P velocity': 'vp_brine'}
-            'log_table' always takes precedence over 'inv_log_table'
-
-    :param inv_log_table:
-            dict
-            Dictionary of log name : log type as "key: value" pairs that specify which log type to use for each log.
-            The main difference to when 'log_table' is specified is that we can load specific logs of the same log type.
-            E.G. vp_brine, vp_oil, vp_gas which all are "P velocity" log types {'vp_brine': 'P velocity', 'vp_oil': 'P velocity'}
-            When this is specified, we only load those logs that are listed among the log names in this dictionary
-
+            LogTable
+            Object which contains which log types, and associated and which log(s) to use for each log type
+            When this is specified, we only load those logs that are listed
     :return:
         tuple with two dicts
         first dict contains a log_name: LogCurve "key: value" pair for log in the las file
@@ -1162,19 +1186,15 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
     only_these_logs = generated_keys  # This contains all the logs
     log_types = [None] * len(only_these_logs)
     if log_table is not None:
-        inv_log_table = None
-        only_these_logs = list(log_table.values())
-        log_types = list(log_table.keys())
-    if inv_log_table is not None:
-        only_these_logs = list(inv_log_table.keys())
-        log_types = list(inv_log_table.values())
+        only_these_logs = log_table.log_names
+        log_types = log_table.log_types
 
     # Find and extract data
     data = well_dict.pop('data')
     output = {}
     for _key, _log_type in zip(only_these_logs, log_types):
         try:
-            data_units = well_dict['curve'][_key]['unit']
+            data_units = well_dict['curve'][_key.lower()]['unit']
         except KeyError as e:
             warn_txt = '{}: Log {} is not found in {}'.format(
                 e, _key, os.path.basename(file_name)
@@ -1191,7 +1211,7 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
 
         output[_key.lower()] = LogCurve(
             _key.lower(),
-            Q_(data[_key], data_units),
+            Q_(data[_key.lower()], data_units),
             Depth(Q_(data[depth_key], depth_units), depth_type=depth_type),
             _log_type,
             well_name,
