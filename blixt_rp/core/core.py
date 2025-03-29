@@ -16,7 +16,6 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', 
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-import blixt_rp.core.log_curve_new as brlc
 from blixt_utils.utils import print_info, add_one, fix_well_name, cycle_colors, isnan
 from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
@@ -373,6 +372,7 @@ class Interval:
         :param depth_type:
             str
         """
+        import blixt_rp.core.log_curve_new as brlc
         self.well = well
         if depth_type is None:
             depth_type = 'md'

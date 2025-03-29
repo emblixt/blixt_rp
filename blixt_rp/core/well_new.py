@@ -32,8 +32,6 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', 
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from blixt_rp.core.core import Header, LogTable
-from blixt_rp.core.log_curve_new import LogCurve
 
 # global variables
 supported_version = {2.0, 3.0}
@@ -47,6 +45,8 @@ class Well(object):
     so that they don't have to be regularly sampled, or with the same sampling.
     This also means that a LogCurve object can contain other data than typical log data, such as core samples.
     """
+    from blixt_rp.core.core import Header, LogTable
+    from blixt_rp.core.log_curve_new import LogCurve
     def __init__(self,
                  header: Header | None = None,
                  logs: list | None = None
@@ -58,6 +58,7 @@ class Well(object):
             dict type which contains
         :param logs:
         """
+        from blixt_rp.core.core import Header
         if header is None:
             self.header = Header({})
         elif isinstance(header, dict):
@@ -128,7 +129,8 @@ class Well(object):
 
     def read_las(self, file_name: str, verbose: bool = False, encoding: str = 'UTF8',
                  log_table: LogTable | None = None, ignore_header: bool = False,
-                 if_log_exists: str = 'overwrite'):
+                 if_log_exists: str = 'overwrite',
+                 template_file: str | None = None):
         """
         Uses the log_curve_new.py function 'read_las()' to read a las file
 
@@ -146,10 +148,22 @@ class Well(object):
             'overwrite': Overwrite old log
             'ask': Ask to overwrite or ignore
             'ignore': new log is ignored if a log of same name exists from before
+        :param template_file:
+            str
+            full filename of .xlsx file that contains templates of each log type.
+            Of the format used by the project_table.xlsx file
         :return:
         """
         from blixt_rp.core.log_curve_new import read_las as _read_las
-        log_curves, well_dict = _read_las(file_name, verbose=verbose, encoding=encoding, log_table=log_table)
+        log_curves, well_dict = _read_las(file_name, verbose=verbose, encoding=encoding, log_table=log_table,
+                                          template_file=template_file)
+
+        if self.header.name is None:
+            self.header.name = well_dict['well_info']['well']['value']
+
+        for _key, _value in log_curves.items():
+            _value.style.well = self.header.name
+
         if self.logs is None:
             self.logs = list(log_curves.values())
         else:
@@ -158,9 +172,6 @@ class Well(object):
 
         if not ignore_header:
             self.header = add_headers(self.header, well_dict, [], None)
-
-        if self.header.name is None:
-            self.header.name = well_dict['well_info']['well']['value']
 
     def read_general_ascii(self,
                            file_name: str,

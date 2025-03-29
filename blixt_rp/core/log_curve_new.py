@@ -19,13 +19,13 @@ import pint
 # from pint import UnitRegistry
 from math import isclose, ceil
 
+
 # To test blixt_rp and blixt_utils libraries directly, without installation:
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 from blixt_rp.core.param import Param
-from blixt_rp.core.core import Template, LogTable, Cutoffs, CutoffRule, Header
 from blixt_utils.signal_analysis.signal_analysis import smooth as _smooth
 from blixt_utils.misc.curve_fitting import residuals, linear_function, calculate_depth_trend
 from blixt_rp.rp_utils.definitions import allowed_depth_formats
@@ -33,7 +33,6 @@ from blixt_utils.misc.convert_data import convert
 from blixt_utils.misc import masks as msks
 from blixt_utils.misc import templates as tmplts
 import blixt_rp.rp_utils.definitions as rud
-from blixt_utils.utils import print_info, fix_well_name
 from blixt_utils.io.io import read_general_ascii_GENERAL as read_file
 
 
@@ -181,7 +180,7 @@ class LogCurve(object):
     when the log data is given in 'm/s', it will be automatically converted to 'km/s'
 
     """
-
+    from blixt_rp.core.core import Template, Header
     def __init__(self,
                  name: str,
                  log_data: pint.Quantity,
@@ -216,6 +215,8 @@ class LogCurve(object):
         :param header:
             Header object or dict
         """
+        from blixt_rp.core.core import Template, Header
+        from blixt_utils.utils import print_info
         if len(log_data) != len(depth):
             raise IOError('Length of log_data ({}) must equal length of depth ({})'.format(
                 len(log_data), len(depth)))
@@ -294,6 +295,7 @@ class LogCurve(object):
             style.units = str(self.data.units)
         self._style = style
 
+    from blixt_rp.core.core import Template
     def __len__(self):
         return len(self.data)
 
@@ -349,6 +351,7 @@ class LogCurve(object):
     @depth_units.setter
     def depth_units(self, to_units):
         """ Converts the depth units to 'to_units'"""
+        from blixt_utils.utils import print_info
         try:
             cnv_txt = 'Convert depth from {} to {}'.format(
                 str(self.depth.units), to_units
@@ -375,6 +378,7 @@ class LogCurve(object):
         """
         Converts the log data units to 'to_units', and changes the unit in the style too
         """
+        from blixt_utils.utils import print_info
         try:
             cnv_txt = 'Convert from {} to {}'.format(
                 str(self.data.units), to_units
@@ -427,6 +431,7 @@ class LogCurve(object):
 
     @style.setter
     def style(self, style_template: Template | dict | None):
+        from blixt_rp.core.core import Template
         if style_template is None:
             self._style = Template()
         elif isinstance(style_template, dict):
@@ -490,6 +495,7 @@ class LogCurve(object):
         return copied_log_curve
 
     def velocity_from_sonic(self, name: str | None = None):
+        from blixt_utils.utils import print_info
         if self.log_type not in ['Sonic', 'Shear sonic']:
             warn_txt = 'Log type must be "Sonic" or "Shear sonic" to calculate velocity'
             print_info(warn_txt, 'warning', logger)
@@ -676,6 +682,7 @@ class LogCurve(object):
         :return:
             Smoothened LogCurve object when overwrite is False, else
         """
+        from blixt_utils.utils import print_info
         if not self.is_evenly_spaced:
             warn_txt = 'Only evenly spaced data can be smoothened'
             print_info(warn_txt, 'warning', logger)
@@ -821,6 +828,7 @@ class LogCurve(object):
             LogCurve object
         """
         from blixt_utils.utils import mask_string
+        from blixt_utils.utils import print_info
 
         green_flag = True
         final_mask = None
@@ -1140,7 +1148,7 @@ def find_depth_parameter(parameters, only_md=False):
 
 
 def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
-             log_table: LogTable | None = None) -> (dict, dict):
+             log_table = None, template_file: str | None = None) -> (dict, dict):
     """
     Returns a LogCurve object for each, or selected, log in las file, packed in a dict
 
@@ -1151,12 +1159,19 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
             LogTable
             Object which contains which log types, and associated and which log(s) to use for each log type
             When this is specified, we only load those logs that are listed
+    :param template_file:
+        str
+        full filename of .xlsx file that contains templates of each log type.
     :return:
         tuple with two dicts
         first dict contains a log_name: LogCurve "key: value" pair for log in the las file
         second dict contains the standard info about the well and curves extracted from the las file
     """
+    import pandas as pd
+    from blixt_utils.utils import fix_well_name
+    from blixt_utils.utils import print_info
     from blixt_utils.io.io import well_reader
+    from blixt_rp.core.core import Template, templates_from_table
 
     with open(file_name, "r", encoding=encoding) as f:
         lines = f.readlines()
@@ -1192,7 +1207,17 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
     # Find and extract data
     data = well_dict.pop('data')
     output = {}
+    if template_file is not None:
+        table = pd.read_excel(template_file, header=1, sheet_name='Templates', engine='openpyxl')
+        template_dict = templates_from_table(table)
+    else:
+        template_dict = None
     for _key, _log_type in zip(only_these_logs, log_types):
+        style = None
+        if template_dict is not None:
+            if _log_type in list(template_dict.keys()):
+                style = Template(**template_dict[_log_type])
+                style.name = _key
         try:
             data_units = well_dict['curve'][_key.lower()]['unit']
         except KeyError as e:
@@ -1215,8 +1240,8 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
             Depth(Q_(data[depth_key], depth_units), depth_type=depth_type),
             _log_type,
             well_name,
-            None,
-            {'orig_filename': file_name})
+            style=style,
+            header={'orig_filename': file_name})
 
     return output, well_dict
 
@@ -1231,6 +1256,7 @@ def read_general_ascii(file_name: str,
                        verbose: bool = False,
                        encoding: str = 'UTF8') -> None | dict:
 
+    from blixt_utils.utils import print_info
     output = {}
     data, units = read_file(file_name,
                             separator,
@@ -1302,6 +1328,7 @@ def translate_units_for_pint(unit):
     :return:
         str
     """
+    from blixt_utils.utils import print_info
     print_info('This function will be deprecated', 'warning', logger)
     if '^3' in unit:
         pass
@@ -1383,6 +1410,7 @@ def handle_coords_old(coords, coord_units: str, coord_type: str, verbose=False):
     :return:
 
     """
+    from blixt_utils.utils import print_info
     coord_type = coord_type.lower()
     if coord_type not in ['md', 'tvd', 'twt', 'owt']:
         raise IOError('Dimension type must be either md, tvd, twt or owt. Not {}'.format(coord_type))
