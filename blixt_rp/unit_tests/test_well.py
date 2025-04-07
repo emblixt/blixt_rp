@@ -104,8 +104,27 @@ class WellTestCase(unittest.TestCase):
         })
         well1 = Well()
         well1.read_las(las_file2, log_table=log_table, template_file=project_table)
-        print(well1.name, well1.get_log_names)
+        #print(well1.name, well1.get_log_names)
+        for _key in list(well1.header.keys()):
+            print(_key, well1.header[_key])
         lc = well1.get_log_curve('vs_brine')
-        print(lc.style)
+        #print(lc.style)
         self.assertIsInstance(lc.style, Template)
 
+    def test_old_well_type(self):
+        from blixt_rp.core.well import Well as OldWell
+        w0 = OldWell()
+        w0.read_las(las_file2)
+        print(w0.header, w0.block['Logs'].header, w0.block['Logs'].logs)
+
+    def test_write_las(self):
+        from blixt_rp.core.well_new import Well
+        from blixt_rp.core.core import LogTable
+        log_table = LogTable({
+            'P velocity': 'Vp_brine',
+            'S velocity': 'Vs_brine',
+            'Density': 'Rho_brine'
+        })
+        well1 = Well()
+        well1.read_las(las_file2, log_table=log_table, template_file=project_table)
+        well1.write_las('test.las')

@@ -19,6 +19,8 @@ import pint
 # from pint import UnitRegistry
 from math import isclose, ceil
 
+from pandas.core.config_init import max_cols
+from prompt_toolkit.layout import max_layout_dimensions
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
@@ -55,11 +57,20 @@ class Depth(object):
                  depth_type: str = 'md',
                  verbose: bool = False):
         """
+        if depth is a pint.Quantity, units are ignored.
+        if depth is not a pint.Quantity, and depth_units is None, an Error is raised
 
         :param depth:
-
+            flt, int, np.ndarray or pint.Quantity
         :param units:
+            str
+            Any unit handled by pint.
+            Extensions to pint default units should be added here:
+            blixt_rp/units_to_pint.txt
+            (jetbrains://pycharm/navigate/reference?project=PycharmProjects&path=blixt_rp/blixt_rp/units_to_pint.txt)
         :param depth_type:
+            str
+            'md', 'tvd', 'owt', or 'twt'
         :param verbose:
         """
 
@@ -341,6 +352,14 @@ class LogCurve(object):
             old_name, value)
 
     @property
+    def top(self) -> pint.Quantity:
+        return self.depth.depth[0]
+
+    @property
+    def base(self) -> pint.Quantity:
+        return self.depth.depth[-1]
+
+    @property
     def depth_type(self):
         return self.depth.depth_type
 
@@ -539,6 +558,8 @@ class LogCurve(object):
         :return
             LogCurve object
         """
+        # TODO
+        # Make sure this works correctly for log curves of different sampling and start and stop!
         if self.depth_type != log_curve.depth_type:
             raise ValueError('The two depth formats (depth_type) are not the same: {} != {}'.format(
                 self.depth_type, log_curve.depth_type))
@@ -565,6 +586,28 @@ class LogCurve(object):
             header=self.header,
             style=self.style
         )
+
+    def to_twt(self, twt: pint.Quantity, dt: pint.Quantity):
+        """
+        Returns a LogCurve object with a regularly sampled TWT as Depth, with the
+        log curve data resampled to match the range of the input TWT
+        :param twt:
+            The twt data for the depth-time relation
+        :param dt:
+            The sample rate of the new twt
+        :return:
+            LogCurve object where Depth is a regularly sampled TWT array and with original LogCurve data resampled
+            to match this new Depth
+        """
+        info_txt = 'Converting log {}, in {} domain to Time domain with a regularly sampled TWT Depth (dt: {})'.format(
+            self.name, self.depth_type, dt)
+        twt, data = _to_twt(twt, self.values, dt)
+        return  replace_data(self,
+                             Q_(data, self.units),
+                             Depth(twt, depth_type='twt'),
+                             overwrite=False,
+                             info_txt=info_txt)
+
 
     def clean_data(self, nans=True, infinites=True, overwrite=False):
         """
@@ -764,6 +807,8 @@ class LogCurve(object):
         """
         if window_len is None:
             window_len = Q_(2., 'm')
+        if not isinstance(max_clip, pint.Quantity):
+            max_clip = Q_(max_clip, self.units)
 
         info_txt = 'Despike with max clip {} and a window length of {}'.format(max_clip, window_len)
         _smooth = self.smooth(window_len)
@@ -1255,6 +1300,43 @@ def read_general_ascii(file_name: str,
                        var_types: list | None = None,
                        verbose: bool = False,
                        encoding: str = 'UTF8') -> None | dict:
+    """
+
+    :param file_name:
+    :param separator:
+        str
+        'space', 'tab', ',', ';', ...
+    :param data_begins_on_row:
+        int
+        Pythonic row number (starting at 0) of the first line of data
+    :param var_names:
+        int or list
+        Either (pythonic) row number of where the variable names can be read in the file (NOTE: must have
+        the same number of items and separator as the data for it to work)
+        OR
+        list of variables names. Its length must match the number of data columns or length of var_columns
+
+        If None: generic variable names are created automatically
+    :param var_columns:
+        list
+        list of integers that indicate the column numbers (pythonic) to load for each variable listed in var_names
+        if var_names is an integer, all variables are loaded and this parameter is ignored
+    :param var_units:
+        int or list
+        Either (pythonic) row number of where the units can be read in the file (NOTE: must have
+        the same number of items and separator as the data for it to work)
+        OR
+        list of units. Its length must match the number of data columns
+
+        If None: empty units are assigned each variable
+    :param var_types:
+    :param verbose:
+    :param encoding:
+        str
+        Name of encoding to use when reading the data
+        'utf-8-sig' seems useful
+    :return:
+    """
 
     from blixt_utils.utils import print_info
     output = {}
@@ -1570,6 +1652,69 @@ def is_equivalent(first: pint.Unit, second: pint.Unit):
         return False
     return isclose(factor, 1)
 
+
+def _to_twt(
+        twt: pint.Quantity,
+        data: np.ndarray,
+        dt: pint.Quantity = Q_(1, 'millisecond'),
+        axis: int = -1
+):
+    """
+    Converts the input depth domain data to a regularly sampled array in TWT
+    :param twt:
+        The twt data for the depth-time relation
+    :param data:
+        A N-D array of real values in the depth domain
+        The length of the 'axis' axis must be the same as twt
+    :param dt:
+        The sample rate of the new twt
+    :param axis:
+       The axis corresponding to the depth axis, which shall be converted to the time domain
+    :return:
+        two tuple
+        The regularly sampled twt values
+        The data resampled to match the regularly sampled twt
+    """
+    from scipy.interpolate import interp1d
+    if data.shape[axis] != twt.shape[0]:
+        raise IOError('Depth array and TWT array must have same length')
+    new_twt = np.arange(
+        np.nanmin(twt).to('millisecond').magnitude,
+        np.nanmax(twt).to('millisecond').magnitude,
+        dt.to('millisecond').magnitude
+    )
+    return Q_(new_twt, 'millisecond'), _interpolate(twt.magnitude, data, new_twt, kind='linear', axis=axis)
+
+def _to_depth(
+        time_depth_twt: pint.Quantity,
+        data_twt: pint.Quantity,
+        data: np.ndarray,
+        axis: int = -1
+):
+    """
+    Converts the data, which is supposed to be regularly sampled in TWT, to the depth domain, which is irregularly
+    sampled in TWT
+    :param time_depth_twt:
+        The twt data for the depth-time relation
+    :param data_twt:
+        The twt data (values) for the given data
+    :param data:
+        A N-D array of real values, regularly sampled in the time domain
+        The length of the 'axis' axis must be the same as data_twt
+    :param axis:
+       The axis corresponding to the depth axis, which shall be converted to the time domain
+    :return:
+        the data resampled to match the time (time_depth_twt) of the time-depth pair
+    """
+    from scipy.interpolate import interp1d
+    if data.shape[axis] != data_twt.shape[0]:
+        raise IOError('Data array and TWT array must have same length')
+    return _interpolate(
+        data_twt.to('millisecond').magnitude,
+        data,
+        time_depth_twt.to('millisecond').magnitude,
+        kind='linear',
+        axis=axis, fill_value='extrapolate')
 
 # def take_units_from_style(log_curve: LogCurve):
 #     # If the style Template contains a unit, which is not None, then we should convert the data to this

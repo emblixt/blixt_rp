@@ -9,7 +9,8 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_te
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 # sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from blixt_rp.core.core import Interval, StratUnit, Intervals, Template, Header, CutoffRule, Cutoffs, LogTable
+from blixt_rp.core.core import (Interval, StratUnit, Intervals, Template, Header, CutoffRule, Cutoffs, LogTable,
+                                to_twt, to_depth)
 
 
 test_file_dir = str(os.path.dirname(__file__).replace(
@@ -190,10 +191,11 @@ class IntervalTests(unittest.TestCase):
         project_file = os.path.join(project_dir,"blixt_rp\\excels\\project_table_new.xlsx")
         wis = Intervals()
         wis.read_blixt_tops(project_file)
-        print(wis)
-        for _i in wis.intervals:
-            print(_i)
+        # print(wis)
+        # for _i in wis.intervals:
+        #     print(_i)
         print(wis.get_strat_units())
+        print(wis.get_intervals_dict('Well_F'))
 
     def test_append(self):
         append_file = os.path.join(project_dir, 'test.xlsx')

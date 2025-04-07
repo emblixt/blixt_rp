@@ -160,6 +160,8 @@ class Well(object):
 
         if self.header.name is None:
             self.header.name = well_dict['well_info']['well']['value']
+        if self.header.orig_filename is None:
+            self.header.orig_filename = file_name
 
         for _key, _value in log_curves.items():
             _value.style.well = self.header.name
@@ -193,6 +195,106 @@ class Well(object):
             for _val in list(log_curves.values()):
                 self.add_log(_val, if_log_exists=if_log_exists)
 
+    def write_las(self, file_name, overwrite=False):
+        from blixt_utils.utils import print_info
+        from datetime import datetime
+        if os.path.isfile(file_name) and (not overwrite):
+            warn_txt = 'File {} already exist. Write cancelled'.format(file_name)
+            print_info(warn_txt, 'warning', logger)
+            return
+
+        out = (
+            '#----------------------------------------------------------------------------\n'
+            '~VERSION INFORMATION\n'
+            'VERS.            2.0                  :CWLS LOG ASCII STANDARD -VERSION 2.0\n'
+            'WRAP.            NO                   :ONE LINE PER DEPTH STEP\n'
+            '#\n'
+        )
+
+        out += '# {}\n'.format(self.header['creation_info'])
+        if 'note' in list(self.header.keys()):
+            out += '# NOTE: {}\n'.format(self.header['note'])
+        out += '# Written to las on: {}\n'.format(datetime.now().isoformat())
+        out += '# Modified on: {}\n'.format(self.header['modification_date'])
+        for _log in self.logs:
+            if _log.header['modification_history'] is not None:
+                out += '#  Modification: {}: {}\n'.format(_log.name,
+                                                          _log.header['modification_history'].replace('\n', '\n#   '))
+
+        # WELL INFO
+        out += (
+            '#--------------------------------------------------------------------\n'
+            '~WELL INFORMATION\n'
+            '#MNEM .UNIT      DATA                 :DESCRIPTION OF MNEMONIC\n'
+            '#----------      ------------         -------------------------------\n'
+        )
+        if 'well_info' not in list(self.header.keys()):
+            print_info('Well info is lacking in {}'.format(self.name), 'error', logger, 'IOError')
+        for _key in list(self.header['well_info'].keys()):
+            out += '{0: <7}.{1: <9}{2: <21}:{3:}\n'.format(
+                _key.upper(),
+                self.header['well_info'][_key].unit,
+                str(self.header['well_info'][_key].value) if self.header['well_info'][_key].value is not None else '',
+                self.header['well_info'][_key].desc.upper()
+            )
+
+        # CURVE INFO
+        out += (
+            '#\n'
+            '# ----------------------------------------------------------------------------\n'
+            '~CURVE INFORMATION\n'
+            '# MNEM.UNIT                                         : CURVE DESCRIPTION\n'
+            '# ----------                                        -------------------------------\n'
+        )
+        # NOTE, this new version of the Well object can contain logs with different depth sampling, which the las
+        # format does not support. So we try with the first log curve, and take the depth from that
+        ref_depth = self.logs[0].depth
+        # TODO We might need to "harmonize" all log curves before writing to las file, to make sure the start and
+        # end MD are shared for all logs
+        i = 1
+        out += '{0: <20}.{1: <33}: {2: <9}{3:}\n'.format(
+            'DEPTH',
+            '{:~}'.format(ref_depth.units),
+            i,
+            ''
+        )
+        for _lc in self.logs:
+            if _lc.step() != ref_depth.step():
+                print_info('Not using the same step, {} can not be added to .las file. Skipping', 'warning', logger)
+                continue
+            i += 1
+            out += '{0: <20}.{1: <33}: {2: <9}{3:}\n'.format(
+                _lc.name.upper(),
+                '{:~}'.format(_lc.units),
+                i,
+                _lc.header.log_type + ', ' + _lc.header.note
+            )
+        out += (
+            '#\n'
+            '# ----------------------------------------------------------------------------\n'
+            '~A                  '
+        )
+
+        # write data column headers
+        for _lc in self.logs:
+            if _lc.step() != ref_depth.step():
+                continue
+            out += '{0: <20}'.format(_lc.name.upper())
+        out += '\n'
+
+        # start writing data
+        for i, md in enumerate(ref_depth.values):
+            out += '{0: <20}'.format(md)
+            for _lc in self.logs:
+                if _lc.step() != ref_depth.step():
+                    continue
+                out += '{:<20.8f}'.format(
+                    self.header['well_info']['null'].value if np.isnan(_lc.values[i]) else _lc.values[i]
+                )
+            out += '\n'
+
+        with open(file_name, 'w+') as f:
+            f.write(out)
 
 def add_headers(_header, _well_info, _ignore_keys, _note):
     """

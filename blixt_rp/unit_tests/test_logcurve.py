@@ -8,7 +8,8 @@ import pint.errors
 from math import isclose
 from .. import ureg, Q_
 
-from blixt_rp.core.log_curve_new import LogCurve, Depth, is_equivalent, read_las
+from blixt_rp.core.log_curve_new import (LogCurve, Depth, is_equivalent, read_las,
+                                         read_general_ascii, _to_twt, _to_depth)
 from blixt_rp.core.core import Template, CutoffRule, Cutoffs, LogTable, Header
 
 test_file_dir = str(os.path.dirname(__file__).replace(
@@ -19,11 +20,15 @@ project_table = os.path.join(test_file_dir.replace('test_data', 'excels'), 'proj
 
 las_file1 = os.path.join(test_file_dir, "L-30.las")
 las_file2 = "T:\\ROKDOC\\PL936\\To Partners from Ikon\\To Partners\\las files\\6406_11_1s.las"
+las_file3 = os.path.join(test_file_dir, "Well F.las")
+data_file1 = os.path.join(test_file_dir, "Well A checkshot.txt")
+data_file2 = "S:\\Well\\UTM32_Mid_Norway_All\\Q-6406\\6406_11_1_S\\6406_11_1_S___checkshot.txt"
 
 n = 1500
 # create a regularly sampled data set
 data1 = Q_(np.linspace(2, 4, n) + np.random.random(n), 'us/feet')
 depth1 = Q_(np.linspace(24, 3430, n), 'm')
+depth1_short = Q_(np.linspace(100, 3300, n), 'm')
 
 # create an irregularly sampled data set
 data2 = Q_(np.linspace(6, 8, n) + np.random.random(n), 's/m')
@@ -33,6 +38,7 @@ n = 1400
 # create a shorter regularly sampled data set
 data3 = Q_(np.linspace(2, 4, n) + np.random.random(n), 'us/feet')
 depth3 = Q_(np.linspace(24, 3430, n), 'm')
+depth3_short = Q_(np.linspace(100, 3300, n), 'm')
 
 # create a shorter irregularly sampled data set
 data4 = Q_(np.linspace(6, 8, n) + np.random.random(n), 's/m')
@@ -51,7 +57,7 @@ cr5 = CutoffRule('DataPair1', '>', Q_(5, 'us/feet'))  # all should be excluded
 # Useful log table
 log_table1 = LogTable({'Density': 'rhob', 'Sonic': 'dt'})
 log_table2 = LogTable({'Resistivity': 'rdep', 'Sonic': 'dt'})
-
+log_table3 = LogTable({'Density': 'rho_brine', 'P velocity': 'vp_brine', 'S velocity': 'vs_brine'})
 
 class LogCurveTestCase(unittest.TestCase):
 
@@ -177,19 +183,15 @@ class LogCurveTestCase(unittest.TestCase):
         self.assertRaises(pint.DimensionalityError, lc_s_fail.velocity_from_sonic, 'Test')
 
     def test_take_sampling(self):
-        lc1 = LogCurve(
-            'test',
-            data1,
-            Depth(depth1)
-        )
+        lc1 = LogCurve( 'test', data1, Depth(depth1_short))
         lc3 = LogCurve('test', data3, Depth(depth3))
+        print('Well 1. Top {}, Step {}, Base {}. Length {}'.format(lc1.top, lc1.step(), lc1.base, len(lc1)))
+        print('Well 2. Top {}, Step {}, Base {}. Length {}'.format(lc3.top, lc3.step(), lc3.base, len(lc3)))
         lc_new = lc1.take_sampling_from(lc3)
-        print(lc1.step())
-        print(lc3.step())
-        print(lc_new.step())
+        print('Well 1 takes sampling from Well 2:')
+        print('        Top {}, Step {}, Base {}. Length {}'.format(lc_new.top, lc_new.step(), lc_new.base, len(lc_new)))
         fig, ax = plt.subplots()
         lc1.plot(ax=ax); lc_new.plot(ax=ax)
-        print(lc1.name, len(lc1), lc3.name, len(lc3), lc_new.name, len(lc_new))
         plt.show()
 
     def test_LogCurve_copy(self):
@@ -377,7 +379,8 @@ class LogCurveTestCase(unittest.TestCase):
         log_curves, well_info = read_las(las_file2, log_table=log_table2)
         lc = log_curves['dt']
         lc.plot(ax=ax)
-        lc_despiked = lc.despike(Q_(20, 'us/ft'), window_len=Q_(20., 'm'), suffix='despike')
+        # lc_despiked = lc.despike(Q_(20, 'us/ft'), window_len=Q_(20., 'm'), suffix='despike')
+        lc_despiked = lc.despike(20, window_len=Q_(20., 'm'), suffix='despike')
         lc_despiked.plot(ax=ax)
         print(lc_despiked.header)
         plt.show()
@@ -466,3 +469,43 @@ class LogCurveTestCase(unittest.TestCase):
         print('Modified header:\n', lc.header)
         print('Well and log curve names: ', lc.well, lc.name)
 
+
+
+class DomainConversionTest(unittest.TestCase):
+    def test_to_twt(self):
+        twt_in = Q_(np.array([10, 15, 21, 27, 33, 40, 46, 52, 58, 64]), 'millisecond')
+        dt = Q_(5., 'millisecond')
+        data = np.linspace(2, 4, len(twt_in))
+        twt_out, data_out = _to_twt(twt_in, data, dt)
+        fig, ax = plt.subplots()
+        ax.scatter(twt_in, data)
+        ax.scatter(twt_out, data_out)
+
+        data_twt = _to_depth(twt_in, Q_(twt_out, 'millisecond'), data_out)
+        ax.scatter(twt_in, data_twt, marker='x', color='yellow')
+        plt.show()
+
+    def test_convert_real_data(self):
+        log_curves, well_info = read_las(las_file2, log_table=log_table3)
+        data_curves = read_general_ascii(
+            data_file2,
+            'space',
+            4,
+            ['md', 'owt'],
+            [0, 1],
+            ['m', 'millisecond'],
+            ['md', 'owt'])
+
+        owt_lc = data_curves['owt'].take_sampling_from(log_curves['vp_brine'])
+        twt = 2.*owt_lc.data
+        # Convert the data to the time domain, with a regular sampling
+        dt = Q_(1, 'millisecond')
+        vp_twt = log_curves['vp_brine'].to_twt(twt, dt)
+        vs_twt = log_curves['vs_brine'].to_twt(twt, dt)
+        rho_twt = log_curves['rho_brine'].to_twt(twt, dt)
+        print(vp_twt.header)
+        vp_twt.plot()
+        # calculate the reflectivity in the (regularly sampled) time domain
+
+
+        plt.show()

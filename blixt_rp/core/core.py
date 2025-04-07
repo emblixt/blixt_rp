@@ -3,6 +3,9 @@ Collection of objects and methods used throughout blixt_rp
 
 """
 import os, sys
+
+import numpy as np
+
 from .. import ureg, Q_
 import pint
 import pandas as pd
@@ -526,17 +529,21 @@ class Intervals(object):
         if well_name is not None, it filters out all other wells
         :return:
         """
-        intervals_dict = {'well': [], 'name': [], 'top MD [m]': [], 'base MD [m]': [],
-                          'level': [], 'source': [], 'note': []}
+        # intervals_dict = {'well': [], 'name': [], 'top MD [m]': [], 'base MD [m]': [],
+        intervals_dict = {'well': [], 'name': [], 'top': [], 'base': [],
+                          'level': [], 'color': [], 'source': [], 'note': []}
         for _interval in self.intervals:
             if well_name is not None:
-                if well_name != _interval.well:
+                if well_name.upper() != _interval.well.upper():
                     continue
-            intervals_dict['well'].append(_interval.well)
+            intervals_dict['well'].append(_interval.well.upper())
             intervals_dict['name'].append(_interval.name)
-            intervals_dict['top MD [m]'].append(_interval.top.to('m').magnitude)
-            intervals_dict['base MD [m]'].append(_interval.base.to('m').magnitude)
+            # intervals_dict['top MD [m]'].append(_interval.top.to('m').magnitude)
+            # intervals_dict['base MD [m]'].append(_interval.base.to('m').magnitude)
+            intervals_dict['top'].append(_interval.top.to('m').magnitude)
+            intervals_dict['base'].append(_interval.base.to('m').magnitude)
             intervals_dict['level'].append(_interval.level)
+            intervals_dict['color'].append(_interval.color)
             intervals_dict['source'].append(_interval.source)
             intervals_dict['note'].append(_interval.desc)
         return intervals_dict
@@ -612,7 +619,6 @@ class Intervals(object):
         # see if there is a sheet with interval info
         strat_units = None
         if interval_info_sheet in list(pd.read_excel(file_name, engine='openpyxl', sheet_name=None)):
-            # raise NotImplementedError('Using the interval info sheet has not been taken into use yet')
             strat_units = {}
             strat_units_table = pd.read_excel(file_name, engine='openpyxl', sheet_name=interval_info_sheet, header=4)
             for _i, _name in enumerate(strat_units_table['Name']):
@@ -637,7 +643,7 @@ class Intervals(object):
                     continue
                 this_strat_unit = strat_units[interval_name]
             _interval = Interval(
-                well=well_name,
+                well=well_name.upper(),
                 top=Q_(float(df['Top depth'][i]), 'm'),
                 base=Q_(float(df['Base depth'][i]), 'm'),
                 interval_info=this_strat_unit
