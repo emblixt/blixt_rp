@@ -9,8 +9,8 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_te
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 # sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from blixt_rp.core.core import (Interval, StratUnit, Intervals, Template, Header, CutoffRule, Cutoffs, LogTable,
-                                to_twt, to_depth)
+from blixt_rp.core.core import Interval, StratUnit, Intervals, Template, Header, CutoffRule, Cutoffs, LogTable
+
 
 
 test_file_dir = str(os.path.dirname(__file__).replace(
@@ -88,11 +88,11 @@ class CutoffTests(unittest.TestCase):
 
 class LogTableTests(unittest.TestCase):
     def test_lt_init(self):
-        lt = LogTable('Test', log_table)
-        print(lt.name)
+        lt = LogTable( log_table)
         print(list(lt.keys()))
         lt.test = 'A log name'  # this has no function now
-        lt['TEST'] = 'A log name' # But this work !
+        lt['TEST'] = 'A log name' # But this work when __setitem__ is kept untouched
+        print(lt.keys())
         inv = lt.invert
         print(lt.log_names)
         print(lt.log_types)

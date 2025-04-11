@@ -30,6 +30,7 @@ test_file_dir = str(os.path.dirname(__file__).replace(
     'test_data'))
 
 project_table = os.path.join(test_file_dir.replace('test_data', 'excels'), 'project_table_new.xlsx')
+project_table2 = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\\PL1221\\PL1221 project_new.xlsx"
 
 las_file1 = os.path.join(test_file_dir, "L-30.las")
 las_file2 = "T:\\ROKDOC\\PL936\\To Partners from Ikon\\To Partners\\las files\\6406_11_1s.las"
@@ -270,7 +271,7 @@ class TestPlot(unittest.TestCase):
             ['md', 'owt'],
             [0, 1],
             ['m', 'millisecond'],
-            ['md', 'owt'])
+            ['MD', 'One-way time'])
         owt_lc = data_curves['owt'].take_sampling_from(vp)
         time_depth_twt = 2.*owt_lc.data
         dt = Q_(1, 'millisecond')
@@ -302,6 +303,27 @@ class TestPlot(unittest.TestCase):
         grid = plotter.figure()
         show(grid)
 
+    def test_chi_rotation(self):
+        well = Well()
+        log_table = LogTable({'Density': ['rho_brine', 'rho_gas70'], 'P velocity': ['vp_brine', 'vp_gas70'],
+                             'S velocity': ['vs_brine', 'vs_gas70']})
+        brine_log_table = LogTable({'Density': 'rho_brine', 'P velocity': 'vp_brine', 'S velocity': 'vs_brine'})
+        hc_log_table = LogTable({'Density': 'rho_gas70', 'P velocity': 'vp_gas70', 'S velocity': 'vs_gas70'})
+
+        well.read_las(las_file2, log_table=log_table, template_file=project_table)
+        well.read_general_ascii(data_file2,
+                                'space',
+                                4,
+                                ['md', 'owt'],
+                                [0, 1],
+                                ['m', 'millisecond'],
+                                ['MD', 'One-way time'])
+
+        wis = Intervals()
+        wis.read_blixt_tops(project_table2)
+
+        grid, chi_slider, backus_slider, frq_slider, data_table, xplot, hplot = bupp.plot_chi_rotation(well, brine_log_table, hc_log_table, wis=wis)
+        show(row(column(grid, chi_slider, backus_slider, frq_slider), column(hplot, xplot)))
 
 def save_as_las():
     root = Tk()

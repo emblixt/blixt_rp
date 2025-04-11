@@ -53,13 +53,15 @@ class LogTable(dict):
         if isinstance(list(log_table.values())[0], list):
             self.multi_log = True
 
-    def __setitem__(self, key, value):
-        if isinstance(value, list) and not self.multi_log:
-            print_info('Not allowed to a add a list of log names to a normal LogTable', 'error', logger, 'ioerror')
-        elif isinstance(value, str) and self.multi_log:
-            print_info('Not allowed to a add a single string (log name) to a multi_log LogTable', 'error', logger, 'ioerror')
-        else:
-            setattr(self, key, value)
+    # def __setitem__(self, key, value):
+    #     print('YOU ARE HERE')
+    #     if isinstance(value, list) and not self.multi_log:
+    #         print_info('Not allowed to a add a list of log names to a normal LogTable', 'error', logger, 'ioerror')
+    #     elif isinstance(value, str) and self.multi_log:
+    #         print_info('Not allowed to a add a single string (log name) to a multi_log LogTable', 'error', logger, 'ioerror')
+    #     else:
+    #         self.__dict__[key] = value
+    #         # setattr(self, key, value)
 
     @property
     def invert(self) -> dict:

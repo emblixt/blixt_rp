@@ -17,6 +17,9 @@ project_table = os.path.join(test_file_dir.replace('test_data', 'excels'), 'proj
 
 las_file1 = os.path.join(test_file_dir, "L-30.las")
 las_file2 = "T:\\ROKDOC\\PL936\\To Partners from Ikon\\To Partners\\las files\\6406_11_1s.las"
+las_file3 = os.path.join(test_file_dir, "Well F.las")
+data_file1 = os.path.join(test_file_dir, "Well A checkshot.txt")
+data_file2 = "S:\\Well\\UTM32_Mid_Norway_All\\Q-6406\\6406_11_1_S\\6406_11_1_S___checkshot.txt"
 
 n = 1500
 # create a regularly sampled data set
@@ -38,7 +41,6 @@ depth4 = Q_(np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n), 'feet')
 
 data5 = Q_(np.linspace(6, 8, n) + np.random.random(n), 'Ohmm')
 depth5 = Q_(np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n), 'feet')
-
 
 class WellTestCase(unittest.TestCase):
 
@@ -128,3 +130,27 @@ class WellTestCase(unittest.TestCase):
         well1 = Well()
         well1.read_las(las_file2, log_table=log_table, template_file=project_table)
         well1.write_las('test.las')
+
+    def test_las_and_data(self):
+        from blixt_rp.core.well_new import Well
+        from blixt_rp.core.core import LogTable, Template
+        # Useful log table
+        log_table3 = LogTable({'Density': 'rho_brine', 'P velocity': 'vp_brine', 'S velocity': 'vs_brine'})
+        well = Well()
+        well.read_las(las_file2, log_table=log_table3, template_file=project_table)
+        print(well.get_log_names)
+        rho = well.get_log_curve('rho_brine')
+        print('Rho:', rho.base, rho.top, rho.step(), len(rho), rho.log_type)
+
+        well.read_general_ascii(data_file2,
+                                'space',
+                                4,
+                                ['md', 'owt'],
+                                [0, 1],
+                                ['m', 'millisecond'],
+                                ['MD', 'One-way time'])
+        print(well.get_log_names)
+        owt = well.get_log_curve('owt')
+        print('OWT:', owt.base, owt.top, owt.step(), len(owt), owt.log_type)
+        print(owt.style)
+

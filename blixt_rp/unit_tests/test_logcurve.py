@@ -494,7 +494,7 @@ class DomainConversionTest(unittest.TestCase):
             ['md', 'owt'],
             [0, 1],
             ['m', 'millisecond'],
-            ['md', 'owt'])
+            ['MD', 'One-way time'])
 
         owt_lc = data_curves['owt'].take_sampling_from(log_curves['vp_brine'])
         twt = 2.*owt_lc.data
@@ -505,7 +505,20 @@ class DomainConversionTest(unittest.TestCase):
         rho_twt = log_curves['rho_brine'].to_twt(twt, dt)
         print(vp_twt.header)
         vp_twt.plot()
-        # calculate the reflectivity in the (regularly sampled) time domain
 
+    def test_twt_from_owt(self):
+        data_curves = read_general_ascii(
+            data_file2,
+            'space',
+            4,
+            ['md', 'owt'],
+            [0, 1],
+            ['m', 'millisecond'],
+            ['MD', 'One-way time'])
 
-        plt.show()
+        owt = data_curves['owt']
+        twt = data_curves['md'].get_twt_from_owt()
+        twt = data_curves['owt'].get_twt_from_owt()
+        print('OWT: ', owt.base, owt.top, owt.min, owt.max, owt.units, len(owt), owt.log_type)
+        print('TWT: ', twt.base, twt.top, twt.min, twt.max, twt.units, len(twt), twt.log_type)
+

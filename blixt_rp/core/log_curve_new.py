@@ -608,6 +608,21 @@ class LogCurve(object):
                              overwrite=False,
                              info_txt=info_txt)
 
+    def get_twt_from_owt(self):
+        """
+        Returns a Two-way time (TWT) LogCurve based on a One-way time (OWT) LogCurve
+        :return:
+        """
+        from blixt_utils.utils import print_info
+        if self.log_type != 'One-way time':
+            warn_text = 'Two-way time can only be calculated from a One-way time log curve, not log_type {}'.format(
+                self.log_type)
+            print_info(warn_text, 'warning', logger)
+            return None
+        twt = replace_data(self, self.data * 2., self.depth, False,
+                            'TWT calculated from OWT')
+        twt.log_type = 'Two-way time'
+        return twt
 
     def clean_data(self, nans=True, infinites=True, overwrite=False):
         """

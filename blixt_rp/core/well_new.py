@@ -88,6 +88,10 @@ class Well(object):
     def get_log_names(self):
         return [_lc.name for _lc in self.logs]
 
+    @property
+    def get_log_types(self):
+        return list(set([_lc.log_type for _lc in self.logs]))
+
     def get_log_curve(self, name):
         for _log in self.logs:
             if _log.name == name:
