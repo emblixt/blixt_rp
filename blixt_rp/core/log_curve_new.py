@@ -19,9 +19,6 @@ import pint
 # from pint import UnitRegistry
 from math import isclose, ceil
 
-from pandas.core.config_init import max_cols
-from prompt_toolkit.layout import max_layout_dimensions
-
 # To test blixt_rp and blixt_utils libraries directly, without installation:
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
@@ -40,7 +37,6 @@ from blixt_utils.io.io import read_general_ascii_GENERAL as read_file
 
 from .. import ureg, Q_
 import pint
-import pint_xarray
 
 logger = logging.getLogger(__name__)
 
@@ -660,7 +656,7 @@ class LogCurve(object):
             info_txt)
 
     def fill_gaps(self, method=None, extrapolate=False, overwrite=False,
-                  fill_values=None, mask=None):
+                  fill_values=None, mask=None, suffix: str | None = None):
         """
 
         :param method:
@@ -673,6 +669,8 @@ class LogCurve(object):
             Boolean np.ndarray of same size as self.values
             A false value indicates that the data should be masked out and replaced by the
             fill_value process
+        :param suffix:
+            str
         :return:
         """
         if method is None:
@@ -703,7 +701,7 @@ class LogCurve(object):
             self.depth,
             overwrite,
             info_txt,
-            suffix='fill_gaps'
+            suffix=suffix
         )
 
     def smooth(self,
@@ -747,6 +745,7 @@ class LogCurve(object):
             return
         if not isinstance(window_len, pint.Quantity):
             # Simply assume that it is given in the correct units
+            window_len = Q_(window_len, self.depth_units)
             w_len = ceil(window_len / self.step().magnitude)
         else:
             w_len = ceil(window_len.to(self.depth_units).magnitude / self.step().magnitude)
@@ -797,7 +796,7 @@ class LogCurve(object):
             disc_txt = ''
             out = _smooth(self.values[mask], w_len, method=method, **kwargs)
 
-        info_txt = 'Data smoothened {}using a {} window of length {}'.format(disc_txt, method, w_len)
+        info_txt = 'Data smoothened {}using a {} window of length {}'.format(disc_txt, method, window_len)
         return replace_data(
             self,
             Q_(out, self.units),
@@ -820,18 +819,28 @@ class LogCurve(object):
         :param suffix:
         :return:
         """
+        # TODO By using the magnitudes we avoided a problem with user defined units (e.g. API), but
+        # we need to add a test that the units are same for the max_clip and the data
         if window_len is None:
             window_len = Q_(2., 'm')
+        if not isinstance(window_len, pint.Quantity):
+            # Assume it is given in same unit as the depth data
+            window_len = Q_(window_len, self.depth_units)
         if not isinstance(max_clip, pint.Quantity):
             max_clip = Q_(max_clip, self.units)
 
         info_txt = 'Despike with max clip {} and a window length of {}'.format(max_clip, window_len)
         _smooth = self.smooth(window_len)
-        spikes = np.where(self.data - _smooth.data > max_clip)[0]
-        spukes = np.where(_smooth.data - self.data > max_clip)[0]
-        out = deepcopy(self.data)
-        out[spikes] = _smooth.data[spikes] + max_clip  # Clip at the max allowed diff
-        out[spukes] = _smooth.data[spukes] - max_clip  # Clip at the min allowed diff
+        # spikes = np.where(self.data - _smooth.data > max_clip)[0]
+        # spukes = np.where(_smooth.data - self.data > max_clip)[0]
+        spikes = np.where(self.data.magnitude - _smooth.data.magnitude > max_clip.magnitude)[0]
+        spukes = np.where(_smooth.data.magnitude - self.data.magnitude > max_clip.magnitude)[0]
+        # out = deepcopy(self.data)
+        out = deepcopy(self.data.magnitude)
+        # out[spikes] = _smooth.data[spikes] + max_clip  # Clip at the max allowed diff
+        # out[spukes] = _smooth.data[spukes] - max_clip  # Clip at the min allowed diff
+        out[spikes] = _smooth.data[spikes].magnitude + max_clip.magnitude  # Clip at the max allowed diff
+        out[spukes] = _smooth.data[spukes].magnitude - max_clip.magnitude  # Clip at the min allowed diff
         return replace_data(
             self,
             Q_(out, self.units),

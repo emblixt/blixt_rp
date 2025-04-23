@@ -10,9 +10,11 @@ import inspect
 from copy import deepcopy
 import bruges.rockphysics.anisotropy as bra
 from .. import ureg, Q_
+from tkinter import Tk
+from tkinter.filedialog import asksaveasfilename
 
 from bokeh.models import ColumnDataSource, Span, Select, Button, Slider, CheckboxGroup, Div, CustomJS
-from bokeh.models import PanTool,WheelZoomTool, ResetTool, SaveTool, CrosshairTool, HoverTool
+from bokeh.models import PanTool,WheelZoomTool, ResetTool, SaveTool, CrosshairTool, HoverTool, TextInput
 from bokeh.events import RangesUpdate
 from bokeh.plotting import show, row, column, figure
 from bokeh.io import output_file
@@ -452,6 +454,122 @@ def plot_chi_rotation(well: cw.Well,
     return grid,chi_slider, backus_slider, freq_slider, data_table, xplot, hplot
 
 
+def interactive_edits(well: cw.Well,
+                      log_columns: list,
+                      wis: Intervals | None = None):
+    # This script is called  by the main.py script under blixt_projects/bokeh_testing
+    # And can be invoked by calling:
+    # C:\Users\emb\Documents\PycharmProjects\blixt_projects>C:\Users\emb\Documents\PycharmProjects\venv\Scripts\bokeh serve --show bokeh_testing
+    """
+    Allow the user to apply some predefined smoothing and spike removal methods on the given well.
+    Backus averaging is not one of smoothing methods, as it should be applied elsewhere (an example of how it is implemented
+    can be found in the test_interactive_edit() test in test_plot_logs.py).
+    NB The smoothing done here should be applied on logs other that tne Vp, Vs, and Rho logs, and preferably after
+    Backus averaging has been applied on those. This is because it is wise to have a similar "smoothness" on both the
+    elastic logs as on other logs (e.g Vsh and Porosity) so that we don't introduce false information
+    :param well:
+        well object, new format from well_new.py
+    :param log_columns:
+        list
+        List  of lists that contain the names of the logs to plot in each column
+        E.G.
+            [['rhob', 'neu'], ['vp', 'vs']]
+    :param wis:
+        Intervals
+    :return:
+    """
+
+    select_editors = CheckboxGroup(
+        labels=['Fill gaps', 'Remove spikes', 'Smooth'],
+        active=[2])
+    post_fix = TextInput(value='edit', title='Log suffix')
+    despike_clip_sel = Select(title='Clip level', value='moderate', options= ['low', 'moderate', 'high'],
+                              description=' Lower clip level and longer window length clips away more data')
+    despike_window_len = Slider(title='Despike window length [m]', start=1, end=20, step=1, value=2)
+    # backus_window_len = Slider(title='Backus window length [m]', start=2, end=18, step=1, value=5)
+    smooth_method_sel = Select(title='Smoothing method', value='median', options= ['convolution', 'median'])
+    smooth_window_sel = Select(title='Smoothing window type', value='hanning',
+                               options=['flat', 'hanning', 'hamming', 'bartlett', 'blackman'])
+    smooth_window_len = Slider(title='Smoothing window length [m]', start=5, end=100, step=5, value=11)
+    run_smoothing = Button(label='Apply edits', button_type='success')
+    save_result = Button(label='Save to .las file', button_type='success')
+
+    # Create a column plot with the requested logs
+    plotter = plot_logs(well, log_columns)
+
+    # add the smoothened data to each column
+    line_sources = []
+    for _i, _column in enumerate(plotter.columns):
+        # print(_column)
+        _log_name = log_columns[_i][0]
+        _this_smooth_res = well.get_log_curve(_log_name).smooth(
+            window_len=smooth_window_len.value,
+            method=smooth_method_sel.value,
+            window=smooth_window_sel.value
+        )
+        _this_source = ColumnDataSource(dict(smooth=_this_smooth_res.values, md=_this_smooth_res.depth.values))
+        _this_style = _this_smooth_res.style
+        _this_style.line_width = 3.
+        _this_style.line_color = 'red'
+        _this_style.name = _this_style.name + '_smooth'
+        line_sources.append(_this_source)
+        _column.add_line(Line(x='smooth', y='md', source=_this_source, style=_this_style))
+
+    def callback():
+        _step = None
+        for _i, _column in enumerate(plotter.columns):
+            _log_name = log_columns[_i][0]
+            _this_smooth_res = well.get_log_curve(_log_name).copy(post_fix.value)
+            if _step is None:
+                _step = _this_smooth_res.step().magnitude
+            _this_step = _this_smooth_res.step().magnitude
+            if _this_step != _step:
+                raise IOError('Current depth step ({}) is different from last ({})'.format(_this_step, _step))
+            if select_editors.active.count(0) > 0:  # Fill gaps
+                print('Fill gaps')
+                _this_smooth_res = _this_smooth_res.fill_gaps()
+            if select_editors.active.count(1) > 0:  # Remove spikes
+                print('Remove spikes at {} level'.format(despike_clip_sel.value))
+                level = _this_smooth_res.std
+                if despike_clip_sel.value == 'low':
+                    level = 0.1 * level
+                elif despike_clip_sel.value == 'moderate':
+                    level = 0.5 * level
+                elif despike_clip_sel.value == 'high':
+                    level = 1.0 * level
+                # print('XXX1', level, despike_window_len.value)
+                _this_smooth_res = _this_smooth_res.despike(max_clip=level, window_len=despike_window_len.value)
+            if select_editors.active.count(2) > 0:  # smooth data
+                # _this_smooth_res = well.get_log_curve(_log_name).smooth(
+                _this_smooth_res = _this_smooth_res.smooth(
+                    window_len=smooth_window_len.value,
+                    method=smooth_method_sel.value,
+                    window=smooth_window_sel.value
+                )
+            line_sources[_i].data['smooth'] = _this_smooth_res.values
+            well.add_log(_this_smooth_res, if_log_exists='overwrite')
+        # l_names = well.get_log_names
+        # print(l_names)
+        # print([well.get_log_curve(_name).units for _name in l_names])
+        # print(well.get_log_curve(l_names[-1]).header)
+
+    def save():
+        file_name = save_as_las()
+        well.write_las(file_name, overwrite=True)
+
+    run_smoothing.on_click(callback)
+    save_result.on_click(save)
+    # "Realize" the figure
+    grid = plotter.figure()
+    if wis is not None:
+        data_table = add_strat_table(grid, stratigraphy=wis.get_intervals_dict(well.name), column_index=None)
+    else:
+        data_table = Div(text='', width=10, height=10)
+
+    # show(grid)
+    return (grid, select_editors, despike_clip_sel, despike_window_len,
+            smooth_method_sel, smooth_window_sel, smooth_window_len, post_fix, run_smoothing, save_result, data_table)
+
 def get_wiggles_in_depth(
         vp: LogCurve,
         vs: LogCurve,
@@ -625,3 +743,11 @@ legend_code = """
     xplot_legend.items[1].label.value = 'HC, ba:' + _ba;
     console.log('Chi angle: ', _chi, xplot_legend.title); 
     """
+
+
+def save_as_las():
+    root = Tk()
+    root.attributes('-topmost', True)
+    root.withdraw()
+    file_name = asksaveasfilename(filetypes=(("las file", "*.las"),("All Files", "*.*")))
+    return file_name

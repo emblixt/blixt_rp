@@ -14,8 +14,6 @@ import bruges.rockphysics.anisotropy as bra
 import pint.errors
 from math import isclose
 
-from scripts.regsetup import description
-
 from .. import ureg, Q_
 
 from blixt_rp.core.log_curve_new import LogCurve, Depth, is_equivalent, read_las, read_general_ascii
@@ -111,6 +109,9 @@ class TestPlot(unittest.TestCase):
         show(row(grid, ba_length))
 
     def test_interactive_edit(self):
+        # This function has now been implemented in plot_logs_new.py, as interactive_edits()
+
+
         # This script is called  by the main.py script under blixt_projects/bokeh_testing
         # And can be invoked by calling:
         # C:\Users\emb\Documents\PycharmProjects\blixt_projects>C:\Users\emb\Documents\PycharmProjects\venv\Scripts\bokeh serve --show bokeh_testing
@@ -209,6 +210,23 @@ class TestPlot(unittest.TestCase):
         # show(grid)
         return (grid, select_editors, despike_clip_sel, despike_window_len,
                 smooth_method_sel, smooth_window_sel, smooth_window_len, backus_window_len, run_smoothing, save_result)
+
+    def test_interactive_edits(self):
+        # This script is called  by the main.py script under blixt_projects/bokeh_testing
+        # And can be invoked by calling:
+        # C:\Users\emb\Documents\PycharmProjects\blixt_projects>C:\Users\emb\Documents\PycharmProjects\venv\Scripts\bokeh serve --show bokeh_testing
+
+        well1 = Well()
+        log_table = LogTable({'Gamma ray': 'grd', 'Density': 'rhob', 'Sonic': 'dt'})
+        well1.read_las(las_file1, log_table=log_table,  template_file=project_table)
+        well1.name = 'Well_L'
+        log_columns = [['grd'], ['rhob'], ['dt']]
+        # log_columns = [['rhob'], ['dt']]
+
+        wis = Intervals()
+        wis.read_blixt_tops(project_table)
+
+        return bupp.interactive_edits(well1, log_columns, wis=wis)
 
     def test_add_strat_table(self):
         log_table = LogTable({

@@ -58,6 +58,7 @@ cr5 = CutoffRule('DataPair1', '>', Q_(5, 'us/feet'))  # all should be excluded
 log_table1 = LogTable({'Density': 'rhob', 'Sonic': 'dt'})
 log_table2 = LogTable({'Resistivity': 'rdep', 'Sonic': 'dt'})
 log_table3 = LogTable({'Density': 'rho_brine', 'P velocity': 'vp_brine', 'S velocity': 'vs_brine'})
+log_table4 = LogTable({'Density': 'rhob', 'Sonic': 'dt', 'Gamma ray': 'grd'})
 
 class LogCurveTestCase(unittest.TestCase):
 
@@ -376,8 +377,9 @@ class LogCurveTestCase(unittest.TestCase):
 
     def test_despike(self):
         fig, ax = plt.subplots()
-        log_curves, well_info = read_las(las_file2, log_table=log_table2)
-        lc = log_curves['dt']
+        log_curves, well_info = read_las(las_file1, log_table=log_table4)
+        lc = log_curves['grd']  # despike fails with gamma ray data because of the pint units
+        # lc = log_curves['dt']
         lc.plot(ax=ax)
         # lc_despiked = lc.despike(Q_(20, 'us/ft'), window_len=Q_(20., 'm'), suffix='despike')
         lc_despiked = lc.despike(20, window_len=Q_(20., 'm'), suffix='despike')
@@ -469,6 +471,15 @@ class LogCurveTestCase(unittest.TestCase):
         print('Modified header:\n', lc.header)
         print('Well and log curve names: ', lc.well, lc.name)
 
+    def test_dimensionless_units(self):
+        # log_curves, well_info = read_las(las_file1, log_table=log_table4)
+        # lc = log_curves['grd']
+        # print(lc.units, np.nanmin(lc.data), np.nanmax(lc.data))
+        # print('Simple multiplication: ', np.nanmin(lc.data * 10.))
+        # # print('Simple subtraction: ', np.nanmin(lc.data * 1.1 - lc.data * 0.9))  # this fails
+        t1 = Q_(np.random.normal(size=10), 'API')
+        t2 = Q_(np.random.normal(size=10), 'API')
+        print(t1 - t2)
 
 
 class DomainConversionTest(unittest.TestCase):
