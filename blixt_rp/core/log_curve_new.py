@@ -24,6 +24,7 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', 
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
+from blixt_rp.core.core import Template
 from blixt_rp.core.param import Param
 from blixt_utils.signal_analysis.signal_analysis import smooth as _smooth
 from blixt_utils.misc.curve_fitting import residuals, linear_function, calculate_depth_trend
@@ -259,8 +260,10 @@ class LogCurve(object):
         # Make sure the values of 'name' and 'well' are aligned.
         if self._name is not None:
             self.header.name = self._name  # self.name wins over self.header.name
+            style.name = self._name
         if self._well is not None:
             self.header.well = self._well  # self.well wins over self.header.well
+            style.well = self._well
 
         if log_type is None:
             if self.header.log_type is not None:
@@ -458,7 +461,6 @@ class LogCurve(object):
         if 'units' in list(self._style.keys()):
             if self._style.units is not None:
                 self.units = self._style.units
-
 
     def step(self, ignore_gaps=False):
         return self.depth.step(ignore_gaps=ignore_gaps)
@@ -1217,7 +1219,8 @@ def find_depth_parameter(parameters, only_md=False):
 
 
 def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
-             log_table = None, template_file: str | None = None) -> (dict, dict):
+             log_table = None, template: Template | str | None = None,
+             rename_logs: dict | None = None) -> (dict, dict):
     """
     Returns a LogCurve object for each, or selected, log in las file, packed in a dict
 
@@ -1228,9 +1231,14 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
             LogTable
             Object which contains which log types, and associated and which log(s) to use for each log type
             When this is specified, we only load those logs that are listed
-    :param template_file:
-        str
-        full filename of .xlsx file that contains templates of each log type.
+    :param template:
+        str or Template object
+        if str, it is the full filename of .xlsx file that contains templates of each log type.
+    :param rename_logs:
+        dict
+        E.G.
+        {'depth': ['DEPT', 'MD']}
+        where the key is the wanted well log name, and the value list is a list of well log names to translate from
     :return:
         tuple with two dicts
         first dict contains a log_name: LogCurve "key: value" pair for log in the las file
@@ -1276,9 +1284,11 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
     # Find and extract data
     data = well_dict.pop('data')
     output = {}
-    if template_file is not None:
-        table = pd.read_excel(template_file, header=1, sheet_name='Templates', engine='openpyxl')
+    if isinstance(template, str):
+        table = pd.read_excel(template, header=1, sheet_name='Templates', engine='openpyxl')
         template_dict = templates_from_table(table)
+    elif isinstance(template, Template):
+        template_dict = template.get_as_dict()
     else:
         template_dict = None
     for _key, _log_type in zip(only_these_logs, log_types):
@@ -1303,8 +1313,19 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
             continue
         data_units = fix_units_for_pint(data_units)
 
-        output[_key.lower()] = LogCurve(
-            _key.lower(),
+        # Rename logs
+        log_name = None
+        if rename_logs is not None:
+            for new_log_name in list(rename_logs.keys()):
+                if _key.lower() in [_l.lower() for _l in rename_logs[new_log_name]]:
+                    log_name = new_log_name
+        if log_name is None:
+            log_name = _key.lower()
+
+        # output[_key.lower()] = LogCurve(
+        output[log_name] = LogCurve(
+            # _key.lower(),
+            log_name,
             Q_(data[_key.lower()], data_units),
             Depth(Q_(data[depth_key], depth_units), depth_type=depth_type),
             _log_type,

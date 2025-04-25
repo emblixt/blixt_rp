@@ -311,6 +311,19 @@ class LogCurveTestCase(unittest.TestCase):
         print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
               lc.depth.base, lc.depth_units)
 
+    def test_read_seismic_from_las(self):
+        las_file = "G:\\My Drive\\Work - Current and Recent\\GeoMind\\Clients\\AkerBP\\PL932 Kaldafjell AVO feasibility\\Wells\\34_3_3S_seismic.las"
+        t = Template(**{'name': 'Seismic', 'units': 'dimensionless', 'line_color': 'b'})
+        log_table = LogTable({'Seismic':
+                                  ['CGG18M01-PSDM-FIN-FULL-T-Denoise2',
+                                    'CGG18M01-NVG-PSDM-ANGLE-MID-13-23-TPL932MSMTMADF2denoise2']})
+        rename_logs = {'full': ['CGG18M01-PSDM-FIN-FULL-T-Denoise2'],
+                       'mid': ['CGG18M01-NVG-PSDM-ANGLE-MID-13-23-TPL932MSMTMADF2denoise2']}
+        log_curves, well_info = read_las(las_file, log_table=log_table, template=t, rename_logs=rename_logs)
+        for key, lc in log_curves.items():
+            print('-x-')
+            print(key, '\n', lc.name, '\n', lc.well, '\n', lc.style, '\n', lc.log_type)
+
     def test_Template(self):
         t = Template(**{'name': 'MY NAME', 'well': 'MY WELL', 'units': 'METER'})
         print(list(t.keys()))

@@ -1,5 +1,6 @@
 import unittest
 import numpy as np
+import pandas as pd
 import os, sys
 import matplotlib.pyplot as plt
 from pint import Quantity as Q_
@@ -9,7 +10,8 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_te
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 # sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from blixt_rp.core.core import Interval, StratUnit, Intervals, Template, Header, CutoffRule, Cutoffs, LogTable
+from blixt_rp.core.core import (Interval, StratUnit, Intervals, Template, Header, CutoffRule, Cutoffs, LogTable,
+                                templates_from_table)
 
 
 
@@ -132,7 +134,17 @@ class TemplateTestCase(unittest.TestCase):
         t.max = 999
         t.colormap = 'A GIANT COLOR'
         print(t)
+        d = t.__dict__
+        print(type(t), type(d))
 
+    def test_dictionary_from_project_table(self):
+        table = pd.read_excel(project_table, header=1, sheet_name='Templates', engine='openpyxl')
+        template_dict = templates_from_table(table)
+        for i, _key in enumerate(list(template_dict.keys())):
+            print(_key)
+            print(template_dict[_key])
+            if i > 0:
+                break
     def test_from_project_table_error(self):
         t = Template()
         t.get_from_project(project_table, 'XXX')

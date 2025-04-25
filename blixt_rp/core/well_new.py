@@ -160,7 +160,7 @@ class Well(object):
         """
         from blixt_rp.core.log_curve_new import read_las as _read_las
         log_curves, well_dict = _read_las(file_name, verbose=verbose, encoding=encoding, log_table=log_table,
-                                          template_file=template_file)
+                                          template=template_file)
 
         if self.header.name is None:
             self.header.name = well_dict['well_info']['well']['value']

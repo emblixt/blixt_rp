@@ -313,6 +313,8 @@ class Template:
         for key in list(all_templates[log_type].keys()):
             self.__setattr__(key, all_templates[log_type][key])
 
+    def get_as_dict(self):
+        return {self.name: self.__dict__}
 class StratUnit(object):
     """
     Contains information about one specific stratigraphic unit (Group, Formation, Member, ...)
