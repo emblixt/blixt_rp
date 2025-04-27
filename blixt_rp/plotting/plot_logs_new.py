@@ -28,11 +28,11 @@ import blixt_rp.core.well_new as cw
 import blixt_rp.rp.rp_core as rp
 from blixt_rp.core.core import StratUnit, Interval, Intervals, LogTable, Template
 from blixt_rp.core.log_curve_new import LogCurve, _to_depth, replace_data
-from blixt_utils.plotting.log_plotter import (LogPlotter, LogColumn, Line, seismic_color_map,
-                                              SeismicTraces, add_strat_table)
+from blixt_utils.plotting.log_plotter import (LogPlotter, LogColumn, Line, seismic_color_map, add_strat_table)
 import blixt_utils.utils as uu
 import blixt_utils.misc.wavelets as bumw
 from blixt_utils.utils import print_info
+from blixt_rp.core.seismic import SeismicTraces
 
 logger = logging.getLogger(__name__)
 

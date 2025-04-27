@@ -3,15 +3,20 @@ import os
 import sys
 import unittest
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import logging
 from itertools import cycle
+from typing import Literal
+import bruges
+from copy import deepcopy
 
 import pint
+from bokeh.models import ColumnDataSource, LinearColorMapper
 from scipy.optimize import least_squares
 
-from bokeh.plotting import show
+from bokeh.plotting import show, figure
 from bokeh.io import output_file
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
@@ -25,14 +30,134 @@ from blixt_utils.plotting.helpers import wiggle_plot
 import blixt_utils.plotting.crossplot as xp
 from blixt_rp.core.core import Template, CutoffRule, Cutoffs, LogTable, Header
 from blixt_rp.core.log_curve_new import read_las
-from blixt_utils.plotting.log_plotter import LogColumn, LogPlotter, SeismicTraces
 
 # global variables
-output_file('C:\\Users\marte\Documents\plot.html')
+# output_file('C:\\Users\marte\Documents\plot.html')
+output_file('C:\\Users\emb\\Documents\\plot.html')
 logger = logging.getLogger(__name__)
 clrs = list(mcolors.BASE_COLORS.keys())
 clrs.remove('w')
 cclrs = cycle(clrs)  # "infinite" loop of the base colors
+test_data_length = 1000
+
+
+class SeismicTraces:
+    """
+    Simple class that contains N number of seismic traces,
+    Each trace must have the same depth/time dimension
+
+    """
+    def __init__(self,
+                 x: np.ndarray | None = None,
+                 y: np.ndarray | None = None,
+                 traces: np.ndarray | None = None,
+                 source: ColumnDataSource | None = None,
+                 trace_type: Literal['avo', 'eei', 'index'] | None = None
+                 ):
+        """
+
+        :param x:
+            np.ndarray of length M with values in the x direction
+            Contains incidence angles when trace_type is 'avo',
+            Chi angles when trace_type is 'eei', and index when trace_type is 'index'
+        :param y:
+            Numpy array of depth/time values, length N
+        :param traces:
+            np.ndarray of size MxN, contains M number of seismic traces, each of length N
+        :param source:
+            ColumnDataSource({'value': [_seismic.traces.T]})
+            Must have the key 'value'
+        :param trace_type:
+            string that describes the type of seismic variation in the x direction
+            'avo': Incidence angle (AVO)
+            'eei': Chi angle (Extended Elastic Impedance)
+            'index': index along an Inline, Xline or arbitrary seismic line
+        """
+        if x is None:
+            x = np.linspace(0,35, 128)
+        self._x = x
+        if y is None:
+            y = np.linspace(500, 3500, test_data_length)
+        self._y = y
+        if trace_type is None:
+            trace_type = 'avo'
+        self._trace_type = trace_type
+
+        self.source = source
+
+        if traces is None and source is None:
+            _synts = SyntheticTraces(trace_length=test_data_length, n_traces=len(x))
+            traces = _synts.get_traces(simulate_avo=self._trace_type=='avo')
+        self._traces = traces
+
+    @property
+    def x(self):
+        return self._x
+
+    @property
+    def y(self):
+        return self._y
+
+    @property
+    def trace_type(self):
+        return self._trace_type
+
+    @property
+    def traces(self):
+        return self._traces
+
+
+class SyntheticTraces:
+    def __init__(self,
+                 trace_length:int | None = None,
+                 dt: float | None = None,
+                 n_traces: int | None = None,
+                 n_reflectors: int | None = None,
+                 seed: int | None = None):
+
+        if trace_length is None:
+            trace_length = 3000
+        if dt is None:
+            dt = 0.001  # seconds
+        if n_traces is None:
+            n_traces = 128
+        if n_reflectors is None:
+            n_reflectors = 3
+
+        x = np.linspace(0, n_traces - 1, n_traces)
+        y = np.linspace(0, trace_length - 1, trace_length)
+        traces = np.zeros((n_traces, trace_length))
+
+        self.trace_length = trace_length
+        self.dt = dt
+        self.n_traces = n_traces
+        self.seed = seed
+        self.n_reflectors = n_reflectors
+        self.rng = np.random.default_rng(self.seed)
+
+        self.w_length = 0.082  # Ricker wavelength in seconds
+        self.f0 = 25.  # Hz
+
+        self.traces = traces
+        self.wavelet = None
+
+    def get_traces(self, simulate_avo=False) -> np.ndarray:
+        idx_refl = self.rng.integers(100, self.trace_length, self.n_reflectors)
+        refl = np.zeros(self.trace_length)
+        refl[idx_refl] = 2 * self.rng.random(self.n_reflectors) - 1
+
+        # Convolve reflectivity model with a Ricker wavelet '''
+        this_wavelet = bruges.filters.wavelets.ricker(self.w_length, self.dt, self.f0)
+        self.wavelet = this_wavelet.amplitude
+        this_trace = np.convolve(refl, self.wavelet, mode='same')
+        for i in range(self.traces.shape[0]):
+            if simulate_avo:
+                _refl = deepcopy(refl)
+                _refl[idx_refl[1]] = _refl[idx_refl[1]] * i*2/(self.traces.shape[0] - 1)
+                this_trace=  np.convolve(_refl, self.wavelet, mode='same')
+            self.traces[i,:] = this_trace
+
+        return self.traces
 
 
 def next_color():
@@ -114,10 +239,47 @@ def interpolate_along_offset(offset_traces: np.ndarray, offset_angles: pint.Quan
 
     return interpolate.interp1d(s2t_in, offset_traces, axis=0, fill_value=None)(s2t_out)
 
+
+def seismic_color_map(min_val=-1, max_val=1, n=256, symmetric=True) -> LinearColorMapper:
+    # Construct cmap dictionary
+    c_dict = {'red': ((0, 0.6314, 0.6314),
+                      (0.33, 0, 0),
+                      (0.4, 0.302, 0.302),
+                      (0.5, 0.8, 0.8),
+                      (0.6, 0.3804, 0.3804),
+                      (0.667, 0.749, 0.749),
+                      (1, 1, 1)),
+              'green': ((0, 1, 1),
+                        (0.33, 0, 0),
+                        (0.4, 0.302, 0.302),
+                        (0.5, 0.8, 0.8),
+                        (0.6, 0.2706, 0.2706),
+                        (0.667, 0, 0),
+                        (1, 1, 1)),
+              'blue': ((0, 1, 1),
+                       (0.33, 0.749, 0.749),
+                       (0.4, 0.302, 0.302),
+                       (0.5, 0.8, 0.8),
+                       (0.6, 0, 0),
+                       (0.667, 0, 0),
+                       (1, 0, 0))}
+
+    if symmetric:
+        if np.sign(min_val) != np.sign(max_val):
+            max_magnitude = np.max([np.abs(min_val), np.abs(max_val)])
+            min_val = np.sign(min_val) * max_magnitude
+            max_val = np.sign(max_val) * max_magnitude
+
+    cmap = mpl.colors.LinearSegmentedColormap('Seismic', c_dict).reversed()
+    _colors = cmap(np.linspace(0, 1, n))
+    return LinearColorMapper(palette=[mpl.colors.to_hex(_c) for _c in _colors], low=min_val, high=max_val)
+
 class TestCases(unittest.TestCase):
 
     def test_interpolate(self):
-        las_file = "G:\\My Drive\\Work - Current and Recent\\GeoMind\\Clients\\AkerBP\\PL932 Kaldafjell AVO feasibility\\Wells\\34_3_3S_seismic.las"
+        from blixt_utils.plotting.log_plotter import LogColumn, LogPlotter
+        las_file = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\\Tampen\\Wells\\34_3_3S_seismic.las"
+        # las_file = "G:\\My Drive\\Work - Current and Recent\\GeoMind\\Clients\\AkerBP\\PL932 Kaldafjell AVO feasibility\\Wells\\34_3_3S_seismic.las"
         t = Template(**{'name': 'Seismic', 'units': 'dimensionless', 'line_color': 'b'})
         log_table = LogTable({'Seismic':
                                   ['CGG18M01-NVG-PSDM-ANGLE-NEAR-05-15-TPL932MSMTMADF2denoise2',
@@ -133,8 +295,6 @@ class TestCases(unittest.TestCase):
         }
         log_curves, well_info = read_las(las_file, log_table=log_table, template=t, rename_logs=rename_logs)
 
-        print(log_curves['near'].depth_type)
-
         offset_angles = pint.Quantity(np.array([10., 18., 26., 34.]), 'deg')
         traces = np.zeros((len(offset_angles), len(log_curves['near'])))
         traces[0,:] = log_curves['near'].values
@@ -143,9 +303,11 @@ class TestCases(unittest.TestCase):
         traces[3,:] = log_curves['ufar'].values
         # fig1, ax1 = plt.subplots()
         # ax1.imshow(traces.T, aspect=1./1000)
-        st_orig = SeismicTraces(x=offset_angles,
+        st_orig = SeismicTraces(x=offset_angles.magnitude,
                                  y=log_curves['near'].depth.values,
-                                 traces=traces,
+                                 # traces=traces,
+                                 traces=None,
+                                 source=ColumnDataSource({'value': [traces.T]}),
                                  trace_type='avo'
                                  )
         lc_orig = LogColumn('orig',
@@ -153,9 +315,11 @@ class TestCases(unittest.TestCase):
 
         new_angles = pint.Quantity(np.linspace(10, 34, 100), 'deg')
         new_traces = interpolate_along_offset(traces, offset_angles, new_angles)
-        st_intrp = SeismicTraces(x=new_angles,
+        st_intrp = SeismicTraces(x=new_angles.magnitude,
                                  y=log_curves['near'].depth.values,
-                                 traces=new_traces,
+                                 # traces=new_traces,
+                                 traces=None,
+                                 source=ColumnDataSource({'value': [new_traces.T]}),
                                  trace_type='avo')
         lc_intrp = LogColumn('interpolated', seismic_traces=st_intrp)
 
@@ -167,6 +331,22 @@ class TestCases(unittest.TestCase):
         # fig2, ax2 = plt.subplots()
         # ax2.imshow(new_traces.T, aspect=1./100.)
         # plt.show()
+
+
+    def test_synthetic_traces(self):
+        fig, ax = plt.subplots()
+        _synts = SyntheticTraces()
+        synts = _synts.get_traces(simulate_avo=True)
+        print(synts.shape)
+        source = ColumnDataSource({'value': [synts.T]})
+        print(np.min(synts))
+        _seismic_color_map = seismic_color_map(min_val=np.min(synts), max_val=np.max(synts))
+
+        p = figure()
+        p.image('value', source=source,
+                color_mapper=_seismic_color_map, dh=synts.shape[1], dw=synts.shape[0], x=0, y=0)
+        show(p)
+
 
     def test_ixg_plot(self):
         fig, axes = plt.subplots(nrows=1, ncols=2)
