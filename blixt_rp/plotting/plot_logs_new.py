@@ -28,7 +28,7 @@ import blixt_rp.core.well_new as cw
 import blixt_rp.rp.rp_core as rp
 from blixt_rp.core.core import StratUnit, Interval, Intervals, LogTable, Template
 from blixt_rp.core.log_curve_new import LogCurve, _to_depth, replace_data
-from blixt_utils.plotting.log_plotter import (LogPlotter, LogColumn, Line, seismic_color_map, add_strat_table)
+from blixt_utils.plotting.log_plotter import (LogPlotter, LogColumn, Line,  add_strat_table)
 import blixt_utils.utils as uu
 import blixt_utils.misc.wavelets as bumw
 from blixt_utils.utils import print_info
@@ -149,8 +149,7 @@ def plot_chi_rotation(well: cw.Well,
     :return:
     """
     # TODO 1. check that the logs have the same length and step
-    # TODO 2. Check output from histogram calculation. With the 6406_11_1s.las I get the Brine EEI values to the right
-    # of the HC EEI values in the histogram even when I'm focused into an depth region in which the Brine has lower EEI
+    # TODO 2. The center of the Chi line must update after changing zoom or recalculating the EEI
 
     # Well must have LogCurve with TWT (or OWT) data, so first check that this exists
     twt = None
@@ -177,15 +176,17 @@ def plot_chi_rotation(well: cw.Well,
             err_txt = 'Log {} does not exist in well {}'.format(_log, well.name)
             print_info(err_txt, 'error', logger, 'IOError')
 
-
     if width is None:
-        width = 800.
+        width = 800
     if height is None:
-        height = 800.
+        height = 800
+
+    # Create title
+    title = Div(text=well.name, width=int(width), height=10)
 
     # Create controller widgets
     chi_slider = Slider(title='Chi angle [deg]', start=-90, end=90, step=3, value=23)
-    backus_slider = Slider(title='Backus window length [m]', start=2, end=18, step=1, value=5)
+    backus_slider = Slider(title='Backus window length [m]', start=0, end=18, step=1, value=5)
     freq_slider = Slider(title='Wavelet central freq. [Hz]', start=10, end=40, step=5, value=20)
 
     # Create initial data:
@@ -224,7 +225,7 @@ def plot_chi_rotation(well: cw.Well,
         return _min, _max, _chi_at_max
 
     eei_min, eei_max, chi_at_max_diff = find_eei_extremes()
-    print('Max separation at chi =', chi_at_max_diff)
+    # print('Max separation at chi =', chi_at_max_diff)
 
     def create_lines_from_line_source(_line_source):
         _line_brine = Line(x='eei_brine', y='md', source=_line_source, style=Template(**{
@@ -252,10 +253,14 @@ def plot_chi_rotation(well: cw.Well,
 
     # Calculate synthetic EEI seismic
     def get_amp_sources(_ba, _freq):
-        _vp_b_ba, _vs_b_ba, _rho_b_ba, _vp_h_ba, _vs_h_ba, _rho_h_ba = calc_backus_avg(
-            vp_brine.values, vs_brine.values, rho_brine.values,
-            vp_hc.values, vs_hc.values, rho_hc.values,
-            _ba, step)
+        if _ba > 0:
+            _vp_b_ba, _vs_b_ba, _rho_b_ba, _vp_h_ba, _vs_h_ba, _rho_h_ba = calc_backus_avg(
+                vp_brine.values, vs_brine.values, rho_brine.values,
+                vp_hc.values, vs_hc.values, rho_hc.values,
+                _ba, step)
+        else:
+            _vp_b_ba, _vs_b_ba, _rho_b_ba, _vp_h_ba, _vs_h_ba, _rho_h_ba = (
+                vp_brine.values, vs_brine.values, rho_brine.values, vp_hc.values, vs_hc.values, rho_hc.values)
 
         # Create LogCurves that contain the backus averaged elastic logs
         _vp_brine_ba = replace_data(vp_brine, Q_(_vp_b_ba, vp_brine.units), vp_brine.depth, False,
@@ -294,9 +299,8 @@ def plot_chi_rotation(well: cw.Well,
 
     amp_brine, amp_hc = get_amp_sources(backus_slider.value, freq_slider.value)
 
-    amp_brine_source = ColumnDataSource({'value': [amp_brine.T]})
-    # _amp_hc_source = ColumnDataSource({'value': [amp_hc.T]})
-    amp_hc_source = ColumnDataSource({'value': [(amp_brine - amp_hc).T]})  # TESTING
+    amp_hc_source = ColumnDataSource({'value': [amp_hc.T]})
+    amp_diff_source = ColumnDataSource({'value': [(amp_brine - amp_hc).T]})  # TESTING
 
     def create_traces(_amp_brine_source, _amp_hc_source):
         _seismic_traces_brine = SeismicTraces(
@@ -309,7 +313,8 @@ def plot_chi_rotation(well: cw.Well,
             trace_type='chi')
         return _seismic_traces_brine, _seismic_traces_hc
 
-    seismic_traces_brine, seismic_traces_hc = create_traces(amp_brine_source, amp_hc_source)
+    # seismic_traces_brine, seismic_traces_hc = create_traces(amp_brine_source, amp_hc_source)
+    seismic_traces_diff, seismic_traces_hc = create_traces(amp_diff_source, amp_hc_source)
 
     def spans(_chi):
         _span = Span(
@@ -323,9 +328,9 @@ def plot_chi_rotation(well: cw.Well,
     _spans = spans(chi_slider.value)
 
     # Create grid plot
-    xplot = figure(width=int(width), height=int(height-200), tools=tools)  # Intercept vs. Gradient crossplot
+    xplot = figure(width=int(width -200), height=int(height-200), tools=tools)  # Intercept vs. Gradient crossplot
     xplot.toolbar.logo = None
-    hplot = figure(width=int(width), height=200, tools=[PanTool(), WheelZoomTool()])  # Histogram
+    hplot = figure(width=int(width - 200), height=200, tools=[PanTool(), WheelZoomTool()])  # Histogram
     hplot.toolbar.logo = None
     plotter = LogPlotter(width=width, height=height)
     c1 = LogColumn('EEI', lines=[line_brine, line_hc], rel_width=1)
@@ -333,14 +338,17 @@ def plot_chi_rotation(well: cw.Well,
     c3 = LogColumn('DIFF', lines=[line_diff], rel_width=0.7)
     # c3 = LogColumn('EEI_BRINE', seismic_traces=seismic_traces_brine, rel_width=1)
     c4 = LogColumn('EEI_HC', seismic_traces=seismic_traces_hc, rel_width=1)
-    plotter.columns = [c1, c2, c3, c4]
+    c5 = LogColumn('EEI_DIFF', seismic_traces=seismic_traces_diff, rel_width=1)
+    plotter.columns = [c1, c2, c3, c4, c5]
     grid = plotter.figure()
     # grid.children[2][0].add_layout(_spans)
     grid.children[3][0].add_layout(_spans)
+    grid.children[4][0].add_layout(_spans)
     # Fake some data to add a legend
     grid.children[3][0].scatter([0], [0], fill_color=None, line_color=None, size=0,
+                                legend_label='HC, ba: {}, Hz: {}'.format(backus_slider.value, freq_slider.value))
+    grid.children[4][0].scatter([0], [0], fill_color=None, line_color=None, size=0,
                                 legend_label='Brine - HC, ba: {}, Hz: {}'.format(backus_slider.value, freq_slider.value))
-
     def calc_xplot_source_dict(_ba, _chi, _mask):
         return calc_all(
                 vp_brine.values[_mask], vs_brine.values[_mask], rho_brine.values[_mask],
@@ -352,19 +360,32 @@ def plot_chi_rotation(well: cw.Well,
         backus_slider.value, chi_slider.value, mask
     ))
 
+    # xplot.scatter(
+    #     x='int_brine', y='grad_brine', source=xplot_source, color='blue', marker='circle',
+    #     legend_label='Brine, ba: {}'.format(backus_slider.value), alpha=0.7
+    # )
+    # xplot.scatter(
+    #     x='int_hc', y='grad_hc', source=xplot_source, color='red', marker='circle',
+    #     legend_label='HC, ba: {}'.format(backus_slider.value), alpha=0.7
+    # )
+    # y_range = np.max([np.abs(np.nanmin(xplot_source.data['grad_hc'])), np.abs(np.nanmax(xplot_source.data['grad_hc']))])
+    # x_range = np.max([np.abs(np.nanmin(xplot_source.data['int_hc'])), np.abs(np.nanmax(xplot_source.data['int_hc']))])
     xplot.scatter(
-        x='int_brine', y='grad_brine', source=xplot_source, color='blue', marker='circle',
+        x='log_ai_b', y='log_gi_b', source=xplot_source, color='blue', marker='circle',
         legend_label='Brine, ba: {}'.format(backus_slider.value), alpha=0.7
     )
     xplot.scatter(
-        x='int_hc', y='grad_hc', source=xplot_source, color='red', marker='circle',
+        x='log_ai_h', y='log_gi_h', source=xplot_source, color='red', marker='circle',
         legend_label='HC, ba: {}'.format(backus_slider.value), alpha=0.7
     )
-    y_range = np.max([np.abs(np.nanmin(xplot_source.data['grad_hc'])), np.abs(np.nanmax(xplot_source.data['grad_hc']))])
-    x_range = np.max([np.abs(np.nanmin(xplot_source.data['int_hc'])), np.abs(np.nanmax(xplot_source.data['int_hc']))])
+    y_range = 0.5 * (np.nanmax(xplot_source.data['log_gi_h']) - np.nanmin(xplot_source.data['log_gi_h']))
+    x_center = float(np.nanmedian(np.append(xplot_source.data['log_ai_h'], xplot_source.data['log_ai_b'])))
+    y_center = float(np.nanmedian(np.append(xplot_source.data['log_gi_h'], xplot_source.data['log_gi_b'])))
+    # y_range = np.max([np.abs(np.nanmin(xplot_source.data['log_gi_h'])), np.abs(np.nanmax(xplot_source.data['log_gi_h']))])
+    # x_range = np.max([np.abs(np.nanmin(xplot_source.data['log_ai_h'])), np.abs(np.nanmax(xplot_source.data['log_ai_h']))])
     bins = np.linspace(1.2 * eei_min, 0.8 * eei_max, 100)
     # bins = 40
-    _x, _y = return_chi_line(y_range, chi_slider.value)
+    _x, _y = return_chi_line(y_range, chi_slider.value, x_center=x_center, y_center=y_center)
     chi_line_source = ColumnDataSource(dict(x=_x, y=_y))
     xplot.line(x='x', y='y', source=chi_line_source)
 
@@ -385,14 +406,16 @@ def plot_chi_rotation(well: cw.Well,
     data_table = add_strat_table(grid, stratigraphy=wis.get_intervals_dict(well.name), column_index=1)
 
     grid.children[0][0].legend.click_policy = 'hide'
-    xplot.xaxis.axis_label = 'Intercept'
-    xplot.yaxis.axis_label = 'Gradient'
+    # xplot.xaxis.axis_label = 'Intercept'
+    # xplot.yaxis.axis_label = 'Gradient'
+    xplot.xaxis.axis_label = 'log AI'
+    xplot.yaxis.axis_label = 'log GI'
     xplot.legend.title = 'Chi: {}'.format(chi_slider.value)
     hplot.legend.title = 'Chi: {}'.format(chi_slider.value)
-    xplot.y_range.start = -1.05 * y_range
-    xplot.y_range.end = 1.05 * y_range
-    xplot.x_range.start = -1.05 * x_range
-    xplot.x_range.end = 1.05 * x_range
+    # xplot.y_range.start = -1.05 * y_range
+    # xplot.y_range.end = 1.05 * y_range
+    # xplot.x_range.start = -1.05 * x_range
+    # xplot.x_range.end = 1.05 * x_range
     hplot.xaxis.axis_label = 'EEI'
     xplot.legend.click_policy = 'hide'
     hplot.legend.click_policy = 'hide'
@@ -409,7 +432,7 @@ def plot_chi_rotation(well: cw.Well,
                                    grid.children[0][0].y_range.end, grid.children[0][0].y_range.start)
 
         _x, _y = return_chi_line(
-            y_range, new)
+            y_range, new, x_center=x_center, y_center=y_center)
         chi_line_source.data = dict(x=_x, y=_y)
         _xplot_dict = calc_xplot_source_dict(backus_slider.value, new, _mask)
         xplot_source.data = _xplot_dict
@@ -417,8 +440,8 @@ def plot_chi_rotation(well: cw.Well,
 
     def backus_callback(attr, old, new):
         _amp_brine, _amp_hc = get_amp_sources(new, freq_slider.value)
-        amp_brine_source.data['value'] = [_amp_brine.T]
-        amp_hc_source.data['value'] = [(_amp_brine - _amp_hc).T]
+        amp_hc_source.data['value'] = [_amp_hc.T]
+        amp_diff_source.data['value'] = [(_amp_brine - _amp_hc).T]
 
         line_source.data = calc_all(
             vp_brine.values, vs_brine.values, rho_brine.values,
@@ -428,14 +451,15 @@ def plot_chi_rotation(well: cw.Well,
 
     def freq_callback(attr, old, new):
         _amp_brine, _amp_hc = get_amp_sources(chi_slider.value, new)
-        amp_brine_source.data['value'] = [_amp_brine.T]
-        amp_hc_source.data['value'] = [(_amp_brine - _amp_hc).T]
+        amp_hc_source.data['value'] = [_amp_hc.T]
+        amp_diff_source.data['value'] = [(_amp_brine - _amp_hc).T]
 
     # Call backs
     legend_callback = CustomJS(args=dict(chi=chi_slider, ba=backus_slider, freq=freq_slider, spans=_spans,
                                          c1_legend=grid.children[0][0].legend[0],
                                          c3_legend=grid.children[2][0].legend[0],
                                          c4_legend=grid.children[3][0].legend[0],
+                                         c5_legend=grid.children[4][0].legend[0],
                                          hplot_legend=hplot.legend[0],
                                          xplot_legend=xplot.legend[0]), code=legend_code)
 
@@ -451,7 +475,231 @@ def plot_chi_rotation(well: cw.Well,
     #                                 CustomJS(args=dict(p=grid.children[0][0]),
     #                                          code='console.log("Range update " + p.y_range.start)'))
 
-    return grid,chi_slider, backus_slider, freq_slider, data_table, xplot, hplot
+    return title, grid,chi_slider, backus_slider, freq_slider, data_table, xplot, hplot
+
+def compare_synth_with_seismic(
+        well: cw.Well,
+        ref_log_table: LogTable,
+        vp_vs_rho_table: LogTable,
+        seismic_traces: SeismicTraces,
+        wis: Intervals | None = None,
+        width: int | None = None,
+        height: int | None = None):
+    """
+    Plots the synthetic seismic based on the elastic logs in vp_vs_rho_table along with the real seismic (seismic_traces)
+    for sake of comparison
+    :param well:
+        Well object
+    :param ref_log_table:
+        LogTable with some well logs useful for comparison / reference
+    :param vp_vs_rho_table:
+        LogTable with Vp, Vs and Rho data that are used to calculate the synthetics
+    :param seismic_traces:
+        SeismicTraces object with real seismic data
+    :param wis:
+        Intervals
+        If provided the working intervals in wis will be plotted
+    :param width:
+    :param height:
+    :return:
+    """
+    if width is None:
+        width = 800.
+    if height is None:
+        height = 800.
+
+    # Well must have LogCurve with TWT (or OWT) data, so first check that this exists
+    twt = None
+    log_types = well.get_log_types
+    if 'Two-way time' in log_types:
+        twt = well.get_logs_of_type('Two-way time')[0]  # Take the first occurrence
+    elif 'One-way time' in log_types:
+        twt = well.get_logs_of_type('One-way time')[0].get_twt_from_owt()
+    else:
+        err_txt = 'No TWT data exists in well {}'.format(well.name)
+        print_info(err_txt, 'error', logger, 'IOError')
+
+    # Check that the required logs exists in the well
+    for _log in (ref_log_table.log_names + vp_vs_rho_table.log_names):
+        if _log not in well.get_log_names:
+            err_txt = 'Log {} does not exist in well {}'.format(_log, well.name)
+            print_info(err_txt, 'error', logger, 'IOError')
+
+    # Create controller widgets
+    backus_slider = Slider(title='Backus window length [m]', start=0, end=20, step=2, value=0, width=int(width/3.) - 5)
+    freq_slider = Slider(title='Wavelet central freq. [Hz]', start=10, end=40, step=5, value=20, width=int(width/3.) - 5)
+    shift_slider = Slider(title='Shift in MD [m]', start=-40, end=40, step=2, value=0,  width=int(width/3.) - 5)
+
+    # Create initial data:
+    vp_orig = well.get_log_curve(vp_vs_rho_table['P velocity'])
+    step =  vp_orig.step().magnitude
+    depth = vp_orig.depth.values
+    vs_orig = well.get_log_curve(vp_vs_rho_table['S velocity'])
+    rho_orig = well.get_log_curve(vp_vs_rho_table['Density'])
+    ai_orig = vp_orig.values * rho_orig.values
+    ai_min = np.nanmin(ai_orig)
+    ai_max = np.nanmax(ai_orig)
+    time_depth_twt = twt.take_sampling_from(vp_orig)
+    dt = Q_(1, 'millisecond')
+    avo_angles = np.arange(seismic_traces.x[0], seismic_traces.x[-1], 1)
+
+    def create_ai_line(_line_source):
+        return Line(
+            x='ai_ba', y='md', source=_line_source, style=Template(**{
+                'name': 'AI ba: {}m'.format(backus_slider.value),
+                'line_color': 'blue', 'min': ai_min, 'max': ai_max
+            })
+        )
+    def calc_ai(_vp, _vs, _rho, _depth, _ba, _step):
+        if _ba == 0.:
+            _vp_ba = vp_orig.values
+            _vs_ba = vs_orig.values
+            _rho_ba = rho_orig.values
+        else:
+            _vp_ba, _vs_ba, _rho_ba, _, _, _ = calc_backus_avg(
+                _vp, _vs, _rho,
+                _vp, _vs, _rho,
+                _ba, _step)
+        return dict(
+            ai_ba=_vp_ba * _rho_ba,
+            vp=_vp_ba,
+            vs=_vs_ba,
+            rho=_rho_ba,
+            md=_depth
+        )
+
+    line_source = ColumnDataSource(
+        calc_ai(
+            vp_orig.values, vs_orig.values, rho_orig.values,
+            depth, backus_slider.value, step
+        )
+    )
+
+    line_ai = create_ai_line(line_source)
+
+    # Calculate synthetic seismic
+    def get_amp_source(_ba, _freq):
+        if _ba == 0.:
+            _vp_b_ba = vp_orig.values
+            _vs_b_ba = vs_orig.values
+            _rho_b_ba = rho_orig.values
+        else:
+            _vp_b_ba, _vs_b_ba, _rho_b_ba, _, _, _ = calc_backus_avg(
+                vp_orig.values, vs_orig.values, rho_orig.values,
+                vp_orig.values, vs_orig.values, rho_orig.values,
+                _ba, step)
+
+        # Create LogCurves that contain the backus averaged elastic logs
+        _vp_ba = replace_data(vp_orig, Q_(_vp_b_ba, vp_orig.units), vp_orig.depth, False,
+                                    'backus {}m'.format(_ba), suffix='ba')
+        _vs_ba = replace_data(vs_orig, Q_(_vs_b_ba, vs_orig.units), vs_orig.depth, False,
+                                    'backus {}m'.format(_ba), suffix='ba')
+        _rho_ba = replace_data(rho_orig, Q_(_rho_b_ba, rho_orig.units), rho_orig.depth, False,
+                                     'backus {}m'.format(_ba), suffix='ba')
+
+        _amp = get_wiggles_in_depth(_vp_ba, _vs_ba, _rho_ba,
+                                    time_depth_twt.data, dt, avo_angles=avo_angles,
+                                    center_frequency=_freq)
+        return _amp
+
+    amp = get_amp_source(backus_slider.value, freq_slider.value)
+    amp_source = ColumnDataSource({'value': [amp.T]})
+
+    def create_synth_traces(_amp_source, _ba, _freq):
+        _seismic_traces = SeismicTraces(
+            x=avo_angles, y=depth,
+            traces=None, source=_amp_source,
+            trace_type='avo',
+            title='Synth. ba: {}m, f: {}Hz'.format(_ba, _freq)
+        )
+        return _seismic_traces
+
+    synth_traces = create_synth_traces(amp_source, backus_slider.value, freq_slider.value)
+
+    # This is necessary to get the source of the real seismic, so that we can shift it later
+    def create_real_traces(_seismic_traces, _source):
+        _seismic_traces = SeismicTraces(
+            x=_seismic_traces.x, y=_seismic_traces.y,
+            traces=None, source=_source,
+            trace_type=_seismic_traces.trace_type,
+            title=_seismic_traces._title
+        )
+        return _seismic_traces
+
+    orig_seismic_values = deepcopy(seismic_traces.source.data['value'][0])
+    data_source = seismic_traces.source
+    real_traces = create_real_traces(seismic_traces, data_source)
+
+
+    # create a grid plot
+    plotter = LogPlotter(width=width, height=height)
+    c1 = LogColumn('REF', lines=[well.get_log_curve(_x).get_line() for _x in ref_log_table.log_names], rel_width=1)
+    if wis is not None:
+        c2 = LogColumn('WIS', lines=[], rel_width=0.3)
+    else:
+        c2 = LogColumn('WIS', lines=[], rel_width=0)
+    c3 = LogColumn('AI', lines=[line_ai], rel_width=1)
+    c4 = LogColumn('SYNTH', seismic_traces=synth_traces, rel_width=1)
+    # c5 = LogColumn('SEISMIC', seismic_traces=seismic_traces, rel_width=1)
+    c5 = LogColumn('SEISMIC', seismic_traces=real_traces, rel_width=1)
+    plotter.columns = [c1, c2, c3, c4, c5]
+    grid = plotter.figure()
+    # Fake some data to add a legend to the real seismic
+    grid.children[4][0].scatter([0], [0], fill_color=None, line_color=None, size=0,
+                                legend_label='Shift = {}m MD'.format(shift_slider.value))
+    grid.children[4][0].legend.label_text_font_size = '10px'
+    for ax in [grid.children[_i][0] for _i in [3, 4]]:
+        ax.x_range.start = avo_angles[0]
+        ax.x_range.end = avo_angles[-1]
+
+    if wis is not None:
+        data_table = add_strat_table(grid, stratigraphy=wis.get_intervals_dict(well.name), column_index=1)
+    else:
+        data_table = Div(text='', width=10, height=10)
+
+    # call back functions
+    def backus_callback(attr, old, new):
+        _amp = get_amp_source(new, freq_slider.value)
+        amp_source.data['value'] = [_amp.T]
+        # print(grid.children[2][0].xaxis[0].axis_label)
+
+        line_source.data = calc_ai(
+            vp_orig.values, vs_orig.values, rho_orig.values,
+            depth, new, step
+        )
+
+    def freq_callback(attr, old, new):
+        _amp = get_amp_source(backus_slider.value, new)
+        amp_source.data['value'] = [_amp.T]
+
+    def shift_callback(attr, old, new):
+        _shifted_data = np.roll(orig_seismic_values, int(new/step), 0)
+        data_source.data['value'] = [_shifted_data]
+
+    legend_callback = CustomJS(args=dict(ba=backus_slider, freq=freq_slider, shift=shift_slider,
+                                         c3_axis=grid.children[2][0].xaxis[0],
+                                         c3_legend=grid.children[2][0].legend[0],
+                                         c4_axis=grid.children[3][0].xaxis[0],
+                                         c5_legend=grid.children[4][0].legend[0]),
+                               code="""
+                                const _ba = ba.value;
+                                const _freq = freq.value;
+                                const _shift = shift.value;
+                                c3_axis.axis_label = 'AI ba:' + _ba + 'm';
+                                c3_legend.items[0].label.value = 'AI ba:' + _ba + 'm';
+                                //c4_legend.items[0].label.value = 'Synth. ba: ' + _ba + 'm, f: ' + _freq + 'Hz: avo';
+                                c4_axis.axis_label = 'Synth. ba: ' + _ba + 'm, f: ' + _freq + 'Hz: avo';
+                                c5_legend.items[0].label.value = 'Shift = ' + _shift + 'm MD'
+                                console.log('Test: ', _ba); 
+                               """)
+    backus_slider.on_change('value_throttled', backus_callback)
+    freq_slider.on_change('value_throttled', freq_callback)
+    shift_slider.on_change('value_throttled', shift_callback)
+    backus_slider.js_on_change('value', legend_callback)
+    freq_slider.js_on_change('value', legend_callback)
+    shift_slider.js_on_change('value', legend_callback)
+
+    return grid, backus_slider, freq_slider, shift_slider, data_table
 
 
 def interactive_edits(well: cw.Well,
@@ -675,7 +923,7 @@ def get_wiggles_in_depth(
 
     return amp
 
-def return_chi_line(_y_half_range, _chi):
+def return_chi_line(_y_half_range, _chi, x_center=0., y_center=0.):
     """
     Returns the end points of a line that goes through the
     origo from -y_half_range to +y_half_range
@@ -686,8 +934,9 @@ def return_chi_line(_y_half_range, _chi):
         Chi angle in deg
     :return:
     """
-    _xl = [-1.1 * _y_half_range * np.tan(np.pi * _chi / 180.), 1.1 * _y_half_range * np.tan(np.pi * _chi / 180.)]
-    _yl = [1.1 * _y_half_range, -1.1 * _y_half_range]
+    _xl = [-1.1 * _y_half_range * np.tan(np.pi * _chi / 180.) + x_center,
+           1.1 * _y_half_range * np.tan(np.pi * _chi / 180.) + x_center]
+    _yl = [1.1 * _y_half_range + y_center, -1.1 * _y_half_range + y_center]
     return _xl, _yl
 
 def mask_based_on_depth(_depth, _top, _base):
@@ -701,9 +950,12 @@ def calc_intercept_gradient(_vp, _vs, _rho):
     return np.append(_intercept, np.zeros(1)), np.append(_gradient, np.zeros(1))
 
 def calc_backus_avg(_vp_b, _vs_b, _rho_b, _vp_h, _vs_h, _rho_h, _ba, _step):
-    _ba_b = bra.backus(_vp_b, _vs_b, _rho_b, _ba, _step)
-    _ba_h = bra.backus(_vp_h, _vs_h, _rho_h, _ba, _step)
-    return _ba_b[0], _ba_b[1], _ba_b[2], _ba_h[0], _ba_h[1], _ba_h[2]
+    if _ba > 0:
+        _ba_b = bra.backus(_vp_b, _vs_b, _rho_b, _ba, _step)
+        _ba_h = bra.backus(_vp_h, _vs_h, _rho_h, _ba, _step)
+        return _ba_b[0], _ba_b[1], _ba_b[2], _ba_h[0], _ba_h[1], _ba_h[2]
+    else:
+        return _vp_b, _vs_b, _rho_b, _vp_h, _vs_h, _rho_h
 
 def calc_eei(_vp_b, _vs_b, _rho_b, _vp_h, _vs_h, _rho_h, _chi):
     _eei_b = rp.eei(_vp_b, _vs_b, _rho_b)(_chi)
@@ -713,6 +965,8 @@ def calc_eei(_vp_b, _vs_b, _rho_b, _vp_h, _vs_h, _rho_h, _chi):
 def calc_all(_vp_b, _vs_b, _rho_b, _vp_h, _vs_h, _rho_h, _depth, _ba, _step, _chi):
     _vp_b, _vs_b, _rho_b, _vp_h, _vs_h, _rho_h = calc_backus_avg(_vp_b, _vs_b, _rho_b, _vp_h, _vs_h, _rho_h, _ba, _step)
     _eei_b, _eei_h = calc_eei(_vp_b, _vs_b, _rho_b, _vp_h, _vs_h, _rho_h, _chi)
+    _ai_b, _ai_h = calc_eei(_vp_b, _vs_b, _rho_b, _vp_h, _vs_h, _rho_h, 0.)  # acoustic impedance
+    _gi_b, _gi_h = calc_eei(_vp_b, _vs_b, _rho_b, _vp_h, _vs_h, _rho_h, 90.)  # gradient impedance
     _i_b, _g_b = calc_intercept_gradient(_vp_b, _vs_b, _rho_b)
     _i_h, _g_h = calc_intercept_gradient(_vp_h, _vs_h, _rho_h)
     return dict(
@@ -723,6 +977,10 @@ def calc_all(_vp_b, _vs_b, _rho_b, _vp_h, _vs_h, _rho_h, _depth, _ba, _step, _ch
         grad_brine=_g_b,
         int_hc=_i_h,
         grad_hc=_g_h,
+        log_ai_b=np.log10(_ai_b),
+        log_gi_b=np.log10(_gi_b),
+        log_ai_h=np.log10(_ai_h),
+        log_gi_h=np.log10(_gi_h),
         md=_depth
     )
 
@@ -734,7 +992,8 @@ legend_code = """
     c1_legend.items[0].label.value = 'EEI brine, chi:' + _chi + ' ba:' + _ba;
     c1_legend.items[1].label.value = 'EEI hc, chi:' + _chi + ' ba:' + _ba;
     c3_legend.items[0].label.value = 'DIFF., chi:' + _chi + ' ba:' + _ba;
-    c4_legend.items[0].label.value = 'Brine - HC, ba:' + _ba + ' Hz:' + _freq;
+    c4_legend.items[0].label.value = 'HC, ba:' + _ba + ' Hz:' + _freq;
+    c5_legend.items[0].label.value = 'Brine - HC, ba:' + _ba + ' Hz:' + _freq;
     hplot_legend.title = 'Chi:' + _chi;
     hplot_legend.items[0].label.value = 'Brine, ba:' + _ba;
     hplot_legend.items[1].label.value = 'HC, ba:' + _ba;

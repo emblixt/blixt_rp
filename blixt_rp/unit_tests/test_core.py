@@ -101,10 +101,16 @@ class LogTableTests(unittest.TestCase):
         print(inv)
         print(lt.dict)
 
+    def test_from_invert(self):
+        inv_dict = {'bs': 'Bit size', 'cali': 'Caliper', 'cpi_phie': 'Porosity', 'cpi_sw': 'Saturation', 'gr': 'Gamma ray', 'rho_fsub_gas80': 'Density', 'rho_fsub_oil80': 'Density', 'rho_insitu_conditioned': 'Density', 'vcl_used': 'Volume', 'vp_fsub_gas80': 'P velocity', 'vp_fsub_oil80': 'P velocity', 'vp_insitu_conditioned': 'P velocity', 'vs_fsub_gas80': 'S velocity', 'vs_fsub_oil80': 'S velocity', 'vs_insitu_conditioned': 'S velocity', 'vsh_mineral': 'Volume'}
+        lt = LogTable()
+        lt.from_invert(inv_dict)
+        print(lt.log_types)
+        print(lt.log_names)
+        print(lt['Bit size'])
 
     def test_multi(self):
-        lt = LogTable('Multiple logs', log_table_multi)
-        print(lt.name)
+        lt = LogTable(log_table_multi)
         print(list(lt.keys()))
         lt['Density'].append('my other rhob')
         print(lt.log_names)

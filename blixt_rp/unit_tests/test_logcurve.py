@@ -57,6 +57,7 @@ cr5 = CutoffRule('DataPair1', '>', Q_(5, 'us/feet'))  # all should be excluded
 # Useful log table
 log_table1 = LogTable({'Density': 'rhob', 'Sonic': 'dt'})
 log_table2 = LogTable({'Resistivity': 'rdep', 'Sonic': 'dt'})
+log_table2_multi = LogTable({'Resistivity': ['rdep', 'rmed'], 'Sonic': ['dt']})
 log_table3 = LogTable({'Density': 'rho_brine', 'P velocity': 'vp_brine', 'S velocity': 'vs_brine'})
 log_table4 = LogTable({'Density': 'rhob', 'Sonic': 'dt', 'Gamma ray': 'grd'})
 
@@ -284,30 +285,32 @@ class LogCurveTestCase(unittest.TestCase):
         # self.assertTrue(np.sum(lc1.calc_mask(cutoffs7, verbose=True).values) < 1)
 
     def test_read(self):
-        # las_file = 'C:\\Users\\marte\\PycharmProjects\\blixt_rp\\test_data\\Well E_CPI.las'
-        log_curves, well_info = read_las(las_file1)
-        print(len(log_curves))
-        lc = log_curves['grd']
-        print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
-              lc.depth.base, lc.depth_units)
+        # # las_file = 'C:\\Users\\marte\\PycharmProjects\\blixt_rp\\test_data\\Well E_CPI.las'
+        # log_curves, well_info = read_las(las_file1)
+        # print(len(log_curves))
+        # lc = log_curves['grd']
+        # print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
+        #       lc.depth.base, lc.depth_units)
 
-        print('\nNow using log_table')
-        log_curves, well_info = read_las(las_file1, log_table=log_table1)
-        print(len(log_curves))
-        lc = log_curves['dt']
-        print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
-              lc.depth.base, lc.depth_units)
+        # print('\nNow using log_table')
+        # log_curves, well_info = read_las(las_file1, log_table=log_table1)
+        # print(len(log_curves))
+        # lc = log_curves['dt']
+        # print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
+        #       lc.depth.base, lc.depth_units)
 
-        print(lc.header)
+        # print(lc.header)
 
-        print('\nNow using erroneous log_table')
-        log_table = LogTable({'Density': 'xxx', 'Sonic': 'yyy'})
-        log_curves, well_info = read_las(las_file1, log_table=log_table)
-        print(len(log_curves))
+        # print('\nNow using erroneous log_table')
+        # log_table = LogTable({'Density': 'xxx', 'Sonic': 'yyy'})
+        # log_curves, well_info = read_las(las_file1, log_table=log_table)
+        # print(len(log_curves))
 
         print('Reading a more complex las file')
-        log_curves, well_info = read_las(las_file2, log_table=log_table2)
-        lc = log_curves['rdep']
+        # log_curves, well_info = read_las(las_file2, log_table=log_table2)
+        # lc = log_curves['rdep']
+        log_curves, well_info = read_las(las_file2, log_table=log_table2_multi)
+        lc = log_curves['rmed']
         print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
               lc.depth.base, lc.depth_units)
 

@@ -20,7 +20,8 @@ from blixt_rp.core.log_curve_new import LogCurve, Depth, is_equivalent, read_las
 from blixt_rp.core.core import Template, LogTable, Intervals, Cutoffs, CutoffRule
 from blixt_rp.core.well_new import Well
 import blixt_rp.plotting.plot_logs_new as bupp
-from blixt_utils.plotting.log_plotter import LogColumn, Line, add_lines, add_strat_table, LogPlotter, SeismicTraces
+from blixt_utils.plotting.log_plotter import LogColumn, Line, add_lines, add_strat_table, LogPlotter
+from blixt_rp.core.seismic import SeismicTraces, interpolate_along_offset
 
 output_file('C:\\Users\emb\\Documents\\plot.html')
 test_file_dir = str(os.path.dirname(__file__).replace(
@@ -342,6 +343,64 @@ class TestPlot(unittest.TestCase):
 
         grid, chi_slider, backus_slider, frq_slider, data_table, xplot, hplot = bupp.plot_chi_rotation(well, brine_log_table, hc_log_table, wis=wis)
         show(row(column(grid, chi_slider, backus_slider, frq_slider), column(hplot, xplot)))
+
+    def test_compare_seismic(self):
+        # Create real seismic traces from las file with seismic
+        las_file = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\\Tampen\\Wells\\34_3_3S_seismic.las"
+        las_file_logs = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\\Tampen\\Wells\\34_3_3S.las"
+        t = Template(**{'name': 'Seismic', 'units': 'dimensionless', 'line_color': 'b'})
+        log_table = LogTable({'Seismic':
+                                  ['CGG18M01-NVG-PSDM-ANGLE-NEAR-05-15-TPL932MSMTMADF2denoise2',
+                                   'CGG18M01-NVG-PSDM-ANGLE-MID-13-23-TPL932MSMTMADF2denoise2',
+                                   'CGG18M01-NVG-PSDM-ANGLE-FAR-21-31-TPL932MSMTMADF2denoise2',
+                                   'CGG18M01-NVG-PSDM-ANGLE-ULTRAFAR-29-39-TPL932MSMTMADF2denoise2'
+                                   ]})
+        rename_logs = {
+            'near': ['CGG18M01-NVG-PSDM-ANGLE-NEAR-05-15-TPL932MSMTMADF2denoise2'],
+            'mid': ['CGG18M01-NVG-PSDM-ANGLE-MID-13-23-TPL932MSMTMADF2denoise2'],
+            'far': ['CGG18M01-NVG-PSDM-ANGLE-FAR-21-31-TPL932MSMTMADF2denoise2'],
+            'ufar': ['CGG18M01-NVG-PSDM-ANGLE-ULTRAFAR-29-39-TPL932MSMTMADF2denoise2']
+        }
+        log_curves, well_info = read_las(las_file, log_table=log_table, template=t, rename_logs=rename_logs)
+
+        offset_angles = pint.Quantity(np.array([10., 18., 26., 34.]), 'deg')
+        traces = np.zeros((len(offset_angles), len(log_curves['near'])))
+        traces[0,:] = log_curves['near'].values
+        traces[1,:] = log_curves['mid'].values
+        traces[2,:] = log_curves['far'].values
+        traces[3,:] = log_curves['ufar'].values
+        # interpolate the seismic traces
+        _traces = interpolate_along_offset(traces,
+                                           offset_angles,
+                                           Q_(np.arange(10, 34, 1), 'deg'))
+        st_orig = SeismicTraces(x=offset_angles.magnitude,
+                                y=log_curves['near'].depth.values,
+                                # traces=traces,
+                                traces=None,
+                                source=ColumnDataSource({'value': [_traces.T]}),
+                                trace_type='avo',
+                                title='CGG18M01-NVG-PSDM'
+                                )
+
+        well = Well()
+        vp_vs_rho_table = LogTable({'Density': 'lfp_rhob_virgin', 'P velocity': 'lfp_vp_virgin',
+                              'S velocity': 'lfp_vs_virgin'})
+        ref_log_table = LogTable({'Volume': 'vsh', 'Gamma ray': 'gr'})
+
+        well.read_las(las_file_logs, log_table=vp_vs_rho_table, template_file=project_table)
+        well.read_las(las_file_logs, log_table=ref_log_table, template_file=project_table)
+        # Fake OWT data from another well
+        well.read_general_ascii(data_file2,
+                                'space',
+                                4,
+                                ['md', 'owt'],
+                                [0, 1],
+                                ['m', 'millisecond'],
+                                ['MD', 'One-way time'])
+        print(well.get_log_names)
+
+        return bupp.compare_synth_with_seismic(well, ref_log_table, vp_vs_rho_table, st_orig)
+
 
 def save_as_las():
     root = Tk()

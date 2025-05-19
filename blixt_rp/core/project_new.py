@@ -255,9 +255,9 @@ class Project(object):
             'ignore': new log is ignored if a log of same name exists from before
         :return:
         """
-        from blixt_rp.core.template_new import Template
+        from blixt_rp.core.core import Template, LogTable
         result = uio.project_wells_new(self.project_table, self.working_dir)
-        templates_dataframe = pd.read_excel(self.project_table, header=1, sheet_name='Templates', engine='openpyxl')
+        # templates_dataframe = pd.read_excel(self.project_table, header=1, sheet_name='Templates', engine='openpyxl')
 
         for _key in list(result.keys()):  # _key is the name of the file to read
             translate_dict = None
@@ -265,13 +265,15 @@ class Project(object):
                 translate_dict = uio.interpret_rename_string(result[_key]['Translate log names'])
             w = Well()
             if uio.filetype(_key) == 'las':
-                w.read_las(_key, inv_log_table=result[_key]['logs'])
+                log_table = LogTable()
+                log_table.from_invert(result[_key]['logs'])
+                w.read_las(_key, log_table=log_table, template_file=self.project_table)
                 if translate_dict is not None:
                     for _new_name, _old_name in translate_dict.items():
                         this_log = w.get_log_curve(_old_name)
                         if this_log is not None:
                             this_log.name = _new_name
-            elif uio.filetype(_key) in ['txt', 'dat', 'ascii']:
+            elif uio.filetype(_key) in ['txt', 'dat', 'ascii', 'asc']:
                 var_names = list(result[_key]['logs'].keys())
                 var_columns = [result[_key]['columns'][_var] for _var in var_names]
                 var_units = [result[_key]['units'][_var] for _var in var_names]
@@ -289,12 +291,12 @@ class Project(object):
                 w.header.note = result[_key]['Note']
 
             if w.logs is not None:
-                for _lc in w.logs:
-                    if _lc.log_type is None:
-                        continue
-                    t = Template()
-                    t.get_from_table(templates_dataframe, _lc.log_type)
-                    _lc.style = t
+                #for _lc in w.logs:
+                #    if _lc.log_type is None:
+                #        continue
+                #    t = Template()
+                #    t.get_from_table(templates_dataframe, _lc.log_type)
+                #    _lc.style = t
                 self.add_well(w, if_well_exists=if_well_exists, if_log_exists=if_log_exists)
 
     def return_dict(self, wells: list | None = None, intervals: list | None = None, logs: list | None = None):

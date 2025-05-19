@@ -49,9 +49,10 @@ class LogTable(dict):
         """
         self.multi_log = False
         # self.name = name
-        super().__init__(log_table)
-        if isinstance(list(log_table.values())[0], list):
-            self.multi_log = True
+        if log_table is not None:
+            super().__init__(log_table)
+            if isinstance(list(log_table.values())[0], list):
+                self.multi_log = True
 
     # def __setitem__(self, key, value):
     #     print('YOU ARE HERE')
@@ -66,8 +67,24 @@ class LogTable(dict):
     @property
     def invert(self) -> dict:
         if self.multi_log:
-            return {v[0]: k for k, v in self.items()}
+            out = {}
+            for k, v in self.items():
+                for _v in v:
+                    out[_v] = k
+            return out
+            # return {v[0]: k for k, v in self.items()}
         return {v: k for k, v in self.items()}
+
+    def from_invert(self, inv_dict):
+        self.multi_log = True
+        tmp = {}
+        for v in inv_dict.values():
+            tmp[v] = []
+        for k, v in inv_dict.items():
+            tmp[v].append(k)
+        for k in list(tmp.keys()):
+            self.__setitem__(k, tmp[k])
+
 
     @property
     def dict(self) -> dict:
@@ -101,6 +118,7 @@ class LogTable(dict):
                 log_types.append(key)
         return log_types
 
+    # TODO Create function to build a LogTable from the output 'logs' of result = uio.project_wells_new()
 class CutoffRule:
     """
     Class for rules for cutoffs
@@ -626,7 +644,7 @@ class Intervals(object):
             strat_units = {}
             strat_units_table = pd.read_excel(file_name, engine='openpyxl', sheet_name=interval_info_sheet, header=4)
             for _i, _name in enumerate(strat_units_table['Name']):
-                if 'no' in strat_units_table['Use'][_i].lower():  # skip strat. units that are not in Use
+                if isinstance(strat_units_table['Use'][_i], float) or ('no' in strat_units_table['Use'][_i].lower()):  # skip strat. units that are not in Use
                     continue
                 strat_units[_name] = StratUnit(_name,
                                                strat_units_table['Level'][_i],

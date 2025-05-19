@@ -18,3 +18,4 @@ micro- = 1e-6 = µ-
 @alias cc = CC
 @alias gram = G
 @alias API = GAPI
+@alias API = gAPI
