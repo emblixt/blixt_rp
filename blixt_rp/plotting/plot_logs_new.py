@@ -31,7 +31,7 @@ from blixt_rp.core.log_curve_new import LogCurve, _to_depth, replace_data
 from blixt_utils.plotting.log_plotter import (LogPlotter, LogColumn, Line,  add_strat_table)
 import blixt_utils.utils as uu
 import blixt_utils.misc.wavelets as bumw
-from blixt_utils.utils import print_info
+from blixt_utils.utils import nan_corrcoef, print_info
 from blixt_rp.core.seismic import SeismicTraces
 
 logger = logging.getLogger(__name__)
@@ -129,6 +129,8 @@ def plot_logs(well: cw.Well,
 def plot_chi_rotation(well: cw.Well,
                       brine_log_table: LogTable,
                       hc_log_table: LogTable,
+                      fluid_log: LogCurve | None = None,
+                      litho_log: LogCurve | None = None,
                       wis: Intervals | None = None,
                       width: int | None = None,
                       height: int | None = None,
@@ -141,7 +143,19 @@ def plot_chi_rotation(well: cw.Well,
 
     :param well:
     :param brine_log_table:
+        LogTable
+        Must contain the log types: 'P velocity', 'S velocity', 'Density'
     :param hc_log_table:
+        LogTable
+        Must contain the log types: 'P velocity', 'S velocity', 'Density'
+    :param fluid_log:
+        LogCurve
+        A log curve object containing a log that should represent the fluid response (e.g. Soil).
+        Used to correlate with the EEI at all Chi angles
+    :param litho_log:
+        LogCurve
+        A log curve object containing a log that should represent the lithology response (e.g. Vsh).
+        Used to correlate with the EEI at all Chi angles
     :param wis:
     :param width:
     :param height:
@@ -205,11 +219,37 @@ def plot_chi_rotation(well: cw.Well,
     dt = Q_(1, 'millisecond')
 
     # Find min / max values of the EEI's
-    def find_eei_extremes():
+    def find_eei_extremes_and_correlations(mask=None):
         _min = 1E6; _max = -1E6; _max_diff = -1E6; _chi_at_max = None
+        _cc_litho_b = []; _cc_litho_h = []; _cc_fluid_b = []; _cc_fluid_h = []  # containers for CC
+        _f_log = None; _l_log = None
+        if mask is None:
+            _vp_b = vp_brine.values
+            _vs_b = vs_brine.values
+            _rho_b = rho_brine.values
+            _vp_h = vp_hc.values
+            _vs_h = vs_hc.values
+            _rho_h = rho_hc.values
+            if fluid_log is not None:
+                _f_log = fluid_log.values
+            if litho_log is not None:
+                _l_log = litho_log.values
+        else:
+            _vp_b = vp_brine.values[mask]
+            _vs_b = vs_brine.values[mask]
+            _rho_b = rho_brine.values[mask]
+            _vp_h = vp_hc.values[mask]
+            _vs_h = vs_hc.values[mask]
+            _rho_h = rho_hc.values[mask]
+            if fluid_log is not None:
+                _f_log = fluid_log.values[mask]
+                print('XXX fluid: ', np.nanmin(_f_log), np.nanmax(_f_log))
+            if litho_log is not None:
+                _l_log = litho_log.values[mask]
+                print('XXX litho: ', np.nanmin(_l_log), np.nanmax(_l_log))
+
         for _chi in chi_angles:
-            _eei_b, _eei_h = calc_eei(vp_brine.values, vs_brine.values, rho_brine.values,
-                                      vp_hc.values, vs_hc.values, rho_hc.values, _chi)
+            _eei_b, _eei_h = calc_eei(_vp_b, _vs_b, _rho_b, _vp_h, _vs_h, _rho_h, _chi)
             _diff = np.abs(np.nanmedian(_eei_b) - np.nanmedian(_eei_h))
             if np.nanmin(_eei_b) < _min:
                 _min = np.nanmin(_eei_b)
@@ -222,10 +262,18 @@ def plot_chi_rotation(well: cw.Well,
             if _diff > _max_diff:
                 _max_diff = _diff
                 _chi_at_max = _chi
-        return _min, _max, _chi_at_max
+            if fluid_log is not None:
+                _cc_fluid_b.append(nan_corrcoef(_eei_b, _f_log)[0, 1])
+                _cc_fluid_h.append(nan_corrcoef(_eei_h, _f_log)[0, 1])
+            if litho_log is not None:
+                _cc_litho_b.append(nan_corrcoef(_eei_b, _l_log)[0, 1])
+                _cc_litho_h.append(nan_corrcoef(_eei_h, _l_log)[0, 1])
+        return _min, _max, _chi_at_max, _cc_litho_b, _cc_litho_h, _cc_fluid_b, _cc_fluid_h
 
-    eei_min, eei_max, chi_at_max_diff = find_eei_extremes()
-    # print('Max separation at chi =', chi_at_max_diff)
+    eei_min, eei_max, chi_at_max_diff, cc_litho_b, cc_litho_h, cc_fluid_b, cc_fluid_h = (
+        find_eei_extremes_and_correlations())
+    cc_fluid_source = ColumnDataSource(dict(x=chi_angles, cc_b=cc_fluid_b, cc_h=cc_fluid_h))
+    cc_litho_source = ColumnDataSource(dict(x=chi_angles, cc_b=cc_litho_b, cc_h=cc_litho_h))
 
     def create_lines_from_line_source(_line_source):
         _line_brine = Line(x='eei_brine', y='md', source=_line_source, style=Template(**{
@@ -327,11 +375,27 @@ def plot_chi_rotation(well: cw.Well,
 
     _spans = spans(chi_slider.value)
 
-    # Create grid plot
+    # Create plots
     xplot = figure(width=int(width -200), height=int(height-200), tools=tools)  # Intercept vs. Gradient crossplot
     xplot.toolbar.logo = None
     hplot = figure(width=int(width - 200), height=200, tools=[PanTool(), WheelZoomTool()])  # Histogram
     hplot.toolbar.logo = None
+
+    if fluid_log:
+        t_f = 'Cross correlation with {}: {}'.format(fluid_log.log_type, fluid_log.name)
+    else:
+        t_f = 'No fluid log to correlate with'
+    if litho_log:
+        t_l = 'Cross correlation with {}: {}'.format(litho_log.log_type, litho_log.name)
+    else:
+        t_l = 'No lithology log to correlate with'
+    cc_fluid_fig = figure(title=t_f, width=int(width - 200), height=150, tools=[PanTool(), WheelZoomTool()])   # cross correlation
+    cc_fluid_fig.toolbar.logo = None
+    cc_fluid_fig.add_layout(_spans)
+    cc_litho_fig = figure(title=t_l, width=int(width - 200), height=150, tools=[PanTool(), WheelZoomTool()])   # cross correlation
+    cc_litho_fig.toolbar.logo = None
+    cc_litho_fig.add_layout(_spans)
+
     plotter = LogPlotter(width=width, height=height)
     c1 = LogColumn('EEI', lines=[line_brine, line_hc], rel_width=1)
     c2 = LogColumn('WIS', lines=[], rel_width=0.3)
@@ -403,7 +467,22 @@ def plot_chi_rotation(well: cw.Well,
 
     draw_histogram(xplot_source.data['eei_brine'], xplot_source.data['eei_hc'])
 
-    data_table = add_strat_table(grid, stratigraphy=wis.get_intervals_dict(well.name), column_index=1)
+    def draw_cc():
+        if fluid_log is not None:
+            cc_fluid_fig.line(x='x', y='cc_b', source=cc_fluid_source, color='blue', legend_label='CC brine')
+            cc_fluid_fig.line(x='x', y='cc_h', source=cc_fluid_source, color='red', legend_label='CC hc')
+            cc_fluid_fig.x_range.start = -90; cc_fluid_fig.x_range.end = 90
+            cc_fluid_fig.y_range.start = -0.7; cc_fluid_fig.y_range.end = 0.7
+        if litho_log is not None:
+            cc_litho_fig.line(x='x', y='cc_b', source=cc_litho_source, color='blue', legend_label='CC brine')
+            cc_litho_fig.line(x='x', y='cc_h', source=cc_litho_source, color='red', legend_label='CC hc')
+            cc_litho_fig.x_range.start = -90; cc_litho_fig.x_range.end = 90
+            cc_litho_fig.y_range.start = -0.7; cc_litho_fig.y_range.end = 0.7
+        cc_litho_fig.xaxis.axis_label = 'Chi angle [deg]'
+
+    draw_cc()
+
+    data_table = add_strat_table(grid, stratigraphy=wis.get_intervals_dict(well.name), width=width, column_index=1)
 
     grid.children[0][0].legend.click_policy = 'hide'
     # xplot.xaxis.axis_label = 'Intercept'
@@ -431,12 +510,22 @@ def plot_chi_rotation(well: cw.Well,
         _mask = mask_based_on_depth(vp_orig.depth.values,
                                    grid.children[0][0].y_range.end, grid.children[0][0].y_range.start)
 
-        _x, _y = return_chi_line(
-            y_range, new, x_center=x_center, y_center=y_center)
-        chi_line_source.data = dict(x=_x, y=_y)
         _xplot_dict = calc_xplot_source_dict(backus_slider.value, new, _mask)
         xplot_source.data = _xplot_dict
+
         draw_histogram(_xplot_dict['eei_brine'], _xplot_dict['eei_hc'])
+
+        _y_range = 0.5 * (np.nanmax(xplot_source.data['log_gi_h']) - np.nanmin(xplot_source.data['log_gi_h']))
+        _x_center = float(np.nanmedian(np.append(xplot_source.data['log_ai_h'], xplot_source.data['log_ai_b'])))
+        _y_center = float(np.nanmedian(np.append(xplot_source.data['log_gi_h'], xplot_source.data['log_gi_b'])))
+        _x, _y = return_chi_line(
+            _y_range, new, x_center=_x_center, y_center=_y_center)
+        chi_line_source.data = dict(x=_x, y=_y)
+
+        _eei_min, _eei_max, _chi_at_max_diff, _cc_litho_b, _cc_litho_h, _cc_fluid_b, _cc_fluid_h = (
+            find_eei_extremes_and_correlations(_mask))
+        cc_fluid_source.data = dict(x=chi_angles, cc_b=_cc_fluid_b, cc_h=_cc_fluid_h)
+        cc_litho_source.data = dict(x=chi_angles, cc_b=_cc_litho_b, cc_h=_cc_litho_h)
 
     def backus_callback(attr, old, new):
         _amp_brine, _amp_hc = get_amp_sources(new, freq_slider.value)
@@ -475,7 +564,7 @@ def plot_chi_rotation(well: cw.Well,
     #                                 CustomJS(args=dict(p=grid.children[0][0]),
     #                                          code='console.log("Range update " + p.y_range.start)'))
 
-    return title, grid,chi_slider, backus_slider, freq_slider, data_table, xplot, hplot
+    return title, grid,chi_slider, backus_slider, freq_slider, data_table, xplot, hplot, cc_fluid_fig, cc_litho_fig
 
 def compare_synth_with_seismic(
         well: cw.Well,
