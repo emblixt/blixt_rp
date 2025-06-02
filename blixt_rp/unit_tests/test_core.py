@@ -148,9 +148,16 @@ class TemplateTestCase(unittest.TestCase):
         template_dict = templates_from_table(table)
         for i, _key in enumerate(list(template_dict.keys())):
             print(_key)
-            print(template_dict[_key])
-            if i > 0:
-                break
+            if i == 0:
+                print(template_dict[_key])
+
+        table = pd.read_excel(project_table, header=1, sheet_name='Well settings', engine='openpyxl')
+        template_dict = templates_from_table(table, well_style=True)
+        for i, _key in enumerate(list(template_dict.keys())):
+            print(_key)
+            if i == 0:
+                print(template_dict[_key])
+
     def test_from_project_table_error(self):
         t = Template()
         t.get_from_project(project_table, 'XXX')

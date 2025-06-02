@@ -25,6 +25,7 @@ from blixt_rp.rp_utils.version import info
 
 logger = logging.getLogger(__name__)
 
+
 class LogTable(dict):
     def __init__(self,
                  # name: str | None = None,
@@ -119,6 +120,8 @@ class LogTable(dict):
         return log_types
 
     # TODO Create function to build a LogTable from the output 'logs' of result = uio.project_wells_new()
+
+
 class CutoffRule:
     """
     Class for rules for cutoffs
@@ -197,6 +200,7 @@ class CutoffRule:
             _limits = self.limit
         return '{}: {} {}'.format( _param, _operator, _limits)
 
+
 class Cutoffs:
     def __init__(self,
                  # name: str | None = None,
@@ -259,6 +263,7 @@ class Cutoffs:
             return_dict[rule.param] = this_list
         return return_dict
 
+
 class Template:
     """
     Template class
@@ -277,6 +282,7 @@ class Template:
                  line_color: str | None = None,
                  line_style: str | None = None,
                  line_width: float | None = None,
+                 fill_color: str | None = None,
                  marker: str | None = None
                  ):
 
@@ -293,8 +299,8 @@ class Template:
         self.line_color = line_color
         self.line_style = line_style
         self.line_width = line_width
+        self.fill_color = fill_color
         self.marker = marker
-
 
     def keys(self):
         return self.__dict__.keys()
@@ -331,8 +337,16 @@ class Template:
         for key in list(all_templates[log_type].keys()):
             self.__setattr__(key, all_templates[log_type][key])
 
+        # # Also add the style settings for the wells
+        # table = pd.read_excel(project_file, header=1, sheet_name='Well settings', engine='openpyxl')
+        # all_templates = templates_from_table(table, well_style=True)
+        # for key in list(all_templates[log_type].keys()):
+        #     self.__setattr__(key, all_templates[log_type][key])
+
     def get_as_dict(self):
         return {self.name: self.__dict__}
+
+
 class StratUnit(object):
     """
     Contains information about one specific stratigraphic unit (Group, Formation, Member, ...)
@@ -377,6 +391,7 @@ class StratUnit(object):
 
     def keys(self):
         return self.__dict__.keys()
+
 
 class Interval:
     """
@@ -461,6 +476,7 @@ class Interval:
             pint.Quantity
         """
         return self.base - this_depth
+
 
 class Intervals(object):
     """
@@ -678,6 +694,7 @@ class Intervals(object):
                    p: figure):
         pass
 
+
 class Header(AttribDict):
     """
     Class for well header information
@@ -744,6 +761,7 @@ class Header(AttribDict):
     def _repr_pretty_(self, p, cycle):
         p.text(str(self))
 
+
 def cutoffs_string(cutoffs_list):
     msk_str = ''
     for key in cutoffs_list:
@@ -756,14 +774,32 @@ def cutoffs_string(cutoffs_list):
         msk_str = msk_str.rstrip(', ')
     return msk_str
 
-def templates_from_table(table: pd.DataFrame | dict) -> dict:
+
+def templates_from_table(table: pd.DataFrame | dict, well_style=False) -> dict:
     """
     Returns a dictionary of logtype: template_dict
     :param table:
+        pandas.DataFrame
+        E.G.
+            table = pd.read_excel(filename, header=1, sheet_name='Templates', engine='openpyxl')
+    :param well_style:
+        bool
+        If true, read the style settings for the wells, and not for the logs
     :return:
         dict
     """
     return_dict = {}
+    if well_style:
+        for i, ans in enumerate(table['Given well name']):
+            if not isinstance(ans, str):
+                continue
+            _ans = ans.upper().strip()
+            return_dict[_ans] = {}
+            return_dict[_ans]['full_name'] = ans
+            return_dict[_ans]['fill_color'] = None if isnan(table['Color'][i]) else table['Color'][i]
+            return_dict[_ans]['marker'] = None if isnan(table['Symbol'][i]) else table['Symbol'][i]
+        return return_dict
+
     for i, ans in enumerate(table['Log type']):
         if not isinstance(ans, str):
             continue
@@ -781,6 +817,7 @@ def templates_from_table(table: pd.DataFrame | dict) -> dict:
         return_dict[ans]['marker'] = None if isnan(table['marker'][i]) else table['marker'][i]
     return return_dict
 
+
 def print_function(my_object):
     keys = list(my_object.__dict__.keys())
     try:
@@ -791,6 +828,7 @@ def print_function(my_object):
     pattern = "%%%ds: %%s" % i
     head = [pattern % (k, str(my_object.__dict__[k])) for k in keys]
     return "\n".join(head)
+
 
 def get_level_from_name(_name: str, source: str | None = None) -> int:
     if source is None:

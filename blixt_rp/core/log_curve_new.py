@@ -543,13 +543,15 @@ class LogCurve(object):
             header=header
         )
 
-    def take_sampling_from(self, log_curve, verbose=False):
+    def take_sampling_from(self, log_curve, suffix: None | str = 'resampled', verbose=False):
         """
         Interpolates the data to match the depth parameter (sampling) of input log_curve,
         and returns a new log_curve
 
         :param log_curve:
             LogCurve object
+        :param suffix:
+            str
         :param verbose:
             Bool
 
@@ -576,8 +578,12 @@ class LogCurve(object):
         new_y = _interpolate(old_x, old_y, new_x)
 
         info_txt = 'Resampled to match {}'.format(log_curve.name)
+        if suffix is not None:
+            new_name = self.name + '_' + suffix
+        else:
+            new_name = self.name
         return LogCurve(
-            self.name + '_resampled',
+            new_name,
             Q_(new_y, self.units),
             Depth(Q_(new_x, self.depth_units)),
             self.log_type,
@@ -1316,6 +1322,10 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
         # Rename logs
         log_name = None
         if rename_logs is not None:
+            if log_table is not None:
+                print_info('Log name translation is not working when LogTable is provided',
+                           'warning', logger)
+                # TODO log name translation does not work when providing a LogTable
             for new_log_name in list(rename_logs.keys()):
                 if _key.lower() in [_l.lower() for _l in rename_logs[new_log_name]]:
                     log_name = new_log_name

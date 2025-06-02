@@ -19,6 +19,8 @@ sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 from blixt_rp.core.well_new import Well
+from blixt_rp.core.core import LogTable
+
 from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
 from blixt_utils.misc.templates import log_header_to_template as l2tmpl
@@ -97,6 +99,7 @@ class Project(object):
             self.working_dir = working_dir
             self.logging_file = logging_file
             self.wells = wells
+            self.templates = None
 
             if project_table is None:
                 self.project_table = os.path.join(self.working_dir, 'excels', 'project_table.xlsx')
@@ -153,7 +156,7 @@ class Project(object):
 
     def get_well(self, name):
         for _well in self.wells:
-            if _well.name == name:
+            if _well.name.lower() == name.lower():
                 return _well
         return None
 
@@ -236,7 +239,8 @@ class Project(object):
 
         print_info('Loaded project settings from: {}'.format(file_name), 'info', logger)
 
-    def load_all_wells(self, if_well_exists: str = 'append', if_log_exists: str = 'overwrite'):
+    def load_all_wells(self, if_well_exists: str = 'append', if_log_exists: str = 'overwrite',
+                       log_table: None | LogTable = None):
         """
         Load all logs and well data that are listed in the project table where "Use" == "Yes"
         :param self:
@@ -253,6 +257,9 @@ class Project(object):
             'overwrite': Overwrite old log
             'ask': Ask to overwrite or ignore
             'ignore': new log is ignored if a log of same name exists from before
+        :param log_table:
+            LogTable
+            If provided only the logs in LogTable will be loaded
         :return:
         """
         from blixt_rp.core.core import Template, LogTable
@@ -261,13 +268,18 @@ class Project(object):
 
         for _key in list(result.keys()):  # _key is the name of the file to read
             translate_dict = None
-            if 'Translate log names' in list(result[_key].keys()):
+            if 'Translate log names' in list(result[_key].keys()) and result[_key]['Translate log names'] is not None:
                 translate_dict = uio.interpret_rename_string(result[_key]['Translate log names'])
             w = Well()
             if uio.filetype(_key) == 'las':
-                log_table = LogTable()
-                log_table.from_invert(result[_key]['logs'])
-                w.read_las(_key, log_table=log_table, template_file=self.project_table)
+                if log_table is None:
+                    _log_table = LogTable()
+                    _log_table.from_invert(result[_key]['logs'])
+                else:
+                    _log_table = log_table
+
+                w.read_las(_key, log_table=log_table, template_file=self.project_table, rename_logs=translate_dict)
+                # w.read_las(_key, log_table=_log_table, template_file=self.project_table)
                 if translate_dict is not None:
                     for _new_name, _old_name in translate_dict.items():
                         this_log = w.get_log_curve(_old_name)
@@ -299,7 +311,22 @@ class Project(object):
                 #    _lc.style = t
                 self.add_well(w, if_well_exists=if_well_exists, if_log_exists=if_log_exists)
 
-    def return_dict(self, wells: list | None = None, intervals: list | None = None, logs: list | None = None):
+    def load_all_templates(self):
+        from blixt_rp.core.core import Template, templates_from_table
+        _templates = {}
+        if self.project_table is not None:
+            table = pd.read_excel(self.project_table, header=1, sheet_name='Templates', engine='openpyxl')
+            template_dict = templates_from_table(table)
+            for i, _key in enumerate(list(template_dict.keys())):
+                    _templates[_key] = Template(template_dict[_key])
+
+            table = pd.read_excel(self.project_table, header=1, sheet_name='Well settings', engine='openpyxl')
+            template_dict = templates_from_table(table, well_style=True)
+            for i, _key in enumerate(list(template_dict.keys())):
+                _templates[_key] = Template(template_dict[_key])
+            self.templates = _templates
+
+    def dict(self, wells: list | None = None, intervals: list | None = None, logs: list | None = None):
         """
         Returns a dictionary where the data is sorted in wells -> working intervals -> logs
         eg:

@@ -45,11 +45,13 @@ class Well(object):
     so that they don't have to be regularly sampled, or with the same sampling.
     This also means that a LogCurve object can contain other data than typical log data, such as core samples.
     """
-    from blixt_rp.core.core import Header, LogTable
+    from blixt_rp.core.core import Header, LogTable, Template
     from blixt_rp.core.log_curve_new import LogCurve
+
     def __init__(self,
                  header: Header | None = None,
-                 logs: list | None = None
+                 logs: list | None = None,
+                 style: None | Template = None
                  ):
         """
 
@@ -57,8 +59,10 @@ class Well(object):
             Header
             dict type which contains
         :param logs:
+        :param style:
+            Template object or dict
         """
-        from blixt_rp.core.core import Header
+        from blixt_rp.core.core import Header, Template
         if header is None:
             self.header = Header({})
         elif isinstance(header, dict):
@@ -71,6 +75,12 @@ class Well(object):
         if self.header.name is None:
             if 'well_info' in list(self.header.__dict__.keys()):
                 self.header.name = self.header.well_info.well.value
+        if style is None:
+            style = Template()
+        elif isinstance(style, dict):
+            style = Template(**style)
+        elif isinstance(style, Template):
+            self._style = style
 
     @property
     def name(self):
@@ -91,6 +101,22 @@ class Well(object):
     @property
     def get_log_types(self):
         return list(set([_lc.log_type for _lc in self.logs]))
+
+    @property
+    def style(self):
+        return self._style
+
+    @style.setter
+    def style(self, style_template: Template | dict | None):
+        from blixt_rp.core.core import Template
+        if style_template is None:
+            self._style = Template()
+        elif isinstance(style_template, dict):
+            self._style = Template(**style_template)
+        elif isinstance(style_template, Template):
+            self._style = style_template
+        else:
+            raise TypeError('style must be either a dict or a Template, not {}'.format(type(style_template)))
 
     def get_log_curve(self, name):
         for _log in self.logs:
@@ -131,8 +157,42 @@ class Well(object):
         else:
             self.logs.append(log_curve)
 
+    def harmonize_logs(self):
+        """
+        Adjusts all logs to have the same length and sample rate
+        :return:
+        """
+        _harmonized_logs = []
+        _longest = None
+        _longest_length = 0
+        for _log in self.logs:
+            if len(_log) > _longest_length:
+                _longest = _log
+                _longest_length = len(_log)
+        for _log in self.logs:
+            if _log.name == _longest.name:
+                _harmonized_logs.append(_log)
+                continue
+            _harmonized_logs.append(
+                _log.take_sampling_from(_longest, suffix=None))
+        self.logs = _harmonized_logs
+
+    def templates(self):
+        """
+        Returns a dictionary of Templates for each log in this well, as well as the
+        Template of the well itself
+        :return:
+            dict
+        """
+        _templates = {}
+        for _log in self.logs:
+            _templates[_log.name] = _log.style
+        _templates[self.name] = self.style
+        return _templates
+
     def read_las(self, file_name: str, verbose: bool = False, encoding: str = 'UTF8',
                  log_table: LogTable | None = None, ignore_header: bool = False,
+                 rename_logs: None | dict = None,
                  if_log_exists: str = 'overwrite',
                  template_file: str | None = None):
         """
@@ -146,6 +206,11 @@ class Well(object):
             Object which contains which log types, and associated and which log(s) to use for each log type
             When this is specified, we only load those logs that are listed
         :param ignore_header:
+        :param rename_logs:
+            dict
+            E.G.
+            {'depth': ['DEPT', 'MD']}
+            where the key is the wanted well log name, and the value list is a list of well log names to translate from
         :param if_log_exists:
             str
             Describes what to do if the log exists from before
@@ -159,8 +224,9 @@ class Well(object):
         :return:
         """
         from blixt_rp.core.log_curve_new import read_las as _read_las
+        from blixt_rp.core.core import Template, templates_from_table
         log_curves, well_dict = _read_las(file_name, verbose=verbose, encoding=encoding, log_table=log_table,
-                                          template=template_file)
+                                          template=template_file, rename_logs=rename_logs)
 
         if self.header.name is None:
             self.header.name = well_dict['well_info']['well']['value']
@@ -178,6 +244,11 @@ class Well(object):
 
         if not ignore_header:
             self.header = add_headers(self.header, well_dict, [], None)
+
+        if template_file is not None:
+            table = pd.read_excel(template_file, header=1, sheet_name='Well settings', engine='openpyxl')
+            template_dict = templates_from_table(table, well_style=True)
+            self.style = Template(template_dict[self.name])
 
     def read_general_ascii(self,
                            file_name: str,
@@ -299,6 +370,28 @@ class Well(object):
 
         with open(file_name, 'w+') as f:
             f.write(out)
+
+    def dict(self, harmonize=True):
+        _dict = {}
+        if harmonize:
+            self.harmonize_logs()
+        for _log in self.logs:
+            _dict[_log.name] = _log.values
+        return _dict
+
+    def data_source(self):
+        """
+        Returns a DataSource object based on the well content
+        :return:
+            DataSource
+        """
+        from blixt_utils.plotting.cross_plotter import DataSource
+        return DataSource(
+            name=self.name,
+            data=self.dict(),
+            templates=self.templates()
+        )
+
 
 def add_headers(_header, _well_info, _ignore_keys, _note):
     """

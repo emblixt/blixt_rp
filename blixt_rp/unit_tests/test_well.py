@@ -7,7 +7,7 @@ import time
 import pint.errors
 from math import isclose
 from .. import Q_
-
+from blixt_rp.core.core import LogTable
 
 test_file_dir = str(os.path.dirname(__file__).replace(
     'blixt_rp\\unit_tests',
@@ -16,7 +16,18 @@ test_file_dir = str(os.path.dirname(__file__).replace(
 project_table = os.path.join(test_file_dir.replace('test_data', 'excels'), 'project_table.xlsx')
 
 las_file1 = os.path.join(test_file_dir, "L-30.las")
+log_table1 = LogTable({
+    'Caliper': ['CALD', 'CALS'],
+    'Density': ['DHRO'],
+    'Sonic': ['DT'],
+    'Gamma ray': ['GRD', 'GRS']
+})
 las_file2 = "T:\\ROKDOC\\PL936\\To Partners from Ikon\\To Partners\\las files\\6406_11_1s.las"
+log_table2 = LogTable({
+    'P velocity': 'Vp_brine',
+    'S velocity': 'Vs_brine',
+    'Density': 'Rho_brine'
+})
 las_file3 = os.path.join(test_file_dir, "Well F.las")
 data_file1 = os.path.join(test_file_dir, "Well A checkshot.txt")
 data_file2 = "S:\\Well\\UTM32_Mid_Norway_All\\Q-6406\\6406_11_1_S\\6406_11_1_S___checkshot.txt"
@@ -42,10 +53,12 @@ depth4 = Q_(np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n), 'feet')
 data5 = Q_(np.linspace(6, 8, n) + np.random.random(n), 'Ohmm')
 depth5 = Q_(np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n), 'feet')
 
+
 class WellTestCase(unittest.TestCase):
 
     def test_create_well(self):
         from blixt_rp.core.well_new import Well
+        from blixt_rp.core.core import LogTable
         w = Well()
         self.assertIsInstance(w, Well, 'Failed')
         w.read_las(las_file1, True)
@@ -62,14 +75,17 @@ class WellTestCase(unittest.TestCase):
         print(' -x-')
 
         w = Well()
-        w.read_las(las_file1, True, log_table={'Sonic': 'dt'})
+        w.read_las(las_file1, True, log_table=LogTable({'Sonic': 'dt'}))
         for log in w.logs:
             print(log.name, log.log_type)
 
         w = Well()
-        w.read_las(las_file1, True, inv_log_table={'cald': 'Caliper', 'cals': 'Caliper'})
+        w.read_las(las_file1, True, log_table=LogTable({'Caliper': ['cald', 'cals']}))
         for log in w.logs:
             print(log.name, log.log_type)
+        d = w.dict()
+        for _key, _value in d.items():
+            print(_key, len(_value))
 
         print(w.name)
 
@@ -99,17 +115,14 @@ class WellTestCase(unittest.TestCase):
     def test_read_las(self):
         from blixt_rp.core.well_new import Well
         from blixt_rp.core.core import LogTable, Template
-        log_table = LogTable({
-            'P velocity': 'Vp_brine',
-            'S velocity': 'Vs_brine',
-            'Density': 'Rho_brine'
-        })
         well1 = Well()
-        well1.read_las(las_file2, log_table=log_table, template_file=project_table)
+        well1.read_las(las_file1, log_table=log_table1, template_file=project_table)
+        lc = well1.get_log_curve('dt')
+        # well1.read_las(las_file2, log_table=log_table2, template_file=project_table)
+        # lc = well1.get_log_curve('vs_brine')
         #print(well1.name, well1.get_log_names)
         for _key in list(well1.header.keys()):
             print(_key, well1.header[_key])
-        lc = well1.get_log_curve('vs_brine')
         #print(lc.style)
         self.assertIsInstance(lc.style, Template)
 

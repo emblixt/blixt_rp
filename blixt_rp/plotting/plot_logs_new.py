@@ -243,22 +243,24 @@ def plot_chi_rotation(well: cw.Well,
             _rho_h = rho_hc.values[mask]
             if fluid_log is not None:
                 _f_log = fluid_log.values[mask]
-                print('XXX fluid: ', np.nanmin(_f_log), np.nanmax(_f_log))
+                # print('XXX fluid: ', np.nanmin(_f_log), np.nanmax(_f_log))
             if litho_log is not None:
                 _l_log = litho_log.values[mask]
-                print('XXX litho: ', np.nanmin(_l_log), np.nanmax(_l_log))
+                # print('XXX litho: ', np.nanmin(_l_log), np.nanmax(_l_log))
 
         for _chi in chi_angles:
             _eei_b, _eei_h = calc_eei(_vp_b, _vs_b, _rho_b, _vp_h, _vs_h, _rho_h, _chi)
             _diff = np.abs(np.nanmedian(_eei_b) - np.nanmedian(_eei_h))
-            if np.nanmin(_eei_b) < _min:
-                _min = np.nanmin(_eei_b)
-            if np.nanmin(_eei_h) < _min:
-                _min = np.nanmin(_eei_h)
-            if np.nanmax(_eei_b) > _max:
-                _max = np.nanmax(_eei_b)
-            if np.nanmax(_eei_h) > _max:
-                _max = np.nanmax(_eei_h)
+            # if np.nanmin(_eei_b) < _min:
+            #     _min = np.nanmin(_eei_b)
+            # if np.nanmin(_eei_h) < _min:
+            #     _min = np.nanmin(_eei_h)
+            # if np.nanmax(_eei_b) > _max:
+            #     _max = np.nanmax(_eei_b)
+            # if np.nanmax(_eei_h) > _max:
+            #     _max = np.nanmax(_eei_h)
+            if np.nanstd(_eei_b) > _max:
+                 _max = np.nanstd(_eei_b)
             if _diff > _max_diff:
                 _max_diff = _diff
                 _chi_at_max = _chi
@@ -268,7 +270,9 @@ def plot_chi_rotation(well: cw.Well,
             if litho_log is not None:
                 _cc_litho_b.append(nan_corrcoef(_eei_b, _l_log)[0, 1])
                 _cc_litho_h.append(nan_corrcoef(_eei_h, _l_log)[0, 1])
-        return _min, _max, _chi_at_max, _cc_litho_b, _cc_litho_h, _cc_fluid_b, _cc_fluid_h
+        # return _min, _max, _chi_at_max, _cc_litho_b, _cc_litho_h, _cc_fluid_b, _cc_fluid_h
+        return (np.nanmean(_eei_b) - 0.5 * _max, np.nanmean(_eei_b) + 0.5 * _max,
+                _chi_at_max, _cc_litho_b, _cc_litho_h, _cc_fluid_b, _cc_fluid_h)
 
     eei_min, eei_max, chi_at_max_diff, cc_litho_b, cc_litho_h, cc_fluid_b, cc_fluid_h = (
         find_eei_extremes_and_correlations())
@@ -442,11 +446,18 @@ def plot_chi_rotation(well: cw.Well,
         x='log_ai_h', y='log_gi_h', source=xplot_source, color='red', marker='circle',
         legend_label='HC, ba: {}'.format(backus_slider.value), alpha=0.7
     )
+
+    # x_r = xplot.x_range
+    # y_r = xplot.~
     y_range = 0.5 * (np.nanmax(xplot_source.data['log_gi_h']) - np.nanmin(xplot_source.data['log_gi_h']))
     x_center = float(np.nanmedian(np.append(xplot_source.data['log_ai_h'], xplot_source.data['log_ai_b'])))
     y_center = float(np.nanmedian(np.append(xplot_source.data['log_gi_h'], xplot_source.data['log_gi_b'])))
     # y_range = np.max([np.abs(np.nanmin(xplot_source.data['log_gi_h'])), np.abs(np.nanmax(xplot_source.data['log_gi_h']))])
     # x_range = np.max([np.abs(np.nanmin(xplot_source.data['log_ai_h'])), np.abs(np.nanmax(xplot_source.data['log_ai_h']))])
+    x_start = 0.8 * np.nanmin(xplot_source.data['log_ai_h'])
+    x_end = 1.2 * np.nanmax(xplot_source.data['log_ai_h'])
+    y_start = 0.8 * np.nanmin(xplot_source.data['log_gi_h'])
+    y_end = 1.2 * np.nanmax(xplot_source.data['log_gi_h'])
     bins = np.linspace(1.2 * eei_min, 0.8 * eei_max, 100)
     # bins = 40
     _x, _y = return_chi_line(y_range, chi_slider.value, x_center=x_center, y_center=y_center)
@@ -491,10 +502,12 @@ def plot_chi_rotation(well: cw.Well,
     xplot.yaxis.axis_label = 'log GI'
     xplot.legend.title = 'Chi: {}'.format(chi_slider.value)
     hplot.legend.title = 'Chi: {}'.format(chi_slider.value)
-    # xplot.y_range.start = -1.05 * y_range
-    # xplot.y_range.end = 1.05 * y_range
-    # xplot.x_range.start = -1.05 * x_range
-    # xplot.x_range.end = 1.05 * x_range
+    # xplot.x_range = x_r  # this did not help, the range kept updating
+    # xplot.y_range = y_r
+    xplot.y_range.start = y_start
+    xplot.y_range.end = y_end
+    xplot.x_range.start = x_start
+    xplot.x_range.end = x_end
     hplot.xaxis.axis_label = 'EEI'
     xplot.legend.click_policy = 'hide'
     hplot.legend.click_policy = 'hide'
@@ -515,12 +528,16 @@ def plot_chi_rotation(well: cw.Well,
 
         draw_histogram(_xplot_dict['eei_brine'], _xplot_dict['eei_hc'])
 
-        _y_range = 0.5 * (np.nanmax(xplot_source.data['log_gi_h']) - np.nanmin(xplot_source.data['log_gi_h']))
+        # _y_range = 0.5 * (np.nanmax(xplot_source.data['log_gi_h']) - np.nanmin(xplot_source.data['log_gi_h']))
         _x_center = float(np.nanmedian(np.append(xplot_source.data['log_ai_h'], xplot_source.data['log_ai_b'])))
         _y_center = float(np.nanmedian(np.append(xplot_source.data['log_gi_h'], xplot_source.data['log_gi_b'])))
         _x, _y = return_chi_line(
-            _y_range, new, x_center=_x_center, y_center=_y_center)
+            y_range, new, x_center=_x_center, y_center=_y_center)
         chi_line_source.data = dict(x=_x, y=_y)
+        xplot.x_range.start = np.nanmin(xplot_source.data['log_ai_h'])
+        xplot.x_range.end = np.nanmax(xplot_source.data['log_ai_h'])
+        xplot.y_range.start = np.nanmin(xplot_source.data['log_gi_h'])
+        xplot.y_range.end = np.nanmax(xplot_source.data['log_gi_h'])
 
         _eei_min, _eei_max, _chi_at_max_diff, _cc_litho_b, _cc_litho_h, _cc_fluid_b, _cc_fluid_h = (
             find_eei_extremes_and_correlations(_mask))

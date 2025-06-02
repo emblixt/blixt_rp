@@ -17,22 +17,30 @@ class ProjectTestCase(unittest.TestCase):
             self.assertTrue(isinstance(wp, Project))
 
     def test_load_wells(self):
-        wp = Project(name='MyProject',
-                     project_table = 'excels\project_table_new.xlsx',
-                     log_to_stdout=True)
-        wp.load_all_wells()
-        for _w in wp.wells:
-            print('-', _w.name, _w.header)
-            for _l in _w.logs:
-                print('  -', _l.name, _l.units, _l.depth_units)
-                print('  -', _l.is_evenly_spaced, len(_l))
-                if _l.style is None:
-                    print('  - STYLE IS LACKING')
-                else:
-                    print('  -', _l.style.units)
-        #  for _, well in wells.items():
-        #     with self.subTest():
-        #         self.assertTrue(well, Well)
+        from blixt_rp.core.core import LogTable
+        log_table = LogTable({'Density': 'rho_dry', 'P velocity': 'vp_dry', 'S velocity': 'vs_dry',
+                              'Porosity': 'PHIE', 'Volume': 'VCL'})
+        for _log_table in (None, log_table):
+            wp = Project(name='MyProject',
+                         project_table='excels\project_table_new.xlsx',
+                         log_to_stdout=True)
+            if _log_table is None:
+                print('- No LogTable')
+            else:
+                print('- With LogTable')
+            wp.load_all_wells(log_table=_log_table)
+            for _w in wp.wells:
+                print('-', _w.name, _w.header)
+                for _l in _w.logs:
+                    print('  -', _l.name, _l.units, 'depth units: ', _l.depth_units)
+                    print('  -', _l.is_evenly_spaced, len(_l))
+                    if _l.style is None:
+                        print('  - STYLE IS LACKING')
+                    else:
+                        print('  -', _l.style.units)
+            #  for _, well in wells.items():
+            #     with self.subTest():
+            #         self.assertTrue(well, Well)
 
     def test_load_selected_wells(self):
         """
