@@ -13,7 +13,7 @@ test_file_dir = str(os.path.dirname(__file__).replace(
     'blixt_rp\\unit_tests',
     'test_data'))
 
-project_table = os.path.join(test_file_dir.replace('test_data', 'excels'), 'project_table.xlsx')
+project_table = os.path.join(test_file_dir.replace('test_data', 'excels'), 'project_table_new.xlsx')
 
 las_file1 = os.path.join(test_file_dir, "L-30.las")
 log_table1 = LogTable({
@@ -117,6 +117,7 @@ class WellTestCase(unittest.TestCase):
         from blixt_rp.core.core import LogTable, Template
         well1 = Well()
         well1.read_las(las_file1, log_table=log_table1, template_file=project_table)
+        print(str(well1.style))
         lc = well1.get_log_curve('dt')
         # well1.read_las(las_file2, log_table=log_table2, template_file=project_table)
         # lc = well1.get_log_curve('vs_brine')

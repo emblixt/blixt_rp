@@ -314,6 +314,19 @@ class LogCurveTestCase(unittest.TestCase):
         print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
               lc.depth.base, lc.depth_units)
 
+    def test_read_and_rename(self):
+
+        rename_logs = {'phie': ['cpi_phie']}
+        # The LogTable contains the translated log name, which is necessary as the same LogTable should be
+        # able to be used across multiple las files, which all use different names for Effective Porosity:w
+        log_table = LogTable(
+            {'Resistivity': ['rdep', 'rmed'], 'Sonic': ['dt'], 'Porosity': ['PHIE', 'CPI_PHIT']})
+        log_curves, well_info = read_las(las_file2, log_table=log_table, rename_logs=rename_logs)
+        print(list(log_curves.keys()))
+        lc = log_curves['rmed']
+        print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
+              lc.depth.base, lc.depth_units)
+
     def test_read_seismic_from_las(self):
         las_file = "G:\\My Drive\\Work - Current and Recent\\GeoMind\\Clients\\AkerBP\\PL932 Kaldafjell AVO feasibility\\Wells\\34_3_3S_seismic.las"
         t = Template(**{'name': 'Seismic', 'units': 'dimensionless', 'line_color': 'b'})

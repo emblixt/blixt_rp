@@ -278,8 +278,8 @@ class Project(object):
                 else:
                     _log_table = log_table
 
-                w.read_las(_key, log_table=log_table, template_file=self.project_table, rename_logs=translate_dict)
-                # w.read_las(_key, log_table=_log_table, template_file=self.project_table)
+                # w.read_las(_key, log_table=log_table, template_file=self.project_table, rename_logs=translate_dict)
+                w.read_las(_key, log_table=_log_table, template_file=self.project_table)
                 if translate_dict is not None:
                     for _new_name, _old_name in translate_dict.items():
                         this_log = w.get_log_curve(_old_name)

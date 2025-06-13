@@ -403,7 +403,16 @@ def plot_chi_rotation(well: cw.Well,
     plotter = LogPlotter(width=width, height=height)
     c1 = LogColumn('EEI', lines=[line_brine, line_hc], rel_width=1)
     c2 = LogColumn('WIS', lines=[], rel_width=0.3)
-    c3 = LogColumn('DIFF', lines=[line_diff], rel_width=0.7)
+    compare_lines = []
+    if litho_log is not None:
+        compare_lines.append(litho_log.get_line())
+    if fluid_log is not None:
+        compare_lines.append(fluid_log.get_line())
+    if len(compare_lines) == 0:
+        c3 = LogColumn('DIFF', lines=[line_diff], rel_width=0.7)
+    else:
+        c3 = LogColumn('COMPARE', lines=compare_lines, rel_width=0.7)
+
     # c3 = LogColumn('EEI_BRINE', seismic_traces=seismic_traces_brine, rel_width=1)
     c4 = LogColumn('EEI_HC', seismic_traces=seismic_traces_hc, rel_width=1)
     c5 = LogColumn('EEI_DIFF', seismic_traces=seismic_traces_diff, rel_width=1)

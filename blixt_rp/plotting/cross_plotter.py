@@ -1,0 +1,760 @@
+# ----------------------------------------------------------------------------------------------------------
+# Filename: cross_plotter.py
+#  Purpose: Cross plot data using the bokeh interactive plotting library
+#           Similar to crossplot.py, but tried to modernize it
+#
+# ---------------------------------------------------------------------------------------------------
+from bokeh.models import (Slider, ColorPicker, Range1d, LinearAxis, LogAxis, Span, Legend, ColumnDataSource, Text,
+                          CustomJS, CustomJSTransform, LinearColorMapper, CheckboxEditor)
+from bokeh.models import PanTool, BoxZoomTool, WheelZoomTool, ResetTool, SaveTool, CrosshairTool, HoverTool, TextInput
+from bokeh.plotting import figure, show
+from bokeh.plotting import column, row
+
+import unittest
+import numpy as np
+import matplotlib.pyplot as plt
+from copy import deepcopy
+
+from html5lib.constants import mathmlTextIntegrationPointElements
+from scipy.stats import wilcoxon
+
+default_tools = [
+    PanTool(),
+    WheelZoomTool(),
+    BoxZoomTool(),
+    HoverTool(),
+    CrosshairTool(),
+    ResetTool(),
+    SaveTool()
+]
+
+cnames = [tmp['color'] for tmp, j in zip(plt.rcParams['axes.prop_cycle'], range(20))]
+markers = ['circle', 'diamond', 'hex', 'inverted_triangle', 'plus', 'square', 'star', 'triangle']
+
+
+class DataSource:
+    """
+    Class containing a dictionary of data, E.G. for one well, which can easily generate a ColumnDataSource
+    But can hold some extra attributes and methods that the ColumnDataSource itself cant have
+    """
+    def __init__(self,
+                 name: None | str = None,
+                 data: None | dict = None,
+                 templates: None | dict = None,
+                 ):
+        """
+        Container for data related to one well
+        :param name:
+            str
+            Name of  well
+        :param data:
+            dict
+            Dictionary of data, with variable names as keys.
+            Remember that a ColumnDataSource requires that all variable has the same length
+        :param templates:
+            dict
+            Dictionary of Template objects for each variable, and preferably also one Template for this
+            DataSource itself.
+        """
+        from blixt_rp.core.core import Template
+        self._name = name
+        self._data = data
+        if templates is None:
+            templates = {}
+        if data is not None:
+            for _key in list(data.keys()):
+                if _key not in list(templates.keys()):
+                    templates[_key] = None
+        self._templates = templates
+
+    def keys(self):
+        return self._data.keys()
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, new_name):
+        self._name = new_name
+
+    @property
+    def data(self):
+        return self._data
+
+    @data.setter
+    def data(self, new_data):
+        if not isinstance(new_data, dict):
+            raise IOError('Data must be input as a dictionary, not {}'.format(type(new_data)))
+        self._data = new_data
+
+    @property
+    def templates(self):
+        return self._templates
+
+    @templates.setter
+    def templates(self, new_templates):
+        for _key in list(self.keys()):
+            if _key not in list(new_templates.keys()):
+                new_templates[_key] = None
+        self._templates = new_templates
+
+    @property
+    def source(self):
+        return ColumnDataSource(data=self.data, name=self.name)
+
+    @source.setter
+    def source(self, new_source):
+        if isinstance(new_source, ColumnDataSource):
+            self.data = dict(new_source.data)
+        elif isinstance(new_source, dict):
+            self.data = new_source
+        else:
+            raise IOError('New source must be either ColumnDataSource or Dict, not {}'.format(
+                type(new_source)
+            ))
+
+    def min_and_max(self):
+        return {_key: [np.nanmin(self.data[_key]), np.nanmax(self.data[_key])] for _key in list(self.keys())}
+
+    def transform_source_data(self,
+                         x: None | str = None,
+                         y: None | str = None,
+                         size: None | str = None,
+                         color: None | str = None,
+                         marker: None | str = None,
+                         legend_group: None | str = None,
+                         ) -> dict:
+        """
+        The idea is to let the input decide which parameter that should be used on the x-axis, y-axis, size, color,
+        marker and legend
+        E.G.
+            if x = 'vp'
+            WHEN
+            self.data = dict(vp=..., vs=..., rho=...)
+            THEN
+            transformed_source_data = dict(x=self.data['vp'], y=..., etc...)
+
+        :param x:
+        :param y:
+        :param size:
+        :param color:
+        :param marker:
+        :param legend_group:
+
+        :return:
+            dict
+            transformed_source
+            The dictionary has at least the following keys:
+                'x', 'y', 'size', 'color', 'marker' and 'legend_group'
+        """
+
+        _n = len(self.data[list(self.keys())[0]])
+        _dict = {}
+
+        if x is not None and x in list(self.keys()):
+            _dict['x'] = self.data[x]
+        elif x is not None:
+            _dict['x'] = x
+        else:
+            pass
+
+        if y is not None and y in list(self.keys()):
+            _dict['y'] = self.data[y]
+        elif y is not None:
+            _dict['y'] = y
+        else:
+            pass
+
+        if size is not None and size in list(self.keys()):
+            _dict['size'] = self.data[size]
+        elif size is not None:
+            _dict['size'] = [size] * _n
+        else:
+            pass
+
+        if color is not None and color in list(self.keys()):
+            _dict['color'] = self.data[color]
+        elif color is not None:
+            _dict['color'] = [color] * _n
+        else:
+            pass
+
+        if marker is not None and marker in list(self.keys()):
+            _dict['marker'] = self.data[marker]
+        elif marker is not None:
+            _dict['marker'] = [marker] * _n
+        else:
+            pass
+
+        if legend_group is not None and legend_group in list(self.keys()):
+            _dict['legend_group'] = self.data[legend_group]
+        elif legend_group is not None:
+            _dict['legend_group'] = [legend_group] * _n
+        else:
+            pass
+
+        return _dict
+
+# class ParamSelector:
+#
+#     def __init__(self,
+#                  selector: str,
+#                  options: list,
+#                  ):
+#         """
+#         :param selector:
+#             str
+#             either 'x', 'y', 'size', 'color', 'marker' or 'legend_group'
+#         :param options:
+#         """
+#         self.selector = selector
+#         self.options = options
+#         self.code = """
+#         """
+#
+#     def drop_menu(self):
+#         from bokeh.models import Select
+#         return Select(title=self.selector, value=self.options[0], options=self.options)
+
+class WorkingIntervalsTable:
+    def __init__(self,
+                 intervals,
+                 width: None | int = None):
+        """
+
+        :param intervals:
+            blixt_rp.core.core.Intervals object
+
+        :param width:
+        """
+        if width is None:
+            width = 600
+        self.width = width
+        self._intervals = intervals
+
+    @property
+    def intervals(self):
+        return self._intervals
+
+    @property
+    def source(self):
+        """
+        Returns a ColumnDataSource with the following columns:
+            'use', 'name', 'level', 'wells', 'color'
+        :return:
+            ColumnDataSource
+        """
+        _well_names = self.intervals.well_names()
+        _interval_names = self.intervals.interval_names()
+
+        _dict = self.intervals.get_strat_units()
+        _ = _dict.pop('desc')
+        _ = _dict.pop('source')
+        _dict['use'] = [True] * len(_dict['name'])
+
+        # add a column with the well names that contains the interval of each row
+        _wells = []
+        for _name in _dict['name']:
+            _wl = []
+            for _wn in _well_names:
+                if self.intervals.get_interval(_name, _wn) is not None:
+                    _wl.append(_wn)
+            _wells.append(_wl)
+
+        _dict['wells'] = [', '.join(_w) for _w in _wells]
+
+        return ColumnDataSource(_dict)
+
+    def __dict__(self):
+        return self.intervals.get_intervals_dict()
+
+    def active_intervals_dict(self, source):
+        """
+        Returns a dictionary suitable for a ColumnDataSource which contains all intervals for all wells
+        with their top (m MD) and base and "active" status (status determined by the 'source' input)
+
+        :param source:
+            ColumnDataSource
+            The self.source of WorkingIntervalsTable
+            It is used to set which intervals are active or not
+
+        :return:
+        {'interval': [...], 'well': [...], 'top': [...], 'base': [...], 'active': [...]}
+        """
+        _dict = dict(
+            interval=[],
+            well=[],
+            top=[],
+            base=[],
+            active=[]
+        )
+        for _int_name in self.intervals.interval_names():
+            for _wname in self.intervals.well_names():
+                _int = self.intervals.get_interval(_int_name, _wname)
+                if _int is not None:
+                    _dict['interval'].append(_int_name)
+                    _dict['well'].append(_wname)
+                    _dict['top'].append(_int.top.magnitude)
+                    _dict['base'].append(_int.base.magnitude)
+                    # iterate over all working intervals in 'source' to see which are active or not
+                    _active = False
+                    for _i, _i_n in enumerate(source.data['name']):
+                        if _i_n == _int_name and _wname in source.data['wells'][_i]:
+                            _active = True
+                    _dict['active'].append(_active)
+        return _dict
+
+    def table_columns(self):
+        """
+        Creates the columns that the table should use
+        :return:
+        """
+        from bokeh.models import (SelectEditor, StringEditor, StringFormatter, IntEditor, TableColumn, CheckboxEditor,
+                                  HTMLTemplateFormatter)
+
+        # Try to color the cells of the 'color' column by their value
+        template = """
+                <div style="background:<%= 
+                    (function color_from_val(){
+                        return(color)
+                        }()) %>; 
+                    color: white"> 
+                <%= value %>
+                </div>
+            """
+        formatter = HTMLTemplateFormatter(template=template)
+        table_columns = [
+            TableColumn(field='use', title='Show',
+                        editor=CheckboxEditor(),
+                        width=30),
+            TableColumn(field='name', title='Stratigraphy',
+                        formatter=StringFormatter(font_style='bold')),
+            TableColumn(field='level', title='Level',
+                        editor=IntEditor(step=1),
+                        width=30),
+            TableColumn(field='wells', title='Wells'),
+            TableColumn(field='color', title='Color',
+                        editor=StringEditor(),
+                        formatter=formatter)
+        ]
+        return table_columns
+
+
+    def draw(self, source):
+        from bokeh.models import DataTable
+
+        active_intervals = ColumnDataSource(self.active_intervals_dict(source))
+
+        source_callback = CustomJS(
+            args=dict(source=source, act_int=active_intervals), code="""
+                const data_table = source.data;
+                var data_active = act_int.data;
+                var interval = 'XXX';
+                for (let i = 0; i < data_table['name'].length; i++) {
+                    interval = data_table['name'][i];
+                    if (data_table['use'][i] === false) {
+                        // Insert code to change the 'active' state of this interval to False in 'data_active'
+                        for (let j = 0; j < data_active['interval'].length; j++) {
+                            if (data_active['interval'][j] === interval) {
+                                data_active['active'][j] = false;
+                                console.log('  Interval: ' + interval + ' is set INACTIVE in well: ' + data_active['well'][j]);
+                            }
+                        }
+                    } else {
+                        // Insert code to change the 'active' state of this interval to True in 'data_active'
+                        for (let j = 0; j < data_active['interval'].length; j++) {
+                            if (data_active['interval'][j] === interval) {
+                                data_active['active'][j] = true;
+                                console.log('  Interval: ' + interval + ' is set active in well: ' + data_active['well'][j]);
+                            }
+                        }
+                    }
+                }
+                //console.log('Data changed: Interval ' + interval + ' is modified');
+                for (let j = 0; j < data_active['interval'].length; j++) {
+                    console.log('Active ?: ' + data_active['interval'][j] + ': ' + data_active['active'][j] );
+                }
+                act_int.data = data_active;
+                act_int.change.emit();
+            """)
+
+        active_callback = CustomJS(code="""
+            console.log('active_intervals has been updated');
+        """)
+
+        source.js_on_change('patching', source_callback)  # 'patching' is necessary. Don't know what it means
+        active_intervals.js_on_change('data', active_callback)  # TODO Can't get this to work
+
+        return DataTable(
+            source=source,
+            columns=self.table_columns(),
+            editable=True,
+            width=self.width,
+            index_position=-1,
+            index_header='index'
+        )
+
+class CrossPlotter:
+    """
+    Class for holding the cross plot
+    """
+    def __init__(self,
+                 data_sources: None | dict = None,
+                 width: None | int = None,
+                 height: None | int = None,
+                 tools: None | list = None):
+        """
+
+        :param data_sources:
+            dictionary of DataSource's
+            All variables within one DataSource have the same length
+            The same variable name can be reused across DataSource's
+        :param width:
+            int
+        :param height:
+            int
+        :param tools:
+        """
+
+        if width is None:
+            width = 600
+        if height is None:
+            height = 600
+        self.width = width
+        self.height = height
+        self._data_sources = data_sources
+        if data_sources is not None:
+            self._sources = {_key: _val.source for _key, _val in data_sources.items()}
+        else:
+            self._sources = None
+        if tools is None:
+            tools = default_tools
+        self._tools = tools
+
+    @property
+    def sources(self):
+        return self._sources
+
+    @property
+    def all_variables(self):
+        _all = []
+        for _source in self._data_sources.values():
+            _all += list(_source.keys())
+        return list(set(_all))
+
+    @property
+    def templates(self):
+        _all = {}
+        for _source in self._data_sources.values():
+            for _key, _val in _source.templates.items():
+                _all[_key] = _val
+        return _all
+
+    @property
+    def common_variables(self):
+        return list(set.intersection(
+            *[set(list(_s.keys())) for _s in self._data_sources.values()]
+        ))
+
+    def js_code(self, console_only=False):
+        console_only_code = """
+            const x_param = x_drop.value;
+            console.log('dropdown: ' + cb_obj.value, x_param);
+        """
+        code1 = """
+            const x_param = x_drop.value;
+            const y_param = y_drop.value;
+            const s_param = s_drop.value;
+            //const c_param = c_drop.value;
+            //const m_param = m_drop.value;
+            //const l_param = l_drop.value;
+            const min = min_max[s_param][0];
+            const max = min_max[s_param][1];
+            const s = [];
+            function size(arr1) {
+                let s = [];
+                for (let i = 0; i < arr1.length; i++) {
+                  s.push(10 + 70 * (arr1[i] - min) / (max - min));
+                      }
+                return s;
+            }
+            // REPLACE DATA
+            for (let i = 0; i < data_keys.length; i++) {
+                data_sources[i].data['x'] = orig_data_sources[i].data[x_param];
+                data_sources[i].data['y'] = orig_data_sources[i].data[y_param]
+                data_sources[i].data['size'] = size(orig_data_sources[i].data[s_param]);
+                }
+            //
+            for (let i = 0; i < data_keys.length; i++) {
+                data_sources[i].change.emit();
+                }
+                
+            // X AXIS
+            xaxis.axis_label = x_param;
+            if (templates[x_param]['min'] === null || templates[x_param]['min'] === undefined) {
+                    console.log('No ' + x_param + ' min value. Use min: ' + min_max[x_param][0]);
+                    x_range.start = min_max[x_param][0];
+                } else {
+                    console.log(x_param + ' min value ' + templates[x_param]['min']);
+                    x_range.start = templates[x_param]['min'];
+                }
+            if (templates[x_param]['max'] === null || templates[x_param]['max'] === undefined) {
+                    console.log('No ' + x_param + ' max value. Use max: ' + min_max[x_param][1]);
+                    x_range.end = min_max[x_param][1];
+                } else {
+                    console.log(x_param + ' max value ' + templates[x_param]['max']);
+                    x_range.end = templates[x_param]['max'];
+                }
+            x_range.change.emit()
+            
+            // Y AXIS
+            yaxis.axis_label = y_param;
+            if (templates[y_param]['min'] === null || templates[y_param]['min'] === undefined) {
+                    console.log('No ' + y_param + ' min value. Use min: ' + min_max[y_param][0]);
+                    y_range.start = min_max[y_param][0];
+                } else {
+                    console.log(y_param + ' min value ' + templates[y_param]['min']);
+                    y_range.start = templates[y_param]['min'];
+                }
+            if (templates[y_param]['max'] === null || templates[y_param]['max'] === undefined) {
+                    console.log('No ' + y_param + ' max value. Use max: ' + min_max[y_param][1]);
+                    y_range.end = min_max[y_param][1];
+                } else {
+                    console.log(y_param + ' max value ' + templates[y_param]['max']);
+                    y_range.end = templates[y_param]['max'];
+                }
+            y_range.change.emit()
+            
+            title.text = 'XXX';
+            //
+            console.log('dropdown: ' + cb_obj.value, x_param);
+            """
+        if console_only:
+            return console_only_code
+        else:
+            return code1
+
+    def drop_down_menus(self):
+        from bokeh.models import Select
+        _x_menu =  Select(title='X axis', value=self.common_variables[0], options=self.all_variables)
+        _y_menu =  Select(title='Y axis', value=self.common_variables[1], options=self.all_variables)
+        # TODO The four selectors below needs fixing before they can be used
+        _size_menu =  Select(title='Size', value=self.common_variables[0], options=self.all_variables)
+        _color_menu =  Select(title='Color axis', value=self.common_variables[0], options=self.all_variables)
+        _marker_menu =  Select(title='Marker', value=self.common_variables[0], options=self.all_variables)
+        _legend_menu =  Select(title='Legend', value=self.common_variables[0], options=self.all_variables)
+        return _x_menu, _y_menu, _size_menu, _color_menu, _marker_menu, _legend_menu
+
+    def min_and_max(self):
+        _out = {}
+        for _key in self.all_variables:
+            _min = 1E6; _max = -1E6
+            for _source in self._data_sources.values():
+                if _key not in list(_source.keys()):
+                    continue
+                if _source.min_and_max()[_key][0] < _min:
+                    _min = _source.min_and_max()[_key][0]
+                if _source.min_and_max()[_key][1] > _max:
+                    _max = _source.min_and_max()[_key][1]
+            _out[_key] = [_min, _max]
+        return _out
+
+
+    def figure(self):
+        xplot = figure(width=self.width, height=self.height, tools=self._tools)
+        xplot.toolbar.active_inspect = None
+        xplot.toolbar.logo = None
+        return xplot
+
+    def draw(self):
+
+        xplot = self.figure()
+
+        # set up drop down menus
+        x_menu, y_menu, size_menu, color_menu, marker_menu, legend_menu = self.drop_down_menus()
+
+        # print('XXX:')
+        # for _key, _val in self.min_and_max().items():
+        #     print(' ', _key, _val)
+
+        # Determine x and y variable
+        x_var = x_menu.value
+        y_var = y_menu.value
+        size_var = size_menu.value
+
+        # Create new 'transformed' sources
+        sources = {}
+        _i = 0
+        for _name, _data_source in self._data_sources.items():
+            sources[_name] = ColumnDataSource(_data_source.transform_source_data(
+                x=x_var,
+                y=y_var,
+                size=20,
+                color=cnames[_i],
+                marker=markers[_i],
+                legend_group=_name
+            ))
+            _i += 1
+
+        # for _name, _source in self._sources.items():
+        #     print('sources', _name, type(_source))
+        #     for _key in [x_var, y_var]:
+        #         print(_key, np.nanmin(_source.data[_key]), np.nanmax(_source.data[_key]))
+
+
+        # plot data
+        _i = 0
+        for _name, _source in sources.items():
+            # Check that the variable exists in the original data
+            if x_var not in list(self._sources[_name].data.keys()):
+                print('No {} in {}'.format(x_var, _name))
+                continue
+            if y_var not in list(self._sources[_name].data.keys()):
+                print('No {} in {}'.format(y_var, _name))
+                continue
+            xplot.scatter(x='x', y='y', source=_source, fill_color='color', marker='marker',
+                          legend_group='legend_group', size='size', fill_alpha=0.5, line_color=None)
+            # xplot.scatter(x='x', y='y', source=_source)
+            _i += 1
+
+        # Axes
+        for _var, _axis in zip([x_var, y_var], [xplot.xaxis, xplot.yaxis]):
+            # _axis.axis_label_text_font_size = '10px'
+            # _axis.major_label_text_font_size = '10px'
+            _axis.axis_label_standoff = 0
+            _axis.axis_label = '{} [{}]'.format(
+                self.templates[_var].name, self.templates[_var].units)
+        for _var, _range in zip([x_var, y_var], [xplot.x_range, xplot.y_range]):
+            if self.templates[_var].min is not None:
+                _range.start = self.templates[_var].min
+            if self.templates[_var].max is not None:
+                _range.end = self.templates[_var].max
+
+
+
+        # Legend
+        if len(xplot.legend) > 0:
+            xplot.legend.click_policy = 'hide'
+            xplot.legend.location = 'top_right'
+            # xplot.legend.label_text_font_size = '8pt'
+
+        # # Test templates:
+        # # print(list(self.templates.keys()))
+        # _templates = {_key: _val.get_as_dict() for _key, _val in self.templates.items()}
+        # # for _var in [x_var, y_var]:
+        # for _var in list(self.templates.keys()):
+        #     # print(list(_templates.keys()))
+        #     print(_var, list(_templates[_var].keys()))
+        #     print(_var, list(_templates[_var][_var].keys()))
+        #     # print(_var, _templates[_var]['min'], _templates[_var]['max'])
+
+        # arrange call backs
+        args_dict = dict(x_drop=x_menu,
+                         y_drop=y_menu,
+                         s_drop=size_menu,
+                         x_range=xplot.x_range,
+                         y_range=xplot.y_range,
+                         templates={_key: _val.get_as_dict()[_key] for _key, _val in self.templates.items()},
+                         data_keys=[_key for _key in list(sources.keys())],
+                         data_sources=[_val for _val in list(sources.values())],
+                         orig_data_sources=[_val.source for _val in list(self._data_sources.values())],
+                         # # table_data=table_source,
+                         # # params=param_dict,
+                         min_max=self.min_and_max(),
+                         # # cmap=exp_cmap,
+                         title=xplot.title,
+                         xaxis=xplot.xaxis[0],
+                         yaxis=xplot.yaxis[0],
+                         # # bar=bar
+                         )
+
+        x_menu.js_on_change('value',
+                             CustomJS(args=args_dict, code=self.js_code(console_only=False)))
+
+        y_menu.js_on_change('value',
+                            CustomJS(args=args_dict, code=self.js_code()))
+
+        size_menu.js_on_change('value',
+                            CustomJS(args=args_dict, code=self.js_code()))
+
+        return xplot, x_menu, y_menu, size_menu
+
+    def show(self, out_file):
+        from bokeh.io import output_file
+        output_file(out_file)
+        xplot, x_menu, y_menu, size_menu = self.draw()
+        show(column(xplot, row(x_menu, y_menu, size_menu)))
+
+
+class TestCases(unittest.TestCase):
+    def test_data_source(self):
+        from blixt_rp.core.core import Template
+        md1 = np.linspace(1000., 2000., 500)
+        md2 = np.linspace(800., 2500., 800)
+        l1_1 = np.random.normal(10., 1., 500)
+        l1_2 = np.random.normal(10., 1., 800)
+        l2_1 = np.random.normal(100., 1., 500)
+        l2_2 = np.random.normal(100., 1., 800)
+        l3 = np.random.normal(50., 1., 500)
+        l4 = np.random.normal(70., 1., 800)
+
+        template_md = Template(name='md', units='m', marker='circle', fill_color='red')
+        template_one = Template(name='var_one', units='m', min=5., max=15., marker='circle', fill_color='red')
+        template_two = Template(name='var_two', units='m/s', min=90., max=110., marker='square', fill_color='blue')
+        template_three = Template(name='var_three', units='kg', min=10., max=80., marker='triangle', fill_color='yellow')
+        template_four = Template(name='var_four', units='feet', min=30., max=90., marker='hex', fill_color='green')
+
+        data_one = dict(md=md1, var_one=l1_1, var_two=l2_1, var_three=l3)
+        data_two = dict(md=md2, var_one=l1_2, var_two=l2_2, var_four=l4)
+        templates_one = {_x.name: _x for _x in [template_md, template_one, template_two, template_three]}
+        templates_two = {_x.name: _x for _x in [template_md, template_one, template_two, template_four]}
+
+        ds1 = DataSource(data=data_one, templates=templates_one)
+        ds2 = DataSource(data=data_two, templates=templates_two)
+        xp = CrossPlotter(dict(one=ds1, two=ds2))
+        # print(xp.all_variables)
+        # print(xp.common_variables)
+        # print(xp.templates)
+        xp.show('C:\\Users\marte\Downloads\plot.html')
+
+    def test_intervals(self):
+        from blixt_rp.core.core import Intervals
+        from bokeh.io import output_file
+        output_file('C:\\Users\\emb\\Downloads\\plot.html')
+        #project_table = "C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+        project_table = "C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+        wis = Intervals()
+        wis.read_blixt_tops(project_table)
+        wis.keep_wells(['WELL_B', 'WELL_C', 'WELL_F'])
+        wis_table = WorkingIntervalsTable(wis)
+        print(wis_table.source.data['use'])
+        table = wis_table.draw(wis_table.source)
+        show(table)
+
+    def test_from_well(self):
+        from blixt_rp.core.project_new import Project
+        from blixt_rp.core.core import LogTable, Intervals
+
+        # project_table = "C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+        project_table = "C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+
+        project = Project(
+            name='testing',
+            # working_dir='C:\\Users\\marte\\PycharmProjects\\blixt_rp',
+            working_dir='/',
+            project_table=project_table
+        )
+        log_table = LogTable({'Density': 'rho_dry', 'P velocity': 'vp_dry', 'S velocity': 'vs_dry',
+                              'Porosity': 'PHIE', 'Volume': 'VCL'})
+
+        wis = Intervals()
+        wis.read_blixt_tops(project.project_table)
+
+        project.load_all_wells(log_table=log_table)
+        # print([(w.name, list(w.style.keys()), w.style.full_name) for w in project.wells])
+        xp = CrossPlotter(
+            {w.name: w.data_source() for w in project.wells}
+        )
+        # xp.show('C:\\Users\\marte\\Downloads\\plot.html')
+        xp.show('C:\\Users\\emb\\Downloads\\plot.html')

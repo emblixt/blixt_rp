@@ -3,6 +3,7 @@ Collection of objects and methods used throughout blixt_rp
 
 """
 import os, sys
+from copy import deepcopy
 
 import numpy as np
 
@@ -118,6 +119,49 @@ class LogTable(dict):
             else:
                 log_types.append(key)
         return log_types
+
+    def un_translate(self, rename_logs: dict):
+        """
+        The LogTable often contains translated log name(s), which is necessary as the same LogTable should be
+        able to be used across multiple las files, which all use different names for the 'same' log.
+        E.G. PHIE is called CPI_PHIE in one las file, and XXX_PHIE in another
+
+        This method returns a new LogTable which uses the 'un-translatet' log names, and leaves the original LogTable
+        untouched
+
+        :param rename_logs:
+            dict
+            E.G.
+                {'phie': ['CPI_PHIE']}
+                where the key is the wanted well log name, and the value list is a list of well log names
+                to translate from
+                NOTE TODO
+                Because the value list (e.g. ['CPI_PHI'] can contain several log names (BUT rarely do so),
+                and we can't know which one to use, we take the first item. But raise a warning
+        :return
+            LogTable with the 'un-translated' log names
+        """
+        un_translated_log_table = deepcopy(self)
+        if rename_logs is not None:
+            for _log_name, _log_type in zip(self.log_names, self.log_types):
+                if _log_name.lower() in [_l.lower() for _l in list(rename_logs.keys())]:
+                    if len(rename_logs[_log_name.lower()]) > 1:
+                        warn_txt = 'We bluntly assume you want to un-translate using the first name in the list:'
+                        warn_txt += ' {}, and not the second: {} (and so on)'.format(
+                            rename_logs[_log_name][0], rename_logs[_log_name][1])
+                        print_info(warn_txt, 'warning', logger)
+
+                    # Do the un-translation. Different for multi log LogTables
+                    if self.multi_log:
+                        _log_list = [_l.lower() for _l in un_translated_log_table[_log_type]]
+                        _i = _log_list.index(_log_name.lower())
+                        _log_list.pop(_i)
+                        _log_list.insert(_i, rename_logs[_log_name.lower()][0].lower())
+                        un_translated_log_table[_log_type] = _log_list
+                    else:
+                        un_translated_log_table[_log_type] = rename_logs[_log_name][0].lower()
+        return un_translated_log_table
+
 
     # TODO Create function to build a LogTable from the output 'logs' of result = uio.project_wells_new()
 
@@ -512,6 +556,11 @@ class Intervals(object):
     def interval_names(self):
         return list(set([_x.name for _x in self.intervals]))
 
+    def keep_wells(self, well_names: list):
+        for _interval in self.intervals[:]:
+            if _interval.well not in well_names:
+                self.intervals.remove(_interval)
+
     def well_names(self):
         return list(set([_x.well for _x in self.intervals]))
 
@@ -795,7 +844,8 @@ def templates_from_table(table: pd.DataFrame | dict, well_style=False) -> dict:
                 continue
             _ans = ans.upper().strip()
             return_dict[_ans] = {}
-            return_dict[_ans]['full_name'] = ans
+            return_dict[_ans]['full_name'] = _ans
+            return_dict[_ans]['name'] = _ans
             return_dict[_ans]['fill_color'] = None if isnan(table['Color'][i]) else table['Color'][i]
             return_dict[_ans]['marker'] = None if isnan(table['Symbol'][i]) else table['Symbol'][i]
         return return_dict

@@ -119,10 +119,23 @@ class LogTableTests(unittest.TestCase):
         print(lt.dict)
 
     def test_mixing(self):
-        lt1 = LogTable('Test', log_table)
-        lt2 = LogTable('Multiple logs', log_table_multi)
+        lt1 = LogTable( log_table)
+        lt2 = LogTable( log_table_multi)
         # lt1['Should fail'] = [1,2,3]
         lt2['Should fail'] = 'Vp'
+
+    def test_un_translate(self):
+        lt1 = LogTable(log_table)
+        rename_logs = {'phie': ['cpi_phie', 'xxx_phie']}
+        lt2 = lt1.un_translate(rename_logs=rename_logs)
+        print(lt2.log_names)
+
+        print('Using a multi_log LogTable:')
+        lt1 = LogTable(log_table_multi)
+        rename_logs = {'vp_virg': ['vp_dry', 'vp_insitu']}
+        lt2 = lt1.un_translate(rename_logs=rename_logs)
+        print(lt2.log_names)
+
 
 
 class TemplateTestCase(unittest.TestCase):
@@ -190,6 +203,9 @@ class IntervalTests(unittest.TestCase):
         f = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\\Sodir_well_tops_BarentsSea.xlsx"
         wis = Intervals(name='Working intervals')
         wis.read_sodir_tops(f)
+
+        # Test removing most well
+        wis.keep_wells(['7016_2_1', '7119_7_1'])
 
         for well in wis.well_names():
             print('Well: {}'.format(well))

@@ -187,7 +187,7 @@ class Well(object):
         _templates = {}
         for _log in self.logs:
             _templates[_log.name] = _log.style
-        _templates[self.name] = self.style
+        _templates[self.name.upper()] = self.style
         return _templates
 
     def read_las(self, file_name: str, verbose: bool = False, encoding: str = 'UTF8',
@@ -248,7 +248,7 @@ class Well(object):
         if template_file is not None:
             table = pd.read_excel(template_file, header=1, sheet_name='Well settings', engine='openpyxl')
             template_dict = templates_from_table(table, well_style=True)
-            self.style = Template(template_dict[self.name])
+            self.style = template_dict[self.name]
 
     def read_general_ascii(self,
                            file_name: str,

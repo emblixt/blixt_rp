@@ -1280,6 +1280,11 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
         print_info(warn_txt, 'warning', logger)
     depth_units = fix_units_for_pint(depth_units)
 
+    # Un-translate the log_table if necessary
+    if rename_logs is not None:
+        if log_table is not None:
+            log_table = log_table.un_translate(rename_logs=rename_logs)
+
     # Only read those logs we requested in the log_table
     only_these_logs = generated_keys  # This contains all the logs
     log_types = [None] * len(only_these_logs)
@@ -1322,10 +1327,6 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
         # Rename logs
         log_name = None
         if rename_logs is not None:
-            if log_table is not None:
-                print_info('Log name translation is not working when LogTable is provided',
-                           'warning', logger)
-                # TODO log name translation does not work when providing a LogTable
             for new_log_name in list(rename_logs.keys()):
                 if _key.lower() in [_l.lower() for _l in rename_logs[new_log_name]]:
                     log_name = new_log_name
