@@ -1157,7 +1157,7 @@ class LogCurve(object):
         Returns a (blixt_utils specific) Line object, which can be directly used in plot_logs_new.py
         :return:
         """
-        from blixt_utils.plotting.log_plotter import Line
+        from blixt_rp.plotting.log_plotter import Line
         self.style.name = self.name
         return Line(
             x=self.data.magnitude,

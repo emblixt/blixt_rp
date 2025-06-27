@@ -30,8 +30,19 @@ def minimum_working_example():
     ))
 
     # callback functions
+    callback2 = CustomJS(
+        args=dict(rental_source=rental_source),
+        code="""
+            const rental_data = rental_source.data;
+            console.log('Car rentals has been updated');
+            for (let j = 0; j < rental_data['car_rental'].length; j++) {
+                console.log(' - Car rental ' + rental_data['car_rental'][j] + ' in business? ' + rental_data['in_business'][j]);
+            }
+        """
+    )
+
     callback1 = CustomJS(
-        args=dict(car_source=car_source, rental_source=rental_source),
+        args=dict(car_source=car_source, rental_source=rental_source, cb=callback2),
         code = """
             const car_data = car_source.data;
             var rental_data = rental_source.data;
@@ -45,25 +56,12 @@ def minimum_working_example():
                 } 
             }
             rental_source.data = rental_data;
-            rental_source.change.emit();
+            cb.execute()
         """
     )
 
-    callback2 = CustomJS(code="""
-        console.log('Car rentals has been updated');
-    """)
-
-    def python_callback1(attr, old, new):
-        print('Cars have been updated in Python' )
-
-    def python_callback2(attr, old, new):
-        print('Car rentals has been updated in Python' )
 
     car_source.js_on_change('patching', callback1)
-    car_source.on_change('data', python_callback1)
-
-    rental_source.js_on_change('data', callback2)
-    rental_source.on_change('data', python_callback2) # This does not work either!
 
     return main_table
 

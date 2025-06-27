@@ -260,7 +260,7 @@ class Well(object):
                            var_types: list | None = None,
                            if_log_exists: str = 'overwrite',
                            verbose: bool = False,
-                           encoding: str = 'UTF8'):
+                           encoding: None | str = 'UTF8'):
         from blixt_rp.core.log_curve_new import read_general_ascii as _read_general_ascii
         log_curves = _read_general_ascii(file_name, separator, data_begins_on_row, var_names, var_columns, var_units,
                                          var_types, verbose, encoding)
@@ -385,7 +385,7 @@ class Well(object):
         :return:
             DataSource
         """
-        from blixt_utils.plotting.cross_plotter import DataSource
+        from blixt_rp.plotting.cross_plotter import DataSource
         return DataSource(
             name=self.name,
             data=self.dict(),

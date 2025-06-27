@@ -41,6 +41,7 @@ class DataSource:
                  name: None | str = None,
                  data: None | dict = None,
                  templates: None | dict = None,
+                 mask: None | np.ndarray = None
                  ):
         """
         Container for data related to one well
@@ -55,6 +56,11 @@ class DataSource:
             dict
             Dictionary of Template objects for each variable, and preferably also one Template for this
             DataSource itself.
+        :param mask:
+            np.ndarray of boolean values
+            Must have same length as the data (values) in the data dictionary
+            True means data is kept
+            False means the data is masked out
         """
         from blixt_rp.core.core import Template
         self._name = name
@@ -66,6 +72,9 @@ class DataSource:
                 if _key not in list(templates.keys()):
                     templates[_key] = None
         self._templates = templates
+        if mask is None:
+            mask = np.array(np.ones(len(data[list(data.keys())[0]])), dtype=bool)
+        self.mask = mask
 
     def keys(self):
         return self._data.keys()
@@ -194,6 +203,8 @@ class DataSource:
         else:
             pass
 
+        _dict['mask'] = self.mask
+
         return _dict
 
 # class ParamSelector:
@@ -314,7 +325,7 @@ class WorkingIntervalsTable:
                                   HTMLTemplateFormatter)
 
         # Try to color the cells of the 'color' column by their value
-        template = """
+        colored_cell_template = """
                 <div style="background:<%= 
                     (function color_from_val(){
                         return(color)
@@ -323,7 +334,7 @@ class WorkingIntervalsTable:
                 <%= value %>
                 </div>
             """
-        formatter = HTMLTemplateFormatter(template=template)
+        formatter = HTMLTemplateFormatter(template=colored_cell_template)
         table_columns = [
             TableColumn(field='use', title='Show',
                         editor=CheckboxEditor(),
@@ -346,45 +357,36 @@ class WorkingIntervalsTable:
 
         active_intervals = ColumnDataSource(self.active_intervals_dict(source))
 
+        active_callback = CustomJS(
+            args=dict(act_int=active_intervals),
+            code="""
+                const data_active = act_int.data;
+                console.log('active_intervals has been updated');
+                for (let j = 0; j < data_active['interval'].length; j++) {
+                    console.log('   - Interval: ' + data_active['interval'][j] + ' is active? ' + data_active['active'][j]);
+                }
+            """
+        )
+
         source_callback = CustomJS(
-            args=dict(source=source, act_int=active_intervals), code="""
+            args=dict(source=source, act_int=active_intervals, cb=active_callback),
+            code="""
                 const data_table = source.data;
                 var data_active = act_int.data;
-                var interval = 'XXX';
                 for (let i = 0; i < data_table['name'].length; i++) {
-                    interval = data_table['name'][i];
-                    if (data_table['use'][i] === false) {
-                        // Insert code to change the 'active' state of this interval to False in 'data_active'
-                        for (let j = 0; j < data_active['interval'].length; j++) {
-                            if (data_active['interval'][j] === interval) {
-                                data_active['active'][j] = false;
-                                console.log('  Interval: ' + interval + ' is set INACTIVE in well: ' + data_active['well'][j]);
-                            }
-                        }
-                    } else {
-                        // Insert code to change the 'active' state of this interval to True in 'data_active'
-                        for (let j = 0; j < data_active['interval'].length; j++) {
-                            if (data_active['interval'][j] === interval) {
-                                data_active['active'][j] = true;
-                                console.log('  Interval: ' + interval + ' is set active in well: ' + data_active['well'][j]);
-                            }
+                    for (let j = 0; j < data_active['interval'].length; j++) {
+                        if (data_table['name'][i] === data_active['interval'][j]) {
+                            data_active['active'][j] = data_table['use'][i]
+                            console.log('  Interval: ' + data_table['name'][i] + ' in well: ' + data_active['well'][j] + ' is active? ' + data_active['active'][j]);
                         }
                     }
                 }
-                //console.log('Data changed: Interval ' + interval + ' is modified');
-                for (let j = 0; j < data_active['interval'].length; j++) {
-                    console.log('Active ?: ' + data_active['interval'][j] + ': ' + data_active['active'][j] );
-                }
                 act_int.data = data_active;
-                act_int.change.emit();
-            """)
-
-        active_callback = CustomJS(code="""
-            console.log('active_intervals has been updated');
-        """)
+                cb.execute();
+            """
+        )
 
         source.js_on_change('patching', source_callback)  # 'patching' is necessary. Don't know what it means
-        active_intervals.js_on_change('data', active_callback)  # TODO Can't get this to work
 
         return DataTable(
             source=source,
@@ -394,6 +396,107 @@ class WorkingIntervalsTable:
             index_position=-1,
             index_header='index'
         )
+
+
+class CutOffsTable:
+    def __init__(self,
+                 cutoffs,
+                 width: None | int = None):
+        """
+
+        :param cut_offs:
+            blixt_rp.core.core.Cutoffs object
+        :param width:
+            int
+        """
+        if width is None:
+            width = 600
+        self.width = width
+        self._cutoffs = cutoffs
+
+    @property
+    def cutoffs(self):
+        return self._cutoffs
+
+    @property
+    def source(self):
+        """
+        Returns a ColumnDataSource with the following columns:
+            'use', 'log', 'operator', 'limits'
+        :return:
+            ColumnDataSource
+        """
+        _dict = dict(use=[], log=[], operator=[], limits=[])
+        for _rule in self.cutoffs.cutoffs:
+            _dict['use'].append(False)
+            _dict['log'].append(_rule.param)
+            _dict['operator'].append(_rule.operator)
+            if isinstance(_rule.limit, list):
+                _r = ', '.join([str(_x.magnitude) for _x in _rule.limit])
+            else:
+                _r = str(_rule.limit.magnitude)
+            _dict['limits'].append(_r)
+
+        return ColumnDataSource(_dict)
+
+    def table_columns(self, logs):
+        from bokeh.models import (SelectEditor, StringEditor, TableColumn, CheckboxEditor)
+        _operators = ['<', '<=', '>', '>=', '><', '==', '!=']
+        table_columns = [
+            TableColumn(field='use', title='Use', editor=CheckboxEditor(), width=30),
+            TableColumn(field='log', title='Log name', editor=SelectEditor(options=logs)),
+            TableColumn(field='operator', title='Operator', editor=SelectEditor(options=_operators)),
+            TableColumn(field='limits', title='Limits (comma separated)', editor=StringEditor())
+        ]
+        return table_columns
+
+
+    def draw(self, source, logs):
+        from bokeh.models import DataTable, Button
+
+        add_row_callback = CustomJS(
+            args=dict(source=source, source_dict=dict(source.data)),
+            code="""
+                var new_data = source.data;
+                new_data['use'].push(source_dict['use'][0]);
+                new_data['log'].push(source_dict['log'][0]);
+                new_data['operator'].push(source_dict['operator'][0]);
+                new_data['limits'].push(source_dict['limits'][0]);
+
+                source.data = new_data
+                source.change.emit()
+            """
+        )
+        delete_row_callback = CustomJS(
+            args=dict(source=source),
+            code="""
+                var new_data = source.data;
+                new_data['use'].shift();
+                new_data['log'].shift();
+                new_data['operator'].shift();
+                new_data['limits'].shift();
+                
+                source.data = new_data
+                source.change.emit()
+            """
+        )
+
+        dt =  DataTable(
+            source=source,
+            columns=self.table_columns(logs),
+            editable=True,
+            width=self.width,
+            index_position=-1,
+            index_header='index'
+        )
+
+        add_row = Button(label='Add row', button_type='success')
+        add_row.js_on_click(add_row_callback)
+        delete_row = Button(label='Remove first row', button_type='success')
+        delete_row.js_on_click(delete_row_callback)
+
+        return dt, add_row, delete_row
+
 
 class CrossPlotter:
     """
@@ -432,6 +535,8 @@ class CrossPlotter:
             tools = default_tools
         self._tools = tools
 
+        self.fixed_sizes = ['1', '5', '10', '20']
+
     @property
     def sources(self):
         return self._sources
@@ -456,6 +561,36 @@ class CrossPlotter:
         return list(set.intersection(
             *[set(list(_s.keys())) for _s in self._data_sources.values()]
         ))
+
+    @property
+    def source(self):
+        """
+        Returns a merged CDS with all the common variables from all data_sources
+        :return:
+        """
+        _dict = {}
+        _i = 0
+        for _key, _item in self.sources.items():
+            _len = None
+            for _var in self.common_variables:
+                _len = len(_item.data[_var])
+                if _i == 0:
+                    _dict[_var] = _item.data[_var]
+                else:
+                    _dict[_var] = np.append(_dict[_var], _item.data[_var])
+            if _i == 0:
+                _dict['source__name'] = np.array([_key] * _len)
+                _dict['legend_group'] = np.array([_key] * _len)
+                _dict['color'] = np.array([cnames[_i]] * _len)
+                _dict['marker'] = np.array([markers[_i]] * _len)
+            else:
+                _dict['source__name'] = np.append(_dict['source__name'], np.array([_key] * _len))
+                _dict['legend_group'] = np.append(_dict['legend_group'], np.array([_key] * _len))
+                _dict['color'] = np.append(_dict['color'], np.array([cnames[_i]] * _len))
+                _dict['marker'] = np.append(_dict['marker'], np.array([markers[_i]] * _len))
+            _i += 1
+
+        return _dict
 
     def js_code(self, console_only=False):
         console_only_code = """
@@ -483,7 +618,12 @@ class CrossPlotter:
             for (let i = 0; i < data_keys.length; i++) {
                 data_sources[i].data['x'] = orig_data_sources[i].data[x_param];
                 data_sources[i].data['y'] = orig_data_sources[i].data[y_param]
-                data_sources[i].data['size'] = size(orig_data_sources[i].data[s_param]);
+                if (min_max[s_param][0] === 'constant') {
+                        let length = orig_data_sources[i].data[x_param].length;
+                        data_sources[i].data['size'] = Array(length).fill(Number(s_param));
+                    } else {
+                        data_sources[i].data['size'] = size(orig_data_sources[i].data[s_param]);
+                    }
                 }
             //
             for (let i = 0; i < data_keys.length; i++) {
@@ -539,8 +679,9 @@ class CrossPlotter:
         from bokeh.models import Select
         _x_menu =  Select(title='X axis', value=self.common_variables[0], options=self.all_variables)
         _y_menu =  Select(title='Y axis', value=self.common_variables[1], options=self.all_variables)
-        # TODO The four selectors below needs fixing before they can be used
-        _size_menu =  Select(title='Size', value=self.common_variables[0], options=self.all_variables)
+        _size_menu =  Select(title='Size', value=20,
+                             options= self.fixed_sizes + self.all_variables)
+        # TODO The selectors below needs fixing before they can be used
         _color_menu =  Select(title='Color axis', value=self.common_variables[0], options=self.all_variables)
         _marker_menu =  Select(title='Marker', value=self.common_variables[0], options=self.all_variables)
         _legend_menu =  Select(title='Legend', value=self.common_variables[0], options=self.all_variables)
@@ -558,6 +699,8 @@ class CrossPlotter:
                 if _source.min_and_max()[_key][1] > _max:
                     _max = _source.min_and_max()[_key][1]
             _out[_key] = [_min, _max]
+        for _key in self.fixed_sizes:
+            _out[_key] = ['constant', 'constant']
         return _out
 
 
@@ -716,7 +859,10 @@ class TestCases(unittest.TestCase):
         # print(xp.all_variables)
         # print(xp.common_variables)
         # print(xp.templates)
-        xp.show('C:\\Users\marte\Downloads\plot.html')
+        d = xp.source
+        for _key, _item in d.items():
+            print(_key, _item[:5], _item[-5:], len(_item))
+        # xp.show('C:\\Users\marte\Downloads\plot.html')
 
     def test_intervals(self):
         from blixt_rp.core.core import Intervals
@@ -742,7 +888,7 @@ class TestCases(unittest.TestCase):
         project = Project(
             name='testing',
             # working_dir='C:\\Users\\marte\\PycharmProjects\\blixt_rp',
-            working_dir='/',
+            working_dir='C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp',
             project_table=project_table
         )
         log_table = LogTable({'Density': 'rho_dry', 'P velocity': 'vp_dry', 'S velocity': 'vs_dry',
@@ -758,3 +904,39 @@ class TestCases(unittest.TestCase):
         )
         # xp.show('C:\\Users\\marte\\Downloads\\plot.html')
         xp.show('C:\\Users\\emb\\Downloads\\plot.html')
+
+    def test_cutoffs(self):
+        from pint import Quantity as Q_
+        from bokeh.io import output_file
+        from bokeh.plotting import column
+        from blixt_rp.core.core import CutoffRule, Cutoffs
+        output_file('C:\\Users\\emb\\Downloads\\plot.html')
+
+        rule1 = CutoffRule('name1', '>', Q_(100, 'm'))
+        rule2 = CutoffRule('name2', '<', Q_(10, 'm'))
+        rule3 = CutoffRule('name3', '==', Q_(1000, 'm'))
+        rule5 = CutoffRule('name5', '><', [Q_(10, 'm'), Q_(1000, 'm')])
+        # cutoffs = Cutoffs(cutoffs=[rule1, rule2, rule3, rule5])
+        cutoffs = Cutoffs(cutoffs=[])
+        ct = CutOffsTable(cutoffs)
+        table_source = ct.source
+        # print(ct.source.data)
+        table, add_row, delete_row = ct.draw(table_source, ['log A', 'log B'])
+
+        test_callback = CustomJS(
+            args=dict(source=table_source),
+            code="""
+                const args = ['use', 'log', 'operator', 'limits'];
+                // Create a loop that iterates over all rows in the table first, then we can do the loop below for each row
+                for (var i = 0; i < args.length; i++) {
+                    if (source.data[args[i]][0] === null || source.data[args[i]][0] === undefined) {
+                        console.log('Do nothing');
+                    } else {
+                        console.log('Log table source is changed ', source.data[args[i]]);
+                    }
+                }
+            """)
+
+        table_source.js_on_change('patching', test_callback)
+        show(column(table, add_row, delete_row))
+

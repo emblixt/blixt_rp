@@ -481,6 +481,24 @@ def add_seismic_traces(_p: bokeh.plotting.figure,
                                  label_standoff=3, major_label_text_font_size='10px')
             _p.add_layout(color_bar, 'above')
 
+def add_color_amp(_p):
+    from bokeh.models import NumericInput
+    orig_max_val = _p._property_values['above'][1].color_mapper.high
+    color_amp_factor = NumericInput(value=100, low=10, high=500,
+                                    title="Boost color scale (10 - 500%)")
+    color_amp_factor.js_on_change('value', CustomJS(
+        args=dict(
+            c_amp=color_amp_factor,
+            c_map=_p._property_values['above'][1].color_mapper,
+            max_val=orig_max_val),
+        code="""
+            c_map.high = max_val * c_amp.value/100.
+            c_map.low = -1. * max_val * c_amp.value/100.
+            console.log('test:', c_amp.value);
+            """))
+
+    return color_amp_factor
+
 
 def add_strat_table(_p: bokeh.plotting.figure,
                     stratigraphy: dict,
@@ -565,7 +583,7 @@ def add_strat_table(_p: bokeh.plotting.figure,
             elif _key == 'line_width':
                 stratigraphy[_key] = [2] * len(stratigraphy['top'])
             elif _key == 'font_size':
-                stratigraphy[_key] =['15px'] * len(stratigraphy['top'])
+                stratigraphy[_key] =['12px'] * len(stratigraphy['top'])
 
     # create extra source items
     stratigraphy['mid'] = list(0.5 * (np.array(stratigraphy['top']) + np.array(stratigraphy['base'])))
@@ -642,23 +660,39 @@ def add_strat_table(_p: bokeh.plotting.figure,
 
     strati_units()
 
-    text_glyph = None
+    # Add text
+
+    # Tried to hide texts that overlap
+    # _l = strati_source.data['level']
+    # _text_alpha = [float(_l[_i] != _l[_i + 1]) for _i in range(len(_l) - 1)] + [1.]
+    text_glyph = Text(x=_p.children[0][0].x_range.start, y='top',
+                      text='name', text_font_size='font_size', text_alpha='visible')
+                      # text='name', text_font_size='font_size', text_alpha=_text_alpha)  # This didn't work, need to modify source!
+    _p.children[0][0].add_glyph(strati_source, text_glyph)
+    if column_index is not None:
+        text_glyph = Text(x='level', y='mid',
+                          text='name', text_font_size='font_size', text_font_style='bold',
+                          text_alpha='visible', text_align='center', text_baseline='middle',
+                          angle=90., angle_units='deg')
+        _p.children[column_index][0].add_glyph(strati_source, text_glyph)
+
+    # text_glyph = None
     _spans = spans()
     for _span in _spans:
         for i, _child in enumerate(_p.children):
             _child[0].add_layout(_span)
-            if i == 0:
-                text_glyph = Text(x=_child[0].x_range.start, y='top',
-                                  text='name', text_font_size='font_size', text_alpha='visible')
-                _child[0].add_glyph(strati_source, text_glyph)
-        if column_index is not None:
-            for i, _child in enumerate(_p.children):
-                if i == column_index:
-                    text_glyph = Text(x='level', y='mid',
-                                      text='name', text_font_size='font_size', text_font_style='bold',
-                                      text_alpha='visible', text_align='center', text_baseline='middle',
-                                      angle=90., angle_units='deg')
-                    _child[0].add_glyph(strati_source, text_glyph)
+    #         if i == 0:
+    #             text_glyph = Text(x=_child[0].x_range.start, y='top',
+    #                               text='name', text_font_size='font_size', text_alpha='visible')
+    #             _child[0].add_glyph(strati_source, text_glyph)
+    #     if column_index is not None:
+    #         for i, _child in enumerate(_p.children):
+    #             if i == column_index:
+    #                 text_glyph = Text(x='level', y='mid',
+    #                                   text='name', text_font_size='font_size', text_font_style='bold',
+    #                                   text_alpha='visible', text_align='center', text_baseline='middle',
+    #                                   angle=90., angle_units='deg')
+    #                 _child[0].add_glyph(strati_source, text_glyph)
 
     span_callback = CustomJS(args=dict(source=strati_source, spans=_spans), code=code)
 

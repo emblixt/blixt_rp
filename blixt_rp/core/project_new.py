@@ -297,7 +297,8 @@ class Project(object):
                     var_names=var_names,
                     var_columns=var_columns,
                     var_units=var_units,
-                    var_types=var_types
+                    var_types=var_types,
+                    encoding=None,
                 )
                 w.name = result[_key]['Given well name']
                 w.header.note = result[_key]['Note']

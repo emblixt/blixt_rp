@@ -28,7 +28,7 @@ import blixt_rp.core.well_new as cw
 import blixt_rp.rp.rp_core as rp
 from blixt_rp.core.core import StratUnit, Interval, Intervals, LogTable, Template
 from blixt_rp.core.log_curve_new import LogCurve, _to_depth, replace_data
-from blixt_utils.plotting.log_plotter import (LogPlotter, LogColumn, Line,  add_strat_table)
+from blixt_rp.plotting.log_plotter import (LogPlotter, LogColumn, Line,  add_strat_table, add_color_amp)
 import blixt_utils.utils as uu
 import blixt_utils.misc.wavelets as bumw
 from blixt_utils.utils import nan_corrcoef, print_info
@@ -767,6 +767,9 @@ def compare_synth_with_seismic(
         ax.x_range.start = avo_angles[0]
         ax.x_range.end = avo_angles[-1]
 
+    # Add possibility to modify colors on the real seismic
+    color_amp_factor = add_color_amp(grid.children[4][0])
+
     if wis is not None:
         data_table = add_strat_table(grid, stratigraphy=wis.get_intervals_dict(well.name), column_index=1)
     else:
@@ -814,7 +817,7 @@ def compare_synth_with_seismic(
     freq_slider.js_on_change('value', legend_callback)
     shift_slider.js_on_change('value', legend_callback)
 
-    return grid, backus_slider, freq_slider, shift_slider, data_table
+    return grid, backus_slider, freq_slider, shift_slider, data_table, color_amp_factor
 
 
 def interactive_edits(well: cw.Well,
