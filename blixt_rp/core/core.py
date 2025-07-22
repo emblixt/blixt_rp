@@ -180,7 +180,8 @@ class CutoffRule:
     def __init__(self,
                  param: str,
                  operator: str | None,
-                 limit: pint.Quantity | list | str ):
+                 limit: pint.Quantity | list | str,
+                 name: str | None = None):
         """
 
         :param param:
@@ -199,13 +200,18 @@ class CutoffRule:
             pint.Quantity | list | str
             If limit is a string, the CutoffRule becomes an interval cutoff, where the string is the name of
             the interval we limit the data to.
+        :param name:
+            Name of the rule
+            Useful for classifying data according to a set of rules sharing the same name
         """
         raise_unit_error = False
         self.interval_cutoff = False
 
         # instantiate 'param'
-        self.__name__ = param
         self.param = param
+
+        self.__name__ = name
+        self.name = name
 
         # instantiate 'operator'
         if operator is None and not isinstance(limit, str):
@@ -247,9 +253,9 @@ class CutoffRule:
 
 class Cutoffs:
     def __init__(self,
-                 # name: str | None = None,
                  cutoffs: list | None = None,
-                 log_table: LogTable | None = None
+                 log_table: LogTable | None = None,
+                 name: str | None = None
                  ):
         """
 
@@ -258,7 +264,7 @@ class Cutoffs:
         :param cutoffs:
             List of CutOffRules
         """
-        # self.name = name
+        self.name = name
         self.log_table = log_table
         if cutoffs is None:
             cutoffs = []
@@ -274,7 +280,7 @@ class Cutoffs:
         self.cutoffs = cutoffs
 
     @property
-    def cutoff_names(self):
+    def cutoff_params(self):
         return [_x.param for _x in self.cutoffs]
 
     def __len__(self):
@@ -285,16 +291,18 @@ class Cutoffs:
 
     def append(self, new_cutoffs):
         if isinstance(new_cutoffs, list):
-            for co in new_cutoffs:
-                if co.param in self.cutoff_names:
+            for i, co in enumerate(new_cutoffs[:]):
+                if co.param in self.cutoff_params:
                     warn_txt = '{} is repeated and last occurrence is ignored'.format(co.param)
                     print_info(warn_txt, 'warning', logger=logger)
+                    _ = new_cutoffs.pop(i)
             self.cutoffs = self.cutoffs + new_cutoffs
         elif isinstance(new_cutoffs, CutoffRule):
-            if new_cutoffs.param in self.cutoff_names:
+            if new_cutoffs.param in self.cutoff_params:
                 warn_txt = '{} is repeated and last occurrence is ignored'.format(new_cutoffs.param)
                 print_info(warn_txt, 'warning', logger=logger)
-            self.cutoffs.append(new_cutoffs)
+            else:
+                self.cutoffs.append(new_cutoffs)
 
     def get_dict(self):
         return_dict = {}

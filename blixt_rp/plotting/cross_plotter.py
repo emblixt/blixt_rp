@@ -15,7 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from copy import deepcopy
 
-from html5lib.constants import mathmlTextIntegrationPointElements
+# from html5lib.constants import mathmlTextIntegrationPointElements
 from scipy.stats import wilcoxon
 
 default_tools = [
@@ -126,86 +126,86 @@ class DataSource:
     def min_and_max(self):
         return {_key: [np.nanmin(self.data[_key]), np.nanmax(self.data[_key])] for _key in list(self.keys())}
 
-    def transform_source_data(self,
-                         x: None | str = None,
-                         y: None | str = None,
-                         size: None | str = None,
-                         color: None | str = None,
-                         marker: None | str = None,
-                         legend_group: None | str = None,
-                         ) -> dict:
-        """
-        The idea is to let the input decide which parameter that should be used on the x-axis, y-axis, size, color,
-        marker and legend
-        E.G.
-            if x = 'vp'
-            WHEN
-            self.data = dict(vp=..., vs=..., rho=...)
-            THEN
-            transformed_source_data = dict(x=self.data['vp'], y=..., etc...)
+    # def transform_source_data(self,
+    #                      x: None | str = None,
+    #                      y: None | str = None,
+    #                      size: None | str = None,
+    #                      color: None | str = None,
+    #                      marker: None | str = None,
+    #                      legend_group: None | str = None,
+    #                      ) -> dict:
+    #     """
+    #     The idea is to let the input decide which parameter that should be used on the x-axis, y-axis, size, color,
+    #     marker and legend
+    #     E.G.
+    #         if x = 'vp'
+    #         WHEN
+    #         self.data = dict(vp=..., vs=..., rho=...)
+    #         THEN
+    #         transformed_source_data = dict(x=self.data['vp'], y=..., etc...)
 
-        :param x:
-        :param y:
-        :param size:
-        :param color:
-        :param marker:
-        :param legend_group:
+    #     :param x:
+    #     :param y:
+    #     :param size:
+    #     :param color:
+    #     :param marker:
+    #     :param legend_group:
 
-        :return:
-            dict
-            transformed_source
-            The dictionary has at least the following keys:
-                'x', 'y', 'size', 'color', 'marker' and 'legend_group'
-        """
+    #     :return:
+    #         dict
+    #         transformed_source
+    #         The dictionary has at least the following keys:
+    #             'x', 'y', 'size', 'color', 'marker' and 'legend_group'
+    #     """
 
-        _n = len(self.data[list(self.keys())[0]])
-        _dict = {}
+    #     _n = len(self.data[list(self.keys())[0]])
+    #     _dict = {}
 
-        if x is not None and x in list(self.keys()):
-            _dict['x'] = self.data[x]
-        elif x is not None:
-            _dict['x'] = x
-        else:
-            pass
+    #     if x is not None and x in list(self.keys()):
+    #         _dict['x'] = self.data[x]
+    #     elif x is not None:
+    #         _dict['x'] = x
+    #     else:
+    #         pass
 
-        if y is not None and y in list(self.keys()):
-            _dict['y'] = self.data[y]
-        elif y is not None:
-            _dict['y'] = y
-        else:
-            pass
+    #     if y is not None and y in list(self.keys()):
+    #         _dict['y'] = self.data[y]
+    #     elif y is not None:
+    #         _dict['y'] = y
+    #     else:
+    #         pass
 
-        if size is not None and size in list(self.keys()):
-            _dict['size'] = self.data[size]
-        elif size is not None:
-            _dict['size'] = [size] * _n
-        else:
-            pass
+    #     if size is not None and size in list(self.keys()):
+    #         _dict['size'] = self.data[size]
+    #     elif size is not None:
+    #         _dict['size'] = [size] * _n
+    #     else:
+    #         pass
 
-        if color is not None and color in list(self.keys()):
-            _dict['color'] = self.data[color]
-        elif color is not None:
-            _dict['color'] = [color] * _n
-        else:
-            pass
+    #     if color is not None and color in list(self.keys()):
+    #         _dict['color'] = self.data[color]
+    #     elif color is not None:
+    #         _dict['color'] = [color] * _n
+    #     else:
+    #         pass
 
-        if marker is not None and marker in list(self.keys()):
-            _dict['marker'] = self.data[marker]
-        elif marker is not None:
-            _dict['marker'] = [marker] * _n
-        else:
-            pass
+    #     if marker is not None and marker in list(self.keys()):
+    #         _dict['marker'] = self.data[marker]
+    #     elif marker is not None:
+    #         _dict['marker'] = [marker] * _n
+    #     else:
+    #         pass
 
-        if legend_group is not None and legend_group in list(self.keys()):
-            _dict['legend_group'] = self.data[legend_group]
-        elif legend_group is not None:
-            _dict['legend_group'] = [legend_group] * _n
-        else:
-            pass
+    #     if legend_group is not None and legend_group in list(self.keys()):
+    #         _dict['legend_group'] = self.data[legend_group]
+    #     elif legend_group is not None:
+    #         _dict['legend_group'] = [legend_group] * _n
+    #     else:
+    #         pass
 
-        _dict['mask'] = self.mask
+    #     _dict['mask'] = self.mask
 
-        return _dict
+    #     return _dict
 
 # class ParamSelector:
 #
@@ -227,6 +227,7 @@ class DataSource:
 #     def drop_menu(self):
 #         from bokeh.models import Select
 #         return Select(title=self.selector, value=self.options[0], options=self.options)
+
 
 class WorkingIntervalsTable:
     def __init__(self,
@@ -398,43 +399,55 @@ class WorkingIntervalsTable:
         )
 
 
-class CutOffsTable:
+class ClassificationTable:
+    """
+    Table with rules that classify the data.
+    The rules can also be used to mask out data (cutoffs)
+    """
     def __init__(self,
-                 cutoffs,
+                 rules,
                  width: None | int = None):
         """
 
-        :param cut_offs:
+        :param rules:
             blixt_rp.core.core.Cutoffs object
         :param width:
             int
         """
+        # TODO
+        # Instead of using _rules as a CutOffs object, use a list of CutOffRules which can be updated
         if width is None:
             width = 600
         self.width = width
-        self._cutoffs = cutoffs
+        self._rules = rules
 
     @property
-    def cutoffs(self):
-        return self._cutoffs
+    def rules(self):
+        return self._rules
 
     @property
     def source(self):
         """
         Returns a ColumnDataSource with the following columns:
-            'use', 'log', 'operator', 'limits'
+            'use', 'name', 'log', 'units', 'operator', 'limits'
+        When 'use' is set to True, and setting the 'use_cutoffs' check box to active, the rule is used to cut out data (mask)
         :return:
             ColumnDataSource
         """
-        _dict = dict(use=[], log=[], operator=[], limits=[])
-        for _rule in self.cutoffs.cutoffs:
-            _dict['use'].append(False)
-            _dict['log'].append(_rule.param)
-            _dict['operator'].append(_rule.operator)
+        _dict = dict(use=[], name=[], log=[], units=[], operator=[], limits=[])
+        for _rule in self.rules.cutoffs:
+            _u = None
             if isinstance(_rule.limit, list):
                 _r = ', '.join([str(_x.magnitude) for _x in _rule.limit])
+                _u = str(_rule.limit[0].units)
             else:
                 _r = str(_rule.limit.magnitude)
+                _u = str(_rule.limit.units)
+            _dict['use'].append(False)
+            _dict['name'].append('-')
+            _dict['log'].append(_rule.param)
+            _dict['units'].append(_u)
+            _dict['operator'].append(_rule.operator)
             _dict['limits'].append(_r)
 
         return ColumnDataSource(_dict)
@@ -443,25 +456,93 @@ class CutOffsTable:
         from bokeh.models import (SelectEditor, StringEditor, TableColumn, CheckboxEditor)
         _operators = ['<', '<=', '>', '>=', '><', '==', '!=']
         table_columns = [
-            TableColumn(field='use', title='Use', editor=CheckboxEditor(), width=30),
+            TableColumn(field='use', title='Use as cutoff', editor=CheckboxEditor()),
+            TableColumn(field='name', title='Class', editor=StringEditor()),
             TableColumn(field='log', title='Log name', editor=SelectEditor(options=logs)),
+            TableColumn(field='units', title='Units'),
             TableColumn(field='operator', title='Operator', editor=SelectEditor(options=_operators)),
             TableColumn(field='limits', title='Limits (comma separated)', editor=StringEditor())
         ]
         return table_columns
 
+    def draw(self,
+             source: ColumnDataSource,
+             logs: list):
+        from bokeh.models import DataTable, Button, CheckboxGroup
+        from blixt_rp.core.core import CutoffRule, Cutoffs
 
-    def draw(self, source, logs):
-        from bokeh.models import DataTable, Button
+        def update_table_callback():
+            # How do I use input variables to a python call back?
+            #  - It depends on which widget you use, see:
+            #      docs.bokeh.org/en/latest/docs/user_guide/interaction/python_callbacks.html#ug-interaction-python-callbacks
+            rules = []
+            use_status = []
+            for i, use in enumerate(source.data['use']):
+                if ',' in source.data['limits'][i]:
+                    this_limit = [float(_s) for _s in source.data['limits'][i].split(',')]
+                else:
+                    this_limit = float(source.data['limits'][i])
+                use_status.append(use)
+                rules.append(CutoffRule(
+                    param=source.data['log'][i],
+                    operator=source.data['operator'][i],
+                    limit=this_limit,
+                    name=source.data['name'][i]
+                ))
+
+            print('TEST', source.data['use'])
+
+        def use_cutoffs_callback(attr, old, new):
+            if len(new) == 1:
+                print('Use cutoffs, ', old, new)
+            else:
+                print('Do not use cutoffs, ', old, new)
+
+        # # JS code that detect if table is "full" (e.g. all cells contain data) after being modified
+        # modified_callback = CustomJS(
+        #     args=dict(source=source),
+        #     code="""
+        #         const args = ['use', 'name', 'log', 'operator', 'limits'];
+        #         //function compare(data, operator, limit) {
+        #         //    if (operator === '>') {
+        #         //        for (let i = 0; i < data.length; i++) {
+        #         //            if (data[i] > limit) {
+        #         //                console.log('True)
+        #         //            } else {
+        #         //                console.log('False)
+        #         //            }
+        #         //        }
+        #         //    }
+        #         //}
+        #         var counter = 0;
+        #         for (var i = 0; i < source.data['use'].length; i++) {  // iterate over all rows
+        #             for (var j = 0; j < args.length; j++) {  // iterate over all parameters
+        #                 if ( ! (source.data[args[j]][i] === null || source.data[args[j]][i] === undefined)) {
+        #                     //console.log('Log table source is changed ', source.data[args[j]][i]);
+        #                     counter++;
+        #                 }
+        #             }
+        #             if (counter > 4) {
+        #                 console.log('5 parameters are given. One row is full!')
+        #             }
+        #         }
+        #         if (counter > source.data['use'].length * 5 - 1) {
+        #             console.log(source.data['use'].length * 5, ' parameters are given. All rows are full!')
+        #             source.data = source.data
+        #             source.change.emit()
+        #         }
+        #     """
+        # )
 
         add_row_callback = CustomJS(
-            args=dict(source=source, source_dict=dict(source.data)),
+            args=dict(source=source, logs=logs),
             code="""
                 var new_data = source.data;
-                new_data['use'].push(source_dict['use'][0]);
-                new_data['log'].push(source_dict['log'][0]);
-                new_data['operator'].push(source_dict['operator'][0]);
-                new_data['limits'].push(source_dict['limits'][0]);
+                new_data['use'].push(1 == 2);
+                new_data['name'].push('Class A');
+                new_data['log'].push(logs[0]);
+                new_data['operator'].push('>');
+                new_data['limits'].push('1.');
 
                 source.data = new_data
                 source.change.emit()
@@ -471,17 +552,20 @@ class CutOffsTable:
             args=dict(source=source),
             code="""
                 var new_data = source.data;
-                new_data['use'].shift();
-                new_data['log'].shift();
-                new_data['operator'].shift();
-                new_data['limits'].shift();
-                
-                source.data = new_data
-                source.change.emit()
+                if (source.data['use'].length > 1) {
+                    new_data['use'].shift();
+                    new_data['name'].shift();
+                    new_data['log'].shift();
+                    new_data['operator'].shift();
+                    new_data['limits'].shift();
+                    
+                    source.data = new_data
+                    source.change.emit()
+                }
             """
         )
 
-        dt =  DataTable(
+        dt = DataTable(
             source=source,
             columns=self.table_columns(logs),
             editable=True,
@@ -492,10 +576,18 @@ class CutOffsTable:
 
         add_row = Button(label='Add row', button_type='success')
         add_row.js_on_click(add_row_callback)
+
         delete_row = Button(label='Remove first row', button_type='success')
         delete_row.js_on_click(delete_row_callback)
 
-        return dt, add_row, delete_row
+        update_table = Button(label='Update', button_type='success')
+        update_table.on_click(update_table_callback)
+        # source.js_on_change('patching', modified_callback)
+
+        use_cutoffs = CheckboxGroup(labels=['Use cutoffs'], active=[])
+        use_cutoffs.on_change('active', use_cutoffs_callback)
+
+        return dt, add_row, delete_row, update_table, use_cutoffs
 
 
 class CrossPlotter:
@@ -527,19 +619,26 @@ class CrossPlotter:
         self.width = width
         self.height = height
         self._data_sources = data_sources
-        if data_sources is not None:
-            self._sources = {_key: _val.source for _key, _val in data_sources.items()}
-        else:
-            self._sources = None
+        # if data_sources is not None:
+        #     self._sources = {_key: _val.source for _key, _val in data_sources.items()}
+        # else:
+        #     self._sources = None
         if tools is None:
             tools = default_tools
         self._tools = tools
 
         self.fixed_sizes = ['1', '5', '10', '20']
 
-    @property
-    def sources(self):
-        return self._sources
+    def __len__(self):
+        _len = 0
+        for _key, _item in self._data_sources.items():
+            _var = self.common_variables[0]
+            _len += len(_item.source.data[_var])
+        return _len
+
+    # @property
+    # def sources(self):
+    #     return self._sources
 
     @property
     def all_variables(self):
@@ -563,33 +662,126 @@ class CrossPlotter:
         ))
 
     @property
-    def source(self):
+    def source(self) -> dict:
         """
         Returns a merged CDS with all the common variables from all data_sources
         :return:
         """
         _dict = {}
         _i = 0
-        for _key, _item in self.sources.items():
+        for _key, _item in self._data_sources.items():
             _len = None
             for _var in self.common_variables:
-                _len = len(_item.data[_var])
+                _len = len(_item.source.data[_var])
                 if _i == 0:
-                    _dict[_var] = _item.data[_var]
+                    _dict[_var] = _item.source.data[_var]
                 else:
-                    _dict[_var] = np.append(_dict[_var], _item.data[_var])
+                    _dict[_var] = np.append(_dict[_var], _item.source.data[_var])
             if _i == 0:
-                _dict['source__name'] = np.array([_key] * _len)
+                _dict['source_name'] = np.array([_key] * _len)
                 _dict['legend_group'] = np.array([_key] * _len)
                 _dict['color'] = np.array([cnames[_i]] * _len)
                 _dict['marker'] = np.array([markers[_i]] * _len)
+                _dict['size'] = np.array([5.] * _len)
+                _dict['mask'] = np.array([True] * _len)
             else:
-                _dict['source__name'] = np.append(_dict['source__name'], np.array([_key] * _len))
+                _dict['source_name'] = np.append(_dict['source_name'], np.array([_key] * _len))
                 _dict['legend_group'] = np.append(_dict['legend_group'], np.array([_key] * _len))
                 _dict['color'] = np.append(_dict['color'], np.array([cnames[_i]] * _len))
                 _dict['marker'] = np.append(_dict['marker'], np.array([markers[_i]] * _len))
+                _dict['size'] = np.append(_dict['size'], np.array([5.] * _len))
+                _dict['mask'] = np.append(_dict['mask'], np.array([True] * _len))
             _i += 1
 
+        return _dict
+
+    def x_y_source(self,
+                   source_dict: dict,
+                   x: None | str = None,
+                   y: None | str = None,
+                   size: None | float | str = None,
+                   color: None | str = None,
+                   marker: None | str = None,
+                   legend_group: None | str = None,
+                   mask: None | np.ndarray = None
+                   ) -> dict:
+        """
+        The idea is to let the input decide which parameter that should be used on the x-axis, y-axis, size, color,
+        marker and legend
+        E.G.
+            if x = 'vp'
+            WHEN
+            source_dict = dict(vp=..., vs=..., rho=...)
+            THEN
+            x_y_source = dict(x=source_dict['vp'], y=..., etc...)
+
+        :param source_dict:
+        :param x:
+        :param y:
+        :param size:
+        :param color:
+        :param marker:
+        :param legend_group:
+        :param mask:
+
+        :return:
+            dict
+            transformed_source
+            The dictionary has at least the following keys:
+                'x', 'y', 'size', 'color', 'marker' and 'legend_group'
+        """
+        _n = len(self)
+        _vars = list(source_dict.keys())
+        _dict = {}
+
+        if x is not None and x in _vars:
+            _dict['x'] = source_dict[x]
+        elif x is not None:
+            _dict['x'] = x
+        else:
+            pass
+
+        if y is not None and y in _vars:
+            _dict['y'] = source_dict[y]
+        elif y is not None:
+            _dict['y'] = y
+        else:
+            pass
+
+        if size is not None and size in _vars:
+            _dict['size'] = source_dict[size]
+        elif size is not None:
+            _dict['size'] = [size] * _n
+        else:
+            _dict['size'] = source_dict['size']
+
+        if color is not None and color in _vars:
+            _dict['color'] = source_dict[color]
+        elif color is not None:
+            _dict['color'] = [color] * _n
+        else:
+            _dict['color'] = source_dict['color']
+
+        if marker is not None and marker in _vars:
+            _dict['marker'] = source_dict[marker]
+        elif marker is not None:
+            _dict['marker'] = [marker] * _n
+        else:
+            _dict['marker'] = source_dict['marker']
+
+        if legend_group is not None and legend_group in _vars:
+            _dict['legend_group'] = source_dict[legend_group]
+        elif legend_group is not None:
+            _dict['legend_group'] = [legend_group] * _n
+        else:
+            _dict['legend_group'] = source_dict['legend_group']
+
+        if mask is not None:
+            _dict['mask'] = mask
+        else:
+            _dict['mask'] = source_dict['mask']
+
+        _dict['source_name'] = source_dict['source_name']
         return _dict
 
     def js_code(self, console_only=False):
@@ -629,6 +821,75 @@ class CrossPlotter:
             for (let i = 0; i < data_keys.length; i++) {
                 data_sources[i].change.emit();
                 }
+
+            // X AXIS
+            xaxis.axis_label = x_param;
+            if (templates[x_param]['min'] === null || templates[x_param]['min'] === undefined) {
+                    console.log('No ' + x_param + ' min value. Use min: ' + min_max[x_param][0]);
+                    x_range.start = min_max[x_param][0];
+                } else {
+                    console.log(x_param + ' min value ' + templates[x_param]['min']);
+                    x_range.start = templates[x_param]['min'];
+                }
+            if (templates[x_param]['max'] === null || templates[x_param]['max'] === undefined) {
+                    console.log('No ' + x_param + ' max value. Use max: ' + min_max[x_param][1]);
+                    x_range.end = min_max[x_param][1];
+                } else {
+                    console.log(x_param + ' max value ' + templates[x_param]['max']);
+                    x_range.end = templates[x_param]['max'];
+                }
+            x_range.change.emit()
+
+            // Y AXIS
+            yaxis.axis_label = y_param;
+            if (templates[y_param]['min'] === null || templates[y_param]['min'] === undefined) {
+                    console.log('No ' + y_param + ' min value. Use min: ' + min_max[y_param][0]);
+                    y_range.start = min_max[y_param][0];
+                } else {
+                    console.log(y_param + ' min value ' + templates[y_param]['min']);
+                    y_range.start = templates[y_param]['min'];
+                }
+            if (templates[y_param]['max'] === null || templates[y_param]['max'] === undefined) {
+                    console.log('No ' + y_param + ' max value. Use max: ' + min_max[y_param][1]);
+                    y_range.end = min_max[y_param][1];
+                } else {
+                    console.log(y_param + ' max value ' + templates[y_param]['max']);
+                    y_range.end = templates[y_param]['max'];
+                }
+            y_range.change.emit()
+
+            title.text = 'XXX';
+            //
+            console.log('dropdown: ' + cb_obj.value, x_param);
+            """
+        code2 = """
+            const x_param = x_drop.value;
+            const y_param = y_drop.value;
+            const s_param = s_drop.value;
+            //const c_param = c_drop.value;
+            //const m_param = m_drop.value;
+            //const l_param = l_drop.value;
+            const min = min_max[s_param][0];
+            const max = min_max[s_param][1];
+            const s = [];
+            function size(arr1) {
+                let s = [];
+                for (let i = 0; i < arr1.length; i++) {
+                  s.push(10 + 70 * (arr1[i] - min) / (max - min));
+                      }
+                return s;
+            }
+            // REPLACE DATA
+            x_y_source.data['x'] = source.data[x_param];
+            x_y_source.data['y'] = source.data[y_param];
+            if (min_max[s_param][0] === 'constant') {
+                    let length = source.data[x_param].length;
+                    x_y_source.data['size'] = Array(length).fill(Number(s_param));
+                } else {
+                    x_y_source.data['size'] = size(source.data[s_param]);
+                }
+            //
+            x_y_source.change.emit();
                 
             // X AXIS
             xaxis.axis_label = x_param;
@@ -673,18 +934,18 @@ class CrossPlotter:
         if console_only:
             return console_only_code
         else:
-            return code1
+            return code2
 
     def drop_down_menus(self):
         from bokeh.models import Select
-        _x_menu =  Select(title='X axis', value=self.common_variables[0], options=self.all_variables)
-        _y_menu =  Select(title='Y axis', value=self.common_variables[1], options=self.all_variables)
+        _x_menu =  Select(title='X axis', value=self.common_variables[0], options=self.common_variables)
+        _y_menu =  Select(title='Y axis', value=self.common_variables[1], options=self.common_variables)
         _size_menu =  Select(title='Size', value=20,
-                             options= self.fixed_sizes + self.all_variables)
+                             options= self.fixed_sizes + self.common_variables)
         # TODO The selectors below needs fixing before they can be used
-        _color_menu =  Select(title='Color axis', value=self.common_variables[0], options=self.all_variables)
-        _marker_menu =  Select(title='Marker', value=self.common_variables[0], options=self.all_variables)
-        _legend_menu =  Select(title='Legend', value=self.common_variables[0], options=self.all_variables)
+        _color_menu =  Select(title='Color axis', value=self.common_variables[0], options=self.common_variables)
+        _marker_menu =  Select(title='Marker', value=self.common_variables[0], options=self.common_variables)
+        _legend_menu =  Select(title='Legend', value=self.common_variables[0], options=self.common_variables)
         return _x_menu, _y_menu, _size_menu, _color_menu, _marker_menu, _legend_menu
 
     def min_and_max(self):
@@ -702,7 +963,6 @@ class CrossPlotter:
         for _key in self.fixed_sizes:
             _out[_key] = ['constant', 'constant']
         return _out
-
 
     def figure(self):
         xplot = figure(width=self.width, height=self.height, tools=self._tools)
@@ -726,19 +986,32 @@ class CrossPlotter:
         y_var = y_menu.value
         size_var = size_menu.value
 
+        source_dict = self.source
+        source = ColumnDataSource(source_dict)
+
+        x_y_source_dict = self.x_y_source(
+            source_dict,
+            x=x_var,
+            y=y_var,
+            size=size_var)
+        x_y_source = ColumnDataSource(x_y_source_dict)
+
+        xplot.scatter(x='x', y='y', source=x_y_source, fill_color='color', marker='marker',
+                      legend_group='legend_group', size='size', fill_alpha=0.5, line_color=None)
+
         # Create new 'transformed' sources
-        sources = {}
-        _i = 0
-        for _name, _data_source in self._data_sources.items():
-            sources[_name] = ColumnDataSource(_data_source.transform_source_data(
-                x=x_var,
-                y=y_var,
-                size=20,
-                color=cnames[_i],
-                marker=markers[_i],
-                legend_group=_name
-            ))
-            _i += 1
+        # sources = {}
+        # _i = 0
+        # for _name, _data_source in self._data_sources.items():
+        #     sources[_name] = ColumnDataSource(_data_source.transform_source_data(
+        #         x=x_var,
+        #         y=y_var,
+        #         size=20,
+        #         color=cnames[_i],
+        #         marker=markers[_i],
+        #         legend_group=_name
+        #     ))
+        #     _i += 1
 
         # for _name, _source in self._sources.items():
         #     print('sources', _name, type(_source))
@@ -747,19 +1020,19 @@ class CrossPlotter:
 
 
         # plot data
-        _i = 0
-        for _name, _source in sources.items():
-            # Check that the variable exists in the original data
-            if x_var not in list(self._sources[_name].data.keys()):
-                print('No {} in {}'.format(x_var, _name))
-                continue
-            if y_var not in list(self._sources[_name].data.keys()):
-                print('No {} in {}'.format(y_var, _name))
-                continue
-            xplot.scatter(x='x', y='y', source=_source, fill_color='color', marker='marker',
-                          legend_group='legend_group', size='size', fill_alpha=0.5, line_color=None)
-            # xplot.scatter(x='x', y='y', source=_source)
-            _i += 1
+        # _i = 0
+        # for _name, _source in sources.items():
+        #     # Check that the variable exists in the original data
+        #     if x_var not in list(self._sources[_name].data.keys()):
+        #         print('No {} in {}'.format(x_var, _name))
+        #         continue
+        #     if y_var not in list(self._sources[_name].data.keys()):
+        #         print('No {} in {}'.format(y_var, _name))
+        #         continue
+        #     xplot.scatter(x='x', y='y', source=_source, fill_color='color', marker='marker',
+        #                   legend_group='legend_group', size='size', fill_alpha=0.5, line_color=None)
+        #     # xplot.scatter(x='x', y='y', source=_source)
+        #     _i += 1
 
         # Axes
         for _var, _axis in zip([x_var, y_var], [xplot.xaxis, xplot.yaxis]):
@@ -773,8 +1046,6 @@ class CrossPlotter:
                 _range.start = self.templates[_var].min
             if self.templates[_var].max is not None:
                 _range.end = self.templates[_var].max
-
-
 
         # Legend
         if len(xplot.legend) > 0:
@@ -799,11 +1070,11 @@ class CrossPlotter:
                          x_range=xplot.x_range,
                          y_range=xplot.y_range,
                          templates={_key: _val.get_as_dict()[_key] for _key, _val in self.templates.items()},
-                         data_keys=[_key for _key in list(sources.keys())],
-                         data_sources=[_val for _val in list(sources.values())],
-                         orig_data_sources=[_val.source for _val in list(self._data_sources.values())],
-                         # # table_data=table_source,
-                         # # params=param_dict,
+                         # data_keys=[_key for _key in list(sources.keys())],
+                         # data_sources=[_val for _val in list(sources.values())],
+                         # orig_data_sources=[_val.source for _val in list(self._data_sources.values())],
+                         x_y_source=x_y_source,
+                         source=source,
                          min_max=self.min_and_max(),
                          # # cmap=exp_cmap,
                          title=xplot.title,
@@ -812,14 +1083,23 @@ class CrossPlotter:
                          # # bar=bar
                          )
 
-        x_menu.js_on_change('value',
-                             CustomJS(args=args_dict, code=self.js_code(console_only=False)))
+        x_menu.js_on_change(
+            'value',
+            CustomJS(
+                args=args_dict,
+                code=self.js_code(console_only=False)))
 
-        y_menu.js_on_change('value',
-                            CustomJS(args=args_dict, code=self.js_code()))
+        y_menu.js_on_change(
+            'value',
+            CustomJS(
+                args=args_dict,
+                code=self.js_code()))
 
-        size_menu.js_on_change('value',
-                            CustomJS(args=args_dict, code=self.js_code()))
+        size_menu.js_on_change(
+            'value',
+            CustomJS(
+                args=args_dict,
+                code=self.js_code()))
 
         return xplot, x_menu, y_menu, size_menu
 
@@ -859,10 +1139,17 @@ class TestCases(unittest.TestCase):
         # print(xp.all_variables)
         # print(xp.common_variables)
         # print(xp.templates)
+        print(len(xp))
         d = xp.source
         for _key, _item in d.items():
             print(_key, _item[:5], _item[-5:], len(_item))
-        # xp.show('C:\\Users\marte\Downloads\plot.html')
+        print('XXX')
+        d = xp.x_y_source(d,
+                          x='var_two',
+                          y='var_one')
+        for _key, _item in d.items():
+            print(_key, _item[:5], _item[-5:], len(_item))
+        xp.show('C:\\Users\marte\Downloads\plot.html')
 
     def test_intervals(self):
         from blixt_rp.core.core import Intervals
@@ -882,13 +1169,13 @@ class TestCases(unittest.TestCase):
         from blixt_rp.core.project_new import Project
         from blixt_rp.core.core import LogTable, Intervals
 
-        # project_table = "C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
-        project_table = "C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+        project_table = "C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+        # project_table = "C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
 
         project = Project(
             name='testing',
-            # working_dir='C:\\Users\\marte\\PycharmProjects\\blixt_rp',
-            working_dir='C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp',
+            working_dir='C:\\Users\\marte\\PycharmProjects\\blixt_rp',
+            # working_dir='C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp',
             project_table=project_table
         )
         log_table = LogTable({'Density': 'rho_dry', 'P velocity': 'vp_dry', 'S velocity': 'vs_dry',
@@ -902,41 +1189,28 @@ class TestCases(unittest.TestCase):
         xp = CrossPlotter(
             {w.name: w.data_source() for w in project.wells}
         )
-        # xp.show('C:\\Users\\marte\\Downloads\\plot.html')
-        xp.show('C:\\Users\\emb\\Downloads\\plot.html')
+        xp.show('C:\\Users\\marte\\Downloads\\plot.html')
+        # xxp.show('C:\\Users\\emb\\Downloads\\plot.html')
 
     def test_cutoffs(self):
         from pint import Quantity as Q_
         from bokeh.io import output_file
         from bokeh.plotting import column
         from blixt_rp.core.core import CutoffRule, Cutoffs
-        output_file('C:\\Users\\emb\\Downloads\\plot.html')
+        # output_file('C:\\Users\\emb\\Downloads\\plot.html')
+        output_file('C:\\Users\\marte\\Downloads\\plot.html')
 
-        rule1 = CutoffRule('name1', '>', Q_(100, 'm'))
-        rule2 = CutoffRule('name2', '<', Q_(10, 'm'))
-        rule3 = CutoffRule('name3', '==', Q_(1000, 'm'))
-        rule5 = CutoffRule('name5', '><', [Q_(10, 'm'), Q_(1000, 'm')])
-        # cutoffs = Cutoffs(cutoffs=[rule1, rule2, rule3, rule5])
-        cutoffs = Cutoffs(cutoffs=[])
-        ct = CutOffsTable(cutoffs)
+        rule1 = CutoffRule('param1', '>', Q_(100, 'm'))
+        rule2 = CutoffRule('param2', '<', Q_(10, 'm'))
+        rule3 = CutoffRule('param3', '==', Q_(1000, 'm'))
+        rule5 = CutoffRule('param5', '><', [Q_(10, 'm'), Q_(1000, 'm')])
+        cutoffs = Cutoffs(cutoffs=[rule1, rule2, rule3, rule5])
+        # cutoffs = Cutoffs(cutoffs=[])
+        ct = ClassificationTable(cutoffs)
         table_source = ct.source
         # print(ct.source.data)
-        table, add_row, delete_row = ct.draw(table_source, ['log A', 'log B'])
+        table, add_row, delete_row, update, use = ct.draw(table_source, ['log A', 'log B'])
 
-        test_callback = CustomJS(
-            args=dict(source=table_source),
-            code="""
-                const args = ['use', 'log', 'operator', 'limits'];
-                // Create a loop that iterates over all rows in the table first, then we can do the loop below for each row
-                for (var i = 0; i < args.length; i++) {
-                    if (source.data[args[i]][0] === null || source.data[args[i]][0] === undefined) {
-                        console.log('Do nothing');
-                    } else {
-                        console.log('Log table source is changed ', source.data[args[i]]);
-                    }
-                }
-            """)
-
-        table_source.js_on_change('patching', test_callback)
-        show(column(table, add_row, delete_row))
+        # show(column(table, add_row, delete_row, update, use))
+        return table, add_row, delete_row, update, use
 

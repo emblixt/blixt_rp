@@ -73,16 +73,17 @@ class CutoffTests(unittest.TestCase):
 
     def test_failed_init(self):
         cutoffs = Cutoffs
-        self.assertRaises(IOError, cutoffs, name='test', alpha='JA', beta='Nej' )
+        self.assertRaises(TypeError, cutoffs, name='test', alpha='JA', beta='Nej' )
 
     def test_init(self):
         cutoffs = Cutoffs(cutoffs=[rule1, rule2])
         print(len(cutoffs))
         cutoffs.append([rule3, rule4])
         cutoffs.append(rule1)
+        cutoffs.append([rule1])
         cutoffs.append(rule5)
         print(len(cutoffs))
-        print(cutoffs.cutoff_names)
+        print(cutoffs.cutoff_params)
         print(cutoffs)
         print(cutoffs.get_dict())
         self.assertTrue(True)
