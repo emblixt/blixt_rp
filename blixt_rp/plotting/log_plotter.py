@@ -316,6 +316,14 @@ class Line:
             _max = self.max
         return _min, _max
 
+class FluidSubControls:
+    """
+    Class for handling the logistics of fluid substitution, with controls etc.
+    """
+    def __init__(self,
+                 ):
+        return
+
 
 def create_column_figure(_column: LogColumn,
                          _w: Span | None,

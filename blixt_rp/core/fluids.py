@@ -14,6 +14,8 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+import unittest
+from bokeh.models import ColumnDataSource
 
 from blixt_rp.core.param import Param
 import blixt_rp.rp.rp_core as rp
@@ -26,6 +28,43 @@ from blixt_utils.utils import isnan, print_info
 # https://realpython.com/python-data-classes/
 
 logger = logging.getLogger(__name__)
+
+def read_all_fluids_from_excel(filename, fluid_sheet='Fluids', fluid_header=1) -> dict:
+    # First read in all fluids defined in the project table
+    all_fluids = {}
+    fluids_table = pd.read_excel(filename,
+                                 sheet_name=fluid_sheet, header=fluid_header, engine='openpyxl')
+
+    for i, name in enumerate(fluids_table['Name']):
+        if isnan(name):
+            continue  # Avoid empty lines
+        # if fluids_table['Calculation method'][i] == 'Batzle and Wang':
+        #    warn_txt = 'Calculation of fluid properties is still not implemented, please use constant values'
+        #    print_info(warn_txt, 'warning', logger)
+        this_fluid = Fluid(
+            'User specified' if isnan(fluids_table['Calculation method'][i]) else \
+                fluids_table['Calculation method'][i],
+            float(fluids_table['Bulk moduli [GPa]'][i]),
+            float(fluids_table['Shear moduli [GPa]'][i]),
+            float(fluids_table['Density [g/cm3]'][i]),
+            float(fluids_table['T gradient [deg C/m]'][i]),
+            float(fluids_table['T ref [C]'][i]),
+            float(fluids_table['P gradient [MPa/m]'][i]),
+            float(fluids_table['P ref [MPa]'][i]),
+            float(fluids_table['Salinity [ppm]'][i]),
+            float(fluids_table['GOR'][i]),
+            float(fluids_table['Oil API'][i]),
+            float(fluids_table['Gas gravity'][i]),
+            fluids_table['Gas mixing'][i],
+            float(fluids_table['Brie exponent'][i]),
+            # Fluid type is now defined in the fluid mixture sheet
+            # fluid_type=None if isnan(fluids_table['Fluid type'][i]) else fluids_table['Fluid type'][i].lower(),
+            name=name.lower(),
+            status='from excel'
+        )
+        all_fluids[name.lower()] = this_fluid
+
+    return all_fluids
 
 
 class Header(AttribDict):
@@ -323,6 +362,42 @@ class Fluid(object):
             # No calculation done
             pass
 
+class FluidsTable:
+    """
+    Returns a table and bokeh CDS for the provided fluids
+    """
+    def __init__(self,
+                 fluids: None | list = None,
+                 width: None | int = None):
+        """
+
+        :param fluids:
+            list of Fluid objects
+        :param width:
+            int
+        """
+        if width is None:
+            width = 600
+        self.width = width
+        if fluids is None:
+            fluids = []
+        self.fluids = fluids
+        self.keys = ['name', 'k', 'mu', 'rho', 'bd', 'calculation_method',
+                     'temp_gradient', 'temp_ref',
+                     'pressure_gradient', 'pressure_ref',
+                     'salinity', 'gor', 'oil_api', 'gas_gravity', 'gas_mixing', 'brie_exponent', 'status']
+    @property
+    def source(self) -> ColumnDataSource:
+        _dict = {_x:[] for _x in self.keys}
+        for _fluid in self.fluids:
+            for _key in self.keys:
+                if _key == 'name':
+                    _dict['name'].append(_fluid.header.name)
+                elif _key == 'bd':
+                    _dict['bd'].append(None)
+                else:
+                    _dict[_key].append(_fluid.__dict__[_key])
+        return ColumnDataSource(_dict)
 
 class FluidMix(object):
     """
@@ -369,38 +444,7 @@ class FluidMix(object):
                    mix_sheet='Fluid mixtures', mix_header=1):
 
         # First read in all fluids defined in the project table
-        all_fluids = {}
-        fluids_table = pd.read_excel(filename,
-                                     sheet_name=fluid_sheet, header=fluid_header, engine='openpyxl')
-
-        for i, name in enumerate(fluids_table['Name']):
-            if isnan(name):
-                continue  # Avoid empty lines
-            #if fluids_table['Calculation method'][i] == 'Batzle and Wang':
-            #    warn_txt = 'Calculation of fluid properties is still not implemented, please use constant values'
-            #    print_info(warn_txt, 'warning', logger)
-            this_fluid = Fluid(
-                    'User specified' if isnan(fluids_table['Calculation method'][i]) else \
-                        fluids_table['Calculation method'][i],
-                    float(fluids_table['Bulk moduli [GPa]'][i]),
-                    float(fluids_table['Shear moduli [GPa]'][i]),
-                    float(fluids_table['Density [g/cm3]'][i]),
-                    float(fluids_table['T gradient [deg C/m]'][i]),
-                    float(fluids_table['T ref [C]'][i]),
-                    float(fluids_table['P gradient [MPa/m]'][i]),
-                    float(fluids_table['P ref [MPa]'][i]),
-                    float(fluids_table['Salinity [ppm]'][i]),
-                    float(fluids_table['GOR'][i]),
-                    float(fluids_table['Oil API'][i]),
-                    float(fluids_table['Gas gravity'][i]),
-                    fluids_table['Gas mixing'][i],
-                    float(fluids_table['Brie exponent'][i]),
-                    # Fluid type is now defined in the fluid mixture sheet
-                    #fluid_type=None if isnan(fluids_table['Fluid type'][i]) else fluids_table['Fluid type'][i].lower(),
-                    name=name.lower(),
-                    status='from excel'
-            )
-            all_fluids[name.lower()] = this_fluid
+        all_fluids = read_all_fluids_from_excel(filename, fluid_sheet, fluid_header)
 
         # Then read in the fluid mixes
         fluids_mixes = {
@@ -576,101 +620,105 @@ class FluidMix(object):
                             continue
 
 
-def test_fluidsub():
-    from importlib import reload
-    import matplotlib.pyplot as plt
-    import blixt_rp.rp.rp_core as rp
-    reload(rp)
-    from blixt_rp.core.well import Well
+class TestCases(unittest.TestCase):
+    def test_data(self):
+        import os
+        # working_dir = 'C:\\Users\\marten\\PycharmProjects\\blixt_rp'
+        working_dir = 'C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp'
 
-    w = Well()
-    # Create a well table without using the excel sheet
-    well_table = {'../test_data/Well A.las':
-        {'Given well name': 'WELL_A',
-         'logs':
-             {'vp_dry': 'P velocity',
-              'vp_so08': 'P velocity',
-              'vp_sg08': 'P velocity',
-              'vs_dry': 'S velocity',
-              'vs_so08': 'S velocity',
-              'vs_sg08': 'S velocity',
-              'rho_dry': 'Density',
-              'rho_so08': 'Density',
-              'rho_sg08': 'Density',
-              'phie': 'Porosity',
-              'vcl': 'Volume'},
-         'Note': ''}}
-    w.read_well_table(well_table, 0)
-    w.calc_mask({'vcl': ['<', 0.4], 'phie': ['>', 0.1]}, name='sand')
-    mask = w.block['Logs'].masks['sand'].values
-    vp = w.block['Logs'].logs['vp_dry'].values[mask]
-    vs = w.block['Logs'].logs['vs_dry'].values[mask]
-    rho = w.block['Logs'].logs['rho_dry'].values[mask]
-    por = w.block['Logs'].logs['phie'].values[mask]
+        from blixt_rp.core.well import Project
+        wp = Project(
+            name='MyProject',
+            working_dir=working_dir,
+            project_table=os.path.join(working_dir, 'excels\\project_table.xlsx')
+        )
 
-    test = 'constants'  #'array'
-    # Test with constant Vsh and constant Sw
-    v_sh = 0.2
-    s_w = 0.2
-    if test == 'array':  # test with arrays of v_sh and s_w
-        v_sh = w.block['Logs'].logs['vcl'].values[mask]
-        # create a mock-up water saturation
-        s_w = 0.2 + v_sh
-        s_w[s_w > 1.0] = 1.0
+        myfluids = FluidMix()
+        myfluids.read_excel(wp.project_table)
+        all_fluids = read_all_fluids_from_excel(wp.project_table)
+        return all_fluids, myfluids
 
-    # Mineral models, K & MU in GPa, rho in g/cm3
-    rho_qz = 2.6;   k_qz = 37;  mu_qz = 44
-    rho_sh = 2.8;   k_sh = 15;  mu_sh = 5
+    def test_fluid_table(self):
+        all_fluids, fluid_mix = self.test_data()
+        ft = FluidsTable(fluids=list(all_fluids.values()))
+        for _key in list(ft.source.data.keys()):
+            print(_key, ft.source.data[_key])
 
-    # Mineral shear and bulk modulus using Voigt-Reuss-Hill average for given Vsh
-    k0 = rp.vrh_bounds([v_sh, (1.-v_sh)], [k_sh, k_qz])[-1]  # GPa
-    mu0 = rp.vrh_bounds([v_sh, (1.-v_sh)], [mu_sh, mu_qz])[-1]  # GPa
-    rho0 = v_sh*rho_sh + (1. - v_sh)*rho_qz  # g/cm3
+    def test_fluidsub():
+        # TODO
+        # This needs to be updated to the new well model
+        from importlib import reload
+        import matplotlib.pyplot as plt
+        import blixt_rp.rp.rp_core as rp
+        reload(rp)
+        from blixt_rp.core.well import Well
 
-    # Brine model, rho in g/cm3, K in GPa
-    rho_b = 1.1;   k_b = 2.8
+        w = Well()
+        # Create a well table without using the excel sheet
+        well_table = {'../test_data/Well A.las':
+            {'Given well name': 'WELL_A',
+             'logs':
+                 {'vp_dry': 'P velocity',
+                  'vp_so08': 'P velocity',
+                  'vp_sg08': 'P velocity',
+                  'vs_dry': 'S velocity',
+                  'vs_so08': 'S velocity',
+                  'vs_sg08': 'S velocity',
+                  'rho_dry': 'Density',
+                  'rho_so08': 'Density',
+                  'rho_sg08': 'Density',
+                  'phie': 'Porosity',
+                  'vcl': 'Volume'},
+             'Note': ''}}
+        w.read_well_table(well_table, 0)
+        w.calc_mask({'vcl': ['<', 0.4], 'phie': ['>', 0.1]}, name='sand')
+        mask = w.block['Logs'].masks['sand'].values
+        vp = w.block['Logs'].logs['vp_dry'].values[mask]
+        vs = w.block['Logs'].logs['vs_dry'].values[mask]
+        rho = w.block['Logs'].logs['rho_dry'].values[mask]
+        por = w.block['Logs'].logs['phie'].values[mask]
 
-    # Hydrocarbon model, K in GPa
-    fluid = 'oil'
-    rho_o = 0.8;    k_o = 0.9
-    rho_g = 0.2;    k_g = 0.06
-    (k_hc, rho_hc) = (k_g, rho_g) if fluid == 'gas' else (k_o, rho_o)
+        test = 'constants'  #'array'
+        # Test with constant Vsh and constant Sw
+        v_sh = 0.2
+        s_w = 0.2
+        if test == 'array':  # test with arrays of v_sh and s_w
+            v_sh = w.block['Logs'].logs['vcl'].values[mask]
+            # create a mock-up water saturation
+            s_w = 0.2 + v_sh
+            s_w[s_w > 1.0] = 1.0
 
-    # intitial fluid
-    rho_f1 = rho_b; k_f1 = k_b
+        # Mineral models, K & MU in GPa, rho in g/cm3
+        rho_qz = 2.6;   k_qz = 37;  mu_qz = 44
+        rho_sh = 2.8;   k_sh = 15;  mu_sh = 5
 
-    # After fluid substitution
-    rho_f2 = s_w*rho_b + (1.-s_w)*rho_hc
-    k_f2 = rp.vrh_bounds([s_w, (1.-s_w)], [k_b, k_hc])[1]  # Reuss uniform fluid mix
+        # Mineral shear and bulk modulus using Voigt-Reuss-Hill average for given Vsh
+        k0 = rp.vrh_bounds([v_sh, (1.-v_sh)], [k_sh, k_qz])[-1]  # GPa
+        mu0 = rp.vrh_bounds([v_sh, (1.-v_sh)], [mu_sh, mu_qz])[-1]  # GPa
+        rho0 = v_sh*rho_sh + (1. - v_sh)*rho_qz  # g/cm3
 
-    v_p_2, v_s_2, rho_2, k_2 = rp.gassmann_vel(vp, vs, rho, k_f1, rho_f1, k_f2, rho_f2, k0, por)
+        # Brine model, rho in g/cm3, K in GPa
+        rho_b = 1.1;   k_b = 2.8
 
-    plt.plot(vp, label='dry')
-    plt.plot(w.block['Logs'].logs['vp_so08'].values[mask], label='RD oil')
-    plt.plot(v_p_2, label='my oil')
-    plt.legend()
-    plt.show()
+        # Hydrocarbon model, K in GPa
+        fluid = 'oil'
+        rho_o = 0.8;    k_o = 0.9
+        rho_g = 0.2;    k_g = 0.06
+        (k_hc, rho_hc) = (k_g, rho_g) if fluid == 'gas' else (k_o, rho_o)
 
-def test_fluid_mix():
-    pass
+        # intitial fluid
+        rho_f1 = rho_b; k_f1 = k_b
 
-if __name__ == '__main__':
-    import os
-    working_dir = 'C:\\Users\\marten\\PycharmProjects\\blixt_rp'
+        # After fluid substitution
+        rho_f2 = s_w*rho_b + (1.-s_w)*rho_hc
+        k_f2 = rp.vrh_bounds([s_w, (1.-s_w)], [k_b, k_hc])[1]  # Reuss uniform fluid mix
 
-    from blixt_rp.core.well import Project
-    wp = Project(
-        name='MyProject',
-        working_dir=working_dir,
-        project_table=os.path.join(working_dir, 'excels\\project_table.xlsx')
-    )
+        v_p_2, v_s_2, rho_2, k_2 = rp.gassmann_vel(vp, vs, rho, k_f1, rho_f1, k_f2, rho_f2, k0, por)
 
-    wells = wp.load_all_wells(unit_convert_using_template=True)
-    templates = wp.load_all_templates()
-    wis = wp.load_all_wis()
+        plt.plot(vp, label='dry')
+        plt.plot(w.block['Logs'].logs['vp_so08'].values[mask], label='RD oil')
+        plt.plot(v_p_2, label='my oil')
+        plt.legend()
+        plt.show()
 
-    myfluids = FluidMix()
-    myfluids.read_excel(wp.project_table)
-    print(myfluids.print_all_fluids())
 
-    # test_fluidsub()
