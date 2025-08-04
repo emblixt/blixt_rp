@@ -736,10 +736,6 @@ class ClassificationTable:
                     len(orig_data['legend_group']), list(set(list(orig_data['legend_group'])))))
                 classification_data_source.data = orig_data
 
-
-
-
-
         dt = DataTable(
             source=source,
             columns=self.table_columns(parameters, units),

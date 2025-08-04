@@ -2,6 +2,8 @@
 """
 Created on Fri Jan 10 08:31:28 2020
 Module for handling rockphysics fluid models
+This version uses the pint library instead of selfmade Param
+
 :copyright: Erik Mårten Blixt (marten.blixt@gmail.com)
 :license:
     GNU Lesser General Public License, Version 3
@@ -16,6 +18,7 @@ import pandas as pd
 import unittest
 import os, sys
 from bokeh.models import ColumnDataSource
+import pint
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
@@ -29,10 +32,27 @@ from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
 from blixt_utils.utils import isnan, print_info
 
-# data class decorator explained here:
-# https://realpython.com/python-data-classes/
+from .. import ureg, Q_
 
 logger = logging.getLogger(__name__)
+
+def_fluid_vals = dict(
+    k=Q_(2, 'GPa'),
+    mu=Q_(2, 'GPa'),
+    rho=Q_(2, 'gram / cm^3'),
+    calculation_method='Batzle and Wang',
+    temp_gradient=Q_(0.03, 'degC/m'),
+    temp_ref=Q_(4.0, 'degC'),
+    pressure_gradient=Q_(0.0107, 'MPa / m'),
+    pressure_ref=Q_(0, 'MPa'),
+    salinity=Q_(70000.0, 'ppm'),
+    gor=Q_(1., ''),
+    oil_api=Q_(30., ''),
+    gas_gravity=Q_(0.6, ''),
+    gas_mixing='Brie',
+    brie_exponent=Q_(2., ''),
+    status=None
+)
 
 
 def read_all_fluids_from_excel(filename, fluid_sheet='Fluids', fluid_header=1) -> dict:
@@ -44,27 +64,21 @@ def read_all_fluids_from_excel(filename, fluid_sheet='Fluids', fluid_header=1) -
     for i, name in enumerate(fluids_table['Name']):
         if isnan(name):
             continue  # Avoid empty lines
-        # if fluids_table['Calculation method'][i] == 'Batzle and Wang':
-        #    warn_txt = 'Calculation of fluid properties is still not implemented, please use constant values'
-        #    print_info(warn_txt, 'warning', logger)
         this_fluid = Fluid(
-            'User specified' if isnan(fluids_table['Calculation method'][i]) else \
-                fluids_table['Calculation method'][i],
-            float(fluids_table['Bulk moduli [GPa]'][i]),
-            float(fluids_table['Shear moduli [GPa]'][i]),
-            float(fluids_table['Density [g/cm3]'][i]),
-            float(fluids_table['T gradient [deg C/m]'][i]),
-            float(fluids_table['T ref [C]'][i]),
-            float(fluids_table['P gradient [MPa/m]'][i]),
-            float(fluids_table['P ref [MPa]'][i]),
-            float(fluids_table['Salinity [ppm]'][i]),
-            float(fluids_table['GOR'][i]),
-            float(fluids_table['Oil API'][i]),
-            float(fluids_table['Gas gravity'][i]),
-            fluids_table['Gas mixing'][i],
-            float(fluids_table['Brie exponent'][i]),
-            # Fluid type is now defined in the fluid mixture sheet
-            # fluid_type=None if isnan(fluids_table['Fluid type'][i]) else fluids_table['Fluid type'][i].lower(),
+            calculation_method='User specified' if isnan(fluids_table['Calculation method'][i]) else fluids_table['Calculation method'][i],
+            k=float(fluids_table['Bulk moduli [GPa]'][i]),
+            mu=float(fluids_table['Shear moduli [GPa]'][i]),
+            rho=float(fluids_table['Density [g/cm3]'][i]),
+            temp_gradient=float(fluids_table['T gradient [deg C/m]'][i]),
+            temp_ref=float(fluids_table['T ref [C]'][i]),
+            pressure_gradient=float(fluids_table['P gradient [MPa/m]'][i]),
+            pressure_ref=float(fluids_table['P ref [MPa]'][i]),
+            salinity=float(fluids_table['Salinity [ppm]'][i]),
+            gor=float(fluids_table['GOR'][i]),
+            oil_api=float(fluids_table['Oil API'][i]),
+            gas_gravity=float(fluids_table['Gas gravity'][i]),
+            gas_mixing=fluids_table['Gas mixing'][i],
+            brie_exponent=float(fluids_table['Brie exponent'][i]),
             name=name.lower(),
             status='from excel'
         )
@@ -134,28 +148,26 @@ class Header(AttribDict):
 
 
 class Fluid(object):
-    # TODO
-    # Use pint.Quantities as input
     def __init__(self,
-            calculation_method=None,  # or Batzle and Wang',  # or 'User specified'
-            k=None,  # Bulk modulus in GPa
-            mu=None,  # Shear modulus in GPa
-            rho=None,  # Density in g/cm3
-            temp_gradient=None,
-            temp_ref=None,  # at seafloor
-            pressure_gradient=None,
-            pressure_ref=None,  # at seafloor
-            salinity=None,
-            gor=None,
-            oil_api=None,
-            gas_gravity=None,
-            gas_mixing=None, 
-            brie_exponent=None,
-            fluid_type=None,
-            name='Default',
-            volume_fraction=None,
-            status=None,
-            header=None):
+                 calculation_method: None | str = None,  # or Batzle and Wang',  # or 'User specified'
+                 k: None | Q_ = None,  # Bulk modulus in GPa
+                 mu: None | Q_ = None,  # Shear modulus in GPa
+                 rho: None | Q_ = None,  # Density in g/cm3
+                 temp_gradient: None | Q_ = None,
+                 temp_ref: None | Q_ = None,  # at seafloor
+                 pressure_gradient: None | Q_ = None,
+                 pressure_ref: None | Q_ = None,  # at seafloor
+                 salinity: None | Q_ = None,
+                 gor: None | Q_ = None,
+                 oil_api: None | Q_ = None,
+                 gas_gravity: None | Q_ = None,
+                 gas_mixing: None | str = None,
+                 brie_exponent: None | Q_ = None,
+                 fluid_type: None | Q_ = None,
+                 name: None | str = 'Default',
+                 volume_fraction: None | str | Q_ = None,
+                 status: None | str = None,
+                 header: None | dict = None):
 
         if header is None:
             header = {}
@@ -163,93 +175,30 @@ class Fluid(object):
             header['name'] = name
 
         self.header = Header(header)
-        # initiating class variables to None to avoid warnings
-        self.calculation_method = None
-        self.k = None
-        self.mu = None
-        self.rho = None
-        self.temp_gradient = None
-        self.temp_ref = None
-        self.pressure_gradient = None
-        self.pressure_ref = None
-        self.salinity = None
-        self.gor = None
-        self.oil_api = None
-        self.gas_gravity = None
-        self.gas_mixing = None
-        self.brie_exponent = None
-        self.fluid_type = None
-        self.name = None
-        self.volume_fraction = None
-
-        # Case input data is given as a float or integer, create a Param
-        # object with default units and description
-        for this_name, param, unit_str, desc_str, def_val in zip(
-                ['k', 'mu', 'rho', 'calculation_method', 'temp_gradient', 'temp_ref',
-                #['calculation_method', 'temp_gradient', 'temp_ref',
-                 'pressure_gradient', 'pressure_ref', 'salinity', 'gor', 
-                 'oil_api', 'gas_gravity', 'gas_mixing', 'brie_exponent', 'status'],
-                [k, mu, rho, calculation_method, temp_gradient, temp_ref,
-                #[calculation_method, temp_gradient, temp_ref,
-                 pressure_gradient, pressure_ref, salinity, gor, 
-                 oil_api, gas_gravity, gas_mixing, brie_exponent, status],
-                ['GPa', 'GPa', 'g/cm3', '', 'degC/m', 'degC',
-                #['', 'C/m', 'C',
-                 'MPa/m', 'MPa', 'ppm', '',
-                 'API', '', '', '', 'str'],
-                ['Bulk moduli', 'Shear moduli', 'Density', '', '', '',
-                #['', '', '',
-                 '', 'Pressure at mudline', '', 'Gas/Oil ratio',
-                 '', '', 'Wood or Brie', '', 'Status'],
-                [np.nan, np.nan, np.nan, 'User specified', 0.03, 10.,
-                #['User specified', 0.03, 10.,
-                   0.0107, 0., 70000., 1., 
-                   30., 0.6, 'Wood', 2., None]):
-            if (param is None) or isnan(param):
-                param = def_val
-                #print('param {} is None'.format(this_name))
-            if isinstance(param, int):
-                param = float(param)
-                #print('param {} is integer'.format(this_name))
-            if isinstance(param, float) or isinstance(param, str):
-                #print('param {} is float or string'.format(this_name))
-                param = Param(name=this_name, value=param, unit=unit_str, desc=desc_str)
-            # TODO
-            # catch the cases where input data is neither None, int,  float or str
-            # TODO
-            # The handling of parameters that are strings are different for fluids (Param) and minerals (strings)
-            
-            super(Fluid, self).__setattr__(this_name, param)
-        
-        super(Fluid, self).__setattr__('name', name)
-        super(Fluid, self).__setattr__('fluid_type', fluid_type)
-        super(Fluid, self).__setattr__('volume_fraction', volume_fraction)
-
-#    def __getattribute__(self, item):
-#        if object.__getattribute__(self, 'calculation_method ') == 'Batzle and Wang':
-#            print('Batzle and Wang')#
-#        #    if (item == 'k') or (item == 'mu') or (item == 'rho'):
-#        #        warn_txt = 'Calculation of fluid properties not yet implemented'
-#        #        print_info(warn_txt, 'warning', logger)
-#        #        return None
-#        #else:
-#        #    return object.__getattribute__(self, item)
-#        return object.__getattribute__(self, item)
+        self.calculation_method = calculation_method
+        self.k = k
+        self.mu = mu
+        self.rho = rho
+        self.temp_gradient = temp_gradient
+        self.temp_ref = temp_ref
+        self.pressure_gradient = pressure_gradient
+        self.pressure_ref = pressure_ref
+        self.salinity = salinity
+        self.gor = gor
+        self.oil_api = oil_api
+        self.gas_gravity = gas_gravity
+        self.gas_mixing = gas_mixing
+        self.brie_exponent = brie_exponent
+        self.fluid_type = fluid_type
+        self.name = name
+        self.volume_fraction = volume_fraction
 
     def __str__(self):
         keys = list(self.__dict__.keys())
-        #r_keys = []
-        #for k in keys:
-        #    if isinstance(self.__dict__[k], Param) and isnan(self.__dict__[k].value):
-        #        r_keys.append(k)
-        #for k in r_keys:
-        #    keys.remove(k)
-        
+
         pattern = "%%%ds: %%s" % len(keys)
 
-        #head = [pattern % (k, self.__dict__[k]) for k in keys]
-        head = [pattern % (k, '{}, {}'.format( self.__dict__[k].value,  self.__dict__[k].desc)) if \
-                isinstance(self.__dict__[k], Param) else pattern % (k, self.__dict__[k]) for k in keys]
+        head = [ pattern % (k, self.__dict__[k]) for k in keys]
         return "\n".join(head)
 
     def print_fluid(self, verbose=False):
@@ -258,15 +207,16 @@ class Fluid(object):
             out = str(self)
         else:
             out += '      K: {}, Mu: {}, Rho {}\n'.format(
-                self.k.value, self.mu.value, self.rho.value)
-            out += '      Calculation method: {}\n'.format(self.calculation_method.value)
-            out += '      Status: {}\n'.format(self.status.value)
+                self.k, self.mu, self.rho)
+            out += '      Calculation method: {}\n'.format(self.calculation_method)
+            out += '      Status: {}\n'.format(self.status)
             out += '      Volume fraction: {}\n'.format(self.volume_fraction)
         return out
 
     def keys(self):
         return self.__dict__.keys()
 
+    # TODO Continue here
     def calc_k(self, bd):
         """
         Calculates the fluid bulk modulus at given burial depth
@@ -370,6 +320,148 @@ class Fluid(object):
         else:
             # No calculation done
             pass
+
+
+class FluidsTable:
+    """
+    Returns a table and bokeh CDS for the provided fluids
+    """
+    def __init__(self,
+                 fluids: None | list = None,
+                 width: None | int = None):
+        """
+
+        :param fluids:
+            list of Fluid objects
+        :param width:
+            int
+        """
+        if width is None:
+                width = 700
+        self.width = width
+        if fluids is None:
+            fluids = []
+        self.fluids = fluids
+        self.keys = ['name', 'k', 'mu', 'rho', 'bd', 'calculation_method',
+                     'temp_gradient', 'temp_ref',
+                     'pressure_gradient', 'pressure_ref',
+                     'salinity', 'gor', 'oil_api', 'gas_gravity', 'gas_mixing', 'brie_exponent', 'fluid_type']
+    @property
+    def source(self) -> ColumnDataSource:
+        _dict = {_x:[] for _x in self.keys}
+        for _fluid in self.fluids:
+            for _key in self.keys:
+                if _key == 'name':
+                    _dict['name'].append(_fluid.header.name)
+                elif _key in ['bd', 'fluid_type']:
+                    _dict[_key].append(None)
+                else:
+                    _dict[_key].append(_fluid.__dict__[_key].value)
+        return ColumnDataSource(_dict)
+
+    def table_columns(self):
+        from bokeh.models import (SelectEditor, StringEditor, TableColumn, CheckboxEditor)
+        _calc_methods = ['Batzle and Wang', 'User specified']
+        _fluid_types = ['-', 'Brine', 'Oil', 'Gas']
+        table_columns = [
+            TableColumn(field='name', title='Name'),
+            TableColumn(field='fluid_type', title='Fluid type',
+                        editor=SelectEditor(options=_fluid_types)),
+            TableColumn(field='k', title='K [GPa]'),
+            TableColumn(field='mu', title='G [GPa]'),
+            TableColumn(field='rho', title='Den. [g/cm3]'),
+            TableColumn(field='bd', title='Burial depth [m]'),
+            TableColumn(field='calculation_method', title='Calc. meth.',
+                        editor=SelectEditor(options=_calc_methods)),
+            TableColumn(field='temp_ref', title='T. ref. [deg C]'),
+            TableColumn(field='temp_gradient', title='T. grad. [deg C/m]'),
+            TableColumn(field='pressure_ref', title='P. ref. [MPa]'),
+            TableColumn(field='pressure_gradient', title='P. grad. [MPa/m]'),
+            TableColumn(field='salinity', title='Salinity [ppm]'),
+            TableColumn(field='gor', title='GOR'),
+            TableColumn(field='oil_api', title='Oil API'),
+            TableColumn(field='gas_gravity', title='Gas gravity')
+        ]
+        return table_columns
+
+    def draw(self,
+             source: ColumnDataSource):
+        from bokeh.models import DataTable, Button, CheckboxGroup
+
+        def add_row_function():
+            new_data = dict(source.data)
+            for _key in list(new_data.keys()):
+                new_data[_key].append(None)
+            source.data = new_data
+
+        def delete_row_function():
+            selected_index = source.selected.indices
+            new_data = {_x:[] for _x in self.keys}
+            for _i in range(len(source.data['name'])):
+                if _i  in selected_index:
+                    continue
+                for _x in self.keys:
+                    new_data[_x].append(source.data[_x][_i])
+            source.selected.indices = []
+            source.data = new_data
+
+        def update_table_function():
+            new_data = dict(source.data)
+            _fluids = []
+            for _i in range(len(new_data['name'])):
+                this_fluid =  Fluid(
+                    calculation_method=new_data['calculation_method'][_i],
+                    k=new_data['k'][_i],
+                    mu=new_data['mu'][_i],
+                    rho=new_data['rho'][_i],
+                    temp_gradient=new_data['temp_gradient'][_i],
+                    temp_ref=new_data['temp_ref'][_i],
+                    pressure_gradient=new_data['pressure_gradient'][_i],
+                    pressure_ref=new_data['pressure_ref'][_i],
+                    salinity=new_data['salinity'][_i],
+                    gor=new_data['gor'][_i],
+                    oil_api=new_data['oil_api'][_i],
+                    gas_gravity=new_data['gas_gravity'][_i],
+                    fluid_type=new_data['fluid_type'][_i].lower(),
+                    name=new_data['name'][_i],
+                    )
+                _fluids.append(this_fluid)
+                if new_data['calculation_method'][_i] == 'Batzle and Wang' and (new_data['bd'][_i] is not None) and (new_data['fluid_type'][_i] in ['Brine', 'Oil', 'Gas']):
+                    print('XXX1', new_data['name'][_i], new_data['fluid_type'][_i], new_data['bd'][_i])
+                    print('XXX2', this_fluid.name, this_fluid.fluid_type)
+                    # TODO Can come to this point
+                    this_fluid.calc_k(new_data['bd'][_i])
+                    this_fluid.calc_mu(new_data['bd'][_i])
+                    this_fluid.calc_rho(new_data['bd'][_i])
+                    print('YYY', this_fluid.fluid_type.value)
+                    new_data['k'][_i] = this_fluid.k
+                    new_data['mu'][_i] = this_fluid.mu
+                    new_data['rho'][_i] = this_fluid.rho
+                    print('YYY', this_fluid.k, this_fluid.mu, this_fluid.rho)
+                    # TODO But not here!
+
+            self.fluids = _fluids
+            source.data = new_data
+
+        dt = DataTable(
+            source=source,
+            columns=self.table_columns(),
+            editable=True,
+            width=self.width,
+            index_position = -1,
+            index_header = 'index'
+        )
+
+        add_row = Button(label='Add row', button_type='success')
+        add_row.on_click(add_row_function)
+
+        delete_row = Button(label='Delete selected rows', button_type='success')
+        delete_row.on_click(delete_row_function)
+
+        update_table = Button(label='Update', button_type='success')
+        update_table.on_click(update_table_function)
+
+        return dt, add_row, delete_row, update_table
 
 
 class FluidMix(object):
@@ -611,7 +703,25 @@ class TestCases(unittest.TestCase):
         all_fluids = read_all_fluids_from_excel(wp.project_table)
         return all_fluids, myfluids
 
+    def test_fluid_table(self):
+        from bokeh.io import output_file
+        from bokeh.plotting import show, row, column
+        # output_file('C:\\Users\\emb\\Downloads\\plot.html')
+        output_file('C:\\Users\\marte\\Downloads\\plot.html')
+
+        all_fluids, fluid_mix = self.test_data()
+        ft = FluidsTable(fluids=list(all_fluids.values()))
+        source = ft.source
+        # for _key in list(source.data.keys()):
+        #     print(_key, source.data[_key])
+
+        table, add_row, delete_row, update = ft.draw(source)
+        # show(column(table, row(add_row, delete_row, update)))
+        return table, add_row, delete_row, update
+
     def test_fluidsub():
+        # TODO
+        # This needs to be updated to the new well model
         from importlib import reload
         import matplotlib.pyplot as plt
         import blixt_rp.rp.rp_core as rp
