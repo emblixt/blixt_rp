@@ -189,7 +189,7 @@ class Fluid(object):
         self.gas_gravity = gas_gravity
         self.gas_mixing = gas_mixing
         self.brie_exponent = brie_exponent
-        self.fluid_type = fluid_type
+        self.fluid_type = fluid_type.lower() if fluid_type is not None else None
         self.name = name
         self.volume_fraction = volume_fraction
 
@@ -216,49 +216,43 @@ class Fluid(object):
     def keys(self):
         return self.__dict__.keys()
 
-    # TODO Continue here
-    def calc_k(self, bd):
+    def calc_k(self, bd: Q_):
         """
         Calculates the fluid bulk modulus at given burial depth
         :param bd:
         :return:
         """
-        if self.calculation_method.value == 'Batzle and Wang':
+        if self.calculation_method == 'Batzle and Wang':
             print('calc_k: {}, Fluid: {}, Burial depth: {}'.format(self.name, self.fluid_type, bd))
-            if (bd is None) or isnan(bd):
-                warn_txt = 'No Burial depth value given for the fluid calculation. ' \
-                           'Batzle and Wang not possible to calculate'
-                print_info(warn_txt, 'warning', logger)
 
-            _s = self.salinity
-            _p = self.pressure_ref.value + self.pressure_gradient.value * bd
-            _t = self.temp_ref.value + self.temp_gradient.value * bd
+            _s = self.salinity.to('ppm').magnitude
+            _p = self.pressure_ref + self.pressure_gradient * bd
+            _p = _p.to('MPa').magnitude
+            _t = self.temp_ref + self.temp_gradient * bd
+            _t = _t.to('degC').magnitude
             if self.fluid_type == 'brine':
                 rho_b = rp.rho_b(_s, _p,  _t).value
                 v_p_b = rp.v_p_b(_s, _p, _t).value
-                this_k = Param(name='k_b',
-                             value=v_p_b**2 * rho_b * 1.E-6,
-                             unit='GPa',
-                             desc='Brine bulk modulus'
-                )
-                print(this_k)
+                _this_k = v_p_b**2 * rho_b * 1.E-6
             elif self.fluid_type == 'oil':
-                this_k, rho_o = rp.k_and_rho_o(
-                    self.oil_api,
-                    self.gas_gravity,
-                    self.gor,
+                _this_k, rho_o = rp.k_and_rho_o(
+                    self.oil_api.magnitude,
+                    self.gas_gravity.magnitude,
+                    self.gor.magnitude,
                     _p,
                     _t
                 )
             elif self.fluid_type == 'gas':
-                this_k, rho_g = rp.k_and_rho_g(self.gas_gravity, _p, _t)
+                _this_k, rho_g = rp.k_and_rho_g(self.gas_gravity.magnitude, _p, _t)
             else:
                 raise NotImplementedError('Bulk modulus not possible to calculate for {}'.format(self.fluid_type))
+            this_k = Q_(_this_k, 'GPa')
             self.k = this_k
         else:
             # No calculation done
             pass
 
+    # TODO Continue here
     def calc_mu(self, bd):
         #print('calc_mu: {}, Burial depth: {}'.format(self.name, bd))
         if self.calculation_method.value == 'Batzle and Wang':
@@ -702,6 +696,21 @@ class TestCases(unittest.TestCase):
         myfluids.read_excel(wp.project_table)
         all_fluids = read_all_fluids_from_excel(wp.project_table)
         return all_fluids, myfluids
+
+    def test_fluid(self):
+        default = def_fluid_vals
+        f1 = Fluid(**default)
+        print(f1)
+        f1.fluid_type = 'brine'
+        f1.calc_k(Q_(1000, 'm'))
+        print('Brine: ', f1.k)
+        f1.fluid_type = 'oil'
+        f1.calc_k(Q_(1000, 'm'))
+        print('Oil: ', f1.k)
+        f1.fluid_type = 'gas'
+        f1.calc_k(Q_(1000, 'm'))
+        print('Gas: ', f1.k)
+
 
     def test_fluid_table(self):
         from bokeh.io import output_file
