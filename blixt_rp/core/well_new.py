@@ -19,23 +19,156 @@ Take inspiration from obspy and converter to create these objects
     GNU Lesser General Public License, Version 3
     (https://www.gnu.org/copyleft/lesser.html)
 """
+from copy import deepcopy
+
 import numpy as np
 import pandas as pd
 import logging
 import os, sys
 import matplotlib.pyplot as plt
+import pint
+from scipy.constants import degree
 from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
+
+from blixt_rp.core.log_curve_new import LogCurve
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
+from .. import ureg, Q_
 
 # global variables
 supported_version = {2.0, 3.0}
 logger = logging.getLogger(__name__)
+
+def check_depth_type(input_lc: LogCurve, depth_type: str = 'md') -> bool:
+    """
+
+    :param input_lc:
+    :param depth_type:
+        str
+        'md', 'tvd', 'owt', or 'twt'
+
+    :return:
+        bool
+    """
+    return input_lc.depth_type == depth_type
+
+class WellTrajectory:
+    """
+    Handles the trajectory of a well.
+    The common, and necessary, dimension is measured depth; MD
+    Other dimensions, like true vertical depth (TVD), inclination (INC), burial depth (BD), will follow
+    """
+    def __init__(self,
+                 md: pint.Quantity,
+                 tvd_kb:  LogCurve | None = None,
+                 inc: LogCurve | None = None,
+                 verbose: bool = False):
+        """
+
+        :param md:
+            pint.Quantity
+            An array of measured depth along the well with units
+        :param tvd:
+            LogCurve
+            LogCurve object with true vertical depth relative to Kelly Bushing TVD data as a function of MD
+            So in a vertical well tvd_kb is equal to MD
+        :param inc:
+            LogCurve
+            The inclination of a well trajectory is typically defined as the angle between the wellbore and a
+            vertical line (parallel to Earth's gravity) at a specific point along the well path. This angle is
+            measured in degrees, with:
+                0° meaning the well is vertical (straight down),
+                90° meaning the well is horizontal (parallel to the surface),
+                Angles greater than 90° indicating "drilling up" rather than down.
+
+        """
+        # from blixt_rp.core.log_curve_new import _interpolate
+        self._md = md.to('meter')
+        self.verbose = verbose
+
+        # TVD data are quite safe to extrapolate
+        self._tvd_kb = self.set_param(tvd_kb, 'meter', 'extrapolate')
+
+        # Inclination can not be extrapolated
+        self._inc = self.set_param(inc, 'degree', None)
+
+    def set_param(self,
+                  input_log: LogCurve | None,
+                  units: str | None,
+                  fill_value: str | None) -> pint.Quantity | None:
+        """
+        Interpolates the input log to match the MD of the WellTrajectory
+
+        :param input_log:
+            LogCurve
+            LogCurve with data as a function of MD that should be attached as a property of the WellTrajectory
+        :param units:
+            str
+            Valid Pint name of a unit we want the property to be given in
+        :param fill_value:
+            str
+            Parameter sent further to _interpolate which decides how to handle data outside the bound of the
+            input LogCurve
+        :return:
+        """
+        from blixt_rp.core.log_curve_new import _interpolate
+
+        if input_log is None:
+            return None
+
+        # Check what depth domain the input log data is given in
+        if check_depth_type(input_log, 'md'):  # Input log must be given as a function of MD
+            if not input_log.units == ureg(units):
+                input_log.units = units
+            new_x = self._md.magnitude
+            old_x = input_log.depth.values
+            old_y = input_log.values
+            new_y = _interpolate(old_x, old_y, new_x, fill_value=fill_value)
+
+            if self.verbose:
+                fig, ax = plt.subplots()
+                ax.plot(old_x, old_y, 'k--')
+                ax.plot(new_x, new_y, 'r')
+                plt.show()
+
+            return Q_(new_y, units)
+
+    @property
+    def md(self):
+        return self._md
+
+    @property
+    def tvd_kb(self):
+        return self._tvd_kb
+
+    @tvd_kb.setter
+    def tvd_kb(self, value: LogCurve):
+        # TVD data are quite safe to extrapolate
+        self._tvd_kb = self.set_param(value, 'meter', 'extrapolate')
+
+    @property
+    def inc(self):
+        return self._inc
+
+    @inc.setter
+    def inc(self, value: LogCurve):
+        self._inc = self.set_param(value, 'degree', None)
+
+    def burial_depth(self, kelly_busing: pint.Quantity, water_depth:pint.Quantity) -> pint.Quantity | None:
+        """
+        Returns the burial depth (vertical depth below mud line (sea floor)) calculated from the tvd_kb
+        :param kelly_busing:
+        :param water_depth:
+        :return:
+        """
+        if self.tvd_kb is None:
+            return None
+        return self.tvd_kb - np.abs(kelly_busing) - np.abs(water_depth)
 
 
 class Well(object):
@@ -51,7 +184,7 @@ class Well(object):
     def __init__(self,
                  header: Header | None = None,
                  logs: list | None = None,
-                 style: None | Template = None
+                 style: Template | None = None
                  ):
         """
 
@@ -127,6 +260,10 @@ class Well(object):
     def get_logs_of_type(self, log_type):
         return [_lc for _lc in self.logs if _lc.log_type == log_type]
 
+    def get_logs_of_depth_type(self, depth_type):
+        # depth_type = 'md', 'tvd', 'owt', or 'twt'
+        return [_lc for _lc in self.logs if _lc.depth.depth_type == depth_type]
+
     def add_log(self, log_curve: LogCurve, if_log_exists: str = 'overwrite'):
         """
         Adds a LogCurve object to the well
@@ -192,7 +329,7 @@ class Well(object):
 
     def read_las(self, file_name: str, verbose: bool = False, encoding: str = 'UTF8',
                  log_table: LogTable | None = None, ignore_header: bool = False,
-                 rename_logs: None | dict = None,
+                 rename_logs: dict | None = None,
                  if_log_exists: str = 'overwrite',
                  template_file: str | None = None):
         """
@@ -220,7 +357,8 @@ class Well(object):
         :param template_file:
             str
             full filename of .xlsx file that contains templates of each log type.
-            Of the format used by the project_table.xlsx file
+            Of the format used by the project_table_new.xlsx file
+            Kelly bushing, water depth and other information is also extracted from the file
         :return:
         """
         from blixt_rp.core.log_curve_new import read_las as _read_las
@@ -247,8 +385,24 @@ class Well(object):
 
         if template_file is not None:
             table = pd.read_excel(template_file, header=1, sheet_name='Well settings', engine='openpyxl')
+
+            # set the style from the template file (project table)
             template_dict = templates_from_table(table, well_style=True)
-            self.style = template_dict[self.name]
+            if self.name in list(template_dict.keys()):
+                self.style = template_dict[self.name]
+
+            # add extra info to the header
+            for i, ans in enumerate(table['Given well name']):
+                if not isinstance(ans, str):
+                    continue
+                if ans.upper() == self.name.upper():
+                    self.header.kb = Q_(float(table['KB'][i]), 'm')
+                    self.header.water_depth = Q_(float(table['Water depth'][i]), 'm')
+                    self.header.note = str(table['Note'][i])
+                    self.header.content = table['Content'][i]
+                    self.header.discovery_in = table['Discovery in'][i]
+
+
 
     def read_general_ascii(self,
                            file_name: str,
@@ -260,7 +414,7 @@ class Well(object):
                            var_types: list | None = None,
                            if_log_exists: str = 'overwrite',
                            verbose: bool = False,
-                           encoding: None | str = 'UTF8'):
+                           encoding: str | None = 'UTF8'):
         from blixt_rp.core.log_curve_new import read_general_ascii as _read_general_ascii
         log_curves = _read_general_ascii(file_name, separator, data_begins_on_row, var_names, var_columns, var_units,
                                          var_types, verbose, encoding)
@@ -390,6 +544,73 @@ class Well(object):
             name=self.name,
             data=self.dict(),
             templates=self.templates()
+        )
+
+    def calc_press_ref(self, rho_sea: Q_):
+        """
+        Calculates the reference pressure in MPa (pressure at mudline (seafloor)) based on the water depth and
+        sea water density.
+
+        :param rho_sea:
+            float
+            Density of sea water
+        """
+
+        if not 'water_depth' in list(self.header.keys()):
+            return None
+
+        if rho_sea is None:
+            rho_sea = Q_(1.025,  'gram / cm^3')
+
+        return (rho_sea * self.header.water_depth * Q_(9.81, 'meter / s^2')).to('MPa')
+
+    def calc_temp_ref(self):
+        """
+        Calculates the reference temperature in degC (pressure at mudline (seafloor))
+        """
+        return Q_(4.0, 'degC')
+
+    def get_tvd_log(self) -> LogCurve | None:
+        from blixt_utils.utils import print_info
+        tvd_logs = self.get_logs_of_type('TVD')
+        if len(tvd_logs) == 0:
+            warn_txt = 'No True Vertical Depth log in {}, using MD'.format(self.name)
+            print_info(warn_txt, 'warning', logger)
+            return None
+        return tvd_logs[0]
+
+    def get_md_log(self) -> LogCurve | None:
+        """
+        Creates a new LogCurve object with MD data, and MD depth, taken from the LogCurve that has the largest
+        depth span
+        :return:
+        """
+        logs_with_md = self.get_logs_of_depth_type('md')
+        _last_range = Q_(-1000., 'm')
+        selected_log = None
+        for _lc in logs_with_md:
+            _range = _lc.base - _lc.top
+            # print(_lc.name, _range)
+            if _range > _last_range:
+                selected_log = _lc
+                _last_range = _range
+        if selected_log is None:
+            return None
+
+        return LogCurve(
+            name='md',
+            log_data=selected_log.depth.depth,
+            depth=selected_log.depth,
+            log_type = 'MD',
+            well=selected_log.well,
+            style=dict(full_name='Measured depth',
+                       name='md',
+                       units=str(selected_log.depth_units)),
+            header=dict(name='md',
+                        well=selected_log.well,
+                        log_type='MD',
+                        note='MD log taken from {}'.format(selected_log.name),
+                        orig_filename=selected_log.header.orig_filename)
         )
 
 

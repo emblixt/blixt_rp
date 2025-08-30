@@ -28,9 +28,11 @@ log_table2 = LogTable({
     'S velocity': 'Vs_brine',
     'Density': 'Rho_brine'
 })
+
 las_file3 = os.path.join(test_file_dir, "Well F.las")
 data_file1 = os.path.join(test_file_dir, "Well A checkshot.txt")
 data_file2 = "S:\\Well\\UTM32_Mid_Norway_All\\Q-6406\\6406_11_1_S\\6406_11_1_S___checkshot.txt"
+data_file2_wellpath = "S:\\Well\\UTM32_Mid_Norway_All\\Q-6406\\6406_11_1_S\\6406_11_1_S___wellpath.txt"
 
 n = 1500
 # create a regularly sampled data set
@@ -147,11 +149,8 @@ class WellTestCase(unittest.TestCase):
 
     def test_las_and_data(self):
         from blixt_rp.core.well_new import Well
-        from blixt_rp.core.core import LogTable, Template
-        # Useful log table
-        log_table3 = LogTable({'Density': 'rho_brine', 'P velocity': 'vp_brine', 'S velocity': 'vs_brine'})
         well = Well()
-        well.read_las(las_file2, log_table=log_table3, template_file=project_table)
+        well.read_las(las_file2, log_table=log_table2, template_file=project_table)
         print(well.get_log_names)
         rho = well.get_log_curve('rho_brine')
         print('Rho:', rho.base, rho.top, rho.step(), len(rho), rho.log_type)
@@ -167,4 +166,51 @@ class WellTestCase(unittest.TestCase):
         owt = well.get_log_curve('owt')
         print('OWT:', owt.base, owt.top, owt.step(), len(owt), owt.log_type)
         print(owt.style)
+
+    def test_create_md_log(self):
+        from blixt_rp.core.well_new import Well
+        well = Well()
+        well.read_las(las_file2, log_table=log_table2, template_file=project_table)
+        well.read_general_ascii(data_file2,
+                                'space',
+                                4,
+                                ['md', 'owt'],
+                                [0, 1],
+                                ['m', 'millisecond'],
+                                ['MD', 'One-way time'])
+
+        # Now we create a LogCurve of MD data from the LogCurve that has the longest depth range
+        md = well.get_md_log()
+
+        # Now we take the MD LogCurve that was generated from data_file2
+        md_log = well.get_log_curve('md')
+
+        print(md.header, '\n', md.style, '\n', md.units)
+        print(well.get_log_names)
+        print(md_log.values[:5], md_log.values[-5:])
+        print(md.values[:5], md.values[-5:])
+
+
+    def test_well_trajectory(self):
+        from blixt_rp.core.well_new import Well, WellTrajectory
+        well = Well()
+        well.read_las(las_file2, log_table=log_table2, template_file=project_table)
+        well.read_general_ascii(data_file2_wellpath,
+                                'space',
+                                1,
+                                ['md', 'tvd', 'inc'],
+                                [4, 5, 6],
+                                ['m', 'm',  'degree'],
+                                ['MD', 'TVD', 'INC'])
+
+        # Now we create a LogCurve of MD data from the LogCurve that has the longest depth range
+        md = well.get_md_log()
+        wt = WellTrajectory(
+            md=md.data,
+            tvd_kb=well.get_log_curve('tvd'),
+            inc=well.get_log_curve('inc'),
+            verbose=True
+        )
+        print(len(md), len(wt.tvd_kb), len(wt.inc))
+
 

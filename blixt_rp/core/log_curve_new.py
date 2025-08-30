@@ -392,7 +392,7 @@ class LogCurve(object):
         return self.data.units
 
     @units.setter
-    def units(self, to_units):
+    def units(self, to_units: str):
         """
         Converts the log data units to 'to_units', and changes the unit in the style too
         """
@@ -543,7 +543,7 @@ class LogCurve(object):
             header=header
         )
 
-    def take_sampling_from(self, log_curve, suffix: None | str = 'resampled', verbose=False):
+    def take_sampling_from(self, log_curve, suffix: str | None = 'resampled', verbose=False):
         """
         Interpolates the data to match the depth parameter (sampling) of input log_curve,
         and returns a new log_curve
@@ -1355,7 +1355,7 @@ def read_general_ascii(file_name: str,
                        var_units=None,
                        var_types: list | None = None,
                        verbose: bool = False,
-                       encoding: str = 'UTF8') -> None | dict:
+                       encoding: str = 'UTF8') -> dict | None:
     """
 
     :param file_name:
@@ -1670,7 +1670,20 @@ def replace_data(
         overwrite: bool,
         info_txt,
         suffix=None
-):
+) -> LogCurve | None:
+    """
+
+    :param logcurve_in:
+    :param log_data:
+    :param depth:
+    :param overwrite:
+        bool
+        If True it overwrites the input data and returns nothing
+        If False it creates a new version of the input data, replace the data and returns a LogCurve
+    :param info_txt:
+    :param suffix:
+    :return:
+    """
     if len(log_data) != len(depth):
         raise IOError('Length of log_data ({}) must equal length of depth ({})'.format(
             len(log_data), len(depth)))

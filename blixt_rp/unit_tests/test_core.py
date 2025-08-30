@@ -4,6 +4,7 @@ import pandas as pd
 import os, sys
 import matplotlib.pyplot as plt
 from pint import Quantity as Q_
+from bokeh.plotting import show
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
@@ -48,6 +49,9 @@ gp1 = StratUnit('Test1 GP', 2)
 interval1 = Interval('TestWell', Q_(100., 'm'), Q_(200., 'm'), fm1)
 interval2 = Interval('TestWell', Q_(200., 'm'), Q_(300., 'm'), fm2)
 interval3 = Interval('TestWell', Q_(100., 'm'), Q_(300., 'm'), gp1)
+interval4 = Interval('AnotherWell', Q_(100. - 10., 'm'), Q_(200. + 10., 'm'), fm1)
+interval5 = Interval('AnotherWell', Q_(200. - 10., 'm'), Q_(300. + 10., 'm'), fm2)
+interval6 = Interval('AnotherWell', Q_(100. - 10., 'm'), Q_(300. + 10., 'm'), gp1)
 
 class CutoffTests(unittest.TestCase):
     def test_rule_init(self):
@@ -87,6 +91,26 @@ class CutoffTests(unittest.TestCase):
         print(cutoffs)
         print(cutoffs.get_dict())
         self.assertTrue(True)
+
+    def test_classification_table(self):
+        from bokeh.io import output_file
+        from bokeh.plotting import column
+        from blixt_rp.core.core import CutoffRule, ClassificationTable
+        output_file('C:\\Users\\emb\\Downloads\\plot.html')
+        # output_file('C:\\Users\\marte\\Downloads\\plot.html')
+
+        rule1 = CutoffRule('param1', '>', Q_(100, 'm'))
+        rule2 = CutoffRule('param2', '<', Q_(10, 'm'))
+        rule3 = CutoffRule('param3', '==', Q_(1000, 'm'))
+        rule5 = CutoffRule('param5', '><', [Q_(10, 'm'), Q_(1000, 'm')])
+        ct = ClassificationTable([rule1, rule2, rule3, rule5])
+        # ct = ClassificationTable()
+        table_source = ct.source
+        # print(ct.source.data)
+        table, add_row, delete_row, update, use = ct.draw(table_source, ['log A', 'log B'], units=['m', 'km'])
+
+        # show(column(table, add_row, delete_row, update, use))
+        return table, add_row, delete_row, update, use
 
 
 class LogTableTests(unittest.TestCase):
@@ -138,7 +162,6 @@ class LogTableTests(unittest.TestCase):
         print(lt2.log_names)
 
 
-
 class TemplateTestCase(unittest.TestCase):
 
     def test_from_scratch(self):
@@ -177,26 +200,29 @@ class TemplateTestCase(unittest.TestCase):
         t.get_from_project(project_table, 'XXX')
         print(t)
 
+
 class IntervalTests(unittest.TestCase):
 
     def test_create_intervals(self):
-        wis = Intervals('TEST', [interval1, interval2, interval3])
+        wis = Intervals('TEST', [interval1, interval2, interval3, interval4, interval5, interval6])
 
         print(wis)
-        print('-x-')
+        print('-x1-')
         print(wis.well_names())
-        print('-x-')
+        print('-x2-')
         print(wis.interval_names())
-        print('-x-')
+        print('-x3-')
         print(wis.get_well_depth_range('TestWell'))
-        print('-x-')
+        print('-x4-')
+        print(wis.get_well_depth_range('AnotherWell'))
+        print('-x5-')
         _i = wis.get_interval('Test1 FM', 'TestWell')
         print(_i.thickness)
-        print('-x-')
+        print('-x6-')
         print(_i.mid)
-        print('-x-')
+        print('-x7-')
         print(_i.distance_to_top(Q_(0, 'm')))
-        print('-x-')
+        print('-x8-')
 
         self.assertIsInstance(wis, Intervals)
 
@@ -252,10 +278,50 @@ class IntervalTests(unittest.TestCase):
     def test_plot(self):
         wis = Intervals(name='TEST', intervals=[interval1, interval2, interval3])
 
+    def test_intervals_table(self):
+        from blixt_rp.core.core import Intervals, WorkingIntervalsTable
+        from bokeh.io import output_file
+        output_file('C:\\Users\\emb\\Downloads\\plot.html')
+        #project_table = "C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+        project_table = "C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+        wis = Intervals()
+        wis.read_blixt_tops(project_table)
+        wis.keep_wells(['WELL_B', 'WELL_C', 'WELL_F'])
+        wis_table = WorkingIntervalsTable(wis)
+        print(wis_table.source.data['use'])
+        print('-x1-')
+        print(wis_table.active_intervals_dict(wis_table.source))
+        table = wis_table.draw(wis_table.source)
+        show(table)
+
+    def test_intervals_table_2(self):
+        from blixt_rp.core.core import Intervals, WorkingIntervalsTable
+        wis = Intervals(
+            name='test', intervals=[
+                Interval( well='one', top=Q_(1050, 'm'), base=Q_(1150, 'm'), interval_info=StratUnit('wi_1', 1)),
+                Interval( well='one', top=Q_(1200, 'm'), base=Q_(1400, 'm'), interval_info=StratUnit('wi_2', 1)),
+                Interval( well='two', top=Q_(1550, 'm'), base=Q_(1650, 'm'), interval_info=StratUnit('wi_1', 1)),
+                Interval( well='two', top=Q_(1800, 'm'), base=Q_(1950, 'm'), interval_info=StratUnit('wi_2', 1))
+            ] )
+        wis_table = WorkingIntervalsTable(wis)
+        wis_source = wis_table.source
+        mask = wis_table.create_mask(wis_source, md=Q_(np.linspace(1000., 2000., 10), 'm'),
+                                     wells=None)
+        self.assertTrue(np.array_equal(mask, np.array([0, 1, 1, 1, 0, 1, 0, 0, 1, 0], dtype=bool)))
+        print('-x1-')
+        mask = wis_table.create_mask(wis_source, md=Q_(np.linspace(1000., 2000., 10), 'm'),
+                                     wells=['one'] * 10)
+        self.assertTrue(np.array_equal(mask, np.array([0, 1, 1, 1, 0, 0, 0, 0, 0, 0], dtype=bool)))
+        print('-x2-')
+        mask = wis_table.create_mask(wis_source, md=Q_(np.linspace(1000., 2000., 10), 'm'),
+                                     wells=['two'] * 10)
+        self.assertTrue(np.array_equal(mask, np.array([0, 0, 0, 0, 0, 1, 0, 0, 1, 0], dtype=bool)))
+
 
 class HeaderTestCase(unittest.TestCase):
 
     def test_Header(self):
+        import time
         h = Header({'name': 'MY NAME', 'well': 'MY WELL'})
         print(list(h.keys()))
         print(h.name, h.creation_date)
@@ -263,3 +329,4 @@ class HeaderTestCase(unittest.TestCase):
         h.orig_filename = 'A TEST'
         print(h.orig_filename, h.creation_date, h.modification_date)
         print(h)
+        print(list(h.keys()))

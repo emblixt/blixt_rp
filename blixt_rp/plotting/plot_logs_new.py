@@ -164,7 +164,8 @@ def plot_chi_rotation(well: cw.Well,
     """
     # TODO 1. check that the logs have the same length and step
     # TODO 2. The center of the Chi line must update after changing zoom or recalculating the EEI
-
+    # TODO 3. Create a Class for this
+    # TODO 4. Plot the uncertainty in log AI vs. log GI plot
     # Well must have LogCurve with TWT (or OWT) data, so first check that this exists
     twt = None
     log_types = well.get_log_types
@@ -1109,7 +1110,7 @@ legend_code = """
     spans.location = _chi;
     c1_legend.items[0].label.value = 'EEI brine, chi:' + _chi + ' ba:' + _ba;
     c1_legend.items[1].label.value = 'EEI hc, chi:' + _chi + ' ba:' + _ba;
-    c3_legend.items[0].label.value = 'DIFF., chi:' + _chi + ' ba:' + _ba;
+    \\ c3_legend.items[0].label.value = 'DIFF., chi:' + _chi + ' ba:' + _ba;
     c4_legend.items[0].label.value = 'HC, ba:' + _ba + ' Hz:' + _freq;
     c5_legend.items[0].label.value = 'Brine - HC, ba:' + _ba + ' Hz:' + _freq;
     hplot_legend.title = 'Chi:' + _chi;

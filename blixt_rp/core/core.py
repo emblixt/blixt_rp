@@ -12,7 +12,11 @@ import pint
 import pandas as pd
 import logging
 
-from bokeh.plotting import figure
+from bokeh.models import (Slider, ColorPicker, Range1d, LinearAxis, LogAxis, Span, Legend, ColumnDataSource, Text,
+                          CustomJS, CustomJSTransform, LinearColorMapper, CheckboxEditor, Select)
+from bokeh.models import PanTool, BoxZoomTool, WheelZoomTool, ResetTool, SaveTool, CrosshairTool, HoverTool, TextInput
+from bokeh.plotting import figure, show
+from bokeh.plotting import column, row
 from datetime import datetime
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
@@ -249,6 +253,259 @@ class CutoffRule:
         else:
             _limits = self.limit
         return '{}: {} {}'.format( _param, _operator, _limits)
+
+
+class ClassificationTable:
+    """
+    Table with rules that classify the data.
+    The rules can also be used to mask out data (cutoffs)
+
+    """
+    def __init__(self,
+                 rules: list | None = None,
+                 width: int | None = None):
+        """
+
+        :param rules:
+            list
+            List of blixt_rp.core.core.CutoffRules objects
+        :param width:
+            int
+        """
+        if width is None:
+            width = 600
+        self.width = width
+        if rules is None:
+            rules = []
+        self._rules = rules
+        self.use_status = [False for _i in range(len(self._rules))]
+        self.cutoffs = []
+        self.keys = ['use', 'name', 'log', 'units', 'operator', 'limits']
+
+    @property
+    def rules(self):
+        return self._rules
+
+    @rules.setter
+    def rules(self, new_rules):
+        self._rules = new_rules
+
+    @property
+    def classes(self):
+        _classes = {}
+        for _rule in self.rules:
+            if _rule.name not in list(_classes.keys()):
+                _classes[_rule.name] = [_rule]
+            else:
+                _classes[_rule.name].append(_rule)
+        return _classes
+
+    @property
+    def source(self) -> ColumnDataSource:
+        """
+        Returns a ColumnDataSource with the following columns:
+            'use', 'name', 'log', 'units', 'operator', 'limits'
+        When 'use' is set to True, and setting the 'use_cutoffs' check box to active, the rule is used to cut out data (mask)
+        :return:
+            ColumnDataSource
+        """
+        # _dict = dict(use=[], name=[], log=[], units=[], operator=[], limits=[])
+        _dict = {_x:[] for _x in self.keys}
+        # for _rule in self.rules.cutoffs:
+        for _rule in self.rules:
+            _u = None
+            if isinstance(_rule.limit, list):
+                _r = ', '.join([str(_x.magnitude) for _x in _rule.limit])
+                _u = str(format(_rule.limit[0].units, '~'))
+            else:
+                _r = str(_rule.limit.magnitude)
+                _u = str(format(_rule.limit.units, '~'))
+            _dict['use'].append(False)
+            _dict['name'].append('-')
+            _dict['log'].append(_rule.param)
+            _dict['units'].append(_u)
+            _dict['operator'].append(_rule.operator)
+            _dict['limits'].append(_r)
+
+        return ColumnDataSource(_dict)
+
+    def table_columns(self, parameters: list, units: list):
+        from bokeh.models import (SelectEditor, StringEditor, TableColumn, CheckboxEditor)
+        _operators = ['<', '<=', '>', '>=', '><', '==', '!=']
+        table_columns = [
+            TableColumn(field='use', title='Use as cutoff', editor=CheckboxEditor()),
+            TableColumn(field='name', title='Class', editor=StringEditor()),
+            TableColumn(field='log', title='Parameter', editor=SelectEditor(options=parameters)),
+            TableColumn(field='units', title='Units', editor=SelectEditor(options=units)),
+            TableColumn(field='operator', title='Operator', editor=SelectEditor(options=_operators)),
+            TableColumn(field='limits', title='Limits (comma separated)', editor=StringEditor())
+        ]
+        return table_columns
+
+    def draw(self,
+             source: ColumnDataSource,
+             parameters: list,
+             units: list,
+             classification_data_source: ColumnDataSource | None = None,
+             color_menu: Select | None = None):
+        """
+
+        :param source:
+        :param parameters:
+        :param units:
+        :param classification_data_source:
+            data source that the classification is applied on
+        :param color_menu:
+            Select
+            Dropdown menu that decides how to color the data.
+            Only the option "Classification" will be listened to here
+        :return:
+        """
+        from bokeh.models import DataTable, Button, CheckboxGroup
+        from blixt_rp.core.core import CutoffRule
+        from pint import Quantity as Q_
+        import blixt_utils.misc.masks as masks
+
+        orig_data = None
+        # take a backup of the original data
+        if classification_data_source is not None:
+            orig_data = dict(classification_data_source.data)
+
+        def update_table_callback():
+            # How do I use input variables to a python call back?
+            #  - It depends on which widget you use, see:
+            #      docs.bokeh.org/en/latest/docs/user_guide/interaction/python_callbacks.html#ug-interaction-python-callbacks
+            cutoffs = []
+            rules = []
+            use_status = []
+            for i, use in enumerate(source.data['use']):
+                if ',' in source.data['limits'][i]:
+                    this_limit = [Q_(float(_s), source.data['units'][i]) for _s in source.data['limits'][i].split(',')]
+                else:
+                    this_limit = Q_(float(source.data['limits'][i]), source.data['units'][i])
+                use_status.append(use)
+                _rule = CutoffRule(
+                    param=source.data['log'][i],
+                    operator=source.data['operator'][i],
+                    limit=this_limit,
+                    name=source.data['name'][i]
+                )
+                rules.append(_rule)
+                if use:
+                    cutoffs.append(_rule)
+            self.rules = rules
+            self.use_status = use_status
+            self.cutoffs = cutoffs
+
+        def use_cutoffs_callback(attr, old, new):
+            if len(new) == 1 and classification_data_source is not None:
+                print('Use cutoffs, ', old, new)
+                update_table_callback()
+                if len(self.cutoffs) > 0:  # There are active cutoffs
+                    new_data = dict(classification_data_source.data)
+                    _mask = None
+                    for _i, _rule in enumerate(self.cutoffs):
+                        _this_mask = masks.create_mask(
+                            classification_data_source.data[_rule.param],
+                            _rule.operator,
+                            _rule.limit
+                        )
+                        if _i == 0:  # First cutoff rule
+                            _mask = _this_mask
+                        else:  # Append new cutoff rule using AND
+                            _mask = masks.combine_masks([_mask, _this_mask])
+                    # apply mask
+                    for _key in list(new_data.keys()):
+                        new_data[_key] = new_data[_key][_mask]
+                    classification_data_source.data = new_data
+            else:
+                print('Do not use cutoffs, ', old, new)
+                classification_data_source.data = orig_data
+
+        def add_row_function():
+            new_data = dict(source.data)
+            new_data['use'].append(False)
+            new_data['name'].append('Class A')
+            new_data['log'].append(parameters[0])
+            new_data['units'].append(units[0])
+            new_data['operator'].append('>')
+            new_data['limits'].append('1.')
+            source.data = new_data
+
+        def delete_row_function():
+            selected_index = source.selected.indices
+            # new_data = dict(use=[], name=[], log=[], units=[], operator=[], limits=[])
+            new_data = {_x:[] for _x in self.keys}
+            for _i in range(len(source.data['use'])):
+                if _i in selected_index:
+                    continue
+                for _x in self.keys:
+                    new_data[_x].append(source.data[_x][_i])
+            source.selected.indices = []
+            source.data = new_data
+
+        def use_color_classification(attr, old, new):
+            print(attr, old, new)
+            if new == 'Classification':
+                update_table_callback()
+                if len(self.rules) > 0:
+                    print(list(self.classes.keys()))
+                    new_data = dict(classification_data_source.data)
+                    # Add 'non-classified' to all data points first
+                    new_data['legend_group'][:] = 'No class'
+                    new_data['color'][:] = 'gray'
+                    new_data['marker'][:] = 'dot'
+                    # Add specific style to classified data
+                    for _i, _class in enumerate(self.classes.keys()):  # iterate over all classes
+                        _mask = None
+                        for _j, _rule in enumerate(self.classes[_class]):  # iterate over all rules within this class
+                            _this_mask = masks.create_mask(
+                                classification_data_source.data[_rule.param],
+                                _rule.operator,
+                                _rule.limit
+                            )
+                            if _j == 0:
+                                _mask = _this_mask
+                            else:  # Append rule using AND
+                                _mask = masks.combine_masks([_mask, _this_mask])
+                        new_data['legend_group'][_mask] = _class
+                        new_data['color'][_mask] = cnames[_i]
+                        new_data['marker'][_mask] = markers[_i]
+                    print('Classification ON. {} data points with classes {} '.format(
+                        len(new_data['legend_group']), list(set(new_data['legend_group']))))
+                    classification_data_source.data = new_data
+            else:
+                # TODO
+                # This doesnt work properly. The classification doesn't reset
+                print('Classification OFF. {} data points with classes {} '.format(
+                    len(orig_data['legend_group']), list(set(list(orig_data['legend_group'])))))
+                classification_data_source.data = orig_data
+
+        dt = DataTable(
+            source=source,
+            columns=self.table_columns(parameters, units),
+            editable=True,
+            width=self.width,
+            index_position=-1,
+            index_header='index'
+        )
+
+        add_row = Button(label='Add row', button_type='success')
+        add_row.on_click(add_row_function)
+
+        delete_row = Button(label='Delete selected rows', button_type='success')
+        delete_row.on_click(delete_row_function)
+
+        update_table = Button(label='Update', button_type='success')
+        update_table.on_click(update_table_callback)
+
+        use_cutoffs = CheckboxGroup(labels=['Use cutoffs'], active=[])
+        use_cutoffs.on_change('active', use_cutoffs_callback)
+
+        if (color_menu is not None) and (classification_data_source is not None):
+            color_menu.on_change('value', use_color_classification)
+
+        return dt, add_row, delete_row, update_table, use_cutoffs
 
 
 class Cutoffs:
@@ -751,6 +1008,212 @@ class Intervals(object):
                    p: figure):
         pass
 
+class WorkingIntervalsTable:
+    def __init__(self,
+                 intervals,
+                 width: int | None = None):
+        """
+
+        :param intervals:
+            blixt_rp.core.core.Intervals object
+
+        :param width:
+        """
+        if width is None:
+            width = 600
+        self.width = width
+        self._intervals = intervals
+
+    @property
+    def intervals(self):
+        return self._intervals
+
+    @property
+    def source(self) -> ColumnDataSource:
+        """
+        Returns a ColumnDataSource with the following columns:
+            'use', 'name', 'level', 'wells', 'color'
+        :return:
+            ColumnDataSource
+        """
+        _well_names = self.intervals.well_names()
+        _interval_names = self.intervals.interval_names()
+
+        _dict = self.intervals.get_strat_units()
+        _ = _dict.pop('desc')
+        _ = _dict.pop('source')
+        _dict['use'] = [True] * len(_dict['name'])
+
+        # add a column with the well names that contains the interval of each row
+        _wells = []
+        for _name in _dict['name']:
+            _wl = []
+            for _wn in _well_names:
+                if self.intervals.get_interval(_name, _wn) is not None:
+                    _wl.append(_wn)
+            _wells.append(_wl)
+
+        _dict['wells'] = [', '.join(_w) for _w in _wells]
+
+        return ColumnDataSource(_dict)
+
+    def __dict__(self):
+        return self.intervals.get_intervals_dict()
+
+    def active_intervals_dict(self, source: ColumnDataSource) -> dict:
+        """
+        Returns a dictionary suitable for a ColumnDataSource which contains all intervals for all wells
+        with their top (m MD) and base and "active" status (status determined by the 'source' input)
+
+        :param source:
+            ColumnDataSource
+            The self.source of WorkingIntervalsTable
+            It is used to set which intervals are active or not
+
+        :return:
+        {'interval': [...], 'well': [...], 'top': [...], 'base': [...], 'active': [...]}
+        """
+        _dict = dict(
+            interval=[],
+            well=[],
+            top=[],
+            base=[],
+            active=[]
+        )
+        for _int_name in self.intervals.interval_names():
+            for _wname in self.intervals.well_names():
+                _int = self.intervals.get_interval(_int_name, _wname)
+                if _int is not None:
+                    _dict['interval'].append(_int_name)
+                    _dict['well'].append(_wname)
+                    _dict['top'].append(_int.top.to('m').magnitude)
+                    _dict['base'].append(_int.base.to('m').magnitude)
+                    # iterate over all working intervals in 'source' to see which are active or not
+                    _active = False
+                    for _i, _i_n in enumerate(source.data['name']):
+                        if _i_n == _int_name and _wname in source.data['wells'][_i] and source.data['use'][_i]:
+                            _active = True
+                    _dict['active'].append(_active)
+        return _dict
+
+    def create_mask(self, source: ColumnDataSource, md: pint.Quantity, wells: list | None = None) -> np.array:
+        """
+        Returns a boolean mask which is True within the intervals that are set Active in the table.
+        :param source:
+            ColumnDataSource
+            The internal source property of self.
+            Needed as input to active_intervals_dict()
+        :param md:
+            pint.Quantity
+            Array of measured depth with units
+        :param wells:
+            list
+            If provided, must have the same length as the md array
+            Our data in cross_plotter.py have merged data from several wells into one array,
+            so this list contains the name of the well from which the corresponding md value
+            comes from
+        :return:
+        """
+        _intervals = self.active_intervals_dict(source)
+        _mask = np.zeros(len(md), dtype=bool)  # initial mask with all False
+        if wells is None:
+            for i, _md in enumerate(md.to('m')):
+                for j, _active in enumerate(_intervals['active']):
+                    if _active:
+                        if (_md.magnitude >= _intervals['top'][j]) and (_md.magnitude < _intervals['base'][j]):
+                           _mask[i] = True
+        else:
+            for i, _md in enumerate(md.to('m')):
+                for j, _active in enumerate(_intervals['active']):
+                    if _active and (_intervals['well'][j] == wells[i]):
+                        # print('XXX', _active, _intervals['well'][j], wells[i])
+                        if (_md.magnitude >= _intervals['top'][j]) and (_md.magnitude < _intervals['base'][j]):
+                            _mask[i] = True
+
+        return _mask
+
+    def table_columns(self):
+        """
+        Creates the columns that the table should use
+        :return:
+        """
+        from bokeh.models import (SelectEditor, StringEditor, StringFormatter, IntEditor, TableColumn, CheckboxEditor,
+                                  HTMLTemplateFormatter)
+
+        # Try to color the cells of the 'color' column by their value
+        colored_cell_template = """
+                <div style="background:<%= 
+                    (function color_from_val(){
+                        return(color)
+                        }()) %>; 
+                    color: white"> 
+                <%= value %>
+                </div>
+            """
+        formatter = HTMLTemplateFormatter(template=colored_cell_template)
+        table_columns = [
+            TableColumn(field='use', title='Show',
+                        editor=CheckboxEditor(),
+                        width=30),
+            TableColumn(field='name', title='Stratigraphy',
+                        formatter=StringFormatter(font_style='bold')),
+            TableColumn(field='level', title='Level',
+                        editor=IntEditor(step=1),
+                        width=30),
+            TableColumn(field='wells', title='Wells'),
+            TableColumn(field='color', title='Color',
+                        editor=StringEditor(),
+                        formatter=formatter)
+        ]
+        return table_columns
+
+
+    def draw(self, source):
+        from bokeh.models import DataTable
+
+        active_intervals = ColumnDataSource(self.active_intervals_dict(source))
+
+        active_callback = CustomJS(
+            args=dict(act_int=active_intervals),
+            code="""
+                const data_active = act_int.data;
+                console.log('active_intervals has been updated');
+                for (let j = 0; j < data_active['interval'].length; j++) {
+                    console.log('   - Interval: ' + data_active['interval'][j] + ' is active? ' + data_active['active'][j]);
+                }
+            """
+        )
+
+        source_callback = CustomJS(
+            args=dict(source=source, act_int=active_intervals, cb=active_callback),
+            code="""
+                const data_table = source.data;
+                var data_active = act_int.data;
+                for (let i = 0; i < data_table['name'].length; i++) {
+                    for (let j = 0; j < data_active['interval'].length; j++) {
+                        if (data_table['name'][i] === data_active['interval'][j]) {
+                            data_active['active'][j] = data_table['use'][i]
+                            console.log('  Interval: ' + data_table['name'][i] + ' in well: ' + data_active['well'][j] + ' is active? ' + data_active['active'][j]);
+                        }
+                    }
+                }
+                act_int.data = data_active;
+                // source.data = data_table;
+                // cb.execute();
+            """
+        )
+
+        source.js_on_change('patching', source_callback)  # 'patching' is necessary. Don't know what it means
+
+        return DataTable(
+            source=source,
+            columns=self.table_columns(),
+            editable=True,
+            width=self.width,
+            index_position=-1,
+            index_header='index'
+        )
+
 
 class Header(AttribDict):
     """
@@ -854,6 +1317,7 @@ def templates_from_table(table: pd.DataFrame | dict, well_style=False) -> dict:
             return_dict[_ans] = {}
             return_dict[_ans]['full_name'] = _ans
             return_dict[_ans]['name'] = _ans
+            return_dict[_ans]['well'] = _ans
             return_dict[_ans]['fill_color'] = None if isnan(table['Color'][i]) else table['Color'][i]
             return_dict[_ans]['marker'] = None if isnan(table['Symbol'][i]) else table['Symbol'][i]
         return return_dict

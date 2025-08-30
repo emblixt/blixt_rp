@@ -102,7 +102,7 @@ class Project(object):
             self.templates = None
 
             if project_table is None:
-                self.project_table = os.path.join(self.working_dir, 'excels', 'project_table.xlsx')
+                self.project_table = os.path.join(self.working_dir, 'excels', 'project_table_new.xlsx')
             elif not os.path.isfile(project_table):
                 self.project_table = os.path.join(self.working_dir, project_table)
             else:
@@ -240,7 +240,7 @@ class Project(object):
         print_info('Loaded project settings from: {}'.format(file_name), 'info', logger)
 
     def load_all_wells(self, if_well_exists: str = 'append', if_log_exists: str = 'overwrite',
-                       log_table: None | LogTable = None):
+                       log_table: LogTable | None = None):
         """
         Load all logs and well data that are listed in the project table where "Use" == "Yes"
         :param self:

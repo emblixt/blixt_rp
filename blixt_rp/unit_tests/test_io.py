@@ -1,9 +1,16 @@
 import unittest
 import os
+import sys
+
+# To test blixt_rp and blixt_utils libraries directly, without installation:
+project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
+sys.path.append(os.path.join(project_dir, 'blixt_rp'))
+sys.path.append(os.path.join(project_dir, 'blixt_utils'))
+
 import blixt_utils.io.io as uio
 from blixt_utils.misc.attribdict import AttribDict
-from blixt_rp.core.well import Well
-from blixt_rp.core.well import Project
+from blixt_rp.core.well_new import Well
+from blixt_rp.core.project_new import Project
 from blixt_utils.io.io import well_reader
 
 
@@ -11,6 +18,19 @@ import numpy as np
 
 def_lb_name = 'Logs'  # default Block name
 def_msk_name = 'Mask'  # default mask name
+
+working_dir ='C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp'
+las_file = os.path.join(working_dir, 'test_data/Well A.las')
+las_files = [os.path.join(working_dir, _las) for _las in ['test_data/Well A.las',
+                                                             'test_data/Well A more data.las',
+                                                             'test_data/Well B.las',
+                                                             'test_data/Well C.las',
+                                                             'test_data/Well D.LAS',
+                                                             'test_data/Well E_CPI.las',
+                                                             'test_data/Well E_CPI test copy.las',
+                                                             'test_data/Well F.las',
+                                                             'test_data/L-30.las',
+                                                             'test_data/WrongWellInfo.las']]
 
 
 def create_test_data(var_name):
@@ -33,18 +53,16 @@ def read_las(lfile):
 
 
 class LasTestCase(unittest.TestCase):
-    wp = Project(name='MyProject', log_to_stdout=True)
-    well_table = uio.project_wells(wp.project_table, wp.working_dir)
-    #las_file = list(well_table.keys())[0]
-    las_file = os.path.join(wp.working_dir, 'test_data/Well A.las')
-    #my_logs = well_table[las_file]['logs']
-    my_logs = None
 
     def test_read_las(self):
-        null_value, gen_keys, well_dict = read_las(LasTestCase.las_file)
-        with self.subTest():
-            print(len(gen_keys), len(list(well_dict['data'].keys())))
-            self.assertEqual(len(gen_keys), len(list(well_dict['data'].keys())))
+        for _las_file in las_files:
+            null_value, gen_keys, well_dict = read_las(_las_file)
+            with self.subTest():
+                print('\n', os.path.basename(_las_file))
+                print(gen_keys)
+                print(list(well_dict['well_info'].keys()))
+                print(len(gen_keys), len(list(well_dict['data'].keys())))
+                self.assertEqual(len(gen_keys), len(list(well_dict['data'].keys())))
 
     def test_header_types(self):
         """

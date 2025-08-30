@@ -45,13 +45,13 @@ markers = ['circle', 'diamond', 'hex', 'inverted_triangle', 'plus', 'square', 's
 
 def add_x_y_to_source(
                source_dict: dict,
-               x: None | str = None,
-               y: None | str = None,
-               size: None | float | str = None,
-               color: None | str = None,
-               marker: None | str = None,
-               legend_group: None | str = None,
-               mask: None | np.ndarray = None
+               x: str | None = None,
+               y: str | None = None,
+               size: float | str | None = None,
+               color: str | None = None,
+               marker: str | None = None,
+               legend_group: str | None = None,
+               mask: np.ndarray | None = None
                ) -> dict:
     """
     The idea is to let the input decide which variable that should be used on the x-axis, y-axis, size, color,
@@ -149,10 +149,10 @@ class DataSource:
     But can hold some extra attributes and methods that the ColumnDataSource itself cant have
     """
     def __init__(self,
-                 name: None | str = None,
-                 data: None | dict = None,
-                 templates: None | dict = None,
-                 mask: None | np.ndarray = None
+                 name: str | None = None,
+                 data: dict | None = None,
+                 templates: dict | None = None,
+                 mask: np.ndarray | None = None
                  ):
         """
         Container for data related to one well
@@ -318,450 +318,6 @@ class DataSource:
 
     #     return _dict
 
-# class ParamSelector:
-#
-#     def __init__(self,
-#                  selector: str,
-#                  options: list,
-#                  ):
-#         """
-#         :param selector:
-#             str
-#             either 'x', 'y', 'size', 'color', 'marker' or 'legend_group'
-#         :param options:
-#         """
-#         self.selector = selector
-#         self.options = options
-#         self.code = """
-#         """
-#
-#     def drop_menu(self):
-#         from bokeh.models import Select
-#         return Select(title=self.selector, value=self.options[0], options=self.options)
-
-
-class WorkingIntervalsTable:
-    def __init__(self,
-                 intervals,
-                 width: None | int = None):
-        """
-
-        :param intervals:
-            blixt_rp.core.core.Intervals object
-
-        :param width:
-        """
-        if width is None:
-            width = 600
-        self.width = width
-        self._intervals = intervals
-
-    @property
-    def intervals(self):
-        return self._intervals
-
-    @property
-    def source(self) -> ColumnDataSource:
-        """
-        Returns a ColumnDataSource with the following columns:
-            'use', 'name', 'level', 'wells', 'color'
-        :return:
-            ColumnDataSource
-        """
-        _well_names = self.intervals.well_names()
-        _interval_names = self.intervals.interval_names()
-
-        _dict = self.intervals.get_strat_units()
-        _ = _dict.pop('desc')
-        _ = _dict.pop('source')
-        _dict['use'] = [True] * len(_dict['name'])
-
-        # add a column with the well names that contains the interval of each row
-        _wells = []
-        for _name in _dict['name']:
-            _wl = []
-            for _wn in _well_names:
-                if self.intervals.get_interval(_name, _wn) is not None:
-                    _wl.append(_wn)
-            _wells.append(_wl)
-
-        _dict['wells'] = [', '.join(_w) for _w in _wells]
-
-        return ColumnDataSource(_dict)
-
-    def __dict__(self):
-        return self.intervals.get_intervals_dict()
-
-    def active_intervals_dict(self, source):
-        """
-        Returns a dictionary suitable for a ColumnDataSource which contains all intervals for all wells
-        with their top (m MD) and base and "active" status (status determined by the 'source' input)
-
-        :param source:
-            ColumnDataSource
-            The self.source of WorkingIntervalsTable
-            It is used to set which intervals are active or not
-
-        :return:
-        {'interval': [...], 'well': [...], 'top': [...], 'base': [...], 'active': [...]}
-        """
-        _dict = dict(
-            interval=[],
-            well=[],
-            top=[],
-            base=[],
-            active=[]
-        )
-        for _int_name in self.intervals.interval_names():
-            for _wname in self.intervals.well_names():
-                _int = self.intervals.get_interval(_int_name, _wname)
-                if _int is not None:
-                    _dict['interval'].append(_int_name)
-                    _dict['well'].append(_wname)
-                    _dict['top'].append(_int.top.magnitude)
-                    _dict['base'].append(_int.base.magnitude)
-                    # iterate over all working intervals in 'source' to see which are active or not
-                    _active = False
-                    for _i, _i_n in enumerate(source.data['name']):
-                        if _i_n == _int_name and _wname in source.data['wells'][_i]:
-                            _active = True
-                    _dict['active'].append(_active)
-        return _dict
-
-    def table_columns(self):
-        """
-        Creates the columns that the table should use
-        :return:
-        """
-        from bokeh.models import (SelectEditor, StringEditor, StringFormatter, IntEditor, TableColumn, CheckboxEditor,
-                                  HTMLTemplateFormatter)
-
-        # Try to color the cells of the 'color' column by their value
-        colored_cell_template = """
-                <div style="background:<%= 
-                    (function color_from_val(){
-                        return(color)
-                        }()) %>; 
-                    color: white"> 
-                <%= value %>
-                </div>
-            """
-        formatter = HTMLTemplateFormatter(template=colored_cell_template)
-        table_columns = [
-            TableColumn(field='use', title='Show',
-                        editor=CheckboxEditor(),
-                        width=30),
-            TableColumn(field='name', title='Stratigraphy',
-                        formatter=StringFormatter(font_style='bold')),
-            TableColumn(field='level', title='Level',
-                        editor=IntEditor(step=1),
-                        width=30),
-            TableColumn(field='wells', title='Wells'),
-            TableColumn(field='color', title='Color',
-                        editor=StringEditor(),
-                        formatter=formatter)
-        ]
-        return table_columns
-
-
-    def draw(self, source):
-        from bokeh.models import DataTable
-
-        active_intervals = ColumnDataSource(self.active_intervals_dict(source))
-
-        active_callback = CustomJS(
-            args=dict(act_int=active_intervals),
-            code="""
-                const data_active = act_int.data;
-                console.log('active_intervals has been updated');
-                for (let j = 0; j < data_active['interval'].length; j++) {
-                    console.log('   - Interval: ' + data_active['interval'][j] + ' is active? ' + data_active['active'][j]);
-                }
-            """
-        )
-
-        source_callback = CustomJS(
-            args=dict(source=source, act_int=active_intervals, cb=active_callback),
-            code="""
-                const data_table = source.data;
-                var data_active = act_int.data;
-                for (let i = 0; i < data_table['name'].length; i++) {
-                    for (let j = 0; j < data_active['interval'].length; j++) {
-                        if (data_table['name'][i] === data_active['interval'][j]) {
-                            data_active['active'][j] = data_table['use'][i]
-                            console.log('  Interval: ' + data_table['name'][i] + ' in well: ' + data_active['well'][j] + ' is active? ' + data_active['active'][j]);
-                        }
-                    }
-                }
-                act_int.data = data_active;
-                cb.execute();
-            """
-        )
-
-        source.js_on_change('patching', source_callback)  # 'patching' is necessary. Don't know what it means
-
-        return DataTable(
-            source=source,
-            columns=self.table_columns(),
-            editable=True,
-            width=self.width,
-            index_position=-1,
-            index_header='index'
-        )
-
-
-class ClassificationTable:
-    """
-    Table with rules that classify the data.
-    The rules can also be used to mask out data (cutoffs)
-
-    """
-    def __init__(self,
-                 rules: None | list = None,
-                 width: None | int = None):
-        """
-
-        :param rules:
-            list
-            List of blixt_rp.core.core.CutoffRules objects
-        :param width:
-            int
-        """
-        if width is None:
-            width = 600
-        self.width = width
-        if rules is None:
-            rules = []
-        self._rules = rules
-        self.use_status = [False for _i in range(len(self._rules))]
-        self.cutoffs = []
-        self.keys = ['use', 'name', 'log', 'units', 'operator', 'limits']
-
-    @property
-    def rules(self):
-        return self._rules
-
-    @rules.setter
-    def rules(self, new_rules):
-        self._rules = new_rules
-
-    @property
-    def classes(self):
-        _classes = {}
-        for _rule in self.rules:
-            if _rule.name not in list(_classes.keys()):
-                _classes[_rule.name] = [_rule]
-            else:
-                _classes[_rule.name].append(_rule)
-        return _classes
-
-    @property
-    def source(self) -> ColumnDataSource:
-        """
-        Returns a ColumnDataSource with the following columns:
-            'use', 'name', 'log', 'units', 'operator', 'limits'
-        When 'use' is set to True, and setting the 'use_cutoffs' check box to active, the rule is used to cut out data (mask)
-        :return:
-            ColumnDataSource
-        """
-        # _dict = dict(use=[], name=[], log=[], units=[], operator=[], limits=[])
-        _dict = {_x:[] for _x in self.keys}
-        # for _rule in self.rules.cutoffs:
-        for _rule in self.rules:
-            _u = None
-            if isinstance(_rule.limit, list):
-                _r = ', '.join([str(_x.magnitude) for _x in _rule.limit])
-                _u = str(format(_rule.limit[0].units, '~'))
-            else:
-                _r = str(_rule.limit.magnitude)
-                _u = str(format(_rule.limit.units, '~'))
-            _dict['use'].append(False)
-            _dict['name'].append('-')
-            _dict['log'].append(_rule.param)
-            _dict['units'].append(_u)
-            _dict['operator'].append(_rule.operator)
-            _dict['limits'].append(_r)
-
-        return ColumnDataSource(_dict)
-
-    def table_columns(self, parameters: list, units: list):
-        from bokeh.models import (SelectEditor, StringEditor, TableColumn, CheckboxEditor)
-        _operators = ['<', '<=', '>', '>=', '><', '==', '!=']
-        table_columns = [
-            TableColumn(field='use', title='Use as cutoff', editor=CheckboxEditor()),
-            TableColumn(field='name', title='Class', editor=StringEditor()),
-            TableColumn(field='log', title='Parameter', editor=SelectEditor(options=parameters)),
-            TableColumn(field='units', title='Units', editor=SelectEditor(options=units)),
-            TableColumn(field='operator', title='Operator', editor=SelectEditor(options=_operators)),
-            TableColumn(field='limits', title='Limits (comma separated)', editor=StringEditor())
-        ]
-        return table_columns
-
-    def draw(self,
-             source: ColumnDataSource,
-             parameters: list,
-             units: list,
-             classification_data_source: ColumnDataSource | None = None,
-             color_menu: Select | None = None):
-        """
-
-        :param source:
-        :param parameters:
-        :param units:
-        :param classification_data_source:
-            data source that the classification is applied on
-        :param color_menu:
-            Select
-            Dropdown menu that decides how to color the data.
-            Only the option "Classification" will be listened to here
-        :return:
-        """
-        from bokeh.models import DataTable, Button, CheckboxGroup
-        from blixt_rp.core.core import CutoffRule
-        from pint import Quantity as Q_
-        import blixt_utils.misc.masks as masks
-
-        orig_data = None
-        # take a backup of the original data
-        if classification_data_source is not None:
-            orig_data = dict(classification_data_source.data)
-
-        def update_table_callback():
-            # How do I use input variables to a python call back?
-            #  - It depends on which widget you use, see:
-            #      docs.bokeh.org/en/latest/docs/user_guide/interaction/python_callbacks.html#ug-interaction-python-callbacks
-            cutoffs = []
-            rules = []
-            use_status = []
-            for i, use in enumerate(source.data['use']):
-                if ',' in source.data['limits'][i]:
-                    this_limit = [Q_(float(_s), source.data['units'][i]) for _s in source.data['limits'][i].split(',')]
-                else:
-                    this_limit = Q_(float(source.data['limits'][i]), source.data['units'][i])
-                use_status.append(use)
-                _rule = CutoffRule(
-                    param=source.data['log'][i],
-                    operator=source.data['operator'][i],
-                    limit=this_limit,
-                    name=source.data['name'][i]
-                )
-                rules.append(_rule)
-                if use:
-                    cutoffs.append(_rule)
-            self.rules = rules
-            self.use_status = use_status
-            self.cutoffs = cutoffs
-
-        def use_cutoffs_callback(attr, old, new):
-            if len(new) == 1 and classification_data_source is not None:
-                print('Use cutoffs, ', old, new)
-                update_table_callback()
-                if len(self.cutoffs) > 0:  # There are active cutoffs
-                    new_data = dict(classification_data_source.data)
-                    _mask = None
-                    for _i, _rule in enumerate(self.cutoffs):
-                        _this_mask = masks.create_mask(
-                            classification_data_source.data[_rule.param],
-                            _rule.operator,
-                            _rule.limit
-                        )
-                        if _i == 0:  # First cutoff rule
-                            _mask = _this_mask
-                        else:  # Append new cutoff rule using AND
-                            _mask = masks.combine_masks([_mask, _this_mask])
-                    # apply mask
-                    for _key in list(new_data.keys()):
-                        new_data[_key] = new_data[_key][_mask]
-                    classification_data_source.data = new_data
-            else:
-                print('Do not use cutoffs, ', old, new)
-                classification_data_source.data = orig_data
-
-        def add_row_function():
-            new_data = dict(source.data)
-            new_data['use'].append(False)
-            new_data['name'].append('Class A')
-            new_data['log'].append(parameters[0])
-            new_data['units'].append(units[0])
-            new_data['operator'].append('>')
-            new_data['limits'].append('1.')
-            source.data = new_data
-
-        def delete_row_function():
-            selected_index = source.selected.indices
-            # new_data = dict(use=[], name=[], log=[], units=[], operator=[], limits=[])
-            new_data = {_x:[] for _x in self.keys}
-            for _i in range(len(source.data['use'])):
-                if _i in selected_index:
-                    continue
-                for _x in self.keys:
-                    new_data[_x].append(source.data[_x][_i])
-            source.selected.indices = []
-            source.data = new_data
-
-        def use_color_classification(attr, old, new):
-            print(attr, old, new)
-            if new == 'Classification':
-                update_table_callback()
-                if len(self.rules) > 0:
-                    print(list(self.classes.keys()))
-                    new_data = dict(classification_data_source.data)
-                    # Add 'non-classified' to all data points first
-                    new_data['legend_group'][:] = 'No class'
-                    new_data['color'][:] = 'gray'
-                    new_data['marker'][:] = 'dot'
-                    # Add specific style to classified data
-                    for _i, _class in enumerate(self.classes.keys()):  # iterate over all classes
-                        _mask = None
-                        for _j, _rule in enumerate(self.classes[_class]):  # iterate over all rules within this class
-                            _this_mask = masks.create_mask(
-                                classification_data_source.data[_rule.param],
-                                _rule.operator,
-                                _rule.limit
-                            )
-                            if _j == 0:
-                                _mask = _this_mask
-                            else:  # Append rule using AND
-                               _mask = masks.combine_masks([_mask, _this_mask])
-                        new_data['legend_group'][_mask] = _class
-                        new_data['color'][_mask] = cnames[_i]
-                        new_data['marker'][_mask] = markers[_i]
-                    print('Classification ON. {} data points with classes {} '.format(
-                         len(new_data['legend_group']), list(set(new_data['legend_group']))))
-                    classification_data_source.data = new_data
-            else:
-                # TODO
-                # This doesnt work properly. The classification doesn't reset
-                print('Classification OFF. {} data points with classes {} '.format(
-                    len(orig_data['legend_group']), list(set(list(orig_data['legend_group'])))))
-                classification_data_source.data = orig_data
-
-        dt = DataTable(
-            source=source,
-            columns=self.table_columns(parameters, units),
-            editable=True,
-            width=self.width,
-            index_position=-1,
-            index_header='index'
-        )
-
-        add_row = Button(label='Add row', button_type='success')
-        add_row.on_click(add_row_function)
-
-        delete_row = Button(label='Delete selected rows', button_type='success')
-        delete_row.on_click(delete_row_function)
-
-        update_table = Button(label='Update', button_type='success')
-        update_table.on_click(update_table_callback)
-
-        use_cutoffs = CheckboxGroup(labels=['Use cutoffs'], active=[])
-        use_cutoffs.on_change('active', use_cutoffs_callback)
-
-        if (color_menu is not None) and (classification_data_source is not None):
-            color_menu.on_change('value', use_color_classification)
-
-        return dt, add_row, delete_row, update_table, use_cutoffs
-
 
 class CrossPlotter:
     """
@@ -777,16 +333,24 @@ class CrossPlotter:
 
     """
     def __init__(self,
-                 data_sources: None | dict = None,
-                 width: None | int = None,
-                 height: None | int = None,
-                 tools: None | list = None):
+                 data_sources: dict | None = None,
+                 x: str | None = None,
+                 y: str | None = None,
+                 width: int | None = None,
+                 height: int | None = None,
+                 tools: list | None = None):
         """
 
         :param data_sources:
             dictionary of DataSource's
             All variables within one DataSource have the same length
             The same variable name can be reused across DataSource's
+        :param x:
+            str
+            Name of the X variable
+        :param y:
+            str
+            Name of the Y variable
         :param width:
             int
         :param height:
@@ -794,13 +358,19 @@ class CrossPlotter:
         :param tools:
         """
 
+        self._data_sources = data_sources
+        if x is None:
+            x = self.common_variables[0]
+        if y is None:
+            y = self.common_variables[1]
         if width is None:
             width = 600
         if height is None:
             height = 600
         self.width = width
         self.height = height
-        self._data_sources = data_sources
+        self.x = x
+        self.y = y
         # if data_sources is not None:
         #     self._sources = {_key: _val.source for _key, _val in data_sources.items()}
         # else:
@@ -841,18 +411,12 @@ class CrossPlotter:
         ))
 
     @property
-    def source(self,
-               x: None | str = None,
-               y: None | str = None) -> ColumnDataSource:
+    def source(self) -> ColumnDataSource:
         """
         Returns a merged CDS with all the common variables from all data_sources, plus the extra variables
         created by add_x_y_to_source
         :return:
         """
-        if x is None:
-            x = self.common_variables[0]
-        if y is None:
-            y = self.common_variables[1]
         _dict = {}
         _i = 0
         for _key, _item in self._data_sources.items():
@@ -879,7 +443,7 @@ class CrossPlotter:
                 _dict['mask'] = np.append(_dict['mask'], np.array([True] * _len))
             _i += 1
 
-        _dict = add_x_y_to_source(_dict, x, y)
+        _dict = add_x_y_to_source(_dict, self.x, self.y)
         return ColumnDataSource(_dict)
 
     # def x_y_source(self,
@@ -1197,8 +761,8 @@ class CrossPlotter:
 
     def drop_down_menus(self):
         from bokeh.models import Select
-        _x_menu =  Select(title='X axis', value=self.common_variables[0], options=self.common_variables)
-        _y_menu =  Select(title='Y axis', value=self.common_variables[1], options=self.common_variables)
+        _x_menu =  Select(title='X axis', value=self.x, options=self.common_variables)
+        _y_menu =  Select(title='Y axis', value=self.y, options=self.common_variables)
         _size_menu =  Select(title='Size', value=20,
                              options= self.fixed_sizes + self.common_variables)
         # TODO The selectors below needs fixing before they can be used properly
@@ -1231,6 +795,7 @@ class CrossPlotter:
         return xplot
 
     def draw(self, source):
+        from bokeh.models import CDSView, BooleanFilter
 
         xplot = self.fig()
 
@@ -1253,7 +818,13 @@ class CrossPlotter:
         #     size=size_var)
         # x_y_source = ColumnDataSource(x_y_source_dict)
 
-        xplot.scatter(x='x', y='y', source=source, fill_color='color', marker='marker',
+        # Create a BooleanFilter using the 'mask' column
+        boolean_filter = BooleanFilter(booleans=source.data['mask'])
+
+        # Create a CDSView using the BooleanFilter
+        view = CDSView(filter=boolean_filter)
+
+        xplot.scatter(x='x', y='y', source=source, view=view, fill_color='color', marker='marker',
                       legend_group='legend_group', size='size', fill_alpha=0.5, line_color=None)
 
         # Axes
@@ -1323,6 +894,21 @@ class CrossPlotter:
                 args=args_dict,
                 code=self.js_code()))
 
+        source.js_on_change('patching', CustomJS(
+            args=dict(source=source),
+            code="""
+            console.log('Patching event detected in CrossPlotter');
+            """
+        ))
+
+        source.js_on_change('data', CustomJS(
+            args=dict(source=source, filter=boolean_filter),
+            code="""
+            const new_filter = source.data['mask'];
+            filter.booleans = new_filter;
+            console.log('Data event detected in CrossPlotter');
+            """
+        ))
         return xplot, x_menu, y_menu, size_menu, color_menu
 
     def show_plot(self, source, out_file):
@@ -1356,43 +942,30 @@ class TestCases(unittest.TestCase):
         templates_one = {_x.name: _x for _x in [template_md, template_one, template_two, template_three]}
         templates_two = {_x.name: _x for _x in [template_md, template_one, template_two, template_four]}
 
-        return data_one, templates_one, data_two, templates_two
+        ds1 = DataSource(name='one', data=data_one, templates=templates_one)
+        ds2 = DataSource(name='two', data=data_two, templates=templates_two)
+
+        return ds1, ds2
 
     def test_data_source(self):
 
-        data_one, templates_one, data_two, templates_two = self.test_data()
+        ds1, ds2 = self.test_data()
 
-        ds1 = DataSource(data=data_one, templates=templates_one)
-        ds2 = DataSource(data=data_two, templates=templates_two)
-        xp = CrossPlotter(dict(one=ds1, two=ds2))
+        xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]})
         # print(xp.all_variables)
         # print(xp.common_variables)
         # print(xp.templates)
-        print(len(xp))
+        print(len(xp), xp.all_variables, xp.common_variables)
         d = xp.source
         _dict = dict(d.data)
         for _key, _item in _dict.items():
             print(_key, _item[:5], _item[-5:], len(_item))
         print('XXX')
-        _d = add_x_y_to_source(_dict, x='var_one', y='var_two')
-        for _key, _item in _d.items():
-            print(_key, _item[:5], _item[-5:], len(_item))
+        # _d = add_x_y_to_source(_dict, x='var_one', y='var_two')
+        # for _key, _item in _d.items():
+        #     print(_key, _item[:5], _item[-5:], len(_item))
         # xp.show_plot('C:\\Users\marte\Downloads\plot.html')
         xp.show_plot(d, 'C:\\Users\emb\Downloads\plot.html')
-
-    def test_intervals(self):
-        from blixt_rp.core.core import Intervals
-        from bokeh.io import output_file
-        output_file('C:\\Users\\emb\\Downloads\\plot.html')
-        #project_table = "C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
-        project_table = "C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
-        wis = Intervals()
-        wis.read_blixt_tops(project_table)
-        wis.keep_wells(['WELL_B', 'WELL_C', 'WELL_F'])
-        wis_table = WorkingIntervalsTable(wis)
-        print(wis_table.source.data['use'])
-        table = wis_table.draw(wis_table.source)
-        show(table)
 
     def test_from_well(self):
         from blixt_rp.core.project_new import Project
@@ -1421,34 +994,11 @@ class TestCases(unittest.TestCase):
         source = xp.source
         xp.show_plot(source, 'C:\\Users\\emb\\Downloads\\plot.html')
 
-    def test_classification_table(self):
-        from pint import Quantity as Q_
-        from bokeh.io import output_file
-        from bokeh.plotting import column
-        from blixt_rp.core.core import CutoffRule
-        # output_file('C:\\Users\\emb\\Downloads\\plot.html')
-        output_file('C:\\Users\\marte\\Downloads\\plot.html')
-
-        rule1 = CutoffRule('param1', '>', Q_(100, 'm'))
-        rule2 = CutoffRule('param2', '<', Q_(10, 'm'))
-        rule3 = CutoffRule('param3', '==', Q_(1000, 'm'))
-        rule5 = CutoffRule('param5', '><', [Q_(10, 'm'), Q_(1000, 'm')])
-        ct = ClassificationTable([rule1, rule2, rule3, rule5])
-        # ct = ClassificationTable()
-        table_source = ct.source
-        # print(ct.source.data)
-        table, add_row, delete_row, update, use = ct.draw(table_source, ['log A', 'log B'], units=['m', 'km'])
-
-        # show(column(table, add_row, delete_row, update, use))
-        return table, add_row, delete_row, update, use
-
     def test_data_classification(self):
+        from blixt_rp.core.core import ClassificationTable
         import blixt_utils.misc.masks as masks
-        data_one, templates_one, data_two, templates_two = self.test_data()
-        print(templates_one.keys())
+        ds1, ds2 = self.test_data()
 
-        ds1 = DataSource(data=data_one, templates=templates_one)
-        ds2 = DataSource(data=data_two, templates=templates_two)
         params = []
         units = []
         for data_set in [ds1, ds2]:
@@ -1457,7 +1007,7 @@ class TestCases(unittest.TestCase):
                     params.append(_n)
                     units.append(_t.units)
 
-        xp = CrossPlotter(dict(one=ds1, two=ds2))
+        xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]})
         d_source = xp.source
 
         xplot, x_menu, y_menu, size_menu, color_menu = xp.draw(d_source)
@@ -1479,7 +1029,7 @@ class TestCases(unittest.TestCase):
         # Add a functionality that modifies the legend_group of the source
         # based on the classification
 
-        # This shows that you can have several call back functions attached one one event
+        # This shows that you can have several call back functions attached one event
         use.on_change('active', test_use)
 
         return xplot, x_menu, y_menu, size_menu, color_menu,  table, add_row, delete_row, update, use
