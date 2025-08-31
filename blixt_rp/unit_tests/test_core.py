@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import os, sys
 import matplotlib.pyplot as plt
+from bokeh.models import ColumnDataSource
 from pint import Quantity as Q_
 from bokeh.plotting import show
 
@@ -105,12 +106,46 @@ class CutoffTests(unittest.TestCase):
         rule5 = CutoffRule('param5', '><', [Q_(10, 'm'), Q_(1000, 'm')])
         ct = ClassificationTable([rule1, rule2, rule3, rule5])
         # ct = ClassificationTable()
-        table_source = ct.source
+        rules_source = ct.source
         # print(ct.source.data)
-        table, add_row, delete_row, update, use = ct.draw(table_source, ['log A', 'log B'], units=['m', 'km'])
+        table, add_row, delete_row, update, use = ct.draw(rules_source, ['log A', 'log B'], units=['m', 'km'])
 
         # show(column(table, add_row, delete_row, update, use))
         return table, add_row, delete_row, update, use
+
+    def test_classification_mask(self):
+        from bokeh.io import output_file
+        from bokeh.plotting import column
+        from blixt_rp.core.core import CutoffRule, ClassificationTable
+        output_file('C:\\Users\\emb\\Downloads\\plot.html')
+        # output_file('C:\\Users\\marte\\Downloads\\plot.html')
+
+        rule1 = CutoffRule('param1', '>', Q_(100, 'm'))
+        rule2 = CutoffRule('param2', '<', Q_(10, 'm'))
+        ct = ClassificationTable([rule1, rule2])
+        rules_source = ct.source
+        table, add_row, delete_row, update, use = ct.draw(rules_source, ['param1', 'param2'], units=['m', 'km'])
+
+        data_source = ColumnDataSource(dict(
+            mask=np.ones(10, dtype=bool),
+            param1=np.linspace(10, 200, 10),
+            param2 = np.linspace(1, 12, 10)
+        ))
+
+        # Force the rules to be active as cutoffs
+        rules_source.data['use'] = [True, True]
+        mask = ct.create_mask(rules_source, data_source)
+        print('Both cutoff rules are active: ', mask)
+
+        rules_source.data['use'] = [True, False]
+        mask = ct.create_mask(rules_source, data_source)
+        print('First cutoff rules is active: ', mask)
+
+        rules_source.data['use'] = [False, True]
+        mask = ct.create_mask(rules_source, data_source)
+        print('Second cutoff rules is active: ', mask)
+
+        # show(column(table, add_row, delete_row, update, use))
 
 
 class LogTableTests(unittest.TestCase):

@@ -76,13 +76,6 @@ class TrendPlotter(CrossPlotter):
         """
         if width is None:
             width = 900
-        # Remove all the data that are not to be included in the calculation of the trend (i.e. x and y)
-        for _key, _val in data_sources.items():
-            _this_data = _val.data
-            for _k in list(_this_data.keys()):
-                if not (_k == x or _k == y or _k == 'md'):
-                    _ = _this_data.pop(_k)
-            _val.data = _this_data
 
         super().__init__(data_sources, x, y, width, height, tools)
         self.working_intervals = working_intervals
@@ -96,42 +89,13 @@ class TrendPlotter(CrossPlotter):
         return self._interval_table
 
     def draw(self, source: ColumnDataSource, verbose: bool = False):
-        from bokeh.models import Button, Div
+        from bokeh.models import DataTable, Button, Div
 
         if self.interval_table is not None:
             wis_source = self.interval_table.source
-            wis_table = self.interval_table.draw(wis_source)
+            wis_table, apply = self.interval_table.draw(wis_source, source)
         else:
-            wis_source = None
             wis_table = Div(text='', width=10, height=10)
-
-        # def apply_callback(attr, old, new):  # if calling it from wis_source.on_change
-        # dict(new) is a dictionary representation of the new (modified) wis_source
-        # print(dict(new))
-
-        def apply_callback():
-            if verbose:
-                print('APPLY SUCCESSFUL:', wis_source.data['use'])
-            # Take a copy of the source
-            _dict = dict(source.data)
-            mask = self.interval_table.create_mask(
-                # ColumnDataSource(dict(new)),
-                wis_source,
-                Q_(source.data['md'], 'm'),
-                list(source.data['source_name']))
-
-            # Modify the mask in source
-            _dict['mask'] = mask
-            # Update the source
-            source.data = _dict
-            if verbose:
-                print(source.data['md'][source.data['mask']][:5])
-                print(source.data['md'][source.data['mask']][-5:])
-
-        if wis_source is not None:
-            apply = Button(label='Apply', button_type='success')
-            apply.on_click(apply_callback)
-        else:
             apply = Div(text='', width=10, height=10)
 
         if verbose:
@@ -149,9 +113,11 @@ class TrendPlotter(CrossPlotter):
                 """
             ))
 
-        xplot, x_menu, y_menu, size_menu, color_menu = super().draw(source)
+        xplot, x_menu, y_menu, size_menu, color_menu, reset_mask = super().draw(source)
+        # Passify the x_menu
+        x_menu.disabled = True
 
-        return xplot, x_menu, y_menu, size_menu, color_menu, wis_table, apply
+        return xplot, x_menu, y_menu, size_menu, color_menu, reset_mask, wis_table, apply
 
 class TestCases(unittest.TestCase):
 
@@ -203,8 +169,8 @@ class TestCases(unittest.TestCase):
                           working_intervals=wis)
         d_source = tp.source
 
-        xplot, x_menu, y_menu, size_menu, color_menu, wis_table, apply = tp.draw(d_source)
+        xplot, x_menu, y_menu, size_menu, color_menu, reset_mask, wis_table, apply = tp.draw(d_source)
 
 
         # tp.show_plot(d, 'C:\\Users\emb\Downloads\plot.html')
-        return xplot, x_menu, y_menu, size_menu, color_menu, wis_table, apply
+        return xplot, x_menu, y_menu, size_menu, color_menu, reset_mask, wis_table, apply

@@ -795,7 +795,7 @@ class CrossPlotter:
         return xplot
 
     def draw(self, source):
-        from bokeh.models import CDSView, BooleanFilter
+        from bokeh.models import CDSView, BooleanFilter, Button
 
         xplot = self.fig()
 
@@ -901,27 +901,46 @@ class CrossPlotter:
             """
         ))
 
-        source.js_on_change('data', CustomJS(
+        data_change_callback =  CustomJS(
             args=dict(source=source, filter=boolean_filter),
             code="""
             const new_filter = source.data['mask'];
             filter.booleans = new_filter;
             console.log('Data event detected in CrossPlotter');
             """
+        )
+
+        reset_mask = Button(label='Reset mask', button_type='success')
+        reset_mask.js_on_click(CustomJS(
+            args=dict(source=source, cb2=data_change_callback),
+            code = """
+                var _data = source.data;
+                console.log('Mask is reset');
+                for (let j = 0; j < _data['mask'].length; j++) {
+                    _data['mask'][j] = true;
+                }
+                source.data = _data;
+                cb2.execute();
+            """
         ))
-        return xplot, x_menu, y_menu, size_menu, color_menu
+
+        source.js_on_change('data', data_change_callback)
+
+
+        return xplot, x_menu, y_menu, size_menu, color_menu, reset_mask
 
     def show_plot(self, source, out_file):
         # This is a short cut to give a quick view of the cross plot
         from bokeh.io import output_file
         output_file(out_file)
-        xplot, x_menu, y_menu, size_menu, color_menu = self.draw(source)
-        show(column(xplot, row(x_menu, y_menu, size_menu, color_menu)))
+        xplot, x_menu, y_menu, size_menu, color_menu, reset_mask = self.draw(source)
+        show(column(xplot, row(x_menu, y_menu, size_menu, color_menu, reset_mask)))
 
 
 class TestCases(unittest.TestCase):
     def test_data(self):
-        from blixt_rp.core.core import Template
+        from blixt_rp.core.core import Template, StratUnit, Interval, Intervals
+        from pint import Quantity as Q_
         md1 = np.linspace(1000., 2000., 500)
         md2 = np.linspace(800., 2500., 800)
         l1_1 = np.random.normal(10., 1., 500)
@@ -945,11 +964,19 @@ class TestCases(unittest.TestCase):
         ds1 = DataSource(name='one', data=data_one, templates=templates_one)
         ds2 = DataSource(name='two', data=data_two, templates=templates_two)
 
-        return ds1, ds2
+        wis = Intervals(
+            name='test', intervals=[
+                Interval( well='one', top=Q_(1350, 'm'), base=Q_(1450, 'm'), interval_info=StratUnit('wi_1', 1)),
+                Interval( well='one', top=Q_(1450, 'm'), base=Q_(1750, 'm'), interval_info=StratUnit('wi_2', 1)),
+                Interval( well='two', top=Q_(1300, 'm'), base=Q_(1500, 'm'), interval_info=StratUnit('wi_1', 1)),
+                Interval( well='two', top=Q_(1500, 'm'), base=Q_(1950, 'm'), interval_info=StratUnit('wi_2', 1))
+            ] )
+
+        return ds1, ds2, wis
 
     def test_data_source(self):
 
-        ds1, ds2 = self.test_data()
+        ds1, ds2, wis = self.test_data()
 
         xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]})
         # print(xp.all_variables)
@@ -997,7 +1024,7 @@ class TestCases(unittest.TestCase):
     def test_data_classification(self):
         from blixt_rp.core.core import ClassificationTable
         import blixt_utils.misc.masks as masks
-        ds1, ds2 = self.test_data()
+        ds1, ds2, wis = self.test_data()
 
         params = []
         units = []
@@ -1010,7 +1037,7 @@ class TestCases(unittest.TestCase):
         xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]})
         d_source = xp.source
 
-        xplot, x_menu, y_menu, size_menu, color_menu = xp.draw(d_source)
+        xplot, x_menu, y_menu, size_menu, color_menu, reset_mask = xp.draw(d_source)
 
         ct = ClassificationTable()
         t_source = ct.source
@@ -1018,19 +1045,34 @@ class TestCases(unittest.TestCase):
             t_source,
             params,
             units=units,
-            classification_data_source=d_source,
+            data_source=d_source,
             color_menu=color_menu
         )
 
-        def test_use(attr, old, new):
-            print('TEST: ', ct.cutoffs)
+        # def test_use(attr, old, new):
+        #     print('TEST: ', ct.cutoffs)
 
         # TODO
         # Add a functionality that modifies the legend_group of the source
         # based on the classification
 
         # This shows that you can have several call back functions attached one event
-        use.on_change('active', test_use)
+        # use.on_change('active', test_use)
 
-        return xplot, x_menu, y_menu, size_menu, color_menu,  table, add_row, delete_row, update, use
+        return xplot, x_menu, y_menu, size_menu, color_menu, reset_mask, table, add_row, delete_row, update, use
+
+    def test_working_intervals(self):
+        from blixt_rp.core.core import WorkingIntervalsTable
+        ds1, ds2, wis = self.test_data()
+        xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]})
+        d_source = xp.source
+
+        xplot, x_menu, y_menu, size_menu, color_menu, reset_mask = xp.draw(d_source)
+
+        dt = WorkingIntervalsTable(wis)
+        wis_source = dt.source
+        wis_table, apply = dt.draw(wis_source, d_source)
+
+        return xplot, x_menu, y_menu, size_menu, color_menu, reset_mask, wis_table, apply
+
 
