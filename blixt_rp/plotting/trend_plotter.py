@@ -37,8 +37,8 @@ class TrendPlotter(CrossPlotter):
     Intended use
     > data_sources = ...  # See cross_plotter.py DataSource for explanation
     > working_intervals = ...
-    > cut_offs = ...
-    > dt_plot = DepthTrendPlotter(data_sources, working_intervals, cut_offs)
+    > cutoffs = ...
+    > dt_plot = DepthTrendPlotter(data_sources, working_intervals, cutoffs)
     >
     """
     def __init__(self,
@@ -46,7 +46,7 @@ class TrendPlotter(CrossPlotter):
                  x: str,
                  y: str,
                  working_intervals: Intervals | None = None,
-                 cut_offs: Cutoffs | None = None,
+                 cutoffs: Cutoffs | None = None,
                  width: int | None = None,
                  height: int | None = None,
                  tools: list | None = None):
@@ -69,7 +69,7 @@ class TrendPlotter(CrossPlotter):
             Name of the dependent variable (e.g. 'vp_oil')
 
         :param working_intervals:
-        :param cut_offs:
+        :param cutoffs:
         :param width:
         :param height:
         :param tools:
@@ -77,27 +77,9 @@ class TrendPlotter(CrossPlotter):
         if width is None:
             width = 900
 
-        super().__init__(data_sources, x, y, width, height, tools)
-        self.working_intervals = working_intervals
-        self.cut_offs = cut_offs
-        self._interval_table = None
-        if self.working_intervals is not None:
-            self._interval_table = WorkingIntervalsTable(self.working_intervals)
-
-    @property
-    def interval_table(self):
-        return self._interval_table
+        super().__init__(data_sources, x, y, working_intervals, cutoffs, width, height, tools)
 
     def draw(self, source: ColumnDataSource, verbose: bool = False):
-        from bokeh.models import DataTable, Button, Div
-
-        if self.interval_table is not None:
-            wis_source = self.interval_table.source
-            wis_table, apply = self.interval_table.draw(wis_source, source)
-        else:
-            wis_table = Div(text='', width=10, height=10)
-            apply = Div(text='', width=10, height=10)
-
         if verbose:
             source.js_on_change('patching', CustomJS(
                 args=dict(source=source),
@@ -113,64 +95,30 @@ class TrendPlotter(CrossPlotter):
                 """
             ))
 
-        xplot, x_menu, y_menu, size_menu, color_menu, reset_mask = super().draw(source)
+        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = super().draw(source)
         # Passify the x_menu
         x_menu.disabled = True
 
-        return xplot, x_menu, y_menu, size_menu, color_menu, reset_mask, wis_table, apply
+        return (xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask,
+                ct_guis,
+                wis_guis)
 
 class TestCases(unittest.TestCase):
 
-    def test_data(self):
-        from blixt_rp.core.core import Template, StratUnit, Interval, Intervals
-        from blixt_rp.plotting.cross_plotter import DataSource
-        from pint import Quantity as Q_
-
-        md1 = np.linspace(1000., 2000., 500)
-        md2 = np.linspace(800., 2500., 800)
-        l1_1 = np.random.normal(10., 1., 500)
-        l1_2 = np.random.normal(10., 1., 800)
-        l2_1 = np.random.normal(100., 1., 500) + np.linspace(-8, 8, 500)
-        l2_2 = np.random.normal(100., 1., 800) + np.linspace(-10, 10, 800)
-        l3 = np.random.normal(50., 1., 500)
-        l4 = np.random.normal(70., 1., 800)
-
-        template_md = Template(name='md', units='m', marker='circle', fill_color='red')
-        template_one = Template(name='var_one', units='m', min=5., max=15., marker='circle', fill_color='red')
-        template_two = Template(name='var_two', units='m/s', min=90., max=110., marker='square', fill_color='blue')
-        template_three = Template(name='var_three', units='kg', min=10., max=80., marker='triangle', fill_color='yellow')
-        template_four = Template(name='var_four', units='feet', min=30., max=90., marker='hex', fill_color='green')
-
-        data_one = dict(md=md1, var_one=l1_1, var_two=l2_1, var_three=l3)
-        data_two = dict(md=md2, var_one=l1_2, var_two=l2_2, var_four=l4)
-        templates_one = {_x.name: _x for _x in [template_md, template_one, template_two, template_three]}
-        templates_two = {_x.name: _x for _x in [template_md, template_one, template_two, template_four]}
-
-        ds1 = DataSource(name='one', data=data_one, templates=templates_one)
-        ds2 = DataSource(name='two', data=data_two, templates=templates_two)
-
-        wis = Intervals(
-            name='test', intervals=[
-                Interval( well='one', top=Q_(1350, 'm'), base=Q_(1450, 'm'), interval_info=StratUnit('wi_1', 1)),
-                Interval( well='one', top=Q_(1450, 'm'), base=Q_(1750, 'm'), interval_info=StratUnit('wi_2', 1)),
-                Interval( well='two', top=Q_(1300, 'm'), base=Q_(1500, 'm'), interval_info=StratUnit('wi_1', 1)),
-                Interval( well='two', top=Q_(1500, 'm'), base=Q_(1950, 'm'), interval_info=StratUnit('wi_2', 1))
-            ] )
-
-        return ds1, ds2, wis
-
     def test_data_source(self):
+        import blixt_rp.plotting.cross_plotter as xp
+        test = xp.TestCases()
 
-        ds1, ds2, wis = self.test_data()
+        ds1, ds2, wis, coffs = test.test_data()
 
         tp = TrendPlotter({str(_s.name):_s for _s in [ds1, ds2]},
                           x='md',
                           y='var_two',
+                          cutoffs=coffs,
                           working_intervals=wis)
+
         d_source = tp.source
 
-        xplot, x_menu, y_menu, size_menu, color_menu, reset_mask, wis_table, apply = tp.draw(d_source)
+        return tp.draw(d_source)
 
 
-        # tp.show_plot(d, 'C:\\Users\emb\Downloads\plot.html')
-        return xplot, x_menu, y_menu, size_menu, color_menu, reset_mask, wis_table, apply

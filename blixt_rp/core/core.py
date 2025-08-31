@@ -278,9 +278,9 @@ class ClassificationTable:
         self.height = 100
         if rules is None:
             rules = []
-        self._rules = rules
+        self._rules = rules  # List of all rules
         self.use_status = [False for _i in range(len(self._rules))]
-        self.cutoffs = []
+        self.cutoffs = []  # List of all rules to be used as cutoffs
         self.keys = ['use', 'name', 'log', 'units', 'operator', 'limits']
 
     @property
@@ -330,7 +330,8 @@ class ClassificationTable:
 
         return ColumnDataSource(_dict)
 
-    def create_mask(self, rules_source: ColumnDataSource, data_source: ColumnDataSource) -> np.array:
+    def create_mask(self, rules_source: ColumnDataSource, data_source: ColumnDataSource,
+                    verbose: bool = False) -> np.array:
         """
         Creates a mask for the data_source using the rules in rules_source and returns a boolean mask
 
@@ -366,13 +367,15 @@ class ClassificationTable:
             rules.append(_rule)
             if use:
                 cutoffs.append(_rule)
-        self.rules = rules
-        self.use_status = use_status
-        self.cutoffs = cutoffs
+        # self.rules = rules
+        # self.use_status = use_status
+        # self.cutoffs = cutoffs
 
         _mask = np.ones(len(data_source.data['mask']), dtype=bool)
-        if len(self.cutoffs) > 0:  # There are active cutoffs
-            for _i, _rule in enumerate(self.cutoffs):
+        if len(cutoffs) > 0:  # There are active cutoffs
+            for _i, _rule in enumerate(cutoffs):
+                if verbose:
+                    print('XXX1: Creating cutoffs for param {}'.format(_rule.param) )
                 _this_mask = masks.create_mask(
                     data_source.data[_rule.param],
                     _rule.operator,
@@ -403,7 +406,6 @@ class ClassificationTable:
              source: ColumnDataSource,
              parameters: list,
              units: list,
-             data_source: ColumnDataSource | None = None,
              color_menu: Select | None = None,
              verbose: bool = False):
         """
@@ -413,24 +415,18 @@ class ClassificationTable:
             Source containing the rules
         :param parameters:
         :param units:
-        :param data_source:
-            data source that the classification is applied on
-            Format of data_source is given by the source of CrossPlotter
         :param color_menu:
             Select
             Dropdown menu that decides how to color the data.
             Only the option "Classification" will be listened to here
         :return:
         """
-        from bokeh.models import DataTable, Button, CheckboxGroup
+        from bokeh.models import DataTable, Button, CheckboxGroup, Div
         from blixt_rp.core.core import CutoffRule
         from pint import Quantity as Q_
         import blixt_utils.misc.masks as masks
 
         orig_data = None
-        # take a backup of the original data
-        if data_source is not None:
-            orig_data = dict(data_source.data)
 
         def update_table_callback():
             # How do I use input variables to a python call back?
@@ -458,28 +454,28 @@ class ClassificationTable:
             self.use_status = use_status
             self.cutoffs = cutoffs
 
-        def use_cutoffs_callback(attr, old, new):
-            # Test using the create_mask() function instead
-            if data_source is not None:
-                # Take a copy of the original data, and original mask
-                _dict = dict(data_source.data)
-                orig_mask = data_source.data['mask']
+        # def use_cutoffs_callback(attr, old, new):
+        #     # Test using the create_mask() function instead
+        #     if data_source is not None:
+        #         # Take a copy of the original data, and original mask
+        #         _dict = dict(data_source.data)
+        #         orig_mask = data_source.data['mask']
 
-                if len(new) == 1:  # 'Use cutoffs' is active
-                    if verbose:
-                        print('Use cutoffs, ', old, new)
-                    mask = masks.combine_masks([orig_mask, self.create_mask(source, data_source)])
-                else:
-                    if verbose:
-                        print('Reset cutoffs, ', old, new)
-                    # mask = np.ones(len(data_source.data['mask']), dtype=bool)
-                    mask = orig_mask
+        #         if len(new) == 1:  # 'Use cutoffs' is active
+        #             if verbose:
+        #                 print('Use cutoffs, ', old, new)
+        #             mask = masks.combine_masks([orig_mask, self.create_mask(source, data_source)])
+        #         else:
+        #             if verbose:
+        #                 print('Reset cutoffs, ', old, new)
+        #             # mask = np.ones(len(data_source.data['mask']), dtype=bool)
+        #             mask = orig_mask
 
 
-                # Modify the mask in the data_source
-                _dict['mask'] = mask
-                # Update the source
-                data_source.data = _dict
+        #         # Modify the mask in the data_source
+        #         _dict['mask'] = mask
+        #         # Update the source
+        #         data_source.data = _dict
 
             # if len(new) == 1 and data_source is not None:
             #     print('Use cutoffs, ', old, new)
@@ -527,42 +523,42 @@ class ClassificationTable:
             source.selected.indices = []
             source.data = new_data
 
-        def use_color_classification(attr, old, new):
-            print(attr, old, new)
-            if new == 'Classification':
-                update_table_callback()
-                if len(self.rules) > 0:
-                    print(list(self.classes.keys()))
-                    new_data = dict(data_source.data)
-                    # Add 'non-classified' to all data points first
-                    new_data['legend_group'][:] = 'No class'
-                    new_data['color'][:] = 'gray'
-                    new_data['marker'][:] = 'dot'
-                    # Add specific style to classified data
-                    for _i, _class in enumerate(self.classes.keys()):  # iterate over all classes
-                        _mask = None
-                        for _j, _rule in enumerate(self.classes[_class]):  # iterate over all rules within this class
-                            _this_mask = masks.create_mask(
-                                data_source.data[_rule.param],
-                                _rule.operator,
-                                _rule.limit
-                            )
-                            if _j == 0:
-                                _mask = _this_mask
-                            else:  # Append rule using AND
-                                _mask = masks.combine_masks([_mask, _this_mask])
-                        new_data['legend_group'][_mask] = _class
-                        new_data['color'][_mask] = cnames[_i]
-                        new_data['marker'][_mask] = markers[_i]
-                    print('Classification ON. {} data points with classes {} '.format(
-                        len(new_data['legend_group']), list(set(new_data['legend_group']))))
-                    data_source.data = new_data
-            else:
-                # TODO
-                # This doesnt work properly. The classification doesn't reset
-                print('Classification OFF. {} data points with classes {} '.format(
-                    len(orig_data['legend_group']), list(set(list(orig_data['legend_group'])))))
-                data_source.data = orig_data
+        # def use_color_classification(attr, old, new):
+        #     print(attr, old, new)
+        #     if new == 'Classification':
+        #         update_table_callback()
+        #         if len(self.rules) > 0:
+        #             print(list(self.classes.keys()))
+        #             new_data = dict(data_source.data)
+        #             # Add 'non-classified' to all data points first
+        #             new_data['legend_group'][:] = 'No class'
+        #             new_data['color'][:] = 'gray'
+        #             new_data['marker'][:] = 'dot'
+        #             # Add specific style to classified data
+        #             for _i, _class in enumerate(self.classes.keys()):  # iterate over all classes
+        #                 _mask = None
+        #                 for _j, _rule in enumerate(self.classes[_class]):  # iterate over all rules within this class
+        #                     _this_mask = masks.create_mask(
+        #                         data_source.data[_rule.param],
+        #                         _rule.operator,
+        #                         _rule.limit
+        #                     )
+        #                     if _j == 0:
+        #                         _mask = _this_mask
+        #                     else:  # Append rule using AND
+        #                         _mask = masks.combine_masks([_mask, _this_mask])
+        #                 new_data['legend_group'][_mask] = _class
+        #                 new_data['color'][_mask] = cnames[_i]
+        #                 new_data['marker'][_mask] = markers[_i]
+        #             print('Classification ON. {} data points with classes {} '.format(
+        #                 len(new_data['legend_group']), list(set(new_data['legend_group']))))
+        #             data_source.data = new_data
+        #     else:
+        #         # TODO
+        #        # This doesnt work properly. The classification doesn't reset
+        #         print('Classification OFF. {} data points with classes {} '.format(
+        #             len(orig_data['legend_group']), list(set(list(orig_data['legend_group'])))))
+        #         data_source.data = orig_data
 
         dt = DataTable(
             source=source,
@@ -583,11 +579,12 @@ class ClassificationTable:
         update_table = Button(label='Update', button_type='success')
         update_table.on_click(update_table_callback)
 
-        use_cutoffs = CheckboxGroup(labels=['Use cutoffs'], active=[])
-        use_cutoffs.on_change('active', use_cutoffs_callback)
+        # use_cutoffs = CheckboxGroup(labels=['Use cutoffs'], active=[])
+        # use_cutoffs.on_change('active', use_cutoffs_callback)
+        use_cutoffs = Div(text='', width=10, height=10)
 
-        if (color_menu is not None) and (data_source is not None):
-            color_menu.on_change('value', use_color_classification)
+        # if (color_menu is not None) and (data_source is not None):
+        #     color_menu.on_change('value', use_color_classification)
 
         return dt, add_row, delete_row, update_table, use_cutoffs
 
@@ -1181,7 +1178,7 @@ class WorkingIntervalsTable:
                     _dict['active'].append(_active)
         return _dict
 
-    def create_mask(self, source: ColumnDataSource, md: pint.Quantity, wells: list | None = None) -> np.array:
+    def create_mask(self, source: ColumnDataSource, md: pint.Quantity, wells: list | None = None, verbose:bool = False) -> np.array:
         """
         Returns a boolean mask which is True within the intervals that are set Active in the table.
         :param source:
@@ -1261,7 +1258,6 @@ class WorkingIntervalsTable:
 
     def draw(self,
              source: ColumnDataSource,
-             data_source: ColumnDataSource | None = None,
              verbose: bool = False
              ):
         """
@@ -1270,10 +1266,6 @@ class WorkingIntervalsTable:
         :param source:
             ColumnDataSource
             Source for all working intervals
-        :param data_source:
-            ColumnDataSource
-            Source of data on which the Intervals can be applied to
-            Format of data_source is given by the source of CrossPlotter
         :param verbose:
         :return:
         """
@@ -1315,37 +1307,38 @@ class WorkingIntervalsTable:
 
         source.js_on_change('patching', source_callback)  # 'patching' is necessary. Don't know what it means
 
-        def use_wis_callback(attr, old, new):
-            if verbose:
-                print('APPLY SUCCESSFUL:', source.data['use'])
-            if data_source is not None:
-                # Take a copy of the original data, and original mask
-                _dict = dict(data_source.data)
-                orig_mask = data_source.data['mask']
+        # def use_wis_callback(attr, old, new):
+        #     if verbose:
+        #         print('APPLY SUCCESSFUL:', source.data['use'])
+        #     if data_source is not None:
+        #         # Take a copy of the original data, and original mask
+        #         _dict = dict(data_source.data)
+        #         orig_mask = data_source.data['mask']
 
-                if len(new) == 1:  # 'Use cutoffs' is active
-                    _mask = self.create_mask(
-                        source,
-                        Q_(data_source.data['md'], 'm'),
-                        list(data_source.data['source_name']))
-                    mask = masks.combine_masks([orig_mask, _mask])
-                else:  # Reset mask
-                    mask = orig_mask
+        #         if len(new) == 1:  # 'Use cutoffs' is active
+        #             _mask = self.create_mask(
+        #                 source,
+        #                 Q_(data_source.data['md'], 'm'),
+        #                 list(data_source.data['source_name']))
+        #             mask = masks.combine_masks([orig_mask, _mask])
+        #         else:  # Reset mask
+        #             mask = orig_mask
 
-                # Modify the mask in source
-                _dict['mask'] = mask
-                # Update the source
-                data_source.data = _dict
+        #         # Modify the mask in source
+        #         _dict['mask'] = mask
+        #         # Update the source
+        #         data_source.data = _dict
 
-                if verbose:
-                    print(data_source.data['md'][data_source.data['mask']][:5])
-                    print(data_source.data['md'][data_source.data['mask']][-5:])
+        #         if verbose:
+        #             print(data_source.data['md'][data_source.data['mask']][:5])
+        #             print(data_source.data['md'][data_source.data['mask']][-5:])
 
-        if data_source is not None:
-            use_wis = CheckboxGroup(labels=['Apply working intervals'], active=[])
-            use_wis.on_change('active', use_wis_callback)
-        else:
-            use_wis = Div(text='', width=10, height=10)
+        # if data_source is not None:
+        #     use_wis = CheckboxGroup(labels=['Apply working intervals'], active=[])
+        #     use_wis.on_change('active', use_wis_callback)
+        # else:
+        #     use_wis = Div(text='', width=10, height=10)
+        use_wis = Div(text='', width=10, height=10)
 
 
         dt = DataTable(

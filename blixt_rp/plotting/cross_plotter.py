@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import logging
 from copy import deepcopy
 
+from prompt_toolkit.shortcuts import button_dialog
 # from html5lib.constants import mathmlTextIntegrationPointElements
 from scipy.stats import wilcoxon
 
@@ -25,6 +26,8 @@ from scipy.stats import wilcoxon
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\plotting', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
+from blixt_rp.core.core import Intervals, WorkingIntervalsTable
+from blixt_rp.core.core import Cutoffs, ClassificationTable
 from blixt_utils.utils import print_info
 
 logger = logging.getLogger(__name__)
@@ -336,6 +339,8 @@ class CrossPlotter:
                  data_sources: dict | None = None,
                  x: str | None = None,
                  y: str | None = None,
+                 working_intervals: Intervals | None = None,
+                 cutoffs: Cutoffs | None = None,
                  width: int | None = None,
                  height: int | None = None,
                  tools: list | None = None):
@@ -351,6 +356,12 @@ class CrossPlotter:
         :param y:
             str
             Name of the Y variable
+        :param working_intervals:
+            Intervals
+            Object containing the working intervals
+        :param cutoffs:
+            Cutoffs
+            Object containing the rules used for masks and classification
         :param width:
             int
         :param height:
@@ -375,6 +386,17 @@ class CrossPlotter:
         #     self._sources = {_key: _val.source for _key, _val in data_sources.items()}
         # else:
         #     self._sources = None
+
+        self.cutoffs = cutoffs
+        self._cutoffs_table = None
+        if self.cutoffs is not None:
+            self._cutoffs_table = ClassificationTable(rules=self.cutoffs.cutoffs)
+
+        self.working_intervals = working_intervals
+        self._interval_table = None
+        if self.working_intervals is not None:
+            self._interval_table = WorkingIntervalsTable(self.working_intervals)
+
         if tools is None:
             tools = default_tools
         self._tools = tools
@@ -388,6 +410,14 @@ class CrossPlotter:
             _var = self.common_variables[0]
             _len += len(_item.source.data[_var])
         return _len
+
+    @property
+    def cutoffs_table(self):
+        return self._cutoffs_table
+
+    @property
+    def interval_table(self):
+        return self._interval_table
 
     @property
     def all_variables(self):
@@ -409,6 +439,16 @@ class CrossPlotter:
         return list(set.intersection(
             *[set(list(_s.keys())) for _s in self._data_sources.values()]
         ))
+
+    @property
+    def common_units(self):
+        _units = []
+        _params = []
+        for _param in self.common_variables:
+            _units.append(
+                self.templates[_param].units
+            )
+        return _units
 
     @property
     def source(self) -> ColumnDataSource:
@@ -794,13 +834,19 @@ class CrossPlotter:
         xplot.toolbar.logo = None
         return xplot
 
-    def draw(self, source):
-        from bokeh.models import CDSView, BooleanFilter, Button
+    def draw(self, source: ColumnDataSource, verbose: bool = False):
+        from bokeh.models import CDSView, BooleanFilter, Button, Div
+        import blixt_utils.misc.masks as masks
+        from pint import Quantity as Q_
 
         xplot = self.fig()
 
         # set up drop down menus
         x_menu, y_menu, size_menu, color_menu, marker_menu, legend_menu = self.drop_down_menus()
+        # Make non-working menus inactive
+        color_menu.disabled = True
+        marker_menu.disabled = True
+        legend_menu.disabled = True
 
         # print('XXX:')
         # for _key, _val in self.min_and_max().items():
@@ -817,6 +863,24 @@ class CrossPlotter:
         #     y=y_var,
         #     size=size_var)
         # x_y_source = ColumnDataSource(x_y_source_dict)
+
+        # Draw the classification table
+        ct_source = None
+        if self.cutoffs_table is not None:
+            ct_source = self.cutoffs_table.source
+            ct_guis = self.cutoffs_table.draw(ct_source, self.common_variables, self.common_units, verbose=verbose)
+            # ct_guis = table, add_row, delete_row, update, use
+        else:
+            ct_guis = [Div(text='', width=10, height=10)]*5
+
+        # Draw the working intervals table
+        wis_source = None
+        if self.interval_table is not None:
+            wis_source = self.interval_table.source
+            wis_guis = self.interval_table.draw(wis_source, verbose=verbose)
+            # wis_guis = wis_table, apply
+        else:
+            wis_guis = [Div(text='', width=10, height=10)]*2
 
         # Create a BooleanFilter using the 'mask' column
         boolean_filter = BooleanFilter(booleans=source.data['mask'])
@@ -910,6 +974,31 @@ class CrossPlotter:
             """
         )
 
+        def apply_mask_function():
+            if self.cutoffs_table is not None:
+                _mask_ct = self.cutoffs_table.create_mask(ct_source, source, verbose=True)
+            else:
+                _mask_ct = np.ones(len(source.data['mask']), dtype=bool)
+            if self.interval_table is not None:
+               _mask_wis = self.interval_table.create_mask(
+                   wis_source,
+                   Q_(source.data['md'], 'm'),
+                   list(source.data['source_name']),
+                   verbose=True)
+            else:
+                _mask_wis = np.ones(len(source.data['mask']), dtype=bool)
+
+            source.data['mask'] = masks.combine_masks([_mask_ct, _mask_wis])
+
+        apply_mask = Button(label='Apply masks', button_type='success')
+        apply_mask.on_click(apply_mask_function)
+        apply_mask.js_on_click(CustomJS(
+            args=dict(cb2=data_change_callback),
+            code="""
+                cb2.execute();
+            """
+        ))
+
         reset_mask = Button(label='Reset mask', button_type='success')
         reset_mask.js_on_click(CustomJS(
             args=dict(source=source, cb2=data_change_callback),
@@ -923,30 +1012,32 @@ class CrossPlotter:
                 cb2.execute();
             """
         ))
+        # This is a test to see if reset_mask can update the plot, and with this extra call it did
+        reset_mask.js_on_click(CustomJS(args=args_dict, code=self.js_code()))
 
         source.js_on_change('data', data_change_callback)
 
 
-        return xplot, x_menu, y_menu, size_menu, color_menu, reset_mask
+        return xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis
 
     def show_plot(self, source, out_file):
         # This is a short cut to give a quick view of the cross plot
         from bokeh.io import output_file
         output_file(out_file)
-        xplot, x_menu, y_menu, size_menu, color_menu, reset_mask = self.draw(source)
+        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = self.draw(source)
         show(column(xplot, row(x_menu, y_menu, size_menu, color_menu, reset_mask)))
 
 
 class TestCases(unittest.TestCase):
     def test_data(self):
-        from blixt_rp.core.core import Template, StratUnit, Interval, Intervals
+        from blixt_rp.core.core import Template, StratUnit, Interval, Intervals, CutoffRule, Cutoffs
         from pint import Quantity as Q_
         md1 = np.linspace(1000., 2000., 500)
         md2 = np.linspace(800., 2500., 800)
         l1_1 = np.random.normal(10., 1., 500)
         l1_2 = np.random.normal(10., 1., 800)
-        l2_1 = np.random.normal(100., 1., 500)
-        l2_2 = np.random.normal(100., 1., 800)
+        l2_1 = np.random.normal(100., 1., 500) + np.linspace(-8, 8, 500)
+        l2_2 = np.random.normal(100., 1., 800) + np.linspace(-10, 10, 800)
         l3 = np.random.normal(50., 1., 500)
         l4 = np.random.normal(70., 1., 800)
 
@@ -967,22 +1058,26 @@ class TestCases(unittest.TestCase):
         wis = Intervals(
             name='test', intervals=[
                 Interval( well='one', top=Q_(1350, 'm'), base=Q_(1450, 'm'), interval_info=StratUnit('wi_1', 1)),
-                Interval( well='one', top=Q_(1450, 'm'), base=Q_(1750, 'm'), interval_info=StratUnit('wi_2', 1)),
-                Interval( well='two', top=Q_(1300, 'm'), base=Q_(1500, 'm'), interval_info=StratUnit('wi_1', 1)),
-                Interval( well='two', top=Q_(1500, 'm'), base=Q_(1950, 'm'), interval_info=StratUnit('wi_2', 1))
+                Interval( well='one', top=Q_(1550, 'm'), base=Q_(1750, 'm'), interval_info=StratUnit('wi_2', 1)),
+                Interval( well='two', top=Q_(1500, 'm'), base=Q_(1900, 'm'), interval_info=StratUnit('wi_1', 1)),
+                Interval( well='two', top=Q_(1100, 'm'), base=Q_(1450, 'm'), interval_info=StratUnit('wi_2', 1))
             ] )
 
-        return ds1, ds2, wis
+        rule1 = CutoffRule('var_one', '>', Q_(10, 'm'))
+        rule2 = CutoffRule('var_two', '<', Q_(101, 'm/s'))
+        cutoffs = Cutoffs(cutoffs=[rule1, rule2])
+
+        return ds1, ds2, wis, cutoffs
 
     def test_data_source(self):
 
-        ds1, ds2, wis = self.test_data()
+        ds1, ds2, wis, cutoffs = self.test_data()
 
         xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]})
         # print(xp.all_variables)
         # print(xp.common_variables)
         # print(xp.templates)
-        print(len(xp), xp.all_variables, xp.common_variables)
+        print(len(xp), xp.all_variables, xp.common_variables, xp.common_units)
         d = xp.source
         _dict = dict(d.data)
         for _key, _item in _dict.items():
@@ -1022,57 +1117,33 @@ class TestCases(unittest.TestCase):
         xp.show_plot(source, 'C:\\Users\\emb\\Downloads\\plot.html')
 
     def test_data_classification(self):
-        from blixt_rp.core.core import ClassificationTable
-        import blixt_utils.misc.masks as masks
-        ds1, ds2, wis = self.test_data()
+        ds1, ds2, wis, cutoffs = self.test_data()
 
-        params = []
-        units = []
-        for data_set in [ds1, ds2]:
-            for _n, _t in data_set.templates.items():
-                if _n not in params:
-                    params.append(_n)
-                    units.append(_t.units)
-
-        xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]})
+        xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]}, cutoffs=cutoffs)
         d_source = xp.source
 
-        xplot, x_menu, y_menu, size_menu, color_menu, reset_mask = xp.draw(d_source)
+        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = xp.draw(d_source)
 
-        ct = ClassificationTable()
-        t_source = ct.source
-        table, add_row, delete_row, update, use = ct.draw(
-            t_source,
-            params,
-            units=units,
-            data_source=d_source,
-            color_menu=color_menu
-        )
-
-        # def test_use(attr, old, new):
-        #     print('TEST: ', ct.cutoffs)
-
-        # TODO
-        # Add a functionality that modifies the legend_group of the source
-        # based on the classification
-
-        # This shows that you can have several call back functions attached one event
-        # use.on_change('active', test_use)
-
-        return xplot, x_menu, y_menu, size_menu, color_menu, reset_mask, table, add_row, delete_row, update, use
+        return xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis
 
     def test_working_intervals(self):
-        from blixt_rp.core.core import WorkingIntervalsTable
-        ds1, ds2, wis = self.test_data()
-        xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]})
+        ds1, ds2, wis, cutoffs = self.test_data()
+        xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]}, working_intervals=wis)
         d_source = xp.source
 
-        xplot, x_menu, y_menu, size_menu, color_menu, reset_mask = xp.draw(d_source)
+        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = xp.draw(d_source)
 
-        dt = WorkingIntervalsTable(wis)
-        wis_source = dt.source
-        wis_table, apply = dt.draw(wis_source, d_source)
+        return xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, wis_guis
 
-        return xplot, x_menu, y_menu, size_menu, color_menu, reset_mask, wis_table, apply
+    def test_both(self):
+        ds1, ds2, wis, cutoffs = self.test_data()
+
+        xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]}, cutoffs=cutoffs, working_intervals=wis)
+        d_source = xp.source
+
+        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = (
+            xp.draw(d_source, verbose=True))
+
+        return xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis
 
 
