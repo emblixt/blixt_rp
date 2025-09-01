@@ -1106,6 +1106,9 @@ class WorkingIntervalsTable:
         self.height = 100
         self._intervals = intervals
 
+    # TODO
+    # Create a function that returns the names of all active intervals
+
     @property
     def intervals(self):
         return self._intervals

@@ -386,7 +386,7 @@ class CrossPlotter:
         #     self._sources = {_key: _val.source for _key, _val in data_sources.items()}
         # else:
         #     self._sources = None
-
+        self.xplot = None
         self.cutoffs = cutoffs
         self._cutoffs_table = None
         if self.cutoffs is not None:
@@ -839,7 +839,7 @@ class CrossPlotter:
         import blixt_utils.misc.masks as masks
         from pint import Quantity as Q_
 
-        xplot = self.fig()
+        self.xplot = self.fig()
 
         # set up drop down menus
         x_menu, y_menu, size_menu, color_menu, marker_menu, legend_menu = self.drop_down_menus()
@@ -888,27 +888,27 @@ class CrossPlotter:
         # Create a CDSView using the BooleanFilter
         view = CDSView(filter=boolean_filter)
 
-        xplot.scatter(x='x', y='y', source=source, view=view, fill_color='color', marker='marker',
+        self.xplot.scatter(x='x', y='y', source=source, view=view, fill_color='color', marker='marker',
                       legend_group='legend_group', size='size', fill_alpha=0.5, line_color=None)
 
         # Axes
-        for _var, _axis in zip([x_var, y_var], [xplot.xaxis, xplot.yaxis]):
+        for _var, _axis in zip([x_var, y_var], [self.xplot.xaxis, self.xplot.yaxis]):
             # _axis.axis_label_text_font_size = '10px'
             # _axis.major_label_text_font_size = '10px'
             _axis.axis_label_standoff = 0
             _axis.axis_label = '{} [{}]'.format(
                 self.templates[_var].name, self.templates[_var].units)
-        for _var, _range in zip([x_var, y_var], [xplot.x_range, xplot.y_range]):
+        for _var, _range in zip([x_var, y_var], [self.xplot.x_range, self.xplot.y_range]):
             if self.templates[_var].min is not None:
                 _range.start = self.templates[_var].min
             if self.templates[_var].max is not None:
                 _range.end = self.templates[_var].max
 
         # Legend
-        if len(xplot.legend) > 0:
-            xplot.legend.click_policy = 'hide'
-            xplot.legend.location = 'top_right'
-            # xplot.legend.label_text_font_size = '8pt'
+        if len(self.xplot.legend) > 0:
+            self.xplot.legend.click_policy = 'hide'
+            self.xplot.legend.location = 'top_right'
+            # self.xplot.legend.label_text_font_size = '8pt'
 
         # # Test templates:
         # # print(list(self.templates.keys()))
@@ -924,8 +924,8 @@ class CrossPlotter:
         args_dict = dict(x_drop=x_menu,
                          y_drop=y_menu,
                          s_drop=size_menu,
-                         x_range=xplot.x_range,
-                         y_range=xplot.y_range,
+                         x_range=self.xplot.x_range,
+                         y_range=self.xplot.y_range,
                          templates={_key: _val.get_as_dict()[_key] for _key, _val in self.templates.items()},
                          # data_keys=[_key for _key in list(sources.keys())],
                          # data_sources=[_val for _val in list(sources.values())],
@@ -934,9 +934,9 @@ class CrossPlotter:
                          source=self.source,
                          min_max=self.min_and_max(),
                          # # cmap=exp_cmap,
-                         title=xplot.title,
-                         xaxis=xplot.xaxis[0],
-                         yaxis=xplot.yaxis[0],
+                         title=self.xplot.title,
+                         xaxis=self.xplot.xaxis[0],
+                         yaxis=self.xplot.yaxis[0],
                          # # bar=bar
                          )
 
@@ -1018,7 +1018,7 @@ class CrossPlotter:
         source.js_on_change('data', data_change_callback)
 
 
-        return xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis
+        return self.xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis
 
     def show_plot(self, source, out_file):
         # This is a short cut to give a quick view of the cross plot

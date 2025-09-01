@@ -702,6 +702,8 @@ def plot_depth_trends(wells, log_table, wis, wi_name, templates, cutoffs,
     :return:
     """
     # TODO Need to rewrite this to handle the new well format. Preferably rewrite it to use Bokeh
+    # See TrendPlotter.py - which is an attempt to do so
+
     from scipy.optimize import least_squares
     from blixt_utils.misc.curve_fitting import (residuals, linear_function, depth_trend, exp_function,
                                                 calculate_depth_trend)
