@@ -395,7 +395,7 @@ class CrossPlotter:
         self.working_intervals = working_intervals
         self._interval_table = None
         if self.working_intervals is not None:
-            self._interval_table = WorkingIntervalsTable(self.working_intervals)
+            self._interval_table = WorkingIntervalsTable(self.working_intervals, set_all_active=False)
 
         if tools is None:
             tools = default_tools
@@ -834,7 +834,7 @@ class CrossPlotter:
         xplot.toolbar.logo = None
         return xplot
 
-    def draw(self, source: ColumnDataSource, verbose: bool = False):
+    def draw(self, source: ColumnDataSource, set_all_intervals_active: bool = False, verbose: bool = False):
         from bokeh.models import CDSView, BooleanFilter, Button, Div
         import blixt_utils.misc.masks as masks
         from pint import Quantity as Q_

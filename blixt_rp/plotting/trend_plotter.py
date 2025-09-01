@@ -32,6 +32,7 @@ from blixt_rp.plotting.cross_plotter import CrossPlotter
 
 logger = logging.getLogger(__name__)
 
+
 class TrendPlotter(CrossPlotter):
     """
     Class for handling the (depth) trend plots
@@ -107,6 +108,7 @@ class TrendPlotter(CrossPlotter):
         )
         print(result)
         if p is not None:
+            # Create a line_source of the fitted trend curve
             m_m = self.min_and_max()
             x = np.linspace(m_m[self.x][0], m_m[self.x][1], 100)
             p.line(
@@ -115,7 +117,6 @@ class TrendPlotter(CrossPlotter):
                 legend_label='Linear fit',
                 line_width=2
             )
-
 
     def draw(self, source: ColumnDataSource, verbose: bool = False):
         from bokeh.models import Button, Tooltip
@@ -131,7 +132,6 @@ class TrendPlotter(CrossPlotter):
 
         #  # Trigger the JS when the document is ready
         #  button.js_on_event('document_ready', tooltip_js)
-
 
         if verbose:
             source.js_on_change('patching', CustomJS(
@@ -149,9 +149,6 @@ class TrendPlotter(CrossPlotter):
             ))
 
         xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = super().draw(source)
-        # TODO
-        # Make all working intervals "checked off" in wis_table. This way it will be easier to focus on only one
-        # working interval at a time
         x_menu.disabled = True
 
         def calc_trend_func():

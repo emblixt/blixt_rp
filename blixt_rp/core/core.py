@@ -1089,10 +1089,12 @@ class Intervals(object):
                    p: figure):
         pass
 
+
 class WorkingIntervalsTable:
     def __init__(self,
                  intervals,
-                 width: int | None = None):
+                 width: int | None = None,
+                 set_all_active: bool = True):
         """
 
         :param intervals:
@@ -1105,16 +1107,6 @@ class WorkingIntervalsTable:
         self.width = width
         self.height = 100
         self._intervals = intervals
-
-    # TODO
-    # Create a function that returns the names of all active intervals
-
-    @property
-    def intervals(self):
-        return self._intervals
-
-    @property
-    def source(self) -> ColumnDataSource:
         """
         Returns a ColumnDataSource with the following columns:
             'use', 'name', 'level', 'wells', 'color'
@@ -1127,7 +1119,10 @@ class WorkingIntervalsTable:
         _dict = self.intervals.get_strat_units()
         _ = _dict.pop('desc')
         _ = _dict.pop('source')
-        _dict['use'] = [True] * len(_dict['name'])
+        if set_all_active:
+            _dict['use'] = [True] * len(_dict['name'])
+        else:
+            _dict['use'] = [False] * len(_dict['name'])
 
         # add a column with the well names that contains the interval of each row
         _wells = []
@@ -1140,7 +1135,26 @@ class WorkingIntervalsTable:
 
         _dict['wells'] = [', '.join(_w) for _w in _wells]
 
-        return ColumnDataSource(_dict)
+        self._source =  ColumnDataSource(_dict)
+
+    @property
+    def intervals(self):
+        return self._intervals
+
+    @property
+    def source(self) -> ColumnDataSource:
+        return self._source
+
+    @source.setter
+    def source(self, new_source):
+        if isinstance(new_source, ColumnDataSource):
+            self._source = new_source
+        elif isinstance(new_source, dict):
+            self._source = ColumnDataSource(new_source)
+        else:
+            raise IOError('New source must be either ColumnDataSource or Dict, not {}'.format(
+                type(new_source)
+            ))
 
     def __dict__(self):
         return self.intervals.get_intervals_dict()
@@ -1180,6 +1194,13 @@ class WorkingIntervalsTable:
                             _active = True
                     _dict['active'].append(_active)
         return _dict
+
+    def active_intervals(self, source: ColumnDataSource) -> list:
+        _list = []
+        for _i, _i_n in enumerate(source.data['name']):
+            if source.data['use'][_i]:
+                _list.append(_i_n)
+        return _list
 
     def create_mask(self, source: ColumnDataSource, md: pint.Quantity, wells: list | None = None, verbose:bool = False) -> np.array:
         """
@@ -1257,7 +1278,6 @@ class WorkingIntervalsTable:
                         formatter=formatter)
         ]
         return table_columns
-
 
     def draw(self,
              source: ColumnDataSource,

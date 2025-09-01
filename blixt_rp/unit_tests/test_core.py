@@ -316,18 +316,30 @@ class IntervalTests(unittest.TestCase):
     def test_intervals_table(self):
         from blixt_rp.core.core import Intervals, WorkingIntervalsTable
         from bokeh.io import output_file
-        output_file('C:\\Users\\emb\\Downloads\\plot.html')
-        #project_table = "C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
-        project_table = "C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+        # output_file('C:\\Users\\emb\\Downloads\\plot.html')
+        # project_table = "C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+        output_file('C:\\Users\\marte\\Downloads\\plot.html')
+        project_table = "C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
         wis = Intervals()
         wis.read_blixt_tops(project_table)
         wis.keep_wells(['WELL_B', 'WELL_C', 'WELL_F'])
         wis_table = WorkingIntervalsTable(wis)
-        print(wis_table.source.data['use'])
+        wis_source = wis_table.source
+        print(wis_source.data['use'])
         print('-x1-')
-        print(wis_table.active_intervals_dict(wis_table.source))
-        table = wis_table.draw(wis_table.source)
-        show(table)
+        print(wis_table.active_intervals_dict(wis_source))
+        print(wis_table.active_intervals(wis_source))
+        # Modify source
+        for i in range(len(wis_source.data['use'])):
+            wis_source.data['use'][i] = False
+        # Add it back to wis_tabl
+        wis_table.source = wis_source
+        # Read it out again
+        wis_source = wis_table.source
+        print(wis_table.active_intervals(wis_source))
+
+        # table = wis_table.draw(wis_table.source)
+        # show(table)
 
     def test_intervals_table_2(self):
         from blixt_rp.core.core import Intervals, WorkingIntervalsTable
