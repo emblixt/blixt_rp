@@ -391,11 +391,14 @@ class CrossPlotter:
         self._cutoffs_table = None
         if self.cutoffs is not None:
             self._cutoffs_table = ClassificationTable(rules=self.cutoffs.cutoffs)
+        self.active_cutoffs = []
 
         self.working_intervals = working_intervals
         self._interval_table = None
         if self.working_intervals is not None:
             self._interval_table = WorkingIntervalsTable(self.working_intervals, set_all_active=False)
+        self.active_intervals = []
+
 
         if tools is None:
             tools = default_tools
@@ -945,12 +948,20 @@ class CrossPlotter:
             CustomJS(
                 args=args_dict,
                 code=self.js_code(console_only=False)))
+        # # Update self.x   DIDN'T WORK
+        # x_menu.js_on_change('value', CustomJS(args=dict(x_drop=x_menu, x=self.x),
+        #                                       code= """ const x_param = x_drop.value;
+        #                                         x = x_param; """))
 
         y_menu.js_on_change(
             'value',
             CustomJS(
                 args=args_dict,
                 code=self.js_code()))
+        # y_menu.js_on_change('value', CustomJS(args=dict(y_drop=y_menu, y=self.y),
+        #                                       code= """ const y_param = y_drop.value;
+        #                                         console.log('TEST', y_param)
+        #                                         y = y_param; """))
 
         size_menu.js_on_change(
             'value',
@@ -977,14 +988,17 @@ class CrossPlotter:
         def apply_mask_function():
             if self.cutoffs_table is not None:
                 _mask_ct = self.cutoffs_table.create_mask(ct_source, source, verbose=True)
+                self.active_cutoffs = self.cutoffs_table.active_cutoffs(ct_source)
             else:
                 _mask_ct = np.ones(len(source.data['mask']), dtype=bool)
+
             if self.interval_table is not None:
                _mask_wis = self.interval_table.create_mask(
                    wis_source,
                    Q_(source.data['md'], 'm'),
                    list(source.data['source_name']),
                    verbose=True)
+               self.active_intervals = self.interval_table.active_intervals(wis_source)
             else:
                 _mask_wis = np.ones(len(source.data['mask']), dtype=bool)
 
@@ -1060,7 +1074,8 @@ class TestCases(unittest.TestCase):
                 Interval( well='one', top=Q_(1350, 'm'), base=Q_(1450, 'm'), interval_info=StratUnit('wi_1', 1)),
                 Interval( well='one', top=Q_(1550, 'm'), base=Q_(1750, 'm'), interval_info=StratUnit('wi_2', 1)),
                 Interval( well='two', top=Q_(1500, 'm'), base=Q_(1900, 'm'), interval_info=StratUnit('wi_1', 1)),
-                Interval( well='two', top=Q_(1100, 'm'), base=Q_(1450, 'm'), interval_info=StratUnit('wi_2', 1))
+                Interval( well='two', top=Q_(1100, 'm'), base=Q_(1450, 'm'), interval_info=StratUnit('wi_2', 1)),
+                Interval(well='two', top=Q_(850, 'm'), base=Q_(1550, 'm'), interval_info=StratUnit('wi_3', 1))
             ] )
 
         rule1 = CutoffRule('var_one', '>', Q_(10, 'm'))

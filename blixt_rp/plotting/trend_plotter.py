@@ -52,7 +52,8 @@ class TrendPlotter(CrossPlotter):
                  cutoffs: Cutoffs | None = None,
                  width: int | None = None,
                  height: int | None = None,
-                 tools: list | None = None):
+                 tools: list | None = None,
+                 project_table: str | None = None):
         """
         Plots the data in data_sources in a x vs. y cross plot, where x is the independent variable
         (typically TVD) and y is the dependent variable (e.g. Vp), and it tries to find the function
@@ -76,18 +77,29 @@ class TrendPlotter(CrossPlotter):
         :param width:
         :param height:
         :param tools:
+        :param project_table:
+            str
+            Full path name of excel (typically the project table excel file) to where we can
+            write the results
         """
         if width is None:
             width = 900
+        self.project_table = project_table
 
         super().__init__(data_sources, x, y, working_intervals, cutoffs, width, height, tools)
 
     def calc_trend(self,
+                   x_param: str,
+                   y_param: str,
                    source: ColumnDataSource,
-                   p,
                    verbose: bool = False):
         """
-
+        :param x_param:
+            str
+            Name of the x parameter (independent variable)
+        :param y_param:
+            str
+            Name of the y parameter (dependent variable)
         :param source:
         :param p:
             bokeh.plotting figure
@@ -96,29 +108,57 @@ class TrendPlotter(CrossPlotter):
         """
         from blixt_utils.misc.curve_fitting import (residuals, linear_function, depth_trend, exp_function,
                                                     calculate_depth_trend)
+        target_function = linear_function
+
         result = calculate_depth_trend(
-            source.data['y'],
-            source.data['x'],
-            linear_function,
+            source.data[y_param],
+            source.data[x_param],
+            target_function,
             [1., 1.],
             mask = source.data['mask'],
             verbose=verbose,
-            xlabel=self.y,
-            ylabel=self.x
+            xlabel=y_param,
+            ylabel=x_param
         )
-        print(result)
-        if p is not None:
-            # Create a line_source of the fitted trend curve
-            m_m = self.min_and_max()
-            x = np.linspace(m_m[self.x][0], m_m[self.x][1], 100)
-            p.line(
-                x=x,
-                y=linear_function(x, *result[0].x),  # Index zero, 0, because we only calculate one trend, discrete_intervals = False
-                legend_label='Linear fit',
-                line_width=2
-            )
+        # Create a line_source of the fitted trend curve
+        m_m = self.min_and_max()
+        x = np.linspace(m_m[self.x][0], m_m[self.x][1], 100)
+        _dict = dict(x = np.linspace(m_m[self.x][0], m_m[self.x][1], 100),
+                     y = target_function(x, *result[0].x), # Index zero, 0, because we only calculate one trend, discrete_intervals = False
+                     label=['{} trend in {}, {}'.format(
+                         y_param,
+                         ', '.join(self.active_intervals),
+                         ', '.join(self.active_cutoffs))]*100
+                     )
 
-    def draw(self, source: ColumnDataSource, verbose: bool = False):
+        return ColumnDataSource(_dict), result[0]
+
+    def plot_trend(self,
+                   p: figure,
+                   line_source: ColumnDataSource):
+        """
+        Draws the line given by the line_source (keys x and y) in the figur p
+        
+        :param p: 
+        :param line_source:
+        :param line_renderer
+        :return: 
+        """
+        # Clear previous line
+        p.renderers = [r for r in p.renderers if r.glyph.__class__.__name__ != 'Line']
+
+        line_renderer = p.line(
+            x='x',
+            y='y',
+            legend_label=line_source.data['label'][0],
+            line_width=2,
+            source=line_source
+        )
+
+        # Clear the legend from the previous legend
+        p.legend.items = [item for item in p.legend.items if line_renderer in item.renderers]
+
+    def draw(self, source: ColumnDataSource, set_all_intervals_active: bool = False, verbose: bool = False):
         from bokeh.models import Button, Tooltip
         calc_trend_tooltip = Tooltip(content='Calculate trend for shown data', position='right')
         calc_save_tooltip = Tooltip(content=
@@ -152,15 +192,32 @@ class TrendPlotter(CrossPlotter):
         x_menu.disabled = True
 
         def calc_trend_func():
-            self.calc_trend(source, xplot, verbose=verbose)
+            line_source, res = self.calc_trend(x_menu.value, y_menu.value, source, verbose=verbose)
+            self.plot_trend(xplot, line_source)
 
         calc_trend = Button(label='Calculate trend', button_type='success')
-        # calc_trend.title = calc_trend_tooltip.content
         calc_trend.on_click(calc_trend_func)
+
+        def calc_save_func():
+            from blixt_utils.io.io import write_regression
+            for y_param in y_menu.options:
+                if y_param in ['md', 'tvd', 'twt']:  # don't calculate trends for these
+                    continue
+                line_source, res = self.calc_trend(x_menu.value, y_param, source, verbose=verbose)
+                print(y_param, res['success'], res['x'])
+                if res['success'] and self.project_table is not None:
+                    print('Trying to save results')
+                    write_regression(self.project_table,
+                                     res['x'],
+                                     y_param,
+                                     ', '.join(list(self._data_sources.keys())),
+                                     ', '.join(self.active_intervals),
+                                     'Linear',
+                                     note=line_source.data['label'][0])
 
         calc_all_and_save = Button(label='Calculate trends and save',
                                    button_type='success')
-        # calc_all_and_save.title = calc_save_tooltip.content
+        calc_all_and_save.on_click(calc_save_func)
 
         return (xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask,
                 ct_guis,
@@ -179,7 +236,8 @@ class TestCases(unittest.TestCase):
                           x='md',
                           y='var_two',
                           cutoffs=coffs,
-                          working_intervals=wis)
+                          working_intervals=wis,
+                          project_table="C:\\Users\\emb\\Downloads\\Book.xlsx")
 
         d_source = tp.source
 

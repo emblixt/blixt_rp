@@ -26,7 +26,7 @@ sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 import blixt_rp.core.well_new as cw
 import blixt_rp.rp.rp_core as rp
-from blixt_rp.core.core import StratUnit, Interval, Intervals, LogTable, Template
+from blixt_rp.core.core import StratUnit, Interval, Intervals, LogTable, Template, Cutoffs
 from blixt_rp.core.log_curve_new import LogCurve, _to_depth, replace_data
 from blixt_rp.plotting.log_plotter import (LogPlotter, LogColumn, Line,  add_strat_table, add_color_amp)
 import blixt_utils.utils as uu
@@ -936,6 +936,38 @@ def interactive_edits(well: cw.Well,
     # show(grid)
     return (grid, select_editors, despike_clip_sel, despike_window_len,
             smooth_method_sel, smooth_window_sel, smooth_window_len, post_fix, run_smoothing, save_result, data_table)
+
+def plot_trends(x: str, wells: list, log_table: LogTable, wis:Intervals, wi_name: str,  cutoffs: Cutoffs,
+                results_folder: str | None = None, verbose: bool =True, suffix: str | None = None,
+                de_trend_loc: float | None = None, de_trend_scale: float | None = None, **kwargs):
+        """
+        Plots the depth trends (TVD) for each individual log within the given working interval, for all wells
+
+        :param x:
+            name of the log wch re
+        :param wells:
+        :param log_table:
+        :param wis:
+        :param wi_name:
+        :param cutoffs:
+           Cutoffs Object with CutoffRule's
+           E.G. {'depth': ['><', [2100, 2200]], 'phie': ['>', 0.1]}
+        :param results_folder:
+            str
+            full pathname of folder where results plots should be saved.
+            If verbose is False, no plots are saved
+        :param verbose:
+            bool
+            If True plots are generated, and least_square optimisation shows progress
+        :param suffix:
+            str
+            String used in title and in saved figure names, to distinguish different cases
+        :param de_trend_loc:
+        :param kwargs:
+
+        :return:
+        """
+
 
 def get_wiggles_in_depth(
         vp: LogCurve,

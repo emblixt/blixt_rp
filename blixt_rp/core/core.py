@@ -322,7 +322,7 @@ class ClassificationTable:
                 _r = str(_rule.limit.magnitude)
                 _u = str(format(_rule.limit.units, '~'))
             _dict['use'].append(False)
-            _dict['name'].append('-')
+            _dict['name'].append(_rule.name)
             _dict['log'].append(_rule.param)
             _dict['units'].append(_u)
             _dict['operator'].append(_rule.operator)
@@ -401,6 +401,15 @@ class ClassificationTable:
             TableColumn(field='limits', title='Limits (comma separated)', editor=StringEditor())
         ]
         return table_columns
+
+    def active_cutoffs(self, source: ColumnDataSource) -> list:
+        _list = []
+        for i, _use in enumerate(source.data['use']):
+            if _use:
+                _list.append('{}{}{}'.format(
+                    source.data['log'][i], source.data['operator'][i], source.data['limits'][i]))
+        return _list
+
 
     def draw(self,
              source: ColumnDataSource,
@@ -599,6 +608,7 @@ class Cutoffs:
 
         :param name:
         :param log_table:
+            Seems to have no effect
         :param cutoffs:
             List of CutOffRules
         """

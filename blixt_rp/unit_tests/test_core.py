@@ -109,9 +109,12 @@ class CutoffTests(unittest.TestCase):
         rules_source = ct.source
         # print(ct.source.data)
         table, add_row, delete_row, update, use = ct.draw(rules_source, ['log A', 'log B'], units=['m', 'km'])
+        print(ct.active_cutoffs(rules_source))
+        rules_source.data['use'] = [True, True, True, True]
+        print(ct.active_cutoffs(rules_source))
 
         # show(column(table, add_row, delete_row, update, use))
-        return table, add_row, delete_row, update, use
+        # return table, add_row, delete_row, update, use
 
     def test_classification_mask(self):
         from bokeh.io import output_file
@@ -316,10 +319,10 @@ class IntervalTests(unittest.TestCase):
     def test_intervals_table(self):
         from blixt_rp.core.core import Intervals, WorkingIntervalsTable
         from bokeh.io import output_file
-        # output_file('C:\\Users\\emb\\Downloads\\plot.html')
-        # project_table = "C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
-        output_file('C:\\Users\\marte\\Downloads\\plot.html')
-        project_table = "C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+        output_file('C:\\Users\\emb\\Downloads\\plot.html')
+        project_table = "C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+        # output_file('C:\\Users\\marte\\Downloads\\plot.html')
+        # project_table = "C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
         wis = Intervals()
         wis.read_blixt_tops(project_table)
         wis.keep_wells(['WELL_B', 'WELL_C', 'WELL_F'])
