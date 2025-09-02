@@ -1,9 +1,6 @@
 import unittest
 from blixt_rp.core.project_new import Project
 
-def_lb_name = 'Logs'  # default Block name
-def_msk_name = 'Mask'  # default mask name
-
 
 class ProjectTestCase(unittest.TestCase):
 
@@ -36,6 +33,25 @@ class ProjectTestCase(unittest.TestCase):
                     print('  - log name: {}, unit: {}, depth units: {}, evenly spaced? {}, len: {}, style? {}'.format(_l.name,
                            _l.units, _l.depth_units, _l.is_evenly_spaced, len(_l), style_txt ))
 
+    def test_load_wells_with_rename(self):
+        """
+        Set only Well A active in the project table (_new), because it has a rename in it
+        :return:
+        """
+        from blixt_rp.core.core import LogTable
+        log_table = LogTable({'Gamma ray': ['GR'], 'Resistivity': ['RDEP', 'RMED']})
+        wp = Project(name='MyProject', log_to_stdout=True)
+        wp.load_all_wells(log_table=log_table)
+        for _w in wp.wells:
+            for _l in _w.logs:
+                if _l.style is None:
+                    style_txt = 'STYLE IS LACKING'
+                else:
+                    style_txt = 'True: {} '.format(_l.style.units)
+                print(
+                    '  - log name: {}, unit: {}, depth units: {}, evenly spaced? {}, len: {}, style? {}'.format(
+                        _l.name, _l.units, _l.depth_units, _l.is_evenly_spaced, len(_l), style_txt))
+
     def test_load_selected_wells(self):
         """
         For this test to work, the listed wells below need to have "use = Yes" in the project table
@@ -49,13 +65,3 @@ class ProjectTestCase(unittest.TestCase):
             with self.subTest():
                 self.assertFalse(wname == 'WELL_C')
 
-    def test_load_selected_intervals(self):
-        these_intervals = ['Sand E', 'Sand F']
-        #these_intervals = ['Sand F']
-        wp = Project(name='MyProject', log_to_stdout=True)
-        wells = wp.load_all_wells(include_these_intervals=these_intervals)
-        for _, well in wells.items():
-            md = well.block[def_lb_name].get_md()
-            print(well.well, md.min(), md.max())
-        with self.subTest():
-            self.assertTrue(True)

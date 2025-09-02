@@ -1,5 +1,6 @@
 import unittest
 import os
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import time
@@ -16,11 +17,18 @@ from math import isclose
 
 from .. import ureg, Q_
 
+# To test blixt_rp and blixt_utils libraries directly, without installation:
+project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
+sys.path.append(os.path.join(project_dir, 'blixt_rp'))
+sys.path.append(os.path.join(project_dir, 'blixt_utils'))
+
+# from AkerBP_PL932.PL923_AVO import cutoffs
 from blixt_rp.core.log_curve_new import LogCurve, Depth, is_equivalent, read_las, read_general_ascii
 from blixt_rp.core.core import Template, LogTable, Intervals, Cutoffs, CutoffRule
 from blixt_rp.core.well_new import Well
+from blixt_rp.core.project_new import Project
 import blixt_rp.plotting.plot_logs_new as bupp
-from blixt_utils.plotting.log_plotter import LogColumn, Line, add_lines, add_strat_table, LogPlotter
+from blixt_rp.plotting.log_plotter import LogColumn, Line, add_lines, add_strat_table, LogPlotter
 from blixt_rp.core.seismic import SeismicTraces, interpolate_along_offset
 
 output_file('C:\\Users\emb\\Documents\\plot.html')
@@ -400,6 +408,19 @@ class TestPlot(unittest.TestCase):
         print(well.get_log_names)
 
         return bupp.compare_synth_with_seismic(well, ref_log_table, vp_vs_rho_table, st_orig)
+
+    def test_plot_trends(self):
+        log_table = LogTable({'Density': 'rho_dry', 'P velocity': 'vp_dry', 'S velocity': 'vs_dry',
+                              'Porosity': 'PHIE', 'Volume': 'VCL'})
+        wp = Project(name='MyProject', log_to_stdout=True)
+        wp.load_all_wells(log_table=log_table)
+        wis = wp.load_all_wis()
+        wi_name = 'Sand D'
+        rule1 = CutoffRule('vcl', '<', Q_(0.5, ''))
+        rule2 = CutoffRule('phie', '>', Q_(0.05, ''))
+        cutoffs = Cutoffs(cutoffs=[rule1, rule2])
+        bupp.plot_trends('tvd', wp.wells, log_table, wis, wi_name, cutoffs)
+
 
 
 def save_as_las():

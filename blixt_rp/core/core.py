@@ -56,6 +56,13 @@ class LogTable(dict):
         self.multi_log = False
         # self.name = name
         if log_table is not None:
+            # Make sure log names are in lowercase letters
+            for _key, _val in log_table.items():
+                if isinstance(_val, list):
+                    log_table[_key] = [_x.lower() for _x in _val]
+                else:
+                    log_table[_key] = _val.lower()
+
             super().__init__(log_table)
             if isinstance(list(log_table.values())[0], list):
                 self.multi_log = True
@@ -136,11 +143,13 @@ class LogTable(dict):
         :param rename_logs:
             dict
             E.G.
-                {'phie': ['CPI_PHIE']}
-                where the key is the wanted well log name, and the value list is a list of well log names
+                {'phie': 'CPI_PHIE'}
+                where the key is the wanted well log name, and the value is the well log names
                 to translate from
-                NOTE TODO
-                Because the value list (e.g. ['CPI_PHI'] can contain several log names (BUT rarely do so),
+                OR
+                {'phie': ['CPI_PHIE', 'PHIE_TEST']}
+                NOTE
+                Because the value list (e.g. ['CPI_PHI', 'PHIE_TEST'] can contain several log names (BUT rarely do so),
                 and we can't know which one to use, we take the first item. But raise a warning
         :return
             LogTable with the 'un-translated' log names
@@ -149,7 +158,7 @@ class LogTable(dict):
         if rename_logs is not None:
             for _log_name, _log_type in zip(self.log_names, self.log_types):
                 if _log_name.lower() in [_l.lower() for _l in list(rename_logs.keys())]:
-                    if len(rename_logs[_log_name.lower()]) > 1:
+                    if isinstance(rename_logs[_log_name.lower()], list) and len(rename_logs[_log_name.lower()]) > 1:
                         warn_txt = 'We bluntly assume you want to un-translate using the first name in the list:'
                         warn_txt += ' {}, and not the second: {} (and so on)'.format(
                             rename_logs[_log_name][0], rename_logs[_log_name][1])
@@ -160,7 +169,10 @@ class LogTable(dict):
                         _log_list = [_l.lower() for _l in un_translated_log_table[_log_type]]
                         _i = _log_list.index(_log_name.lower())
                         _log_list.pop(_i)
-                        _log_list.insert(_i, rename_logs[_log_name.lower()][0].lower())
+                        if isinstance(rename_logs[_log_name.lower()], list):
+                            _log_list.insert(_i, rename_logs[_log_name.lower()][0].lower())
+                        else:
+                            _log_list.insert(_i, rename_logs[_log_name.lower()].lower())
                         un_translated_log_table[_log_type] = _log_list
                     else:
                         un_translated_log_table[_log_type] = rename_logs[_log_name][0].lower()

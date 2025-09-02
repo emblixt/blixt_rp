@@ -154,7 +154,8 @@ class CutoffTests(unittest.TestCase):
 class LogTableTests(unittest.TestCase):
     def test_lt_init(self):
         lt = LogTable( log_table)
-        print(list(lt.keys()))
+        for _key in list(lt.keys()):
+            print('{}: {}'.format(_key, lt[_key]))
         lt.test = 'A log name'  # this has no function now
         lt['TEST'] = 'A log name' # But this work when __setitem__ is kept untouched
         print(lt.keys())

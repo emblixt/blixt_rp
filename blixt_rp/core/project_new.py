@@ -278,8 +278,8 @@ class Project(object):
                 else:
                     _log_table = log_table
 
-                # w.read_las(_key, log_table=log_table, template_file=self.project_table, rename_logs=translate_dict)
-                w.read_las(_key, log_table=_log_table, template_file=self.project_table)
+                w.read_las(_key, log_table=log_table, template_file=self.project_table, rename_logs=translate_dict)
+                # w.read_las(_key, log_table=_log_table, template_file=self.project_table)
                 if translate_dict is not None:
                     for _new_name, _old_name in translate_dict.items():
                         this_log = w.get_log_curve(_old_name)
@@ -326,6 +326,13 @@ class Project(object):
             for i, _key in enumerate(list(template_dict.keys())):
                 _templates[_key] = Template(template_dict[_key])
             self.templates = _templates
+
+    def load_all_wis(self):
+        from blixt_rp.core.core import Intervals
+        wis = Intervals()
+        if self.project_table is not None:
+            wis.read_blixt_tops(self.project_table)
+        return wis
 
     def dict(self, wells: list | None = None, intervals: list | None = None, logs: list | None = None):
         """

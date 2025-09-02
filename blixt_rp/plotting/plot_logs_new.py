@@ -937,37 +937,79 @@ def interactive_edits(well: cw.Well,
     return (grid, select_editors, despike_clip_sel, despike_window_len,
             smooth_method_sel, smooth_window_sel, smooth_window_len, post_fix, run_smoothing, save_result, data_table)
 
+
 def plot_trends(x: str, wells: list, log_table: LogTable, wis:Intervals, wi_name: str,  cutoffs: Cutoffs,
                 results_folder: str | None = None, verbose: bool =True, suffix: str | None = None,
                 de_trend_loc: float | None = None, de_trend_scale: float | None = None, **kwargs):
-        """
-        Plots the depth trends (TVD) for each individual log within the given working interval, for all wells
+    """
+    Plots the depth trends (TVD) and performs an optional de-trending for each individual log within the given working interval, for all wells
 
-        :param x:
-            name of the log wch re
-        :param wells:
-        :param log_table:
-        :param wis:
-        :param wi_name:
-        :param cutoffs:
-           Cutoffs Object with CutoffRule's
-           E.G. {'depth': ['><', [2100, 2200]], 'phie': ['>', 0.1]}
-        :param results_folder:
-            str
-            full pathname of folder where results plots should be saved.
-            If verbose is False, no plots are saved
-        :param verbose:
-            bool
-            If True plots are generated, and least_square optimisation shows progress
-        :param suffix:
-            str
-            String used in title and in saved figure names, to distinguish different cases
-        :param de_trend_loc:
-        :param kwargs:
+    :param x:
+        name of the log which represents the independent variable (typically TVD for depth trends)
+    :param wells:
+        list of well_new objects
+    :param log_table:
+        Logtable object with the logs we will trend analyze
+    :param wis:
+    :param wi_name:
+        Name of the working interval we are calculate trend data on
+    :param cutoffs:
+       Cutoffs Object with CutoffRule's
+       E.G. {'depth': ['><', [2100, 2200]], 'phie': ['>', 0.1]}
+    :param results_folder:
+        str
+        full pathname of folder where results plots should be saved.
+        If verbose is False, no plots are saved
+    :param verbose:
+        bool
+        If True plots are generated, and least_square optimisation shows progress
+    :param suffix:
+        str
+        String used in title and in saved figure names, to distinguish different cases
+    :param de_trend_loc:
+        Typically the depth of the target reservoir when analysing depth trends.
+        The data is then shifted to this depth
+    :param de_trend_scale:
+        The uncertainty of the location above
+    :param kwargs:
 
-        :return:
-        """
+    :return:
+    """
+    from blixt_utils.misc.curve_fitting import (residuals, linear_function, depth_trend, exp_function,
+                                                calculate_depth_trend)
+    from blixt_utils.utils import mask_string
 
+    down_weight_outliers = kwargs.pop('down_weight_outliers', False)
+    # target_function = exp_function
+    # x0 = [1000., -1000., -0.001]
+    target_function = linear_function
+    x0 = [1., 1.]
+    # TODO
+    # We need a x0 for each log type
+
+    res = {
+        'success': False,
+        'message': 'No fit done',
+        'x': x0
+    }
+
+    if suffix is None:
+        suffix = ''
+
+    depth_trends = {}
+    data = {}
+    tvd = {}
+    data_detrended = {}
+    tvd_detrended = {}
+    # Start looping over the different log types
+    print_info('START ANALYZING DEPTH TRENDS:', '', None, verbose, False)
+    for log_type in log_table.log_types:
+        log_name = log_table[log_type]
+        print_info('Working on log type: {}, on log: {}'.format(log_type, log_name), ' -', None, verbose, False)
+        # if verbose:
+        #     fig, ax = plt.subplots(figsize=(10, 10))
+        # else:
+        #     fig, ax = None, None
 
 def get_wiggles_in_depth(
         vp: LogCurve,
