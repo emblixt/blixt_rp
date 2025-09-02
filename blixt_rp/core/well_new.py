@@ -73,7 +73,11 @@ class WellTrajectory:
         :param md:
             pint.Quantity
             An array of measured depth along the well with units
-        :param tvd:
+            TIPS: Use the get_md_log() method of Well which returns the longest md log as a LogCurve.
+            E.G.
+            > md = well.get_md_log()
+            > wt = WellTrajectory(md=md.data, ...)
+        :param tvd_kb:
             LogCurve
             LogCurve object with true vertical depth relative to Kelly Bushing TVD data as a function of MD
             So in a vertical well tvd_kb is equal to MD
@@ -180,6 +184,7 @@ class Well(object):
     """
     from blixt_rp.core.core import Header, LogTable, Template
     from blixt_rp.core.log_curve_new import LogCurve
+    from blixt_utils.utils import print_info
 
     def __init__(self,
                  header: Header | None = None,
@@ -214,6 +219,19 @@ class Well(object):
             style = Template(**style)
         elif isinstance(style, Template):
             self._style = style
+
+        self._trajectory = None
+    @property
+    def trajectory(self):
+        return self._trajectory
+
+    @trajectory.setter
+    def trajectory(self, new_trajectory):
+        if isinstance(new_trajectory, WellTrajectory):
+            self._trajectory = new_trajectory
+        else:
+            pass
+
 
     @property
     def name(self):

@@ -575,7 +575,10 @@ class LogCurve(object):
         old_x = self.depth.values
         old_y = self.values
         new_x = log_curve.depth.values
-        new_y = _interpolate(old_x, old_y, new_x)
+        if self.log_type in ['TVD', 'One-way time', 'Two-way time']:
+            new_y = _interpolate(old_x, old_y, new_x, fill_value='extrapolate')
+        else:
+            new_y = _interpolate(old_x, old_y, new_x)
 
         info_txt = 'Resampled to match {}'.format(log_curve.name)
         if suffix is not None:
