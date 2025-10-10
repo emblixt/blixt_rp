@@ -93,7 +93,7 @@ def plot_logs(well: cw.Well,
     flat_list = [ x for xs in log_columns for x in xs ]
     for _log in flat_list:
         if _log not in well.get_log_names:
-            print_info('Log {} does not exist in {}', 'error', raiser='ioerror')
+            print_info('Log {} does not exist in {}'.format(_log, well.name), 'error', logger, raiser='ioerror')
 
     if scales is None:
         scales = ['linear'] * len(log_columns)
@@ -834,6 +834,14 @@ def interactive_edits(well: cw.Well,
     NB The smoothing done here should be applied on logs other that tne Vp, Vs, and Rho logs, and preferably after
     Backus averaging has been applied on those. This is because it is wise to have a similar "smoothness" on both the
     elastic logs as on other logs (e.g Vsh and Porosity) so that we don't introduce false information
+
+    The smoothing is done on all logs in the plot, but in the case of multiple logs in a Column, only the first
+    smoothened result is shown
+
+    All smoothened logs are saved in the output las file.
+
+    Remember to press "Apply" before saving
+
     :param well:
         well object, new format from well_new.py
     :param log_columns:
@@ -854,7 +862,7 @@ def interactive_edits(well: cw.Well,
                               description=' Lower clip level and longer window length clips away more data')
     despike_window_len = Slider(title='Despike window length [m]', start=1, end=20, step=1, value=2)
     # backus_window_len = Slider(title='Backus window length [m]', start=2, end=18, step=1, value=5)
-    smooth_method_sel = Select(title='Smoothing method', value='median', options= ['convolution', 'median'])
+    smooth_method_sel = Select(title='Smoothing method', value='convolution', options= ['convolution', 'median'])
     smooth_window_sel = Select(title='Smoothing window type', value='hanning',
                                options=['flat', 'hanning', 'hamming', 'bartlett', 'blackman'])
     smooth_window_len = Slider(title='Smoothing window length [m]', start=5, end=100, step=5, value=11)
@@ -868,53 +876,59 @@ def interactive_edits(well: cw.Well,
     line_sources = []
     for _i, _column in enumerate(plotter.columns):
         # print(_column)
-        _log_name = log_columns[_i][0]
-        _this_smooth_res = well.get_log_curve(_log_name).smooth(
-            window_len=smooth_window_len.value,
-            method=smooth_method_sel.value,
-            window=smooth_window_sel.value
-        )
-        _this_source = ColumnDataSource(dict(smooth=_this_smooth_res.values, md=_this_smooth_res.depth.values))
-        _this_style = _this_smooth_res.style
-        _this_style.line_width = 3.
-        _this_style.line_color = 'red'
-        _this_style.name = _this_style.name + '_smooth'
-        line_sources.append(_this_source)
-        _column.add_line(Line(x='smooth', y='md', source=_this_source, style=_this_style))
+        # Instead of plotting the smoothened version of each log, we only show the first
+        # Basically the same as: _log_name = log_columns[_i][0]
+        for _j, _log_name in enumerate(log_columns[_i][0:1]):
+            _this_smooth_res = well.get_log_curve(_log_name).smooth(
+                window_len=smooth_window_len.value,
+                method=smooth_method_sel.value,
+                window=smooth_window_sel.value
+            )
+            # Because each log in this column is added with same name ('smooth') to the ColumnDataSource
+            # only one will be plotted
+            _this_source = ColumnDataSource(dict(smooth=_this_smooth_res.values, md=_this_smooth_res.depth.values))
+            _this_style = _this_smooth_res.style
+            _this_style.line_width = 3.
+            _this_style.line_color = 'red'
+            _this_style.name = _this_style.name + '_smooth'
+            line_sources.append(_this_source)
+            _column.add_line(Line(x='smooth', y='md', source=_this_source, style=_this_style))
 
     def callback():
         _step = None
         for _i, _column in enumerate(plotter.columns):
-            _log_name = log_columns[_i][0]
-            _this_smooth_res = well.get_log_curve(_log_name).copy(post_fix.value)
-            if _step is None:
-                _step = _this_smooth_res.step().magnitude
-            _this_step = _this_smooth_res.step().magnitude
-            if _this_step != _step:
-                raise IOError('Current depth step ({}) is different from last ({})'.format(_this_step, _step))
-            if select_editors.active.count(0) > 0:  # Fill gaps
-                print('Fill gaps')
-                _this_smooth_res = _this_smooth_res.fill_gaps()
-            if select_editors.active.count(1) > 0:  # Remove spikes
-                print('Remove spikes at {} level'.format(despike_clip_sel.value))
-                level = _this_smooth_res.std
-                if despike_clip_sel.value == 'low':
-                    level = 0.1 * level
-                elif despike_clip_sel.value == 'moderate':
-                    level = 0.5 * level
-                elif despike_clip_sel.value == 'high':
-                    level = 1.0 * level
-                # print('XXX1', level, despike_window_len.value)
-                _this_smooth_res = _this_smooth_res.despike(max_clip=level, window_len=despike_window_len.value)
-            if select_editors.active.count(2) > 0:  # smooth data
-                # _this_smooth_res = well.get_log_curve(_log_name).smooth(
-                _this_smooth_res = _this_smooth_res.smooth(
-                    window_len=smooth_window_len.value,
-                    method=smooth_method_sel.value,
-                    window=smooth_window_sel.value
-                )
-            line_sources[_i].data['smooth'] = _this_smooth_res.values
-            well.add_log(_this_smooth_res, if_log_exists='overwrite')
+            # and to each log within each column
+            # _log_name = log_columns[_i][0]
+            for _j, _log_name in enumerate(log_columns[_i]):
+                _this_smooth_res = well.get_log_curve(_log_name).copy(post_fix.value)
+                if _step is None:
+                    _step = _this_smooth_res.step().magnitude
+                _this_step = _this_smooth_res.step().magnitude
+                if _this_step != _step:
+                    raise IOError('Current depth step ({}) is different from last ({})'.format(_this_step, _step))
+                if select_editors.active.count(0) > 0:  # Fill gaps
+                    print('Fill gaps')
+                    _this_smooth_res = _this_smooth_res.fill_gaps()
+                if select_editors.active.count(1) > 0:  # Remove spikes
+                    print('Remove spikes at {} level'.format(despike_clip_sel.value))
+                    level = _this_smooth_res.std
+                    if despike_clip_sel.value == 'low':
+                        level = 0.1 * level
+                    elif despike_clip_sel.value == 'moderate':
+                        level = 0.5 * level
+                    elif despike_clip_sel.value == 'high':
+                        level = 1.0 * level
+                    # print('XXX1', level, despike_window_len.value)
+                    _this_smooth_res = _this_smooth_res.despike(max_clip=level, window_len=despike_window_len.value)
+                if select_editors.active.count(2) > 0:  # smooth data
+                    # _this_smooth_res = well.get_log_curve(_log_name).smooth(
+                    _this_smooth_res = _this_smooth_res.smooth(
+                        window_len=smooth_window_len.value,
+                        method=smooth_method_sel.value,
+                        window=smooth_window_sel.value
+                    )
+                line_sources[_i].data['smooth'] = _this_smooth_res.values
+                well.add_log(_this_smooth_res, if_log_exists='overwrite')
         # l_names = well.get_log_names
         # print(l_names)
         # print([well.get_log_curve(_name).units for _name in l_names])
@@ -927,7 +941,7 @@ def interactive_edits(well: cw.Well,
     run_smoothing.on_click(callback)
     save_result.on_click(save)
     # "Realize" the figure
-    grid = plotter.figure()
+    grid = plotter.figure(title=well.name)
     if wis is not None:
         data_table = add_strat_table(grid, stratigraphy=wis.get_intervals_dict(well.name), column_index=None)
     else:
@@ -938,13 +952,13 @@ def interactive_edits(well: cw.Well,
             smooth_method_sel, smooth_window_sel, smooth_window_len, post_fix, run_smoothing, save_result, data_table)
 
 
-def plot_trends(x: str, wells: list, log_table: LogTable, wis:Intervals, wi_name: str,  cutoffs: Cutoffs,
+def plot_trends(x_name: str, wells: list, log_table: LogTable, wis:Intervals, wi_name: str,  cutoffs: Cutoffs,
                 results_folder: str | None = None, verbose: bool =True, suffix: str | None = None,
                 de_trend_loc: float | None = None, de_trend_scale: float | None = None, **kwargs):
     """
     Plots the depth trends (TVD) and performs an optional de-trending for each individual log within the given working interval, for all wells
 
-    :param x:
+    :param x_name:
         name of the log which represents the independent variable (typically TVD for depth trends)
     :param wells:
         list of well_new objects
@@ -978,6 +992,7 @@ def plot_trends(x: str, wells: list, log_table: LogTable, wis:Intervals, wi_name
     from blixt_utils.misc.curve_fitting import (residuals, linear_function, depth_trend, exp_function,
                                                 calculate_depth_trend)
     from blixt_utils.utils import mask_string
+    from blixt_utils.plotting import crossplot as xp
 
     down_weight_outliers = kwargs.pop('down_weight_outliers', False)
     # target_function = exp_function
@@ -996,20 +1011,167 @@ def plot_trends(x: str, wells: list, log_table: LogTable, wis:Intervals, wi_name
     if suffix is None:
         suffix = ''
 
-    depth_trends = {}
+    x_trends = {}
     data = {}
-    tvd = {}
+    x = {}
     data_detrended = {}
-    tvd_detrended = {}
+    x_detrended = {}
+    de_trended_x = None
+    de_trended_data = None
+
     # Start looping over the different log types
     print_info('START ANALYZING DEPTH TRENDS:', '', None, verbose, False)
     for log_type in log_table.log_types:
+        if log_table.multi_log:
+            raise NotImplementedError('This only supports log_tables with one log per log_type, should be extended')
         log_name = log_table[log_type]
         print_info('Working on log type: {}, on log: {}'.format(log_type, log_name), ' -', None, verbose, False)
-        # if verbose:
-        #     fig, ax = plt.subplots(figsize=(10, 10))
-        # else:
-        #     fig, ax = None, None
+        if verbose:
+            fig, ax = plt.subplots(figsize=(10, 10))
+        else:
+            fig, ax = None, None
+
+        # Start looping over wells and collect the data in one container
+        data_container = np.zeros(0)  # empty container
+        x_container = np.zeros(0)
+        legend_items = []
+        x_min = 1E6
+        x_max = -1E6
+        for well in wells:
+            print_info(' - in well: {}'.format(well.name), ' -', None, verbose, False)
+            if x_name not in well.get_log_names:
+                warn_txt = '{} log is missing in well {}'.format(x_name, well.name)
+                print_info(warn_txt, 'warning', logger)
+                continue
+            if log_name not in well.get_log_names:
+                warn_txt = '{} log is missing in well {}'.format(log_name, well.name)
+                print_info(warn_txt, 'warning', logger)
+                continue
+            print_info('Well: {}'.format(well.name), '  *', None, verbose, False)
+
+            # Take into account the log_table when using the cutoffs
+            #TODO  Note that this won't work for multilog log_tables
+            _cutoffs = cutoffs.use_log_table(log_table=log_table)
+
+            # Take into account the requested working interval
+            _cutoffs.append(wis.get_cutoff_rule(wi_name, well.name))
+
+            # Create a dictionary of log data for the well where all logs
+            well_dict = well.dict(cutoffs=_cutoffs, use_cutoffs=True)
+
+            xdata = well_dict[x_name].magnitude
+            ydata = well_dict[log_name].magnitude
+
+            if down_weight_outliers:
+                # Remove outliers here, 2 std out?
+                _f = 1.5
+                outlier_mask = (np.nanmedian(xdata) - _f * np.nanstd(xdata) < xdata) & \
+                               (xdata < np.nanmedian(xdata) + _f * np.nanstd(xdata))
+                xdata = xdata[outlier_mask]
+                ydata = ydata[outlier_mask]
+
+            # Index of NaN's
+            nans = np.isnan(ydata)
+            if len(ydata[~nans]) < 5:
+                warn_txt = 'To few data points in {}, in well {}, after masking'.format(log_name, well.name)
+                print_info(warn_txt, 'warning', logger)
+                continue
+
+            # Gather the data
+            data_container = np.append(data_container, ydata[~nans])
+            x_container = np.append(x_container, xdata[~nans])
+
+            # Prepare for plotting
+            legend_items.append(well.name)
+            if np.min(xdata) < x_min:
+                x_min = np.min(xdata)
+            if np.max(xdata) > x_max:
+                x_max = np.max(xdata)
+
+            if verbose:
+                xp.plot(
+                    xdata,
+                    ydata,
+                    cdata=well.style.fill_color,
+                    mdata=well.style.marker,
+                    xtempl=well.get_log_curve(x_name).style.dict()[x_name],
+                    ytempl=well.get_log_curve(log_name).style.dict()[log_name],
+                    edge_color=False,
+                    ax=ax
+                )
+
+        # Try fit the function to the data
+        print_info('Finished adding all wells for log type {}'.format(log_type), ' -', None, verbose, False)
+        print_info('Trying to fit {} to data'.format(target_function.__name__), ' - ', None, verbose, False)
+        try:
+            res = calculate_depth_trend(data_container, x_container, target_function, x0, loss='soft_l1',
+                                        down_weight_outliers=False,
+                                        verbose=False)[0]  # There is only one interval in this case
+
+        except ValueError as error:
+            warn_txt = 'Depth trend could not calculated for {} for all wells'.format(log_type)
+            print_info(warn_txt, 'warning', logger)
+            print(error)
+            pass
+        info_txt = '  * Success: {}\n  * {}\n  * x0: {}\n  * x: {}'.format(
+            res['success'], res['message'], x0, res['x']
+        )
+        print_info(info_txt, '', None, verbose, False)
+        x_trends[log_name] = res['x']
+        data[log_name] = data_container
+        x[log_name] = x_container
+
+        new_x = np.linspace(x_min, x_max)
+
+        # Try de-trend the data
+        if de_trend_loc is not None:
+            de_trended_x = np.random.normal(
+                loc=de_trend_loc,
+                scale=de_trend_scale,
+                size=len(data_container))
+
+            def detrend(_z, _y, new_z):
+                return _y + target_function(new_z, *res['x']) - target_function(_z, *res['x'])
+
+            de_trended_data = detrend(x_container, data_container, de_trended_x)
+            data_detrended[log_name] = de_trended_data
+            x_detrended[log_name] = de_trended_x
+
+        if verbose:
+            ax.plot(new_x, target_function(new_x, *res['x']))
+            legend_items.append('{}, {}'.format(log_name, target_function.__name__))
+            # legend_items.append('{} = {:.3}xTVD + {:.3}'.format(log_name, res.x[0], res.x[1]))
+
+            if de_trend_loc is not None:
+                ax.scatter(de_trended_x, de_trended_data, c='gray', alpha=0.2,
+                           edgecolors='none')
+                legend_items.append('De-trended data')
+
+            ax.set_title('{}: {}. {} {} {}'.format(log_type, log_name, str(cutoffs), wi_name, suffix))
+            buffer = 0.05 * (x_max - x_min)
+            ax.set_xlim(x_max + buffer, x_min - buffer)
+            this_legend = ax.legend(
+                legend_items,
+                prop=FontProperties(size='smaller'),
+                scatterpoints=1,
+                markerscale=2,
+                loc=1
+            )
+
+
+        if verbose:
+            if results_folder:
+                _outfile = os.path.join(results_folder, '{} trend {} {} {} in {}.png'.format(
+                    x_name.upper(), log_type, log_name, suffix, wi_name))
+                print('Saving to: {}'.format(_outfile))
+                fig.savefig(_outfile)
+            else:
+                plt.show()
+
+    return x_trends, data, x, data_detrended, x_detrended
+
+
+
 
 def get_wiggles_in_depth(
         vp: LogCurve,

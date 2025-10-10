@@ -1228,6 +1228,8 @@ def tuning_wedge_analysis(depth_to_wedge, from_thickness, to_thickness, n_traces
 
     if savefig:
         fig.savefig(savefig)
+    else:
+        plt.show()
 
 
 def saturation_wedge_analysis(depth_to_wedge, thickness, to_hc_saturation, n_traces, overburden, brine_target,

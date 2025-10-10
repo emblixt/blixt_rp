@@ -410,16 +410,21 @@ class TestPlot(unittest.TestCase):
         return bupp.compare_synth_with_seismic(well, ref_log_table, vp_vs_rho_table, st_orig)
 
     def test_plot_trends(self):
+        # Only have Well A active in the project table
         log_table = LogTable({'Density': 'rho_dry', 'P velocity': 'vp_dry', 'S velocity': 'vs_dry',
                               'Porosity': 'PHIE', 'Volume': 'VCL'})
         wp = Project(name='MyProject', log_to_stdout=True)
         wp.load_all_wells(log_table=log_table)
         wis = wp.load_all_wis()
         wi_name = 'Sand D'
+        de_trend_loc = 1850.
+        de_trend_scale = 2.
         rule1 = CutoffRule('vcl', '<', Q_(0.5, ''))
         rule2 = CutoffRule('phie', '>', Q_(0.05, ''))
         cutoffs = Cutoffs(cutoffs=[rule1, rule2])
-        bupp.plot_trends('tvd', wp.wells, log_table, wis, wi_name, cutoffs)
+        bupp.plot_trends('tvd', wp.wells, log_table, wis, wi_name, cutoffs,
+                         de_trend_loc=de_trend_loc, de_trend_scale=de_trend_scale,
+                         results_folder="C:\\Users\\emb\\Downloads", verbose=True)
 
 
 

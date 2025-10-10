@@ -2,7 +2,6 @@ import matplotlib as mpl
 
 import bokeh.plotting
 import numpy as np
-from openpyxl.styles.builtins import title
 from pandas import DataFrame
 from typing import Literal
 # from IPython.core.magics.code import extract_code_ranges
@@ -104,7 +103,7 @@ class LogPlotter:
         n_cols = sum([_column.rel_width for _column in self.columns])
         return int(self.width / n_cols)
 
-    def figure(self) -> gridplot:
+    def figure(self, title: str | None = None) -> gridplot:
         if self._add_tools is not None:
             my_tools = tools + self._add_tools
         else:
@@ -117,7 +116,8 @@ class LogPlotter:
                                       _y_range_flipped=i==0,
                                       _x_axis_visible=len(_column) > 0,
                                       _y_axis_visible=i==0,
-                                      _tools=my_tools)
+                                      _tools=my_tools,
+                                      _title=title)
             children.append(_p)
 
         # Let the y-axis of all columns be controlled by the y-axis of the first column
@@ -333,7 +333,8 @@ def create_column_figure(_column: LogColumn,
                          _y_range_flipped: bool,
                          _x_axis_visible: bool,
                          _y_axis_visible: bool,
-                         _tools: list | None) -> bokeh.plotting.figure:
+                         _tools: list | None,
+                         _title: str | None = None) -> bokeh.plotting.figure:
     """
     Creates a figure for one column
 
@@ -376,7 +377,8 @@ def create_column_figure(_column: LogColumn,
                 height=int(_height * (1. - _column.rel_header_height)),
                 x_axis_location = 'above',
                 x_axis_type = _column.scale,
-                tools=_tools)  # , active_inspect=None)
+                tools=_tools,
+                title=_title)  # , active_inspect=None)
     # style the plot
     _p.toolbar.logo = None
     _p.add_tools(CrosshairTool(overlay=[_w, _h]))

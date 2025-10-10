@@ -240,7 +240,7 @@ class Project(object):
         print_info('Loaded project settings from: {}'.format(file_name), 'info', logger)
 
     def load_all_wells(self, if_well_exists: str = 'append', if_log_exists: str = 'overwrite',
-                       log_table: LogTable | None = None):
+                       log_table: LogTable | None = None, verbose: bool = False):
         """
         Load all logs and well data that are listed in the project table where "Use" == "Yes"
         :param self:
@@ -260,6 +260,7 @@ class Project(object):
         :param log_table:
             LogTable
             If provided only the logs in LogTable will be loaded
+        :param verbose:
         :return:
         """
         from blixt_rp.core.core import Template, LogTable
@@ -267,19 +268,31 @@ class Project(object):
         # templates_dataframe = pd.read_excel(self.project_table, header=1, sheet_name='Templates', engine='openpyxl')
 
         for _key in list(result.keys()):  # _key is the name of the file to read
+            print('Reading from file ', _key)
             translate_dict = None
             if 'Translate log names' in list(result[_key].keys()) and result[_key]['Translate log names'] is not None:
                 translate_dict = uio.interpret_rename_string(result[_key]['Translate log names'])
+                print(translate_dict)
             w = Well()
             if uio.filetype(_key) == 'las':
                 if log_table is None:
+                    # Create a LogTable based on the logs listed in 'result'
                     _log_table = LogTable()
                     _log_table.from_invert(result[_key]['logs'])
                 else:
-                    _log_table = log_table
+                    # TODO THIS IS NOT WORKING WHEN USING translated log names in log_tables with multi_log!
+                    # TODO Try using the untranslate function
+                    # When both a LogTable and a 'result', we need to combine the two so that we only pick
+                    # specific logs from *this* las file
+                    print('  XXX', list(result[_key]['logs'].keys()))
+                    if translate_dict is not None:
+                        print('  XXX', translate_dict)
+                    # _log_table = log_table.keep(result[_key]['logs'])
+                    _log_table = log_table.keep(list(result[_key]['logs'].keys()))
 
-                w.read_las(_key, log_table=log_table, template_file=self.project_table, rename_logs=translate_dict)
-                # w.read_las(_key, log_table=_log_table, template_file=self.project_table)
+                w.read_las(_key, log_table=_log_table, template_file=self.project_table, rename_logs=translate_dict, verbose=verbose)
+                # _lc = w.get_log_curve(w.get_log_names[0])
+                # print('XXX: ', _lc.style.keys())
                 if translate_dict is not None:
                     for _new_name, _old_name in translate_dict.items():
                         this_log = w.get_log_curve(_old_name)

@@ -7,7 +7,7 @@ import time
 import pint.errors
 from math import isclose
 from .. import Q_
-from blixt_rp.core.core import LogTable
+from blixt_rp.core.core import LogTable, Cutoffs, CutoffRule
 
 test_file_dir = str(os.path.dirname(__file__).replace(
     'blixt_rp\\unit_tests',
@@ -55,10 +55,94 @@ depth4 = Q_(np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n), 'feet')
 data5 = Q_(np.linspace(6, 8, n) + np.random.random(n), 'Ohmm')
 depth5 = Q_(np.linspace(1400. * 3, 2500. * 3., n) + np.random.random(n), 'feet')
 
+def simple_test_well():
+    from blixt_rp.core.well_new import Well
+    from blixt_rp.core.log_curve_new import Depth, LogCurve
+    lc1 = LogCurve('Long and regular', data1, Depth(depth1))
+    lc2 = LogCurve('Long and irregular', data2, Depth(depth2))
+    lc3 = LogCurve('Short and regular', data3, Depth(depth3))
+    lc4 = LogCurve('Short and irregular', data4, Depth(depth4))
+    w = Well()
+    for lc in [lc1, lc2, lc3, lc4]:
+        w.add_log(lc)
+
+    return w
 
 class WellTestCase(unittest.TestCase):
 
     def test_create_well(self):
+        w = simple_test_well()
+        print(w.get_log_names)
+        for lc in w.logs:
+            print(lc.name, len(lc), lc.is_evenly_spaced, lc.units, lc.depth_units,  lc.log_type)
+
+    def test_harmonize_logs(self):
+        from blixt_rp.core.well_new import Well
+        from blixt_rp.core.log_curve_new import Depth, LogCurve
+
+        _n = 1400
+        # Create a well where the log with the greatest depth range is regular
+        _data1 = Q_(np.linspace(2, 4, _n) + np.random.random(n), 'us/feet')
+        _depth1 = Depth(Q_(np.linspace(24, 3430, _n), 'm'))
+        _lc1 = LogCurve('Long and regular', _data1, _depth1)
+        _data2 = Q_(np.linspace(6, 8, _n) + np.random.random(n), 's/m')
+        _depth2 = Depth(Q_(np.linspace(50, 3000, _n) + np.random.random(n), 'm'))
+        _lc2 = LogCurve('Short and irregular', _data2, _depth2)
+        w1 = Well()
+        for lc in [_lc1, _lc2]:
+            w1.add_log(lc)
+
+        # Create a well where the log with the greatest depth range is irregular
+        _data1 = Q_(np.linspace(2, 4, _n) + np.random.random(n), 'us/feet')
+        _depth1 = Depth(Q_(np.linspace(24, 3430, _n) + np.random.random(n), 'm'))
+        _lc1 = LogCurve('Long and irregular', _data1, _depth1)
+        _data2 = Q_(np.linspace(6, 8, _n) + np.random.random(n), 's/m')
+        _depth2 = Depth(Q_(np.linspace(50, 3000, _n), 'm'))
+        _lc2 = LogCurve('Short and regular', _data2, _depth2)
+        w2 = Well()
+        for lc in [_lc1, _lc2]:
+            w2.add_log(lc)
+
+        # Create a well from las file
+        las_file =  os.path.join(test_file_dir, 'Well A.las')
+        lt = LogTable({'Porosity': 'phie', 'Volume': 'vcl', 'MD': 'dept'})
+        w3 = Well()
+        w3.read_las(las_file, log_table=lt, template_file=project_table)
+
+        # Test if the dict method ruins the harmonization
+        # NOTE
+        #  OF COURSE THE DATA ISN'T EVENLY SPACED AFTER WE HAVE APPLIED A CUTOFF!
+        w4 = Well()
+        cr1 = CutoffRule('vcl', '<', Q_(0.4, ''))
+        cr2 = CutoffRule('phie', '>', Q_(0.1, ''))
+        ct = Cutoffs([cr1, cr2])
+        w_dict = w3.dict(cutoffs=ct, use_cutoffs=True)
+        depth = Depth(w_dict['dept'])
+        lc_vcl = LogCurve('vcl', w_dict['vcl'], depth, log_type='Volume')
+        if not lc_vcl.is_evenly_spaced:
+            print(' vcl log is not evenly spaced')
+        w4.add_log(lc_vcl)
+
+        lc_phie = LogCurve('phie', w_dict['phie'], depth, log_type='Porosity')
+        if not lc_phie.is_evenly_spaced:
+            print(' phie log is not evenly spaced')
+        w4.add_log(lc_phie)
+
+        lc_dept = LogCurve('dept', w_dict['dept'], depth, log_type='MD')
+        if not lc_dept.is_evenly_spaced:
+            print(' dept log is not evenly spaced')
+        w4.add_log(lc_dept)
+
+
+        # harmonize logs
+        for w in [w1, w2, w3]:
+            w.harmonize_logs()
+            for lc in w.logs:
+                print(lc.name, len(lc), lc.is_evenly_spaced, lc.units, lc.depth_units,  lc.base - lc.top)
+
+
+
+    def test_create_well_from_las(self):
         from blixt_rp.core.well_new import Well
         from blixt_rp.core.core import LogTable
         w = Well()
@@ -213,4 +297,29 @@ class WellTestCase(unittest.TestCase):
         )
         print(len(md), len(wt.tvd_kb), len(wt.inc))
 
+    def test_data_source(self):
+        from blixt_rp.core.well_new import Well
+        from blixt_rp.core.core import LogTable
+        w = Well()
+        w.read_las(las_file1, True)
+        wds = w.data_source()
+        for key in list(wds.data.keys()):
+            print(key, len(wds.data[key]))
+        print('Downsample to every 10th:')
+        wds = w.data_source(down_sample=10)
+        for key in list(wds.data.keys()):
+            print(key, len(wds.data[key]))
 
+        # Add a test of calculating a mask, e.g wds.calc_mask(cutoffs, logtable)
+        w = Well()
+        w.read_las(las_file1, True)
+        cutoffs = Cutoffs(cutoffs=[
+            CutoffRule('rhob', '<', Q_(2.1, 'g/cm**3'))
+        ])
+        print('Mask out densities above 2.1 g/cm3:')
+        wds = w.dict(cutoffs=cutoffs, use_cutoffs=True)
+        for key in list(wds.keys()):
+            print(key, len(wds[key]))
+        print(max(wds['rhob']))
+
+        # Note! The cutoffs should potentially hold a working interval!!

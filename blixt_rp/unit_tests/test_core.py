@@ -31,6 +31,8 @@ rule2 = CutoffRule('name2', '<', Q_(10, 'm'))
 rule3 = CutoffRule('name3', '==', Q_(1000, 'm'))
 rule4 = CutoffRule('name4', None, 'my_interval')
 rule5 = CutoffRule('name5', '><', [Q_(10, 'm'), Q_(1000, 'm')])
+rule6 = CutoffRule('P velocity', '><', [Q_(10, 'm/s'), Q_(1000, 'm/s')])
+rule7 = CutoffRule('Density', '><', [Q_(1.5, 'gr/cm**3'), Q_(2.5, 'gr/cm**3')])
 
 log_table = {
     'P velocity': 'vp',
@@ -150,6 +152,15 @@ class CutoffTests(unittest.TestCase):
 
         # show(column(table, add_row, delete_row, update, use))
 
+    def test_log_types(self):
+        cutoffs = Cutoffs(cutoffs=[rule5, rule6, rule7])
+        # rule5 can not be converted using the LogTable because it is not contained in it
+        print(cutoffs.cutoff_params)
+        new_cutoffs = cutoffs.use_log_table(LogTable(log_table))
+        print(new_cutoffs.cutoff_params)
+
+        # Raise an NotImplementedError because we don't support multi log LogTables yet
+        self.assertRaises(NotImplementedError, cutoffs.use_log_table, LogTable(log_table_multi))
 
 class LogTableTests(unittest.TestCase):
     def test_lt_init(self):
@@ -199,6 +210,19 @@ class LogTableTests(unittest.TestCase):
         rename_logs = {'vp_virg': ['vp_dry', 'vp_insitu']}
         lt2 = lt1.un_translate(rename_logs=rename_logs)
         print(lt2.log_names)
+
+    def test_keep(self):
+        lt1 = LogTable(log_table)
+        keep = ['vp', 'rhob']
+        lt2 = lt1.keep(keep)
+        print(lt2.log_types)
+        print(lt2.log_names)
+
+        lt1 = LogTable(log_table_multi)
+        keep = ['vp_brine', 'vp_oil', 'rhob_virg']
+        lt2 = lt1.keep(keep)
+        print(lt2)
+
 
 
 class TemplateTestCase(unittest.TestCase):
@@ -303,6 +327,21 @@ class IntervalTests(unittest.TestCase):
         #     print(_i)
         print(wis.get_strat_units())
         print(wis.get_intervals_dict('Well_F'))
+
+    def test_cutoff_rule(self):
+        from blixt_utils.misc.masks import create_mask
+        project_file = os.path.join(project_dir,"blixt_rp\\excels\\project_table_new.xlsx")
+        wis = Intervals()
+        wis.read_blixt_tops(project_file)
+        _rule1 = wis.get_cutoff_rule('Shale C', 'WELL_F')
+        _rule2 = wis.get_cutoff_rule('NO INTERVAL', 'WELL_F')
+        print(_rule1, _rule2)
+        md = Q_(np.linspace(1000., 3000., 20), 'm')
+        for _rule in [_rule1, _rule2]:
+            mask = create_mask(md, _rule.operator, _rule.limit)
+            print(md[mask])
+
+
 
     def test_append(self):
         append_file = os.path.join(project_dir, 'test.xlsx')

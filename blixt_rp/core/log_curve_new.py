@@ -24,7 +24,7 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', 
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from blixt_rp.core.core import Template
+from blixt_rp.core.core import Template, Cutoffs, LogTable
 from blixt_rp.core.param import Param
 from blixt_utils.signal_analysis.signal_analysis import smooth as _smooth
 from blixt_utils.misc.curve_fitting import residuals, linear_function, calculate_depth_trend
@@ -303,6 +303,16 @@ class LogCurve(object):
                     style.units = str(self.units)
         else:
             style.units = str(self.data.units)
+
+        # If the style is 'borrowed' from another LogCurve, we need to handle the different scenarios:
+        if self._name is None and style.name is None:  # Do nothing
+            pass
+        elif self._name is None:  # Take name from style
+            self._name = style.name
+        else:  # Rename the names given in the style
+            style.name = self._name
+            style.full_name = self._name
+
         self._style = style
 
     from blixt_rp.core.core import Template
@@ -543,6 +553,49 @@ class LogCurve(object):
             header=header
         )
 
+    def down_sample(self, step: int, suffix: str | None = 'down_sampled', verbose=False):
+        """
+        Interpolates the data to match the depth parameter (sampling) of input log_curve,
+        and returns a new log_curve
+
+        :param step:
+            int
+            Takes every 'step'th sample of the log curve.
+            Similar to a[::step] in Python slicing notation
+        :param suffix:
+            str
+        :param verbose:
+            Bool
+
+        :return
+            LogCurve object
+        """
+
+        # Do the interpolation
+        old_x = self.depth.values
+        old_y = self.values
+        new_x = old_x[::step]
+        new_y = old_y[::step]
+
+
+        header = deepcopy(self.header)
+        header.modification_date = datetime.now().isoformat()
+        header.modification_history += '\nDown sampled to every {}th sample based on {}'.format(step, self.name)
+
+
+        if suffix is not None:
+            new_name = self.name + '_' + suffix
+        else:
+            new_name = self.name
+        return LogCurve(
+            new_name,
+            Q_(new_y, self.units),
+            Depth(Q_(new_x, self.depth_units)),
+            self.log_type,
+            header=header,
+            style=self.style
+        )
+
     def take_sampling_from(self, log_curve, suffix: str | None = 'resampled', verbose=False):
         """
         Interpolates the data to match the depth parameter (sampling) of input log_curve,
@@ -580,7 +633,10 @@ class LogCurve(object):
         else:
             new_y = _interpolate(old_x, old_y, new_x)
 
-        info_txt = 'Resampled to match {}'.format(log_curve.name)
+        header = deepcopy(self.header)
+        header.modification_date = datetime.now().isoformat()
+        header.modification_history += '\nResampled to match {}'.format(log_curve.name)
+
         if suffix is not None:
             new_name = self.name + '_' + suffix
         else:
@@ -590,7 +646,7 @@ class LogCurve(object):
             Q_(new_y, self.units),
             Depth(Q_(new_x, self.depth_units)),
             self.log_type,
-            header=self.header,
+            header=header,
             style=self.style
         )
 
@@ -756,7 +812,7 @@ class LogCurve(object):
             return
         if not isinstance(window_len, pint.Quantity):
             # Simply assume that it is given in the correct units
-            window_len = Q_(window_len, self.depth_units)
+            # window_len = Q_(window_len, self.depth_units)
             w_len = ceil(window_len / self.step().magnitude)
         else:
             w_len = ceil(window_len.to(self.depth_units).magnitude / self.step().magnitude)
@@ -862,10 +918,10 @@ class LogCurve(object):
         )
 
     def calc_mask(self,
-                  cutoffs,
-                  name=None,
-                  log_table=None,
-                  verbose=False):
+                  cutoffs: Cutoffs,
+                  name: str | None =None,
+                  log_table: LogTable | None = None,
+                  verbose: bool | None = False):
         """
         Based on the different cutoffs in the 'cutoffs' dictionary a mask is created.
         In the resulting mask, a False value indicates that the data is masked out
@@ -1229,7 +1285,8 @@ def find_depth_parameter(parameters, only_md=False):
 
 def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
              log_table = None, template: Template | str | None = None,
-             rename_logs: dict | None = None) -> (dict, dict):
+             rename_logs: dict | None = None,
+             only_md: bool = True) -> (dict, dict):
     """
     Returns a LogCurve object for each, or selected, log in las file, packed in a dict
 
@@ -1248,6 +1305,10 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
         E.G.
         {'depth': ['DEPT', 'MD']}
         where the key is the wanted well log name, and the value list is a list of well log names to translate from
+    :param only_md:
+        bool
+        If true it will only search and return logs with depth type = MD,
+        The intended use is in las files where there is both md and twt logs, we will select the MD log for depth
     :return:
         tuple with two dicts
         first dict contains a log_name: LogCurve "key: value" pair for log in the las file
@@ -1261,12 +1322,13 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
 
     with open(file_name, "r", encoding=encoding) as f:
         lines = f.readlines()
+    # TODO Maybe adding the rename functionality already here?
     null_val, generated_keys, well_dict = well_reader(lines, file_format='las')
 
     well_name = fix_well_name(well_dict['well_info']['well']['value'])
 
     # Find depth parameter
-    depth_key, depth_type = find_depth_parameter(generated_keys)
+    depth_key, depth_type = find_depth_parameter(generated_keys, only_md=only_md)
 
     depth_units = well_dict['curve'][depth_key]['unit']
 
@@ -1284,6 +1346,8 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
     depth_units = fix_units_for_pint(depth_units)
 
     # Un-translate the log_table if necessary
+    # OR
+    # TODO IS IT BETTER TO RENAME THE LOGS DIRECTLY WHILE READING THE LAS FILE?
     if rename_logs is not None:
         if log_table is not None:
             log_table = log_table.un_translate(rename_logs=rename_logs)
@@ -1299,11 +1363,15 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
     data = well_dict.pop('data')
     output = {}
     if isinstance(template, str):
+        if verbose:
+            print('read_las(): Template is given as a string')
         table = pd.read_excel(template, header=1, sheet_name='Templates', engine='openpyxl')
         template_dict = templates_from_table(table)
     elif isinstance(template, Template):
-        template_dict = template.get_as_dict()
+        print('read_las(): Template is given as a Template object')
+        template_dict = template.dict()
     else:
+        print('read_las(): No Template is given')
         template_dict = None
     for _key, _log_type in zip(only_these_logs, log_types):
         style = None
@@ -1433,12 +1501,18 @@ def fix_units_for_pint(unit):
 
     if '^3' in unit:
         pass
+    elif '**3' in unit:
+        pass
     elif '3' in unit:
         unit = unit.replace('3', '^3')
+
     if '^2' in unit:
+        pass
+    elif '**2' in unit:
         pass
     elif '2' in unit:
         unit = unit.replace('2', '^2')
+
     if '_' in unit:
         unit = unit.replace('_', ' ')
 

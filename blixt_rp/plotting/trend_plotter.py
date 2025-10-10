@@ -47,7 +47,7 @@ class TrendPlotter(CrossPlotter):
     def __init__(self,
                  data_sources: dict,
                  x: str,
-                 y: str,
+                 y: str | None = None,
                  working_intervals: Intervals | None = None,
                  cutoffs: Cutoffs | None = None,
                  width: int | None = None,

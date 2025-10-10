@@ -184,13 +184,22 @@ class LogCurveTestCase(unittest.TestCase):
             log_type='Shear sonic')
         self.assertRaises(pint.DimensionalityError, lc_s_fail.velocity_from_sonic, 'Test')
 
+    def test_down_sample(self):
+        lc3 = LogCurve('test', data3, Depth(depth3))
+        print('Initial log: Top {}, Step {}, Base {}. Length {}'.format(lc3.top, lc3.step(), lc3.base, len(lc3)))
+        lc_new = lc3.down_sample(4)
+        print('After down sampling: Top {}, Step {}, Base {}. Length {}'.format(lc_new.top, lc_new.step(), lc_new.base, len(lc_new)))
+        print(lc_new.is_evenly_spaced, lc_new.header)
+
+
+
     def test_take_sampling(self):
         lc1 = LogCurve( 'test', data1, Depth(depth1_short))
         lc3 = LogCurve('test', data3, Depth(depth3))
-        print('Well 1. Top {}, Step {}, Base {}. Length {}'.format(lc1.top, lc1.step(), lc1.base, len(lc1)))
-        print('Well 2. Top {}, Step {}, Base {}. Length {}'.format(lc3.top, lc3.step(), lc3.base, len(lc3)))
+        print('Log 1. Top {}, Step {}, Base {}. Length {}'.format(lc1.top, lc1.step(), lc1.base, len(lc1)))
+        print('Log 2. Top {}, Step {}, Base {}. Length {}'.format(lc3.top, lc3.step(), lc3.base, len(lc3)))
         lc_new = lc1.take_sampling_from(lc3)
-        print('Well 1 takes sampling from Well 2:')
+        print('Log 1 takes sampling from Log 2:')
         print('        Top {}, Step {}, Base {}. Length {}'.format(lc_new.top, lc_new.step(), lc_new.base, len(lc_new)))
         fig, ax = plt.subplots()
         lc1.plot(ax=ax); lc_new.plot(ax=ax)
@@ -324,6 +333,18 @@ class LogCurveTestCase(unittest.TestCase):
         log_curves, well_info = read_las(las_file2, log_table=log_table, rename_logs=rename_logs)
         print(list(log_curves.keys()))
         lc = log_curves['rmed']
+        print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
+              lc.depth.base, lc.depth_units)
+
+        l_file = 'C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\\PL1258 Corvina\\Wells\\33_9_17.las'
+        # this works:
+        rename_logs = {'phie_smooth': ['phie_0_0_15_100'], 'vcl_smooth': ['vcl_used_0_0_15_100']}
+        # BUT NOT THIS:
+        # rename_logs = {'phie_smooth': 'phie_0_0_15_100', 'vcl_smooth': 'vcl_used_0_0_15_100'}
+        trend_log_table = LogTable({'Porosity': ['phie_smooth'], 'Volume': ['vsh', 'vcl_smooth']})
+        log_curves, well_info = read_las(l_file, log_table=trend_log_table, rename_logs=rename_logs)
+        print(list(log_curves.keys()))
+        lc = log_curves['phie_smooth']
         print(lc.well, lc.name, lc.log_type, lc.min, lc.max, lc.units, lc.depth_type, lc.depth.top,
               lc.depth.base, lc.depth_units)
 

@@ -43,7 +43,7 @@ class LogTable(dict):
                    'Porosity': 'phie',
                    'Volume': 'vcl'}
         we also support the "multi log" log table, if you want to access specific, but multiple, logs for
-        a log type. Notice that these can NOT be inverted.
+        a log type.
                 log_table = {
                    'P velocity': ['vp_virg', 'vp_brine', 'vp_oil', 'vp_gas'],
                    'S velocity': ['vs_virg', 'vs_brine', 'vs_oil', 'vs_gas'],
@@ -55,7 +55,7 @@ class LogTable(dict):
         """
         self.multi_log = False
         # self.name = name
-        if log_table is not None:
+        if log_table is not None and len(log_table) > 0:
             # Make sure log names are in lowercase letters
             for _key, _val in log_table.items():
                 if isinstance(_val, list):
@@ -137,7 +137,7 @@ class LogTable(dict):
         able to be used across multiple las files, which all use different names for the 'same' log.
         E.G. PHIE is called CPI_PHIE in one las file, and XXX_PHIE in another
 
-        This method returns a new LogTable which uses the 'un-translatet' log names, and leaves the original LogTable
+        This method returns a new LogTable which uses the 'un-translated' log names, and leaves the original LogTable
         untouched
 
         :param rename_logs:
@@ -178,8 +178,42 @@ class LogTable(dict):
                         un_translated_log_table[_log_type] = rename_logs[_log_name][0].lower()
         return un_translated_log_table
 
+    def keep(self, logs_to_keep):
+        """
+        Because LogTables are used to select which logs that are to be read from a las file, but that they also
+        are meant as a selection for multiple wells and las files, we need a way to only keep the log names that
+        are present in one las file
 
-    # TODO Create function to build a LogTable from the output 'logs' of result = uio.project_wells_new()
+        :param logs_to_keep:
+            list
+            List of log names that should be kept
+            e.g. ['vsh', 'phie']
+
+        :return:
+            LogTable
+
+        """
+        # TODO We should add a translate_log or rename variable (optional) which 'untranslates" the logs_to_keep
+        # OR
+        # Can we rewrite the whole THING, and the let renaming occur in the reading of the las file?
+        _dict = {}
+        if self.multi_log:
+            for _key in list(self.keys()):
+                keep = False
+                _these_params = []
+                for _param in logs_to_keep:
+                    if _param in self[_key]:
+                        keep = True
+                        _these_params.append(_param)
+                if keep:
+                    _dict[_key] = _these_params
+                print('    -TEST')
+        else:
+            for _key in list(self.keys()):
+                if self[_key] in logs_to_keep:
+                    _dict[_key] = self[_key]
+        return LogTable(_dict)
+
 
 
 class CutoffRule:
@@ -201,7 +235,7 @@ class CutoffRule:
         """
 
         :param param:
-            name of the parameter
+            name of the parameter (e.g. 'Vsh') OR log type  (e.g. 'Volume')
         :param operator:
             string or None
             representing the masking operation
@@ -613,19 +647,15 @@ class ClassificationTable:
 class Cutoffs:
     def __init__(self,
                  cutoffs: list | None = None,
-                 log_table: LogTable | None = None,
                  name: str | None = None
                  ):
         """
 
         :param name:
-        :param log_table:
-            Seems to have no effect
         :param cutoffs:
             List of CutOffRules
         """
         self.name = name
-        self.log_table = log_table
         if cutoffs is None:
             cutoffs = []
         cutoff_names = []
@@ -665,6 +695,12 @@ class Cutoffs:
                 self.cutoffs.append(new_cutoffs)
 
     def get_dict(self):
+        """
+        Returns a dictionary with the rules in a format used by many functions
+        NOTE that the units of the limits are ignored
+        :return:
+        dict(<param1>=[<operator>: <limit>], ...)
+        """
         return_dict = {}
         for rule in self.cutoffs:
             this_list = [rule.operator]
@@ -672,8 +708,32 @@ class Cutoffs:
                 this_list.append(rule.limit.magnitude)
             elif isinstance(rule.limit, list):
                 this_list.append([rule.limit[0].magnitude, rule.limit[1].magnitude])
+            elif isinstance(rule.limit, str):
+                this_list.append(rule.limit)
+
             return_dict[rule.param] = this_list
         return return_dict
+
+    def use_log_table(self, log_table: LogTable):
+        """
+        Returns a new CutOffs object where the parameter names have been converted from 'log type' (e.g. 'P velocity')
+         to 'log names' (e.g. 'vp_brine')
+
+        :param log_table:
+        :return:
+        """
+        if log_table.multi_log:
+            raise NotImplementedError('Multi log LogTables are not supported (Yet)')
+        new_rules = deepcopy(self.cutoffs)
+        for _rule in new_rules:
+            try:
+                _rule.param = log_table[_rule.param]
+            except KeyError:
+                # warn_txt = 'Log type {} is not found in log_table: {}'.format(
+                #     _rule.param, ', '.join(list(log_table.keys())))
+                # print_info(warn_txt, 'warning', logger=logger)
+                continue
+        return Cutoffs(cutoffs=new_rules)
 
 
 class Template:
@@ -755,7 +815,7 @@ class Template:
         # for key in list(all_templates[log_type].keys()):
         #     self.__setattr__(key, all_templates[log_type][key])
 
-    def get_as_dict(self):
+    def dict(self):
         return {self.name: self.__dict__}
 
 
@@ -934,7 +994,7 @@ class Intervals(object):
 
     def get_interval(self, interval_name, well_name):
         for _interval in self.intervals:
-            if _interval.name == interval_name and _interval.well == well_name:
+            if _interval.name.lower() == interval_name.lower() and _interval.well.lower() == well_name.lower():
                 return _interval
         return None
 
@@ -1002,6 +1062,14 @@ class Intervals(object):
             intervals_dict['source'].append(_interval.source)
             intervals_dict['note'].append(_interval.desc)
         return intervals_dict
+
+    def get_cutoff_rule(self, interval_name: str, well_name: str) -> CutoffRule:
+        _interval = self.get_interval(interval_name, well_name)
+        if _interval is None:
+            _top, _base = self.get_well_depth_range(well_name)
+            return CutoffRule('md', '><', [Q_(_top, 'm'), Q_(_base, 'm')])
+        print(_interval.top, _interval.base)
+        return CutoffRule('md', '><', [_interval.top, _interval.base])
 
     def write_to_excel(self, file_name, intervals_sheet, interval_info_sheet, append: bool = False):
         import openpyxl
@@ -1127,7 +1195,7 @@ class WorkingIntervalsTable:
         if width is None:
             width = 600
         self.width = width
-        self.height = 100
+        self.height = 300
         self._intervals = intervals
         """
         Returns a ColumnDataSource with the following columns:

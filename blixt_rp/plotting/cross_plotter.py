@@ -16,6 +16,7 @@ import unittest
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
+import pint
 from copy import deepcopy
 
 from prompt_toolkit.shortcuts import button_dialog
@@ -27,7 +28,7 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\plottin
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 from blixt_rp.core.core import Intervals, WorkingIntervalsTable
-from blixt_rp.core.core import Cutoffs, ClassificationTable
+from blixt_rp.core.core import Cutoffs, ClassificationTable, LogTable
 from blixt_utils.utils import print_info
 
 logger = logging.getLogger(__name__)
@@ -165,7 +166,11 @@ class DataSource:
         :param data:
             dict
             Dictionary of data, with variable names as keys.
-            Remember that a ColumnDataSource requires that all variable has the same length
+            NOTE that we can store the data here as pint Quantities, that is, with units. Very practical!
+            Remember that a ColumnDataSource requires that all variable has the same length,
+            AND
+            ColumnDataSource can not handle pint Quantities as data, which is why we take the magnitude when
+            creating the source
         :param templates:
             dict
             Dictionary of Template objects for each variable, and preferably also one Template for this
@@ -224,7 +229,14 @@ class DataSource:
 
     @property
     def source(self) -> ColumnDataSource:
-        return ColumnDataSource(data=self.data, name=self.name)
+        _data = {}
+        # Take only the magnitude if data is provided as pint Quantities
+        for _key in list(self.data.keys()):
+            if isinstance(self.data[_key], pint.Quantity):
+                _data[_key] = self.data[_key].magnitude
+            else:
+                _data[_key] = self.data[_key]
+        return ColumnDataSource(data=_data, name=self.name)
 
     @source.setter
     def source(self, new_source):
@@ -239,6 +251,13 @@ class DataSource:
 
     def min_and_max(self):
         return {_key: [np.nanmin(self.data[_key]), np.nanmax(self.data[_key])] for _key in list(self.keys())}
+
+    def calc_mask(self,
+                  cutoffs: Cutoffs,
+                  logtable: LogTable):
+        # TODO
+        pass
+
 
     # def transform_source_data(self,
     #                      x: None | str = None,
@@ -372,8 +391,14 @@ class CrossPlotter:
         self._data_sources = data_sources
         if x is None:
             x = self.common_variables[0]
+        if x not in self.common_variables:
+            raise IOError('The x parameter {} is not among the parameters of the source ({})'.format(
+                x, ', '.join(self.common_variables) ))
         if y is None:
             y = self.common_variables[1]
+        if y not in self.common_variables:
+            raise IOError('The y parameter {} is not among the parameters of the source ({})'.format(
+                y, ', '.join(self.common_variables) ))
         if width is None:
             width = 600
         if height is None:
@@ -822,10 +847,10 @@ class CrossPlotter:
             for _source in self._data_sources.values():
                 if _key not in list(_source.keys()):
                     continue
-                if _source.min_and_max()[_key][0] < _min:
-                    _min = _source.min_and_max()[_key][0]
-                if _source.min_and_max()[_key][1] > _max:
-                    _max = _source.min_and_max()[_key][1]
+                if _source.min_and_max()[_key][0].magnitude < _min:
+                    _min = _source.min_and_max()[_key][0].magnitude
+                if _source.min_and_max()[_key][1].magnitude > _max:
+                    _max = _source.min_and_max()[_key][1].magnitude
             _out[_key] = [_min, _max]
         for _key in self.fixed_sizes:
             _out[_key] = ['constant', 'constant']
@@ -915,7 +940,7 @@ class CrossPlotter:
 
         # # Test templates:
         # # print(list(self.templates.keys()))
-        # _templates = {_key: _val.get_as_dict() for _key, _val in self.templates.items()}
+        # _templates = {_key: _val.dict() for _key, _val in self.templates.items()}
         # # for _var in [x_var, y_var]:
         # for _var in list(self.templates.keys()):
         #     # print(list(_templates.keys()))
@@ -929,7 +954,7 @@ class CrossPlotter:
                          s_drop=size_menu,
                          x_range=self.xplot.x_range,
                          y_range=self.xplot.y_range,
-                         templates={_key: _val.get_as_dict()[_key] for _key, _val in self.templates.items()},
+                         templates={_key: _val.dict()[_key] for _key, _val in self.templates.items()},
                          # data_keys=[_key for _key in list(sources.keys())],
                          # data_sources=[_val for _val in list(sources.values())],
                          # orig_data_sources=[_val.source for _val in list(self._data_sources.values())],
@@ -1043,17 +1068,17 @@ class CrossPlotter:
 
 
 class TestCases(unittest.TestCase):
-    def test_data(self):
+    def test_data(self, size_1: int = 500, size_2: int = 800):
         from blixt_rp.core.core import Template, StratUnit, Interval, Intervals, CutoffRule, Cutoffs
         from pint import Quantity as Q_
-        md1 = np.linspace(1000., 2000., 500)
-        md2 = np.linspace(800., 2500., 800)
-        l1_1 = np.random.normal(10., 1., 500)
-        l1_2 = np.random.normal(10., 1., 800)
-        l2_1 = np.random.normal(100., 1., 500) + np.linspace(-8, 8, 500)
-        l2_2 = np.random.normal(100., 1., 800) + np.linspace(-10, 10, 800)
-        l3 = np.random.normal(50., 1., 500)
-        l4 = np.random.normal(70., 1., 800)
+        md1 = np.linspace(1000., 2000., size_1)
+        md2 = np.linspace(800., 2500., size_2)
+        l1_1 = np.random.normal(10., 1., size_1)
+        l1_2 = np.random.normal(10., 1., size_2)
+        l2_1 = np.random.normal(100., 1., size_1) + np.linspace(-8, 8, size_1)
+        l2_2 = np.random.normal(100., 1., size_2) + np.linspace(-10, 10, size_2)
+        l3 = np.random.normal(50., 1., size_1)
+        l4 = np.random.normal(70., 1., size_2)
 
         template_md = Template(name='md', units='m', marker='circle', fill_color='red')
         template_one = Template(name='var_one', units='m', min=5., max=15., marker='circle', fill_color='red')
@@ -1086,7 +1111,11 @@ class TestCases(unittest.TestCase):
 
     def test_data_source(self):
 
-        ds1, ds2, wis, cutoffs = self.test_data()
+        small = True
+        if small:
+            ds1, ds2, wis, cutoffs = self.test_data(size_1=10, size_2=12)
+        else:
+            ds1, ds2, wis, cutoffs = self.test_data()
 
         xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]})
         # print(xp.all_variables)
@@ -1102,7 +1131,7 @@ class TestCases(unittest.TestCase):
         # for _key, _item in _d.items():
         #     print(_key, _item[:5], _item[-5:], len(_item))
         # xp.show_plot('C:\\Users\marte\Downloads\plot.html')
-        xp.show_plot(d, 'C:\\Users\emb\Downloads\plot.html')
+        xp.show_plot(d, 'C:\\Users\\emb\\Downloads\\plot.html')
 
     def test_from_well(self):
         from blixt_rp.core.project_new import Project
@@ -1151,7 +1180,11 @@ class TestCases(unittest.TestCase):
         return xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, wis_guis
 
     def test_both(self):
-        ds1, ds2, wis, cutoffs = self.test_data()
+        small = True
+        if small:
+            ds1, ds2, wis, cutoffs = self.test_data(size_1=10, size_2=12)
+        else:
+            ds1, ds2, wis, cutoffs = self.test_data()
 
         xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]}, cutoffs=cutoffs, working_intervals=wis)
         d_source = xp.source

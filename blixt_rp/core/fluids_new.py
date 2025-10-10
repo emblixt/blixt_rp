@@ -17,6 +17,8 @@ import numpy as np
 import pandas as pd
 import unittest
 import os, sys
+
+from bokeh.io import output_file
 from bokeh.models import ColumnDataSource
 import pint
 
@@ -684,46 +686,46 @@ class TestCases(unittest.TestCase):
         # show(column(table, row(add_row, delete_row, update)))
         return table, add_row, delete_row, update
 
-    def test_fluidsub():
-        # TODO
-        # This needs to be updated to the new well model
-        from importlib import reload
+    def test_fluidsub(self):
         import matplotlib.pyplot as plt
-        import blixt_rp.rp.rp_core as rp
-        reload(rp)
-        from blixt_rp.core.well import Well
+        from blixt_rp.core.core import LogTable, Cutoffs, CutoffRule
+        from blixt_rp.core.well_new import Well
+        from blixt_rp.core.log_curve_new import Depth, LogCurve
+        from blixt_rp.plotting.cross_plotter import CrossPlotter
 
-        w = Well()
-        # Create a well table without using the excel sheet
-        well_table = {'../test_data/Well A.las':
-            {'Given well name': 'WELL_A',
-             'logs':
-                 {'vp_dry': 'P velocity',
-                  'vp_so08': 'P velocity',
-                  'vp_sg08': 'P velocity',
-                  'vs_dry': 'S velocity',
-                  'vs_so08': 'S velocity',
-                  'vs_sg08': 'S velocity',
-                  'rho_dry': 'Density',
-                  'rho_so08': 'Density',
-                  'rho_sg08': 'Density',
-                  'phie': 'Porosity',
-                  'vcl': 'Volume'},
-             'Note': ''}}
-        w.read_well_table(well_table, 0)
-        w.calc_mask({'vcl': ['<', 0.4], 'phie': ['>', 0.1]}, name='sand')
-        mask = w.block['Logs'].masks['sand'].values
-        vp = w.block['Logs'].logs['vp_dry'].values[mask]
-        vs = w.block['Logs'].logs['vs_dry'].values[mask]
-        rho = w.block['Logs'].logs['rho_dry'].values[mask]
-        por = w.block['Logs'].logs['phie'].values[mask]
+        file_dir = str(os.path.dirname(__file__).replace(
+            'blixt_rp\\core',
+            ''))
+        project_table = os.path.join(file_dir, 'excels\\project_table_new.xlsx')
+
+        las_file =  os.path.join(file_dir, 'test_data/Well A.las')
+        output_file('C:\\Users\\emb\\Downloads\\plot.html')
+
+        logs = {'vp_dry': 'P velocity', 'vp_so08': 'P velocity', 'vp_sg08': 'P velocity',
+                'vs_dry': 'S velocity', 'vs_so08': 'S velocity', 'vs_sg08': 'S velocity',
+                'rho_dry': 'Density', 'rho_so08': 'Density', 'rho_sg08': 'Density',
+                'phie': 'Porosity', 'vcl': 'Volume', 'dept': 'MD'}
+        lt = LogTable()
+        lt.from_invert(logs)
+
+        w1 = Well()
+        w1.read_las(las_file, log_table=lt, template_file=project_table)
+
+        # Calculate and apply this mask:
+        # w.calc_mask({'vcl': ['<', 0.4], 'phie': ['>', 0.1]}, name='sand')  # calc_mask only works for the old Well
+        cr1 = CutoffRule('vcl', '<', Q_(0.4, ''))
+        cr2 = CutoffRule('phie', '>', Q_(0.1, ''))
+        ct = Cutoffs([cr1, cr2])
+
+        w_dict = w1.dict(cutoffs=ct, use_cutoffs=True)
+        # w_dict = w1.dict(cutoffs=ct, use_cutoffs=False)  # Now it creates and an extra parameter 'mask'
 
         test = 'constants'  #'array'
         # Test with constant Vsh and constant Sw
         v_sh = 0.2
         s_w = 0.2
         if test == 'array':  # test with arrays of v_sh and s_w
-            v_sh = w.block['Logs'].logs['vcl'].values[mask]
+            # v_sh = w.block['Logs'].logs['vcl'].values[mask]
             # create a mock-up water saturation
             s_w = 0.2 + v_sh
             s_w[s_w > 1.0] = 1.0
@@ -753,12 +755,28 @@ class TestCases(unittest.TestCase):
         rho_f2 = s_w*rho_b + (1.-s_w)*rho_hc
         k_f2 = rp.vrh_bounds([s_w, (1.-s_w)], [k_b, k_hc])[1]  # Reuss uniform fluid mix
 
-        v_p_2, v_s_2, rho_2, k_2 = rp.gassmann_vel(vp, vs, rho, k_f1, rho_f1, k_f2, rho_f2, k0, por)
+        w2 = Well()
+        w2.name = 'Fluid Sub'
+        v_p_2, v_s_2, rho_2, k_2 = rp.gassmann_vel(
+            w_dict['vp_dry'].magnitude,
+            w_dict['vs_dry'].magnitude,
+            w_dict['rho_dry'].magnitude,
+            k_f1, rho_f1, k_f2, rho_f2, k0,
+            w_dict['phie'].magnitude)
+        # Add fluid subst. logs to well
+        depth = Depth(w_dict['dept'])
+        lc_vp = LogCurve('vp_hc', Q_(v_p_2, 'm/s'), depth, log_type='P velocity', style=deepcopy(w1.get_log_curve('vp_dry').style))
+        w2.add_log(lc_vp)
+        lc_vs = LogCurve('vs_hc', Q_(v_s_2, 'm/s'), depth, log_type='S velocity', style=deepcopy(w1.get_log_curve('vs_dry').style))
+        w2.add_log(lc_vs)
+        lc_rho = LogCurve('rho_hc', Q_(rho_2, 'g/cm**3'), depth, log_type='Density', style=deepcopy(w1.get_log_curve('rho_dry').style))
+        w2.add_log(lc_rho)
+        lc_depth = LogCurve('dept', Q_(depth.magnitude, depth.units), depth, log_type='MD')
+        w2.add_log(lc_depth)
+        print(w2.get_log_names)
 
-        plt.plot(vp, label='dry')
-        plt.plot(w.block['Logs'].logs['vp_so08'].values[mask], label='RD oil')
-        plt.plot(v_p_2, label='my oil')
-        plt.legend()
-        plt.show()
 
+        xp = CrossPlotter({w.name: w.data_source() for w in [w1, w2]})
+        source = xp.source
+        xp.show_plot(source, out_file='C:/Users/emb/Downloads/plot.html')
 

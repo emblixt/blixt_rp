@@ -31,6 +31,7 @@ from scipy.constants import degree
 from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
 
+from blixt_rp.core.core import Cutoffs
 from blixt_rp.core.log_curve_new import LogCurve
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
@@ -39,6 +40,9 @@ sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 from .. import ureg, Q_
+
+from blixt_utils.utils import print_info
+import blixt_utils.misc.masks as msks
 
 # global variables
 supported_version = {2.0, 3.0}
@@ -63,6 +67,7 @@ class WellTrajectory:
     The common, and necessary, dimension is measured depth; MD
     Other dimensions, like true vertical depth (TVD), inclination (INC), burial depth (BD), will follow
     """
+    # TODO Rewrite it to use the Depth object as input for md, and test that 'depth_type' == 'md'
     def __init__(self,
                  md: pint.Quantity,
                  tvd_kb:  LogCurve | None = None,
@@ -184,7 +189,6 @@ class Well(object):
     """
     from blixt_rp.core.core import Header, LogTable, Template
     from blixt_rp.core.log_curve_new import LogCurve
-    from blixt_utils.utils import print_info
 
     def __init__(self,
                  header: Header | None = None,
@@ -217,8 +221,9 @@ class Well(object):
             style = Template()
         elif isinstance(style, dict):
             style = Template(**style)
-        elif isinstance(style, Template):
-            self._style = style
+        elif not isinstance(style, Template):
+            raise IOError('Style must be given as a Template, not {}'.format(type(style)))
+        self._style = style
 
         self._trajectory = None
     @property
@@ -247,6 +252,8 @@ class Well(object):
 
     @property
     def get_log_names(self):
+        if self.logs is None:
+            return []
         return [_lc.name for _lc in self.logs]
 
     @property
@@ -278,7 +285,7 @@ class Well(object):
     def get_logs_of_type(self, log_type):
         return [_lc for _lc in self.logs if _lc.log_type == log_type]
 
-    def get_logs_of_depth_type(self, depth_type):
+    def get_logs_of_depth_type(self, depth_type: str):
         # depth_type = 'md', 'tvd', 'owt', or 'twt'
         return [_lc for _lc in self.logs if _lc.depth.depth_type == depth_type]
 
@@ -312,21 +319,31 @@ class Well(object):
         else:
             self.logs.append(log_curve)
 
-    def harmonize_logs(self):
+    def harmonize_logs(self, down_sample: int | None = None):
         """
         Adjusts all logs to have the same length and sample rate
         :return:
         """
         _harmonized_logs = []
         _longest = None
-        _longest_length = 0
+        _longest_length = Q_(0, 'm')
         for _log in self.logs:
-            if len(_log) > _longest_length:
+            # TODO MAKE SURE THE TEST OF is_evenly_spaced WORKS!
+            # IT DOES, BUT MAYBE IT IS TO STRONG? Creates problems after applying cutoffs
+            delta =_log.base - _log.top
+            if delta > _longest_length and _log.is_evenly_spaced:
                 _longest = _log
-                _longest_length = len(_log)
+                _longest_length = delta
+
+        # Down sample the longest log, then the rest will be down sampled too
+        if down_sample is not None:
+            _temp = _longest.down_sample(step=down_sample, suffix=None)
+            _longest = _temp
+
         for _log in self.logs:
             if _log.name == _longest.name:
-                _harmonized_logs.append(_log)
+                # _harmonized_logs.append(_log)
+                _harmonized_logs.append(_longest)
                 continue
             _harmonized_logs.append(
                 _log.take_sampling_from(_longest, suffix=None))
@@ -382,7 +399,7 @@ class Well(object):
         from blixt_rp.core.log_curve_new import read_las as _read_las
         from blixt_rp.core.core import Template, templates_from_table
         log_curves, well_dict = _read_las(file_name, verbose=verbose, encoding=encoding, log_table=log_table,
-                                          template=template_file, rename_logs=rename_logs)
+                                          template=template_file, rename_logs=rename_logs, only_md=True)
 
         if self.header.name is None:
             self.header.name = well_dict['well_info']['well']['value']
@@ -443,12 +460,16 @@ class Well(object):
                 self.add_log(_val, if_log_exists=if_log_exists)
 
     def write_las(self, file_name, overwrite=False):
-        from blixt_utils.utils import print_info
+        # from blixt_utils.utils import print_info
         from datetime import datetime
         if os.path.isfile(file_name) and (not overwrite):
             warn_txt = 'File {} already exist. Write cancelled'.format(file_name)
             print_info(warn_txt, 'warning', logger)
             return
+
+        # Harmonize logs before writing to las, as the las format requires an equal and uniform
+        # sampling of all logs in a las file
+        self.harmonize_logs()
 
         out = (
             '#----------------------------------------------------------------------------\n'
@@ -493,11 +514,7 @@ class Well(object):
             '# MNEM.UNIT                                         : CURVE DESCRIPTION\n'
             '# ----------                                        -------------------------------\n'
         )
-        # NOTE, this new version of the Well object can contain logs with different depth sampling, which the las
-        # format does not support. So we try with the first log curve, and take the depth from that
         ref_depth = self.logs[0].depth
-        # TODO We might need to "harmonize" all log curves before writing to las file, to make sure the start and
-        # end MD are shared for all logs
         i = 1
         out += '{0: <20}.{1: <33}: {2: <9}{3:}\n'.format(
             'DEPTH',
@@ -512,7 +529,7 @@ class Well(object):
             i += 1
             out += '{0: <20}.{1: <33}: {2: <9}{3:}\n'.format(
                 _lc.name.upper(),
-                '{:~}'.format(_lc.units),
+                '{:~}'.format(_lc.units).replace(' ', ''),
                 i,
                 _lc.header.log_type + ', ' + _lc.header.note
             )
@@ -543,15 +560,56 @@ class Well(object):
         with open(file_name, 'w+') as f:
             f.write(out)
 
-    def dict(self, harmonize=True):
+    def dict(self, harmonize: bool = True, down_sample: int | None = None, cutoffs: Cutoffs | None = None,
+             use_cutoffs: bool = True) -> dict:
+        """
+
+        :param harmonize:
+             When True all logs are made equal in length and with the same sample rate. Necessary for a ColumnDataSource
+        :param down_sample:
+            If down_sample = N, then it takes only every Nth sample of the logs
+        :param cutoffs:
+            Use the cutoffs to calculate a mask
+            NOTE that the mask is the only variable that is dimensionless
+        :param use_cutoffs:
+            If True, the mask calculated by the cutoffs is applied.
+        :return:
+            dictionary with log name: log values as key: value pairs
+        """
         _dict = {}
         if harmonize:
-            self.harmonize_logs()
+            self.harmonize_logs(down_sample=down_sample)
         for _log in self.logs:
-            _dict[_log.name] = _log.values
+            _dict[_log.name] = _log.data  # Keep the units!
+
+        if cutoffs is not None:
+            masks = []
+            if not harmonize:
+                raise IOError('The cutoffs can only be calculated when the harmonize parameter is True')
+            for _rule in cutoffs.cutoffs:
+                if _rule.param not in list(_dict.keys()):
+                    warn_txt = 'Log {} to calculate mask from is not present in well {}'.format(
+                        _rule.param, self.name)
+                    print_info(warn_txt, 'warning', logger)
+                else:
+                    masks.append(
+                        msks.create_mask(
+                            _dict[_rule.param], _rule.operator, _rule.limit
+                        )
+                    )
+            if len(masks) > 0:
+                mask = msks.combine_masks(masks)
+            else:
+                mask = np.ones(len(_dict[list(_dict.keys())[0]]), dtype=bool)
+            _dict['mask'] = mask
+
+            if use_cutoffs:
+                for _key in list(_dict.keys()):
+                    _dict[_key] = _dict[_key][mask]
+
         return _dict
 
-    def data_source(self):
+    def data_source(self, down_sample: int | None = None):
         """
         Returns a DataSource object based on the well content
         :return:
@@ -560,7 +618,7 @@ class Well(object):
         from blixt_rp.plotting.cross_plotter import DataSource
         return DataSource(
             name=self.name,
-            data=self.dict(),
+            data=self.dict(down_sample=down_sample),
             templates=self.templates()
         )
 
@@ -631,6 +689,25 @@ class Well(object):
                         orig_filename=selected_log.header.orig_filename)
         )
 
+    def plot(self, log_columns: list, output_filename: str):
+        """
+        Plots the selected logs in a Bokeh plot
+        :param log_columns:
+        list
+        List  of lists that contain the names of the logs to plot in each column
+        E.G.
+            [['rhob', 'neu'], ['vp', 'vs']]
+        :param output_filename:
+            str
+            Full path name of a html file in which the plot is drawn
+        :return:
+        """
+        from bokeh.plotting import show
+        from bokeh.io import output_file
+        from blixt_rp.plotting.plot_logs_new import plot_logs
+        output_file(output_filename, title=self.name)
+        plotter = plot_logs(self, log_columns)
+        show(plotter.figure())
 
 def add_headers(_header, _well_info, _ignore_keys, _note):
     """
