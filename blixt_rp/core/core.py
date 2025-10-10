@@ -207,7 +207,6 @@ class LogTable(dict):
                         _these_params.append(_param)
                 if keep:
                     _dict[_key] = _these_params
-                print('    -TEST')
         else:
             for _key in list(self.keys()):
                 if self[_key] in logs_to_keep:

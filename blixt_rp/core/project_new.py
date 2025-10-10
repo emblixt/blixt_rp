@@ -264,6 +264,8 @@ class Project(object):
         :return:
         """
         from blixt_rp.core.core import Template, LogTable
+
+        # TODO Try implement the untranslate function in the project_wells
         result = uio.project_wells_new(self.project_table, self.working_dir)
         # templates_dataframe = pd.read_excel(self.project_table, header=1, sheet_name='Templates', engine='openpyxl')
 
@@ -281,23 +283,25 @@ class Project(object):
                     _log_table.from_invert(result[_key]['logs'])
                 else:
                     # TODO THIS IS NOT WORKING WHEN USING translated log names in log_tables with multi_log!
-                    # TODO Try using the untranslate function
                     # When both a LogTable and a 'result', we need to combine the two so that we only pick
                     # specific logs from *this* las file
-                    print('  XXX', list(result[_key]['logs'].keys()))
-                    if translate_dict is not None:
-                        print('  XXX', translate_dict)
+                    # print('  XXX', list(result[_key]['logs'].keys()))
+                    # if translate_dict is not None:
+                    #     print('  XXX', translate_dict)
                     # _log_table = log_table.keep(result[_key]['logs'])
+                    print('XXX', log_table.values())
+                    print('XXX', list(result[_key]['logs'].keys()))
                     _log_table = log_table.keep(list(result[_key]['logs'].keys()))
+                    print('XXX', _log_table.values())
 
                 w.read_las(_key, log_table=_log_table, template_file=self.project_table, rename_logs=translate_dict, verbose=verbose)
                 # _lc = w.get_log_curve(w.get_log_names[0])
                 # print('XXX: ', _lc.style.keys())
-                if translate_dict is not None:
-                    for _new_name, _old_name in translate_dict.items():
-                        this_log = w.get_log_curve(_old_name)
-                        if this_log is not None:
-                            this_log.name = _new_name
+                # if translate_dict is not None:
+                #     for _new_name, _old_name in translate_dict.items():
+                #         this_log = w.get_log_curve(_old_name)
+                #         if this_log is not None:
+                #             this_log.name = _new_name
             elif uio.filetype(_key) in ['txt', 'dat', 'ascii', 'asc']:
                 var_names = list(result[_key]['logs'].keys())
                 var_columns = [result[_key]['columns'][_var] for _var in var_names]

@@ -1322,8 +1322,8 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
 
     with open(file_name, "r", encoding=encoding) as f:
         lines = f.readlines()
-    # TODO Maybe adding the rename functionality already here?
-    null_val, generated_keys, well_dict = well_reader(lines, file_format='las')
+    # null_val, generated_keys, well_dict = well_reader(lines, file_format='las')
+    null_val, generated_keys, well_dict = well_reader(lines, file_format='las', rename_logs=rename_logs)
 
     well_name = fix_well_name(well_dict['well_info']['well']['value'])
 
@@ -1345,12 +1345,12 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
         print_info(warn_txt, 'warning', logger)
     depth_units = fix_units_for_pint(depth_units)
 
-    # Un-translate the log_table if necessary
-    # OR
-    # TODO IS IT BETTER TO RENAME THE LOGS DIRECTLY WHILE READING THE LAS FILE?
-    if rename_logs is not None:
-        if log_table is not None:
-            log_table = log_table.un_translate(rename_logs=rename_logs)
+    # # Un-translate the log_table if necessary
+    # # OR
+    # # TODO IS IT BETTER TO RENAME THE LOGS DIRECTLY WHILE READING THE LAS FILE?
+    # if rename_logs is not None:
+    #     if log_table is not None:
+    #         log_table = log_table.un_translate(rename_logs=rename_logs)
 
     # Only read those logs we requested in the log_table
     only_these_logs = generated_keys  # This contains all the logs
@@ -1395,19 +1395,19 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
             continue
         data_units = fix_units_for_pint(data_units)
 
-        # Rename logs
-        log_name = None
-        if rename_logs is not None:
-            for new_log_name in list(rename_logs.keys()):
-                if _key.lower() in [_l.lower() for _l in rename_logs[new_log_name]]:
-                    log_name = new_log_name
-        if log_name is None:
-            log_name = _key.lower()
+        # # Rename logs
+        # log_name = None
+        # if rename_logs is not None:
+        #     for new_log_name in list(rename_logs.keys()):
+        #         if _key.lower() in [_l.lower() for _l in rename_logs[new_log_name]]:
+        #             log_name = new_log_name
+        # if log_name is None:
+        #     log_name = _key.lower()
 
-        # output[_key.lower()] = LogCurve(
-        output[log_name] = LogCurve(
-            # _key.lower(),
-            log_name,
+        output[_key.lower()] = LogCurve(
+        # output[log_name] = LogCurve(
+            _key.lower(),
+            # log_name,
             Q_(data[_key.lower()], data_units),
             Depth(Q_(data[depth_key], depth_units), depth_type=depth_type),
             _log_type,
