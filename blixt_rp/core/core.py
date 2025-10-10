@@ -131,52 +131,52 @@ class LogTable(dict):
                 log_types.append(key)
         return log_types
 
-    def un_translate(self, rename_logs: dict):
-        """
-        The LogTable often contains translated log name(s), which is necessary as the same LogTable should be
-        able to be used across multiple las files, which all use different names for the 'same' log.
-        E.G. PHIE is called CPI_PHIE in one las file, and XXX_PHIE in another
+    # def un_translate(self, rename_logs: dict):
+    #     """
+    #     The LogTable often contains translated log name(s), which is necessary as the same LogTable should be
+    #     able to be used across multiple las files, which all use different names for the 'same' log.
+    #     E.G. PHIE is called CPI_PHIE in one las file, and XXX_PHIE in another
 
-        This method returns a new LogTable which uses the 'un-translated' log names, and leaves the original LogTable
-        untouched
+    #     This method returns a new LogTable which uses the 'un-translated' log names, and leaves the original LogTable
+    #     untouched
 
-        :param rename_logs:
-            dict
-            E.G.
-                {'phie': 'CPI_PHIE'}
-                where the key is the wanted well log name, and the value is the well log names
-                to translate from
-                OR
-                {'phie': ['CPI_PHIE', 'PHIE_TEST']}
-                NOTE
-                Because the value list (e.g. ['CPI_PHI', 'PHIE_TEST'] can contain several log names (BUT rarely do so),
-                and we can't know which one to use, we take the first item. But raise a warning
-        :return
-            LogTable with the 'un-translated' log names
-        """
-        un_translated_log_table = deepcopy(self)
-        if rename_logs is not None:
-            for _log_name, _log_type in zip(self.log_names, self.log_types):
-                if _log_name.lower() in [_l.lower() for _l in list(rename_logs.keys())]:
-                    if isinstance(rename_logs[_log_name.lower()], list) and len(rename_logs[_log_name.lower()]) > 1:
-                        warn_txt = 'We bluntly assume you want to un-translate using the first name in the list:'
-                        warn_txt += ' {}, and not the second: {} (and so on)'.format(
-                            rename_logs[_log_name][0], rename_logs[_log_name][1])
-                        print_info(warn_txt, 'warning', logger)
+    #     :param rename_logs:
+    #         dict
+    #         E.G.
+    #             {'phie': 'CPI_PHIE'}
+    #             where the key is the wanted well log name, and the value is the well log names
+    #             to translate from
+    #             OR
+    #             {'phie': ['CPI_PHIE', 'PHIE_TEST']}
+    #             NOTE
+    #             Because the value list (e.g. ['CPI_PHI', 'PHIE_TEST'] can contain several log names (BUT rarely do so),
+    #             and we can't know which one to use, we take the first item. But raise a warning
+    #     :return
+    #         LogTable with the 'un-translated' log names
+    #     """
+    #     un_translated_log_table = deepcopy(self)
+    #     if rename_logs is not None:
+    #         for _log_name, _log_type in zip(self.log_names, self.log_types):
+    #             if _log_name.lower() in [_l.lower() for _l in list(rename_logs.keys())]:
+    #                 if isinstance(rename_logs[_log_name.lower()], list) and len(rename_logs[_log_name.lower()]) > 1:
+    #                     warn_txt = 'We bluntly assume you want to un-translate using the first name in the list:'
+    #                     warn_txt += ' {}, and not the second: {} (and so on)'.format(
+    #                         rename_logs[_log_name][0], rename_logs[_log_name][1])
+    #                     print_info(warn_txt, 'warning', logger)
 
-                    # Do the un-translation. Different for multi log LogTables
-                    if self.multi_log:
-                        _log_list = [_l.lower() for _l in un_translated_log_table[_log_type]]
-                        _i = _log_list.index(_log_name.lower())
-                        _log_list.pop(_i)
-                        if isinstance(rename_logs[_log_name.lower()], list):
-                            _log_list.insert(_i, rename_logs[_log_name.lower()][0].lower())
-                        else:
-                            _log_list.insert(_i, rename_logs[_log_name.lower()].lower())
-                        un_translated_log_table[_log_type] = _log_list
-                    else:
-                        un_translated_log_table[_log_type] = rename_logs[_log_name][0].lower()
-        return un_translated_log_table
+    #                 # Do the un-translation. Different for multi log LogTables
+    #                 if self.multi_log:
+    #                     _log_list = [_l.lower() for _l in un_translated_log_table[_log_type]]
+    #                     _i = _log_list.index(_log_name.lower())
+    #                     _log_list.pop(_i)
+    #                     if isinstance(rename_logs[_log_name.lower()], list):
+    #                         _log_list.insert(_i, rename_logs[_log_name.lower()][0].lower())
+    #                     else:
+    #                         _log_list.insert(_i, rename_logs[_log_name.lower()].lower())
+    #                     un_translated_log_table[_log_type] = _log_list
+    #                 else:
+    #                     un_translated_log_table[_log_type] = rename_logs[_log_name][0].lower()
+    #     return un_translated_log_table
 
     def keep(self, logs_to_keep):
         """

@@ -199,17 +199,17 @@ class LogTableTests(unittest.TestCase):
         # lt1['Should fail'] = [1,2,3]
         lt2['Should fail'] = 'Vp'
 
-    def test_un_translate(self):
-        lt1 = LogTable(log_table)
-        rename_logs = {'phie': ['cpi_phie', 'xxx_phie']}
-        lt2 = lt1.un_translate(rename_logs=rename_logs)
-        print(lt2.log_names)
+    # def test_un_translate(self):
+    #     lt1 = LogTable(log_table)
+    #     rename_logs = {'phie': ['cpi_phie', 'xxx_phie']}
+    #     lt2 = lt1.un_translate(rename_logs=rename_logs)
+    #     print(lt2.log_names)
 
-        print('Using a multi_log LogTable:')
-        lt1 = LogTable(log_table_multi)
-        rename_logs = {'vp_virg': ['vp_dry', 'vp_insitu']}
-        lt2 = lt1.un_translate(rename_logs=rename_logs)
-        print(lt2.log_names)
+    #     print('Using a multi_log LogTable:')
+    #     lt1 = LogTable(log_table_multi)
+    #     rename_logs = {'vp_virg': ['vp_dry', 'vp_insitu']}
+    #     lt2 = lt1.un_translate(rename_logs=rename_logs)
+    #     print(lt2.log_names)
 
     def test_keep(self):
         lt1 = LogTable(log_table)

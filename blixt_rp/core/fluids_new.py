@@ -638,7 +638,8 @@ class FluidMix(object):
 
 class TestCases(unittest.TestCase):
     def test_read_fluid_mixes(self):
-        project_table = 'C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx'
+        # project_table = 'C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx'
+        project_table = 'C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx'
         my_fluid_mixes = read_fluidmixes_from_excel(project_table)
         fmix = FluidMix(fluid_mixes=my_fluid_mixes)
         print(fmix.print_all_fluids())
@@ -646,15 +647,9 @@ class TestCases(unittest.TestCase):
 
     def test_data(self):
         import os
-        # working_dir = 'C:\\Users\\marte\\PycharmProjects\\blixt_rp'
-        working_dir = 'C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp'
 
         from blixt_rp.core.well import Project
-        wp = Project(
-            name='MyProject',
-            working_dir=working_dir,
-            project_table=os.path.join(working_dir, 'excels\\project_table_new.xlsx')
-        )
+        wp = Project(name='MyProject')
 
         # myfluids = FluidMix()
         # myfluids.read_excel(wp.project_table)
@@ -674,8 +669,8 @@ class TestCases(unittest.TestCase):
     def test_fluid_table(self):
         from bokeh.io import output_file
         from bokeh.plotting import show, row, column
-        output_file('C:\\Users\\emb\\Downloads\\plot.html')
-        # output_file('C:\\Users\\marte\\Downloads\\plot.html')
+        # output_file('C:\\Users\\emb\\Downloads\\plot.html')
+        output_file('C:\\Users\\marte\\Downloads\\plot.html')
 
         all_fluids, fluid_mix = self.test_data()
         ft = FluidsTable(fluids=list(all_fluids.values()))
@@ -683,8 +678,8 @@ class TestCases(unittest.TestCase):
         # for _key in list(source.data.keys()):
         #     print(_key, source.data[_key])
         table, add_row, delete_row, update = ft.draw(source)
-        # show(column(table, row(add_row, delete_row, update)))
-        return table, add_row, delete_row, update
+        show(column(table, row(add_row, delete_row, update)))
+        # return table, add_row, delete_row, update
 
     def test_fluidsub(self):
         import matplotlib.pyplot as plt
