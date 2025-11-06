@@ -10,6 +10,9 @@ import os, sys
 from typing import Literal
 import bruges.rockphysics.rockphysicsmodels as brr
 
+from bokeh.models import ColumnDataSource, StringFormatter, NumberEditor, NumberFormatter
+# from pandas.io.formats.string import StringFormatter
+
 from .. import ureg, Q_
 import pint
 
@@ -275,4 +278,144 @@ class LithoFluids:
                 )
             )
             self.litho_fluids = all_litho_fluids
+
+class LithoFluidsTable:
+    """
+    Returns a table of "litho-fluids" that are useful for populating a model
+    """
+    def __init__(self,
+                 litho_fluids: LithoFluids | None = None,
+                 width: int | None = None,
+                 height: int | None = None):
+        """
+
+        :param litho_fluids:
+            LithoFluids object
+        :param width:
+            int
+        """
+        if width is None:
+            width = 700
+        self.width = width
+        if height is None:
+            height = 135
+        self.height = height
+        if litho_fluids is None:
+            litho_fluids = LithoFluids()
+        self.litho_fluids = litho_fluids
+        self.keys = ['name', 'vp', 'vs', 'rho',
+                     'vp_std_dev', 'vs_std_dev', 'rho_std_dev',
+                     'vp_vs_cc', 'vp_rho_cc', 'vs_rho_cc']
+
+    @property
+    def source(self) -> ColumnDataSource:
+        _dict = {_x:[] for _x in self.keys}
+        for _litho_fluid in self.litho_fluids.litho_fluids:
+            for _key in self.keys:
+                if _key == 'name':
+                    _dict['name'].append(_litho_fluid.name)
+                else:
+                    _dict[_key].append(_litho_fluid.__dict__[_key].magnitude)
+        return ColumnDataSource(_dict)
+
+    @property
+    def litho_fluid_names(self):
+        _litho_fluid_names = []
+        for _litho_fluid in self.litho_fluids.litho_fluids:
+            _this_name = _litho_fluid.name
+            if _this_name not in _litho_fluid_names:
+                _litho_fluid_names.append(_this_name)
+        return _litho_fluid_names
+
+    def table_columns(self):
+        from bokeh.models import (SelectEditor, StringEditor, TableColumn, CheckboxEditor)
+        column_names = [_s.capitalize().replace('_', ' ') for _s in self.keys]
+        table_columns = []
+        for i, column_key in enumerate(self.keys):
+            if column_key == 'name':
+                _editor = StringEditor()
+                _formatter = StringFormatter(font_style='bold')
+            else:
+                _editor = NumberEditor()
+                _formatter = NumberFormatter(format='0.0[0]')
+            table_columns.append(
+                TableColumn(
+                    field=column_key,
+                    title=column_names[i],
+                    editor=_editor,
+                    formatter=_formatter
+
+                )
+            )
+
+        return table_columns
+
+    def draw(self,
+             source: ColumnDataSource):
+        from bokeh.models import DataTable, Button, CheckboxGroup
+
+        def add_row_function():
+            new_data = dict(source.data)
+            lf = LithoFluid(default='brine_sst')
+            for _key in list(new_data.keys()):
+                if _key == 'name':
+                    new_data[_key].append('brine sst')
+                else:
+                    new_data[_key].append(lf.__dict__[_key])
+            source.data = new_data
+
+        def delete_row_function():
+            selected_index = source.selected.indices
+            new_data = {_x:[] for _x in self.keys}
+            for _i in range(len(source.data['name'])):
+                if _i  in selected_index:
+                    continue
+                for _x in self.keys:
+                    new_data[_x].append(source.data[_x][_i])
+            source.selected.indices = []
+            source.data = new_data
+
+        def update_table_function():
+            new_data = dict(source.data)
+            _litho_fluids = []
+            for _i in range(len(new_data['name'])):
+                # print(' - Iteration: {} of {}'.format( _i, len(new_data['name'])))
+                this_litho_fluid = LithoFluid(
+                    name=new_data['name'][_i],
+                    vp=Q_(new_data['vp'][_i], 'm/s'),
+                    vs=Q_(new_data['vs'][_i], 'm/s'),
+                    rho=Q_(new_data['rho'][_i], 'gram / cm^3'),
+                    vp_std_dev=Q_(new_data['vp_std_dev'][_i], 'm/s'),
+                    vs_std_dev=Q_(new_data['vs_std_dev'][_i], 'm/s'),
+                    rho_std_dev=Q_(new_data['rho_std_dev'][_i], 'gram / cm^3'),
+                    vp_vs_cc=Q_(new_data['vp_vs_cc'][_i], ''),
+                    vp_rho_cc=Q_(new_data['vp_rho_cc'][_i], ''),
+                    vs_rho_cc=Q_(new_data['vs_rho_cc'][_i], '')
+                )
+                _litho_fluids.append(this_litho_fluid)
+
+            self.litho_fluids.litho_fluids = _litho_fluids
+
+            source.data = new_data
+
+        dt = DataTable(
+            source=source,
+            columns=self.table_columns(),
+            editable=True,
+            width=self.width,
+            height=self.height,
+            index_position = -1,
+            index_header = 'index'
+        )
+
+        add_row = Button(label='Add row', button_type='success')
+        add_row.on_click(add_row_function)
+
+        delete_row = Button(label='Delete selected rows', button_type='success')
+        delete_row.on_click(delete_row_function)
+
+        update_table = Button(label='Update', button_type='success')
+        update_table.on_click(update_table_function)
+
+        return dt, add_row, delete_row, update_table
 

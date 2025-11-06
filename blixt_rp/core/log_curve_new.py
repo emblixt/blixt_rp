@@ -68,6 +68,7 @@ class Depth(object):
         :param depth_type:
             str
             'md', 'tvd', 'owt', or 'twt'
+            'tvd' refers to True Vertical Depth relative to Kelly Bushing (tvd_kb)
         :param verbose:
         """
 
@@ -1345,13 +1346,6 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
         print_info(warn_txt, 'warning', logger)
     depth_units = fix_units_for_pint(depth_units)
 
-    # # Un-translate the log_table if necessary
-    # # OR
-    # # TODO IS IT BETTER TO RENAME THE LOGS DIRECTLY WHILE READING THE LAS FILE?
-    # if rename_logs is not None:
-    #     if log_table is not None:
-    #         log_table = log_table.un_translate(rename_logs=rename_logs)
-
     # Only read those logs we requested in the log_table
     only_these_logs = generated_keys  # This contains all the logs
     log_types = [None] * len(only_these_logs)
@@ -1515,6 +1509,9 @@ def fix_units_for_pint(unit):
 
     if '_' in unit:
         unit = unit.replace('_', ' ')
+
+    if unit == 'unitless':
+        unit = 'dimensionless'
 
     return unit
 

@@ -269,6 +269,12 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
     h = figure(width=600, height=200, tools=[PanTool(), WheelZoomTool()])
     h.toolbar.logo = None
     lf_table = create_litho_fluids_table(litho_fluids_list, 800)
+    # TODO Try using the new LithoFluidsTable object in rp_core_new.py instead
+    # my_lfs =  brrp.LithoFluidsTable(lfs)
+    # my_source = my_lfs.source
+    # lf_table, add_row, delete_row, update_table = my_lfs.draw(my_source)
+    # TODO It doesn't interact well with the other objects. Needs to be checked
+
     interface_table = create_interface_table(lf_table, 600)
 
     chi_input = NumericInput(value=26, low=-90, high=90, title="Chi angle:",

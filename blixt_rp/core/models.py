@@ -434,7 +434,7 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
         for _i, avo in list(avo_curves.items()):
             if plot_domain == 'TWT':
                 ax.annotate('{}'.format(_i + 1), avo_positions[_i], bbox={'boxstyle': 'circle', 'color': cnames[_i]})
-                # print('XXX2', avo_positions[_i])
+                print('XXX2', avo_positions[_i])
                 # ax.annotate('{}'.format(_i + 1), (10, 2.), bbox={'boxstyle': 'circle', 'color': cnames[_i]})
             else:
                 # TODO

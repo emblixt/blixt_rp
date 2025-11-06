@@ -954,12 +954,13 @@ def interactive_edits(well: cw.Well,
 
 def plot_trends(x_name: str, wells: list, log_table: LogTable, wis:Intervals, wi_name: str,  cutoffs: Cutoffs,
                 results_folder: str | None = None, verbose: bool =True, suffix: str | None = None,
-                de_trend_loc: float | None = None, de_trend_scale: float | None = None, **kwargs):
+                de_trend_loc: float | None = None, de_trend_scale: float | None = None,
+                skip: list | None = None, **kwargs):
     """
     Plots the depth trends (TVD) and performs an optional de-trending for each individual log within the given working interval, for all wells
 
     :param x_name:
-        name of the log which represents the independent variable (typically TVD for depth trends)
+        name of the log which represents the independent variable (typically TVD_ML (below mudline) for depth trends)
     :param wells:
         list of well_new objects
     :param log_table:
@@ -985,6 +986,9 @@ def plot_trends(x_name: str, wells: list, log_table: LogTable, wis:Intervals, wi
         The data is then shifted to this depth
     :param de_trend_scale:
         The uncertainty of the location above
+    :param skip:
+        List of Log types we don't calculate a trend for.
+        Default values ['Discrete flag']
     :param kwargs:
 
     :return:
@@ -994,6 +998,8 @@ def plot_trends(x_name: str, wells: list, log_table: LogTable, wis:Intervals, wi
     from blixt_utils.utils import mask_string
     from blixt_utils.plotting import crossplot as xp
 
+    if skip is None:
+        skip = ['Discrete flag']
     down_weight_outliers = kwargs.pop('down_weight_outliers', False)
     # target_function = exp_function
     # x0 = [1000., -1000., -0.001]
@@ -1022,6 +1028,8 @@ def plot_trends(x_name: str, wells: list, log_table: LogTable, wis:Intervals, wi
     # Start looping over the different log types
     print_info('START ANALYZING DEPTH TRENDS:', '', None, verbose, False)
     for log_type in log_table.log_types:
+        if log_type in skip:
+            continue
         if log_table.multi_log:
             raise NotImplementedError('This only supports log_tables with one log per log_type, should be extended')
         log_name = log_table[log_type]
@@ -1149,7 +1157,8 @@ def plot_trends(x_name: str, wells: list, log_table: LogTable, wis:Intervals, wi
 
             ax.set_title('{}: {}. {} {} {}'.format(log_type, log_name, str(cutoffs), wi_name, suffix))
             buffer = 0.05 * (x_max - x_min)
-            ax.set_xlim(x_max + buffer, x_min - buffer)
+            # ax.set_xlim(x_max + buffer, x_min - buffer)
+            ax.set_xlim(x_min - buffer, x_max + buffer)
             this_legend = ax.legend(
                 legend_items,
                 prop=FontProperties(size='smaller'),

@@ -6,7 +6,7 @@ class ProjectTestCase(unittest.TestCase):
 
     def test_create_project(self):
         wp = Project(name='MyProject',   # uses the new project table
-                     log_to_stdout=True)
+                     log_to_stdout=False)
         with self.subTest():
             print(type(wp))
             self.assertTrue(isinstance(wp, Project))
@@ -17,21 +17,25 @@ class ProjectTestCase(unittest.TestCase):
                               'Porosity': 'PHIE', 'Volume': 'VCL'})
         for _log_table in (None, log_table):
             wp = Project(name='MyProject', log_to_stdout=True)
-            if _log_table is None:
-                print('- No LogTable')
-            else:
-                print('- With LogTable')
+            # if _log_table is None:
+            #     print('- No LogTable')
+            # else:
+            #     print('- With LogTable')
             wp.load_all_wells(log_table=_log_table)
             for _w in wp.wells:
-                print('-', _w.name, '\n', _w.header, '\n', _w.style)
+                # print('-', _w.name, '\n', _w.header, '\n', _w.style)
+                print('-', _w.name, _log_table)
                 print(_w.calc_press_ref(None))
-                for _l in _w.logs:
-                    if _l.style is None:
-                        style_txt = 'STYLE IS LACKING'
-                    else:
-                        style_txt = 'True: {} '.format(_l.style.units)
-                    print('  - log name: {}, unit: {}, depth units: {}, evenly spaced? {}, len: {}, style? {}'.format(_l.name,
-                           _l.units, _l.depth_units, _l.is_evenly_spaced, len(_l), style_txt ))
+                print(_w.header.water_depth)
+                _w.create_tvd_ml_log()
+                print(_w.get_log_names)
+                # for _l in _w.logs:
+                #     if _l.style is None:
+                #         style_txt = 'STYLE IS LACKING'
+                #     else:
+                #         style_txt = 'True: {} '.format(_l.style.units)
+                #     print('  - log name: {}, unit: {}, depth units: {}, evenly spaced? {}, len: {}, style? {}'.format(_l.name,
+                #            _l.units, _l.depth_units, _l.is_evenly_spaced, len(_l), style_txt ))
 
     def test_load_wells_with_rename(self):
         """

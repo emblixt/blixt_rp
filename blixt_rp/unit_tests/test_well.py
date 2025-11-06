@@ -203,6 +203,9 @@ class WellTestCase(unittest.TestCase):
         from blixt_rp.core.core import LogTable, Template
         well1 = Well()
         well1.read_las(las_file1, log_table=log_table1, template_file=project_table)
+        print(well1.get_log_names)
+        well1.create_md_log()
+        print(well1.get_log_names)
         print(str(well1.style))
         lc = well1.get_log_curve('dt')
         # well1.read_las(las_file2, log_table=log_table2, template_file=project_table)

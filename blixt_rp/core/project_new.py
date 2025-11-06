@@ -283,6 +283,8 @@ class Project(object):
                     _log_table = log_table.keep(list(result[_key]['logs'].keys()))
 
                 w.read_las(_key, log_table=_log_table, template_file=self.project_table, rename_logs=translate_dict, verbose=verbose)
+                # Force name of well to be that given in the project_table, and not given by the las file
+                w.name = result[_key]['Given well name']
 
             elif uio.filetype(_key) in ['txt', 'dat', 'ascii', 'asc']:
                 var_names = list(result[_key]['logs'].keys())

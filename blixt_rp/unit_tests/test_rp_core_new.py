@@ -45,3 +45,14 @@ class SomeTests(unittest.TestCase):
         plt.show()
         self.assertTrue(True)
 
+    def test_litho_fluid_table(self):
+        from bokeh.io import output_file
+        from bokeh.plotting import show, row, column
+        output_file('C:\\Users\\emb\\Downloads\\plot.html')
+        lfs = brrp.LithoFluids()
+        lfs.from_excel(excel_file)
+        table = brrp.LithoFluidsTable(lfs)
+        source = table.source
+        table, add_row, delete_row, update = table.draw(source)
+        show(column(table, row(add_row, delete_row, update)))
+

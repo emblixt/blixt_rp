@@ -30,17 +30,15 @@ import pint
 from scipy.constants import degree
 from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
-
-from blixt_rp.core.core import Cutoffs
-from blixt_rp.core.log_curve_new import LogCurve
+from .. import ureg, Q_
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from .. import ureg, Q_
-
+from blixt_rp.core.core import Cutoffs
+from blixt_rp.core.log_curve_new import LogCurve, Depth
 from blixt_utils.utils import print_info
 import blixt_utils.misc.masks as msks
 
@@ -65,9 +63,8 @@ class WellTrajectory:
     """
     Handles the trajectory of a well.
     The common, and necessary, dimension is measured depth; MD
-    Other dimensions, like true vertical depth (TVD), inclination (INC), burial depth (BD), will follow
+    Other dimensions, like true vertical depth (TVD), inclination (INC), burial depth (tvd_ml), will follow
     """
-    # TODO Rewrite it to use the Depth object as input for md, and test that 'depth_type' == 'md'
     def __init__(self,
                  md: pint.Quantity,
                  tvd_kb:  LogCurve | None = None,
@@ -168,7 +165,7 @@ class WellTrajectory:
     def inc(self, value: LogCurve):
         self._inc = self.set_param(value, 'degree', None)
 
-    def burial_depth(self, kelly_busing: pint.Quantity, water_depth:pint.Quantity) -> pint.Quantity | None:
+    def tvd_ml(self, kelly_busing: pint.Quantity, water_depth:pint.Quantity) -> pint.Quantity | None:
         """
         Returns the burial depth (vertical depth below mud line (sea floor)) calculated from the tvd_kb
         :param kelly_busing:
@@ -226,17 +223,10 @@ class Well(object):
         self._style = style
 
         self._trajectory = None
+
     @property
     def trajectory(self):
         return self._trajectory
-
-    @trajectory.setter
-    def trajectory(self, new_trajectory):
-        if isinstance(new_trajectory, WellTrajectory):
-            self._trajectory = new_trajectory
-        else:
-            pass
-
 
     @property
     def name(self):
@@ -646,14 +636,14 @@ class Well(object):
         """
         return Q_(4.0, 'degC')
 
-    def get_tvd_log(self) -> LogCurve | None:
-        from blixt_utils.utils import print_info
-        tvd_logs = self.get_logs_of_type('TVD')
-        if len(tvd_logs) == 0:
-            warn_txt = 'No True Vertical Depth log in {}, using MD'.format(self.name)
-            print_info(warn_txt, 'warning', logger)
-            return None
-        return tvd_logs[0]
+    # def get_tvd_log(self) -> LogCurve | None:
+    #     from blixt_utils.utils import print_info
+    #     tvd_logs = self.get_logs_of_type('TVD')
+    #     if len(tvd_logs) == 0:
+    #         warn_txt = 'No True Vertical Depth log in {}, using MD'.format(self.name)
+    #         print_info(warn_txt, 'warning', logger)
+    #         return None
+    #     return tvd_logs[0]
 
     def get_md_log(self) -> LogCurve | None:
         """
@@ -688,6 +678,58 @@ class Well(object):
                         note='MD log taken from {}'.format(selected_log.name),
                         orig_filename=selected_log.header.orig_filename)
         )
+
+    def create_md_log(self):
+        self.logs.append(self.get_md_log())
+
+    def create_trajectory(self):
+        _md = self.get_md_log()
+        _tvd_logs = self.get_logs_of_type('TVD')
+        if len(_tvd_logs) == 0:
+            _tvd_log = None
+        else:
+            _tvd_log = _tvd_logs[0]
+        _inc_logs = self.get_logs_of_type('Inclination')
+        if len(_inc_logs) == 0:
+            _inc_log = None
+        else:
+            _inc_log = _inc_logs[0]
+        self._trajectory = WellTrajectory(
+            _md.data,
+            tvd_kb=_tvd_log,
+            inc=_inc_log
+        )
+
+    def create_tvd_ml_log(self):
+        if self._trajectory is None:
+            self.create_trajectory()
+        if not 'water_depth' in list(self.header.keys()):
+            print_info('No water depth provided. Can not calculate TVD_ML (Burial depth)', 'warning', logger)
+        elif not 'kb' in list(self.header.keys()):
+            print_info('No Kelly Bushing provided. Can not calculate TVD_ML (Burial depth)', 'warning', logger)
+        elif self.trajectory.tvd_kb is None:
+            print_info('No TVD (relative to Kelly Bushing) provided. Can not calculate TVD_ML (Burial depth)', 'warning', logger)
+        else:
+            info_str = 'TVD_ML calculated in well {} using KB: {} and water depth {}'.format(self.name,
+                                                                                             self.header.kb,
+                                                                                  self.header.water_depth)
+            self.logs.append(
+                LogCurve(
+                    name='tvd_ml',
+                    log_data=self.trajectory.tvd_ml(self.header.kb, self.header.water_depth),
+                    depth=Depth(self.trajectory.md),
+                    log_type='TVD',
+                    well=self.name,
+                    style = dict(full_name='TVD ml',
+                                 name='tvd_ml',
+                                 units=str(self.trajectory.tvd_kb.units)),
+                    header = dict(name='tvd_ml',
+                                  well=self.name,
+                                  log_type='TVD',
+                                  note=info_str)
+            ) )
+            print_info(info_str, 'info', logger)
+
 
     def plot(self, log_columns: list, output_filename: str):
         """
