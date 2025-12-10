@@ -754,15 +754,18 @@ def avo_qc(
             for _index in _selected_cells:
                 container[_stack].append(_seismic_sources[_stack][_index].data)
             if len(container[_stack]) > 0:
-                _new_data['avg_amp'][_i] = np.nanmean(np.array(container[_stack]))
+                # As pointed out by Ben, the average of a value oscillating around zero will be near zero,
+                # _new_data['avg_amp'][_i] = np.nanmean(np.array(container[_stack]))
+                # Try using the absolute value
+                _new_data['avg_amp'][_i] = np.nanmean(np.abs(np.array(container[_stack])))
             else:
                 _new_data['avg_amp'][_i] = 0.0
         _angle_source.data = dict(_new_data)
         if verbose:
             for _i, _stack in enumerate(_angle_source.data['name']):
-                print('At {}, the avg. amplitude of {} is calculated from {}'.format(_stack,
+                print('At {}, the avg. absolute amplitude of {} is calculated from {}'.format(_stack,
                                                                                      _angle_source.data['avg_amp'][_i],
-                                                                                     ['{:.2}'.format(_amp) for _amp in container[_stack]]))
+                                                                                     ['{:.2}'.format(np.abs(_amp)) for _amp in container[_stack]]))
 
     def changing_stacks_callback(attr, old, new):
         calc_i_g()

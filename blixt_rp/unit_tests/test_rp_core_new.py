@@ -45,7 +45,7 @@ class SomeTests(unittest.TestCase):
         plt.show()
         self.assertTrue(True)
 
-    def test_litho_fluid_table(self):
+    def test_litho_fluid_table(self, unit_test=True):
         from bokeh.io import output_file
         from bokeh.plotting import show, row, column
         output_file('C:\\Users\\emb\\Downloads\\plot.html')
@@ -54,5 +54,9 @@ class SomeTests(unittest.TestCase):
         table = brrp.LithoFluidsTable(lfs)
         source = table.source
         table, add_row, delete_row, update = table.draw(source)
-        show(column(table, row(add_row, delete_row, update)))
+        if unit_test:
+            show(column(table, row(add_row, delete_row, update)))
+            return None
+        else:
+            return table, add_row, delete_row, update
 

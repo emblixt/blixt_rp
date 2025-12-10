@@ -13,6 +13,7 @@ import logging
 from copy import deepcopy
 import numpy as np
 import matplotlib.pyplot as plt
+from bokeh.models import ColumnDataSource
 from pandas import DataFrame
 import xarray as xr
 import pint
@@ -286,9 +287,9 @@ class LogCurve(object):
         # If the style Template contains a unit, which is not None, then we should convert the data to this
         # unit if it is not already using those units.
         if style.units is not None:
-            # print('Units in template is {}'.format(log_curve.style.units))
+            # print('XXX Units in template is {}'.format(style.units))
             if not is_equivalent(self.data.units, ureg.Unit(style.units)):
-                # print('Units are not the same, try to convert')
+                # print(' XXX Units are not the same, try to convert')
                 try:
                     info_txt = '{}: {}: Convert from {} to {}'.format(
                         self.well, self.name, str(self.data.units), style.units
@@ -1219,16 +1220,27 @@ class LogCurve(object):
         """
         from blixt_rp.plotting.log_plotter import Line
         self.style.name = self.name
+        # TODO
+        # Need to rebuild this to use the source initiation instead of x and y as arrays
+        _source = ColumnDataSource(
+            {str(self.name): self.data.magnitude, 'depth': self.depth.magnitude}
+        )
+        # return Line(
+        #     x=self.data.magnitude,
+        #     y=self.depth.magnitude,
+        #     style=self.style
+        #     # line_args = {
+        #     #     'line_color': 'blue' if self.style.line_color is None else self.style.line_color,
+        #     #     'line_dash': 'solid' if self.style.line_style is None else self.style.line_style,
+        #     #     'line_width': 1. if self.style.line_width is None else self.style.line_width,
+        #     #     'legend_label': self.name
+        #     # }
+        # )
         return Line(
-            x=self.data.magnitude,
-            y=self.depth.magnitude,
-            style=self.style
-            # line_args = {
-            #     'line_color': 'blue' if self.style.line_color is None else self.style.line_color,
-            #     'line_dash': 'solid' if self.style.line_style is None else self.style.line_style,
-            #     'line_width': 1. if self.style.line_width is None else self.style.line_width,
-            #     'legend_label': self.name
-            # }
+            x=self.name,
+            y='depth',
+            style=self.style,
+            source=_source
         )
 
 

@@ -892,7 +892,7 @@ class CrossPlotter:
         #     size=size_var)
         # x_y_source = ColumnDataSource(x_y_source_dict)
 
-        # Draw the classification table
+        # Draw the classification / cutoffs table
         ct_source = None
         if self.cutoffs_table is not None:
             ct_source = self.cutoffs_table.source

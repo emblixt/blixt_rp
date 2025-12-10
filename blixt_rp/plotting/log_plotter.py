@@ -1,8 +1,11 @@
+import unittest
+
 import matplotlib as mpl
 
 import bokeh.plotting
 import numpy as np
 from pandas import DataFrame
+import logging
 from typing import Literal
 # from IPython.core.magics.code import extract_code_ranges
 from bokeh.plotting import figure, show
@@ -17,10 +20,13 @@ from bokeh.layouts import gridplot
 from bokeh.transform import transform
 
 # from blixt_utils.misc.templates import necessary_keys
+from blixt_utils.utils import print_info
 from blixt_rp.core.core import Template
 from blixt_rp.core.seismic import SeismicTraces, seismic_color_map
 
-tools = [
+logger = logging.getLogger(__name__)
+
+default_tools = [
     PanTool(),
     WheelZoomTool(),
     HoverTool(),
@@ -31,18 +37,32 @@ tools = [
 
 test_data_length = 1000
 
+line_dashes = {
+    '-': 'solid',
+    '--': 'dashed',
+    ':': 'dotted',
+    '.-': 'dotdash',
+    '-.': 'dashdot'}
+
+
+class LineSource:
+    # TODO Maybe reuse the DataSource in cross_plotter.py, But need to add some functionality to use a well as input
+    # directly
+    pass
 
 class LogPlotter:
     """
     Class for plotting multiple well logs, from one well, in different "columns", all with a common y-axis (time
     or depth)
     """
+    from blixt_rp.core.core import Cutoffs
 
     def __init__(self,
                  width: int = 300,
                  height: int = 600,
                  columns: list |None = None,
-                 add_tools: list | None = None
+                 cutoffs: Cutoffs | None = None,
+                 tools: list | None = None
                  ):
         """
 
@@ -51,14 +71,24 @@ class LogPlotter:
         :param columns:
             list
             list of LogColumn objects
+        :param cutoffs:
+            Cutoffs
+            Object containing the rules used for masks and classification
+        :param tools:
         """
+
         if columns is None:
             columns = []
         self._width = width
         self._height = height
         self._columns = columns
-        self._add_tools = add_tools
 
+        self.cutoffs = cutoffs
+        self._cutoffs_table = None
+
+        if tools is None:
+            tools = default_tools
+        self._tools = tools
 
     @property
     def width(self):
@@ -84,6 +114,10 @@ class LogPlotter:
     def columns(self, l: list):
         self._columns = l
 
+    @property
+    def cutoffs_table(self):
+        return self._cutoffs_table
+
     def add_column(self, _column, keep_column_width=True):
         if keep_column_width:
             old_width = self.width
@@ -103,12 +137,128 @@ class LogPlotter:
         n_cols = sum([_column.rel_width for _column in self.columns])
         return int(self.width / n_cols)
 
+    @property
+    def line_source(self) -> ColumnDataSource:
+        """
+        Returns a merged CDS for all Line objects in all columns.
+        This is necessary when using the BooleanFilter possibility of a CDS on each LogColumn
+        Note that it will only work if all Line objects have CDS, and that they are equal in length
+        :return:
+        """
+        _dict = {}
+        _i = 0
+        _len = 0
+        for _col in self.columns:
+            for _line in _col.lines:
+                if _line.source is None:
+                    warn_txt = 'Line {} in column {} has no source (CDS)'.format(_line.name, _col.name)
+                    print_info(warn_txt, 'warning', logger)
+                    continue
+                for _key, _var in _line.source.data.items():
+                    if _i == 0:
+                        _len = len(_var)
+                    elif _len != len(_var):
+                        warn_txt = 'Line {}({}) in column {} with length: {} differs from previous lengths: {}'.format(
+                            _line.name, _key, _col.name, len(_var), _len)
+                        print_info(warn_txt, 'warning', logger)
+                        continue
+                    _dict[_key] = _var
+                    _i += 1
+        _dict['mask'] = np.array([True] * _len)
+
+        return ColumnDataSource(_dict)
+
+    def add_settings(self, grid: gridplot, width=None):
+        from blixt_rp.core.core import TemplatesTable
+
+        code = """
+            const data = source.data;
+            const cols = Object.keys(data);
+            const nrows = data[cols[0]].length;
+
+            console.log('Plot has ${grid.children.length} columns', grid.children.length);
+            console.log(`Iterating over ${nrows} rows and ${cols.length} columns:`);
+            
+            // Iterate over all columns in the gridplot
+            for (let _c = 0; _c < grid.children.length; _c++) {
+                // Iterate over all renderers
+                for (const r of grid.children[_c][0].renderers) {
+                    console.log('Plot column ', _c);
+                    // If the renderer is a Line glyph
+                    if (r.glyph && r.glyph.constructor.__name__ === 'Line') {
+                        console.log('Found a line renderer:', r.name);
+                        // Iterate over all lines in the settings table
+                        for (let i = 0; i < nrows; i++) {
+                            if (r.name === data['name'][i]) {
+                                console.log(data['name'][i]);
+                                r.glyph.line_color = data['line_color'][i];
+                                r.glyph.line_width = data['line_width'][i];
+                                r.glyph.line_dash = styles[data['line_style'][i]];
+                            }
+                        }
+                    }
+                }
+            }
+
+            // for (let i = 0; i < nrows; i++) {
+            //     for (let j = 0; j < cols.length; j++) {
+            //         const col = cols[j];
+            //         const value = data[col][i];
+            //         console.log(`Row ${i}, Column '${col}': ${value}`);
+            //     }
+            // }
+        """
+
+        templates = []
+        for _col in self.columns:
+            for _line in _col.lines:
+                templates.append(_line.style)
+        table = TemplatesTable(templates, width)
+        source = table.source
+
+        # js_on_change with 'patching' works
+        source_callback = CustomJS(args=dict(source=source, grid=grid, styles=line_dashes), code=code)
+        source.js_on_change('patching', source_callback)
+
+        return table.draw(source)
+
+    def add_cutoffs(self, grid: gridplot, line_source: ColumnDataSource, width=None):
+        """
+
+        :param grid:
+            gridplot
+        :param line_source:
+            ColumnDataSource
+            CDS of all line objects in the plot.
+            e.g. self.line_source
+        :param width:
+            int
+        :return:
+        """
+        from bokeh.models import CDSView, BooleanFilter, Button, Div
+        from blixt_rp.core.core import ClassificationTable
+
+        if self.cutoffs is not None:
+            self._cutoffs_table = ClassificationTable(rules=self.cutoffs.cutoffs, width=width)
+        source = self._cutoffs_table.source
+        # ct_guis consists of: table, add_row, delete_row, update, use
+        ct_guis = self._cutoffs_table.draw(source, parameters=None, units=None)
+
+        # TODO
+        # If a column contains one or more Line objects, they will have a CDS attached to each of them.
+        # We can create a BooleanFilter for each CDS just as we do in the CrossPlotter
+        # But the mask is dependent on the data in the other columns too! To make this happen, we need to create
+        # a CDS which is common for all Lines in the LogPlotter
+        # Create a BooleanFilter,
+        boolean_filter = BooleanFilter(booleans=line_source.data['mask'])
+        #   ># Create a CDSView using the BooleanFilter
+        #   >view = CDSView(filter=boolean_filter)
+
+
+
     def figure(self, title: str | None = None) -> gridplot:
-        if self._add_tools is not None:
-            my_tools = tools + self._add_tools
-        else:
-            my_tools = tools
         children = []
+        lines = []
         _w = Span(dimension="width", line_dash="dashed", line_width=1)
         _h = Span(dimension="height", line_dash="dashed", line_width=0)
         for i, _column in enumerate(self.columns):
@@ -116,8 +266,9 @@ class LogPlotter:
                                       _y_range_flipped=i==0,
                                       _x_axis_visible=len(_column) > 0,
                                       _y_axis_visible=i==0,
-                                      _tools=my_tools,
+                                      _tools=self._tools,
                                       _title=title)
+            _p.name = _column.name
             children.append(_p)
 
         # Let the y-axis of all columns be controlled by the y-axis of the first column
@@ -177,6 +328,10 @@ class LogColumn:
     def name(self):
         return self._name
 
+    @name.setter
+    def name(self, new_name):
+        self._name = new_name
+
     @property
     def rel_width(self):
         return self._rel_width
@@ -216,11 +371,14 @@ class LogColumn:
     @seismic_traces.setter
     def seismic_traces(self, st: SeismicTraces):
         if not isinstance(st, SeismicTraces):
-                raise IOError('{} is not a SeismicTraces object'.format(_st))
+                raise IOError('{} is not a SeismicTraces object'.format(st))
         self._seismic_traces = st
 
     def __len__(self):
-        return max([len(self.lines), 1])  # There is only one seismic_traces object
+        if self.seismic_traces is not None:
+            return 1
+        else:
+            return len(self.lines)
 
 class Line:
     """
@@ -232,10 +390,14 @@ class Line:
                  style: Template | None = None,
                  source: ColumnDataSource | None = None
     ):
+        # TODO
+        # TODO Force this to use source (CDS) as mandatory, and add a view (CDSView object)
         """
 
         :param x:
+            np.array or string
         :param y:
+            np.array or string
         :param style:
             Template
             Template object which we use to create the line arguments that goes to the bokeh.figure.line() method.
@@ -258,6 +420,15 @@ class Line:
                                     min=1000., max=13000.))
         self.style = style
         self.source = source
+        self._name = style.name
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, new_name):
+        self._name = new_name
 
     @property
     def x(self):
@@ -270,14 +441,16 @@ class Line:
     @property
     def line_args(self):
         # handle linestyle
-        if self.style.line_style == '-':
-            line_dash = 'solid'
-        elif self.style.line_style == '--':
-            line_dash = 'dashed'
-        elif self.style.line_style == ':':
-            line_dash = 'dotted'
-        elif self.style.line_style == '-.':
-            line_dash = 'dotdash'
+        # if self.style.line_style == '-':
+        #     line_dash = 'solid'
+        # elif self.style.line_style == '--':
+        #     line_dash = 'dashed'
+        # elif self.style.line_style == ':':
+        #     line_dash = 'dotted'
+        # elif self.style.line_style == '-.':
+        #     line_dash = 'dotdash'
+        if self.style.line_style in ['-', '--', ':', '.-', '-.']:
+            line_dash = line_dashes[self.style.line_style]
         else:
             line_dash = 'solid'
 
@@ -315,14 +488,6 @@ class Line:
         if _max is None:
             _max = self.max
         return _min, _max
-
-class FluidSubControls:
-    """
-    Class for handling the logistics of fluid substitution, with controls etc.
-    """
-    def __init__(self,
-                 ):
-        return
 
 
 def create_column_figure(_column: LogColumn,
@@ -365,6 +530,7 @@ def create_column_figure(_column: LogColumn,
         list
         List of tools included in the toolbar, Except for CrossHairTool, which is added separately
     :return:
+        Bokeh figure
     """
     if _w is None:
         _w = Span(dimension="width", line_dash="dashed", line_width=1)
@@ -425,18 +591,18 @@ def add_lines(_p: bokeh.plotting.figure,
         _legend_label = _line.line_args['legend_label']
         if j == 0:
             if _line.source is None:
-                _p.line(x=_line.x, y=_line.y,  **_line.line_args)
+                _p.line(x=_line.x, y=_line.y, name=_line.name,  **_line.line_args)
             else:
-                _p.line(x=_line.x, y=_line.y, source=_line.source, **_line.line_args)
+                _p.line(x=_line.x, y=_line.y, source=_line.source, name=_line.name, **_line.line_args)
             _p.xaxis.axis_label = _legend_label
             _p.x_range = Range1d(*_line.x_range(from_style=True))
             # print('XXX', _p.x_range.start, _p.x_range.end)
         else:
             _p.extra_x_ranges[_legend_label] = Range1d(*_line.x_range(from_style=True))
             if _line.source is None:
-                _p.line(x=_line.x, y=_line.y, **_line.line_args, x_range_name=_legend_label)
+                _p.line(x=_line.x, y=_line.y, name=_line.name, **_line.line_args, x_range_name=_legend_label)
             else:
-                _p.line(x=_line.x, y=_line.y, source=_line.source, **_line.line_args, x_range_name=_legend_label)
+                _p.line(x=_line.x, y=_line.y, source=_line.source, name=_line.name, **_line.line_args, x_range_name=_legend_label)
             if _column.scale == 'log':
                 this_ax = LogAxis(axis_label=_legend_label, x_range_name=_legend_label,
                                      axis_label_text_font_size='10px',
@@ -579,6 +745,7 @@ def add_strat_table(_p: bokeh.plotting.figure,
             raise IOError('Necessary key {} is lacking in stratigraphy dictionary'.format(_key))
 
     for _key in _optional_keys:
+        # give default values to keys not listed among _current_keys
         if _key not in _current_keys:
             if _key == 'base':
                 stratigraphy[_key] = stratigraphy['top']
@@ -718,3 +885,39 @@ def add_strat_table(_p: bokeh.plotting.figure,
         index_width=60)
 
 
+def select_column(grid: gridplot, column_name: str) -> figure:
+    """
+    Return the figure (column) named column_name of the gridplot grid
+    :param grid:
+        Bokeh gridplot
+    :param column_name:
+        str
+        name of column
+    :return:
+        figure or None if not found
+    """
+    return grid.select_one({'name': column_name})
+
+def select_line(grid: gridplot, line_name: str) -> bokeh.models.Line | None:
+    """
+    Return the figure (column) named column_name of the gridplot grid
+    :param grid:
+        Bokeh gridplot
+    :param line_name:
+        str
+        name of line
+    :return:
+        Line or None if not found
+    """
+    from bokeh.models import Line
+    _line = None
+    for _i, _child in enumerate(grid.children):
+        _line = _child[0].select_one({'name': line_name})
+        if _line is not None:
+            return _line
+    return _line
+
+
+class TestCases(unittest.TestCase):
+    def test_data(self):
+        pass

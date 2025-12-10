@@ -89,11 +89,21 @@ def plot_logs(well: cw.Well,
         [1., 2., 1.
     :return:
     """
+    # TODO Move the following lines to a new class (LineSource) in log_plotter.py
+    # To be able to use a cutoff on the well log data, we need to harmonize the logs to have the same
+    # length and sample rate
+    well.harmonize_logs()
+
     # Check that the requested logs exists in the well
-    flat_list = [ x for xs in log_columns for x in xs ]
-    for _log in flat_list:
-        if _log not in well.get_log_names:
-            print_info('Log {} does not exist in {}'.format(_log, well.name), 'error', logger, raiser='ioerror')
+    # flat_list = [ x for xs in log_columns for x in xs ]
+    # for _log in flat_list[:]:
+    for _col in log_columns:
+        # Iterate over a copy of the list by slicing!
+        for _log in _col[:]:
+            if _log not in well.get_log_names:
+                print_info('Log {} does not exist in {}'.format(_log, well.name), 'warning', logger)
+                # flat_list.remove(_log)
+                _col.remove(_log)
 
     if scales is None:
         scales = ['linear'] * len(log_columns)
@@ -114,8 +124,10 @@ def plot_logs(well: cw.Well,
     for _i, _c in enumerate(log_columns):
         plot_columns.append(
             LogColumn(
-                'test',
+                'column_{}'.format(str(_i)),
                 rel_width=rel_widths[_i],
+                # TODO First create one (ONE) single source from the well, and then re-use this source in all the
+                # TODO different columns, and with a CDSView too
                 lines=[well.get_log_curve(_l).get_line() for _l in _c],
                 scale=scales[_i])
         )

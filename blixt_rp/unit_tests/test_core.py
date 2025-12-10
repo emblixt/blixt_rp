@@ -110,12 +110,13 @@ class CutoffTests(unittest.TestCase):
         # ct = ClassificationTable()
         rules_source = ct.source
         # print(ct.source.data)
-        table, add_row, delete_row, update, use = ct.draw(rules_source, ['log A', 'log B'], units=['m', 'km'])
+        # table, add_row, delete_row, update, use = ct.draw(rules_source, ['log A', 'log B'], units=['m', 'km'])
+        table, add_row, delete_row, update, use = ct.draw(rules_source)
         print(ct.active_cutoffs(rules_source))
         rules_source.data['use'] = [True, True, True, True]
         print(ct.active_cutoffs(rules_source))
 
-        # show(column(table, add_row, delete_row, update, use))
+        show(column(table, add_row, delete_row, update, use))
         # return table, add_row, delete_row, update, use
 
     def test_classification_mask(self):
@@ -263,6 +264,27 @@ class TemplateTestCase(unittest.TestCase):
         t.get_from_project(project_table, 'XXX')
         print(t)
 
+    def test_templates_table(self):
+        from blixt_rp.core.core import TemplatesTable
+        from bokeh.io import output_file
+        output_file('C:\\Users\\emb\\Downloads\\plot.html')
+        project_table = "C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+
+        templates = []
+        for log_type in ['Resistivity', 'P velocity', 'S velocity']:
+            t = Template()
+            t.get_from_project(project_table, log_type)
+            t.name = log_type  # The original template has no name
+            templates.append(t)
+        print(templates)
+        tmpl_table = TemplatesTable(templates)
+        print(tmpl_table.templates)
+        for _t in tmpl_table.templates:
+            print(_t.name)
+        tmpl_source = tmpl_table.source
+        print(tmpl_source.data)
+        table = tmpl_table.draw(tmpl_source)
+        show(table)
 
 class IntervalTests(unittest.TestCase):
 

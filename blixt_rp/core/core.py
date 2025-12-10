@@ -14,7 +14,8 @@ import logging
 
 from bokeh.models import (Slider, ColorPicker, Range1d, LinearAxis, LogAxis, Span, Legend, ColumnDataSource, Text,
                           CustomJS, CustomJSTransform, LinearColorMapper, CheckboxEditor, Select)
-from bokeh.models import PanTool, BoxZoomTool, WheelZoomTool, ResetTool, SaveTool, CrosshairTool, HoverTool, TextInput
+from bokeh.models import (DataTable, PanTool, BoxZoomTool, WheelZoomTool, ResetTool, SaveTool, CrosshairTool,
+                          HoverTool, TextInput)
 from bokeh.plotting import figure, show
 from bokeh.plotting import column, row
 from datetime import datetime
@@ -458,8 +459,8 @@ class ClassificationTable:
 
     def draw(self,
              source: ColumnDataSource,
-             parameters: list,
-             units: list,
+             parameters: list | None = None,
+             units: list | None = None,
              color_menu: Select | None = None,
              verbose: bool = False):
         """
@@ -468,12 +469,18 @@ class ClassificationTable:
             ColumnDataSource
             Source containing the rules
         :param parameters:
+            list
+            List of (log) parameters (variables) on which the rules are applied
+            E.G. 'Vsh'
         :param units:
+            list
+            List of units used for the different parameters
         :param color_menu:
             Select
             Dropdown menu that decides how to color the data.
             Only the option "Classification" will be listened to here
         :return:
+            dt, add_row, delete_row, update_table, use_cutoffs
         """
         from bokeh.models import DataTable, Button, CheckboxGroup, Div
         from blixt_rp.core.core import CutoffRule
@@ -481,6 +488,15 @@ class ClassificationTable:
         import blixt_utils.misc.masks as masks
 
         orig_data = None
+
+        if parameters is None:
+            # Use the parameters defined in the source
+            parameters = source.data['log']
+            parameters = list(set(parameters))
+        if units is None:
+            # Use the units defined in the source
+            units = source.data['units']
+            units = list(set(units))
 
         def update_table_callback():
             # How do I use input variables to a python call back?
@@ -818,6 +834,101 @@ class Template:
         return {self.name: self.__dict__}
 
 
+class TemplatesTable:
+    def __init__(self,
+                 templates: list,
+                 width:int | None = None):
+        """
+
+        :param templates:
+            list
+            List of Template objects
+        :param width:
+        """
+        if width is None:
+            width = 600
+        self.width = width
+        self.height = 200
+        if templates is None:
+            templates = []
+        self._templates = templates
+        self.keys = ['name', 'line_color', 'line_width', 'line_style']
+        self.line_styles = {'-': 'solid', '--': 'dashed', ':': 'dotted', '-.': 'dashdot', '.-': 'dotdash'}
+
+        _dict = {_key: [] for _key in self.keys}
+        # for _t in self._templates:
+        for _t in self.templates:
+            for _key in self.keys:
+                _dict[_key].append(_t.__dict__[_key])
+
+        self._source = ColumnDataSource(_dict)
+
+    @property
+    def templates(self):
+        return self._templates
+
+    @templates.setter
+    def templates(self, new_templates):
+        self._templates = new_templates
+
+    @property
+    def source(self) -> ColumnDataSource:
+        return self._source
+
+    @source.setter
+    def source(self, new_source):
+        if isinstance(new_source, ColumnDataSource):
+            self._source = new_source
+        elif isinstance(new_source, dict):
+            self._source = ColumnDataSource(new_source)
+        else:
+            raise IOError('New source must be either ColumnDataSource or Dict, not {}'.format(
+                type(new_source)
+            ))
+
+    def table_columns(self):
+        from bokeh.models import (SelectEditor, StringEditor, TableColumn, IntEditor, HTMLTemplateFormatter)
+        colored_cell_template = """
+                <div style="background:<%= 
+                    (function color_from_val(){
+                        return(line_color)
+                        }()) %>; 
+                    color: white"> 
+                <%= value %>
+                </div>
+            """
+        formatter = HTMLTemplateFormatter(template=colored_cell_template)
+
+        table_columns = [
+            TableColumn(field='name', title='Name', editor=SelectEditor(options=[_t.name for _t in self.templates])),
+            TableColumn(field='line_color', title='Line color', editor=StringEditor(), formatter=formatter),
+            TableColumn(field='line_width', title='Line width', editor=IntEditor(step=1)),
+            TableColumn(field='line_style', title='Line style',
+                        editor=SelectEditor(options=list(self.line_styles.keys())))
+        ]
+        return table_columns
+
+    def draw(self,
+             source: ColumnDataSource) -> DataTable:
+        """
+        Returns a table
+
+        :param source:
+            ColumnDataSource
+            Source for style used for plotting data
+        :return:
+        """
+
+        return DataTable(
+            source=source,
+            columns=self.table_columns(),
+            editable=True,
+            width=self.width,
+            height=self.height,
+            index_position=-1,
+            index_header='index'
+        )
+
 class StratUnit(object):
     """
     Contains information about one specific stratigraphic unit (Group, Formation, Member, ...)
@@ -1037,15 +1148,23 @@ class Intervals(object):
         return strat_unit_dict
 
     def get_intervals_dict(self,
-                           well_name: str | None = None) -> dict:
+                           well_name: str | None = None, show_only_intervals: list | None = None) -> dict:
         """
         Returns a dictionary with all intervals
-        if well_name is not None, it filters out all other wells
+
+        :param well_name:
+            str or None
+            if well_name is not None, it filters out all other wells
+
+        :param show_only_intervals:
+            list or None
+            If None, all intervals are set visible
+            If list of interval names, only these are set visible
         :return:
         """
         # intervals_dict = {'well': [], 'name': [], 'top MD [m]': [], 'base MD [m]': [],
         intervals_dict = {'well': [], 'name': [], 'top': [], 'base': [],
-                          'level': [], 'color': [], 'source': [], 'note': []}
+                          'level': [], 'color': [], 'source': [], 'visible': [], 'note': []}
         for _interval in self.intervals:
             if well_name is not None:
                 if well_name.upper() != _interval.well.upper():
@@ -1059,6 +1178,13 @@ class Intervals(object):
             intervals_dict['level'].append(_interval.level)
             intervals_dict['color'].append(_interval.color)
             intervals_dict['source'].append(_interval.source)
+            if show_only_intervals is None:
+                intervals_dict['visible'].append(True)
+            else:
+                if _interval.name.lower() in [xx.lower() for xx in show_only_intervals]:
+                    intervals_dict['visible'].append(True)
+                else:
+                    intervals_dict['visible'].append(False)
             intervals_dict['note'].append(_interval.desc)
         return intervals_dict
 

@@ -15,6 +15,7 @@ from bruges.filters import ricker
 logger = logging.getLogger(__name__)
 
 
+
 def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, incident_angle: float,
                     wavelet: numpy.ndarray,
                     time_step=None,
