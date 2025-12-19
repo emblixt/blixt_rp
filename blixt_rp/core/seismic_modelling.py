@@ -3,8 +3,11 @@ import numpy
 import numpy as np
 import logging
 from matplotlib.font_manager import FontProperties
+from .. import ureg, Q_
+import pint
 
 from blixt_rp.core.models import Model, Layer
+from blixt_rp.rp.rp_core_new import LithoFluid
 import blixt_utils.utils as uu
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
@@ -13,7 +16,6 @@ import blixt_rp.plotting.plot_layered_model as model_plot
 from bruges.filters import ricker
 
 logger = logging.getLogger(__name__)
-
 
 
 def wedge_modelling(vps: list, vss: list, rhos: list, up_to_thickness: float, incident_angle: float,

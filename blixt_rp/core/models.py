@@ -2,18 +2,29 @@ import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 import numpy as np
 import sys
+import os
 import logging
 import types
 from copy import deepcopy
+import pint
+from bokeh.models import Column, ColumnDataSource
+
+from .. import ureg, Q_
+from ..rp.rp_core_new import LithoFluids, LithoFluidsTable
 
 # sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
 # Instead of sys.path.append load all PyCharm projects in PyCharm, and they gets added to the sys.path automatically
+
+# To test blixt_rp and blixt_utils libraries directly, without installation:
+project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
+sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot, wavelet_plot
 from blixt_utils.plotting.crossplot import cnames
 import blixt_rp.rp.rp_core as rp
 import blixt_utils.misc.wavelets as bumw
 import blixt_utils.io.io as uio
+from blixt_utils.utils import print_info
 
 logger = logging.getLogger(__name__)
 
@@ -779,11 +790,11 @@ class Layer:
     """
 
     def __init__(self,
-                 thickness=None,
+                 thickness: pint.Quantity | types.FunctionType |  None = None,
                  target=None,
-                 vp=None,
-                 vs=None,
-                 rho=None,
+                 vp: pint.Quantity | types.FunctionType | None = None,
+                 vs: pint.Quantity | types.FunctionType | None = None,
+                 rho: pint.Quantity | types.FunctionType | None = None,
                  ntg=None,
                  domain=None,
                  **kwargs
@@ -849,37 +860,41 @@ class Layer:
         else:
             self.target = target
 
+        if domain is not None:
+            raise ValueError('domain is now set automatically, and should not be set manually')
+
         if thickness is None:
-            self.thickness = 0.1
+            thickness = Q_(0.1, 's')
+        if thickness.check('[length]'):
+            domain = 'Z'
+        elif thickness.check('[time]'):
+            domain = 'TWT'
         else:
-            self.thickness = thickness
+            error_txt = 'Thickness must be given in either Time or Depth'
+            print_info(error_txt, 'error', logger, 'IOError')
+        self._thickness = thickness
 
         if vp is None:
-            self.vp = 3600.
+            self.vp = Q_(3600., 'm/s')
         else:
-            self.vp = vp
+            self.vp = vp.to('m/s')
 
         if vs is None:
-            self.vs = 1800.
+            self.vs = Q_(1800., 'm/s')
         else:
-            self.vs = vs
+            self.vs = vs.to('m/s')
 
         if rho is None:
-            self.rho = 2.3
+            self.rho = Q_(2.3, 'gram/cm^3')
         else:
-            self.rho = rho
+            self.rho = rho.to('gram/cm^3')
 
         if ntg is None:
             self.ntg = 1.
         else:
             self.ntg = ntg
 
-        if domain is None:
-            self.domain = 'TWT'
-        else:
-            self.domain = domain
-        if (self.domain != 'Z') and (self.domain != 'TWT'):
-            raise ValueError('The domain must be either TWT or Z, not {}'.format(self.domain))
+        self.domain = domain
 
         if not (0 <= self.ntg <= 1):
             raise ValueError('NTG must be between 0 and 1')
@@ -891,9 +906,28 @@ class Layer:
             self.gross_rho = kwargs.pop('gross_rho', 2.)
             self.thin_bed_factor = kwargs.pop('thin_bed_factor', 3)
 
-        for arg in [self.thickness, self.vp, self.vs, self.rho, self.ntg]:
+        for arg in [self._thickness, self.vp, self.vs, self.rho, self.ntg]:
             if isinstance(arg, types.FunctionType):
                 self.layer_type = 'quasi 2D'
+
+    @property
+    def thickness(self):
+        return self._thickness
+
+    @thickness.setter
+    def thickness(self, new_thickness):
+        if new_thickness.check('[length]'):
+            self.domain = 'Z'
+        elif new_thickness.check('[time]'):
+            self.domain = 'TWT'
+        elif isinstance(new_thickness, types.FunctionType):
+            # TODO Insert a test if the function returns a length or time value
+            pass
+        else:
+            error_txt = 'Thickness must be given in either Time, Depth or a function'
+            print_info(error_txt, 'error', logger, 'IOError')
+
+        self._thickness = new_thickness
 
     def realize_layer(self, resolution, voigt_reuss_hill=False, index=0):
         """
@@ -1306,3 +1340,331 @@ def laminar_model_analysis(
         fig.savefig(savefig)
 
 
+class ModelLayer(Layer):
+    from blixt_rp.rp.rp_core_new import LithoFluid
+    """
+    Class to hold one layer of a seismic model
+    It has some overlap with the Layer class in blixt_rp.core.models.py, but is tuned towards using bokeh interactive
+    plotting
+    """
+    def __init__(self,
+                 number: int,
+                 case: str | None  = 'Base',
+                 color: str | None  = '#D9D9D9',
+                 thickness: pint.Quantity | None  = Q_(25., 'm'),
+                 litho_fluid: LithoFluid | None = None,
+                 **kwargs
+                 ):
+        """
+
+        :param number:
+            Integer that should reflect the internal order of the different layers.
+            number = 1 the layer is at the top, increasing number are deeper down
+        :param case:
+            String indicating which case the layer represents.
+            E.G. Each layer is named 'Base'  by default, and if layer 3 is the target, we can add a new layer 3 with
+            case string 'HC' and let that represent the hydrocarbon case
+        :param color:
+            String that gives the color of that layer0
+        :param thickness:
+            Thickness in either time or length units.
+        :param litho_fluid:
+            The LithoFluid class associated with this layer
+        """
+        domain = None
+        self._number = number
+        if case is None:
+            case = 'Base'
+        self._case = case
+        if color is None:
+            color = '#D9D9D9'
+        self.color = color
+        if thickness is None:
+            thickness = Q_(25., 'm')
+        self._litho_fluid = litho_fluid
+
+        super().__init__(
+            thickness=thickness,
+            target=kwargs.pop('target', False),
+            vp=litho_fluid.vp.to('m/s'),
+            vs=litho_fluid.vs.to('m/s'),
+            rho=litho_fluid.rho.to('grams/cm^3'),
+            ntg=kwargs.pop('ntg', 1.),
+            domain=domain,
+            **kwargs
+        )
+
+
+
+    @property
+    def number(self):
+        return self._number
+
+    @number.setter
+    def number(self, new_number):
+        self._number = new_number
+
+    @property
+    def case(self):
+        return self._case
+
+    @case.setter
+    def case(self, new_case):
+        self._case = new_case
+
+    @property
+    def litho_fluid(self):
+        return self._litho_fluid
+
+    @litho_fluid.setter
+    def litho_fluid(self, new_litho_fluid):
+        self._litho_fluid = new_litho_fluid
+        self.vp = new_litho_fluid.vp.to('m/s').magnitude
+        self.vs = new_litho_fluid.vs.to('m/s').magnitude
+        self.rho = new_litho_fluid.rho.to('grams/cm^3').magnitude
+
+class ModelTable:
+    """
+    Returns a bokeh DataTable populated with rows of single layers
+    """
+    from bokeh.models import ColumnDataSource
+
+    def __init__(self,
+                 layers: list | None = None,
+                 litho_fluid_source:ColumnDataSource | None = None,
+                 width: int | None = None,
+                 height: int | None = None):
+        """
+
+        :param layers:
+            List of TableLayer objects
+        :param litho_fluid_source:
+            ColumnDataSource of the LithoFluidsTable that contains all the different LithoFluids we can use to
+            populate the model
+        :param width:
+        :param height:
+        """
+        if layers is None:
+            layers = []
+        self.layers = layers
+        self.litho_fluid_source = litho_fluid_source
+        if width is None:
+            width = 700
+        self.width = width
+        if height is None:
+            height = 135
+        self.height = height
+        self.keys = ['number', 'case', 'color', 'thickness', 'litho_fluid']
+
+    @property
+    def input_litho_fluids(self):
+        if self.litho_fluid_source is not None:
+            return self.litho_fluid_source.data['name']
+        else:
+            return []
+
+    @property
+    def source(self):
+        _dict = {_x: [] for _x in self.keys}
+        for _layer in self.layers:
+            for _key in self.keys:
+                if _key == 'thickness':
+                    _dict[_key].append(_layer.thickness.magnitude)
+                elif _key == 'litho_fluid':
+                    _dict[_key].append(_layer.litho_fluid.name)
+                elif _key == 'number':
+                    _dict[_key].append(_layer.number)
+                elif _key == 'case':
+                    _dict[_key].append(_layer.case)
+                else:
+                    _dict[_key].append(_layer.__dict__[_key])
+        return ColumnDataSource(_dict)
+
+
+    @property
+    def numbers(self):
+        return self.source.data['number']
+
+    @property
+    def cases(self):
+        return self.source.data['case']
+
+    @property
+    def litho_fluids(self):
+        return self.source.data['litho_fluid']
+
+    @litho_fluids.setter
+    def litho_fluids(self, new_litho_fluids):
+        if isinstance(new_litho_fluids, list):
+            self.source.data['litho_fluid'] = new_litho_fluids
+        else:
+            print_info('new_litho_fluids is not a list', 'warning', logger)
+
+    def add_litho_fluid(self, litho_fluid: str):
+        self.source.data['litho_fluid'].append(litho_fluid)
+
+    def table_columns(self):
+        from bokeh.models import (SelectEditor, StringEditor, TableColumn, HTMLTemplateFormatter)
+        from bokeh.models import ColumnDataSource, StringFormatter, NumberEditor, NumberFormatter
+        colored_cell_template = """
+                <div style="background:<%= 
+                    (function color_from_val(){
+                        return(color)
+                        }()) %>; 
+                    color: white"> 
+                <%= value %>
+                </div>
+            """
+        formatter = HTMLTemplateFormatter(template=colored_cell_template)
+
+        column_names = [_s.capitalize().replace('_', ' ') for _s in self.keys]
+        table_columns = []
+        for i, column_key in enumerate(self.keys):
+            if column_key == 'litho_fluid':
+                # _editor = SelectEditor(options=self.input_litho_fluids)
+                _editor = StringEditor(completions=self.input_litho_fluids)
+                _formatter = StringFormatter(font_style='bold')
+            elif column_key == 'thickness':
+                _editor = NumberEditor()
+                _formatter = NumberFormatter(format='0.0[0]')
+            elif column_key == 'color':
+                _editor=StringEditor()
+                _formatter=formatter
+            else:
+                _editor = StringEditor()
+                _formatter = StringFormatter()
+            table_columns.append(
+                TableColumn(
+                    field=column_key,
+                    title=column_names[i],
+                    editor=_editor,
+                    formatter=_formatter
+
+                )
+            )
+        return table_columns
+
+
+    def draw(self, source: ColumnDataSource):
+        """
+        Returns a table that is used for defining a model
+        :param source:
+            ColumnDataSource of the initial model, with N layers
+        :return:
+        """
+        from bokeh.models import DataTable, Button
+        from blixt_rp.rp.rp_core_new import LithoFluid
+
+        def add_row_function():
+            new_data = dict(source.data)
+            n = len(new_data['number'])
+            new_row_number = n + 1
+            for _key in list(new_data.keys()):
+                if _key == 'number':
+                    new_data[_key].append(new_row_number)
+                elif _key == 'case':
+                    new_data[_key].append('Base')
+                else:
+                    if n == 0:
+                        new_data[_key].append(None)
+                    else:
+                        new_data[_key].append(new_data[_key][-1])
+            source.data = new_data
+
+        def delete_row_function():
+            selected_index = source.selected.indices
+            new_data = {_x:[] for _x in self.keys}
+            for _i in range(len(source.data['number'])):
+                if _i  in selected_index:
+                    continue
+                for _x in self.keys:
+                    new_data[_x].append(source.data[_x][_i])
+            source.selected.indices = []
+            source.data = new_data
+
+        def update_table_function():
+            new_data = dict(source.data)
+            layers = []
+            print(self.input_litho_fluids)
+            for _i in range(len(new_data['number'])):
+                this_lf = new_data['litho_fluid'][_i]
+                this_i = 0
+                try:
+                    this_i = [_x.lower() for _x in self.litho_fluid_source.data['name']].index(this_lf.lower())
+                except ValueError as e:
+                    warn_txt = 'Litho fluid {} is not found in LithoFluidTable. Using first'.format(this_lf)
+                    print_info(warn_txt, 'warning', logger)
+                    continue
+                this_layer = ModelLayer(
+                    number=new_data['number'][_i],
+                    case=new_data['case'][_i],
+                    color=new_data['color'][_i],
+                    thickness=  Q_(new_data['thickness'][_i] , 'm'),
+                    litho_fluid=LithoFluid(
+                        name=self.litho_fluid_source.data['name'][this_i],
+                        vp=self.litho_fluid_source.data['vp'][this_i],
+                        vs=self.litho_fluid_source.data['vs'][this_i],
+                        rho=self.litho_fluid_source.data['rho'][this_i]
+                    )
+                )
+                layers.append(this_layer)
+            self.layers = layers
+            source.data = new_data
+
+        dt = DataTable(
+            source=source,
+            columns=self.table_columns(),
+            editable=True,
+            width=self.width,
+            height=self.height,
+            index_position = -1,
+            index_header = 'index'
+        )
+
+        add_row = Button(label='Add row', button_type='success')
+        add_row.on_click(add_row_function)
+
+        delete_row = Button(label='Delete selected rows', button_type='success')
+        delete_row.on_click(delete_row_function)
+
+        update_table = Button(label='Update', button_type='success')
+        update_table.on_click(update_table_function)
+
+        return dt, add_row, delete_row, update_table
+
+class LaminarModel:
+    """
+    Creates an interactive laminar (1D) model together with a display of the synthetic response
+    """
+    from blixt_rp.rp.rp_core_new import LithoFluids
+    from blixt_rp.plotting.cross_plotter import DataSource
+
+    def __init__(self,
+                 litho_fluids: LithoFluids,
+                 sample_rate: pint.Quantity | None = None,
+                 wavelet: dict | None = None,
+                 domain: str = 'Z',
+                 depth_to_top: int | float | None = None,
+                 **kwargs
+    ):
+        self._litho_fluids = litho_fluids
+        self.lf_width = kwargs.pop('lf_width', 300)
+        self.model_width = kwargs.pop('model_width', None)
+
+    def draw_lf_table(self, lf_source):
+        # Returns the LithoFluidsTable with control buttons
+        # Returns: lf_table, lf_add_row, lf_delete_row, lf_update
+        lf_obj = LithoFluidsTable(self._litho_fluids, width=self.lf_width)
+        return lf_obj.draw(lf_source)
+
+    def draw_model_table(self, mod_source, lf_source):
+        # Returns the ModelTable with control buttons
+        # Returns: model_table, model_add_row, model_delete_row, model_update
+        initial_layers = [_lf.to_model_layer(_i+1) for _i, _lf in enumerate(self._litho_fluids.litho_fluids)]
+        mod_obj = ModelTable(initial_layers, lf_source)
+        return mod_obj.draw(mod_source)
+
+    def line_source(self):
+        # TODO CONTINUE HERE
+        # Create a DataSource which contains the AI and Vp/Vs ratio for the different cases
+        pass

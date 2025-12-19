@@ -162,7 +162,7 @@ class DataSource:
         Container for data related to one well
         :param name:
             str
-            Name of  well
+            Name of data set (e.g. well name)
         :param data:
             dict
             Dictionary of data, with variable names as keys.

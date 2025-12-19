@@ -1794,7 +1794,7 @@ def replace_data(
     return output
 
 
-def is_equivalent(first: pint.Unit, second: pint.Unit):
+def is_equivalent(first: pint.Unit, second: pint.Unit) -> bool:
     """
     Test if two units are equivalent
     :param first:

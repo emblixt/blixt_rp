@@ -8,7 +8,7 @@ import numpy as np
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from blixt_rp.core.models import (Model, Layer, build_wedge, plot_wiggles, build_layered_model, laminar_model_analysis,
+from blixt_rp.core.models import (Model, Layer, ModelTable, ModelLayer, plot_wiggles, build_layered_model, laminar_model_analysis,
                                   build_saturation_wedge)
 import blixt_utils.misc.wavelets as bumw
 
@@ -201,3 +201,33 @@ class TestCase(unittest.TestCase):
         wedge_ax.set_xlabel('HC saturation')
         wedge_ax.legend(loc='upper left')
         plt.show()
+
+    def test_model_table(self, unit_test=True):
+        from bokeh.io import output_file
+        from bokeh.plotting import show, row, column
+        import blixt_rp.rp.rp_core_new as brrp
+        excel_file = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\PL1221\\SumsAndAverages.xlsx"
+        output_file('C:\\Users\\emb\\Downloads\\plot.html')
+        lfs = brrp.LithoFluids()
+        lfs.from_excel(excel_file)
+        lfs.litho_fluids = lfs.litho_fluids[:3]
+        table_lf = brrp.LithoFluidsTable(lfs, width=300, advanced=False)
+        source_lf = table_lf.source
+        lf_table, add_row, delete_row, update = table_lf.draw(source_lf)
+
+        # layers = [_lf.to_model_layer(_i+1) for _i, _lf in enumerate(lfs.litho_fluids)]
+        layers = []
+        table_model = ModelTable(layers, source_lf)
+        source_model = table_model.source
+        model_table, add_row_m, delete_row_m, update_m = table_model.draw(source_model)
+
+        if unit_test:
+            show(
+                row(
+                    column(model_table, row(add_row_m, delete_row_m, update_m)),
+                    column(lf_table, row(add_row, delete_row, update))
+                )
+            )
+            return None
+        else:
+            return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update

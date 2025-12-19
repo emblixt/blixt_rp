@@ -23,7 +23,6 @@ sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 import blixt_rp.rp_utils.definitions as udo
 import blixt_utils.io.io as bui
-import blixt_rp.rp_utils.avo_monte_carlo as havo
 from blixt_utils.plotting import crossplot as xp
 from blixt_utils.plotting import helpers as uhelp
 
@@ -55,6 +54,8 @@ class LithoFluid:
         vp_std_dev = float(vp_std_dev) if isinstance(vp_std_dev, int) else vp_std_dev
         vs_std_dev = float(vs_std_dev) if isinstance(vs_std_dev, int) else vs_std_dev
         rho_std_dev = float(rho_std_dev) if isinstance(rho_std_dev, int) else rho_std_dev
+
+
 
         # Give default units if not specified
         self.vp = Q_(vp, 'm/s') if isinstance(vp, float) else (None if vp is None else vp)
@@ -183,6 +184,7 @@ class LithoFluid:
         :return:
 
         """
+        import blixt_rp.rp_utils.avo_monte_carlo as havo
         if label is None:
             label = self.name
         if color is None:
@@ -213,6 +215,14 @@ class LithoFluid:
         )
         uhelp.confidence_ellipse(x_data, y_data, ax, n_std=1.0, edgecolor='k')
         uhelp.confidence_ellipse(x_data, y_data, ax, n_std=2.0, edgecolor='k', linestyle='--')
+
+    def to_model_layer(self,
+                       number,
+                       case: str | None = None,
+                       color: str | None = None,
+                       thickness: pint.Quantity = Q_(25., 'm')):
+        from blixt_rp.core.models import ModelLayer
+        return ModelLayer(number, case, color, thickness, self)
 
 
 class LithoFluids:
@@ -285,6 +295,7 @@ class LithoFluidsTable:
     """
     def __init__(self,
                  litho_fluids: LithoFluids | None = None,
+                 advanced: bool = True,
                  width: int | None = None,
                  height: int | None = None):
         """
@@ -303,9 +314,13 @@ class LithoFluidsTable:
         if litho_fluids is None:
             litho_fluids = LithoFluids()
         self.litho_fluids = litho_fluids
-        self.keys = ['name', 'vp', 'vs', 'rho',
-                     'vp_std_dev', 'vs_std_dev', 'rho_std_dev',
-                     'vp_vs_cc', 'vp_rho_cc', 'vs_rho_cc']
+        if advanced:
+            self.keys = ['name', 'vp', 'vs', 'rho',
+                         'vp_std_dev', 'vs_std_dev', 'rho_std_dev',
+                         'vp_vs_cc', 'vp_rho_cc', 'vs_rho_cc']
+        else:
+            self.keys = ['name', 'vp', 'vs', 'rho']
+        self.advanced = advanced
 
     @property
     def source(self) -> ColumnDataSource:
@@ -380,18 +395,27 @@ class LithoFluidsTable:
             _litho_fluids = []
             for _i in range(len(new_data['name'])):
                 # print(' - Iteration: {} of {}'.format( _i, len(new_data['name'])))
-                this_litho_fluid = LithoFluid(
-                    name=new_data['name'][_i],
-                    vp=Q_(new_data['vp'][_i], 'm/s'),
-                    vs=Q_(new_data['vs'][_i], 'm/s'),
-                    rho=Q_(new_data['rho'][_i], 'gram / cm^3'),
-                    vp_std_dev=Q_(new_data['vp_std_dev'][_i], 'm/s'),
-                    vs_std_dev=Q_(new_data['vs_std_dev'][_i], 'm/s'),
-                    rho_std_dev=Q_(new_data['rho_std_dev'][_i], 'gram / cm^3'),
-                    vp_vs_cc=Q_(new_data['vp_vs_cc'][_i], ''),
-                    vp_rho_cc=Q_(new_data['vp_rho_cc'][_i], ''),
-                    vs_rho_cc=Q_(new_data['vs_rho_cc'][_i], '')
-                )
+                if self.advanced:
+                    this_litho_fluid = LithoFluid(
+                        name=new_data['name'][_i],
+                        vp=Q_(new_data['vp'][_i], 'm/s'),
+                        vs=Q_(new_data['vs'][_i], 'm/s'),
+                        rho=Q_(new_data['rho'][_i], 'gram / cm^3'),
+                        vp_std_dev=Q_(new_data['vp_std_dev'][_i], 'm/s'),
+                        vs_std_dev=Q_(new_data['vs_std_dev'][_i], 'm/s'),
+                        rho_std_dev=Q_(new_data['rho_std_dev'][_i], 'gram / cm^3'),
+                        vp_vs_cc=Q_(new_data['vp_vs_cc'][_i], ''),
+                        vp_rho_cc=Q_(new_data['vp_rho_cc'][_i], ''),
+                        vs_rho_cc=Q_(new_data['vs_rho_cc'][_i], '')
+                    )
+                else:
+                    this_litho_fluid = LithoFluid(
+                        name=new_data['name'][_i],
+                        vp=Q_(new_data['vp'][_i], 'm/s'),
+                        vs=Q_(new_data['vs'][_i], 'm/s'),
+                        rho=Q_(new_data['rho'][_i], 'gram / cm^3')
+                    )
+
                 _litho_fluids.append(this_litho_fluid)
 
             self.litho_fluids.litho_fluids = _litho_fluids

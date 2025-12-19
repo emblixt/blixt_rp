@@ -51,7 +51,8 @@ class SomeTests(unittest.TestCase):
         output_file('C:\\Users\\emb\\Downloads\\plot.html')
         lfs = brrp.LithoFluids()
         lfs.from_excel(excel_file)
-        table = brrp.LithoFluidsTable(lfs)
+        # table = brrp.LithoFluidsTable(lfs, advanced=True)
+        table = brrp.LithoFluidsTable(lfs, advanced=False)
         source = table.source
         table, add_row, delete_row, update = table.draw(source)
         if unit_test:
