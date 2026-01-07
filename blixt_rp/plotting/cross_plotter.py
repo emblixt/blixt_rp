@@ -47,8 +47,8 @@ cnames = [tmp['color'] for tmp, j in zip(plt.rcParams['axes.prop_cycle'], range(
 markers = ['circle', 'diamond', 'hex', 'inverted_triangle', 'plus', 'square', 'star', 'triangle']
 
 
-def add_x_y_to_source(
-               source_dict: dict,
+def add_x_y_to_cds(
+               cds_dict: dict,
                x: str | None = None,
                y: str | None = None,
                size: float | str | None = None,
@@ -60,16 +60,16 @@ def add_x_y_to_source(
     """
     The idea is to let the input decide which variable that should be used on the x-axis, y-axis, size, color,
     marker and legend.
-    This function adds the extra keys for 'x', 'y', ... to the original source dictionary
+    This function adds the extra keys for 'x', 'y', ... to the original cds dictionary
 
     E.G.
         if x = 'vp'
         WHEN
-        source_dict = dict(vp=..., vs=..., rho=...)
+        cds_dict = dict(vp=..., vs=..., rho=...)
         THEN
-        x_y_source = dict(vp=..., vs=..., rho=..., x=source_dict['vp'], y=..., etc...)
+        x_y_cds = dict(vp=..., vs=..., rho=..., x=cds_dict['vp'], y=..., etc...)
 
-    :param source_dict:
+    :param cds_dict:
     :param x:
     :param y:
     :param size:
@@ -80,71 +80,71 @@ def add_x_y_to_source(
 
     :return:
         dict
-        transformed_source
+        transformed_cds
         The dictionary has at least the following keys:
             'x', 'y', 'size', 'color', 'marker' and 'legend_group'
     """
-    _vars = list(source_dict.keys())
-    _n = len(source_dict[_vars[0]])
+    _vars = list(cds_dict.keys())
+    _n = len(cds_dict[_vars[0]])
     _dict = {}
 
     # for _key in ['x', 'y', 'size', 'color', 'marker', 'legend_group']:
     #     if _key in _vars:
-    #         warn_txt = 'The key {} is among the original keys of the input source and will be overwritten'.format(_key)
+    #         warn_txt = 'The key {} is among the original keys of the input cds and will be overwritten'.format(_key)
     #         print_info(warn_txt, 'warning', logger)
 
 
     if x is not None and x in _vars:
-        _dict['x'] = source_dict[x]
+        _dict['x'] = cds_dict[x]
     elif x is not None:
         _dict['x'] = x
     else:
-        _dict['x'] = source_dict[_vars[0]]
+        _dict['x'] = cds_dict[_vars[0]]
 
     if y is not None and y in _vars:
-        _dict['y'] = source_dict[y]
+        _dict['y'] = cds_dict[y]
     elif y is not None:
         _dict['y'] = y
     else:
-        _dict['y'] = source_dict[_vars[1]]
+        _dict['y'] = cds_dict[_vars[1]]
 
     if size is not None and size in _vars:
-        _dict['size'] = source_dict[size]
+        _dict['size'] = cds_dict[size]
     elif size is not None:
         _dict['size'] = [size] * _n
     else:
-        _dict['size'] = source_dict['size']
+        _dict['size'] = cds_dict['size']
 
     if color is not None and color in _vars:
-        _dict['color'] = source_dict[color]
+        _dict['color'] = cds_dict[color]
     elif color is not None:
         _dict['color'] = [color] * _n
     else:
-        _dict['color'] = source_dict['color']
+        _dict['color'] = cds_dict['color']
 
     if marker is not None and marker in _vars:
-        _dict['marker'] = source_dict[marker]
+        _dict['marker'] = cds_dict[marker]
     elif marker is not None:
         _dict['marker'] = [marker] * _n
     else:
-        _dict['marker'] = source_dict['marker']
+        _dict['marker'] = cds_dict['marker']
 
     if legend_group is not None and legend_group in _vars:
-        _dict['legend_group'] = source_dict[legend_group]
+        _dict['legend_group'] = cds_dict[legend_group]
     elif legend_group is not None:
         _dict['legend_group'] = [legend_group] * _n
     else:
-        _dict['legend_group'] = source_dict['legend_group']
+        _dict['legend_group'] = cds_dict['legend_group']
 
     if mask is not None:
         _dict['mask'] = mask
     else:
-        _dict['mask'] = source_dict['mask']
+        _dict['mask'] = cds_dict['mask']
 
-    _dict['source_name'] = source_dict['source_name']
+    _dict['source_name'] = cds_dict['source_name']
 
-    source_dict.update(_dict)
-    return source_dict
+    cds_dict.update(_dict)
+    return cds_dict
 
 
 class DataSource:
@@ -170,7 +170,7 @@ class DataSource:
             Remember that a ColumnDataSource requires that all variable has the same length,
             AND
             ColumnDataSource can not handle pint Quantities as data, which is why we take the magnitude when
-            creating the source
+            creating the CDS
         :param templates:
             dict
             Dictionary of Template objects for each variable, and preferably also one Template for this
@@ -228,7 +228,7 @@ class DataSource:
         self._templates = new_templates
 
     @property
-    def source(self) -> ColumnDataSource:
+    def cds(self) -> ColumnDataSource:
         _data = {}
         # Take only the magnitude if data is provided as pint Quantities
         for _key in list(self.data.keys()):
@@ -238,15 +238,15 @@ class DataSource:
                 _data[_key] = self.data[_key]
         return ColumnDataSource(data=_data, name=self.name)
 
-    @source.setter
-    def source(self, new_source):
-        if isinstance(new_source, ColumnDataSource):
-            self.data = dict(new_source.data)
-        elif isinstance(new_source, dict):
-            self.data = new_source
+    @cds.setter
+    def cds(self, new_cds):
+        if isinstance(new_cds, ColumnDataSource):
+            self.data = dict(new_cds.data)
+        elif isinstance(new_cds, dict):
+            self.data = new_cds
         else:
-            raise IOError('New source must be either ColumnDataSource or Dict, not {}'.format(
-                type(new_source)
+            raise IOError('New cds must be either ColumnDataSource or Dict, not {}'.format(
+                type(new_cds)
             ))
 
     def min_and_max(self):
@@ -348,9 +348,9 @@ class CrossPlotter:
         # Intended usage
     > data_sources = ...  # See DataSource for explanation
     > xp = CrossPlotter(data_sources)
-    > source = xp.source()
-        # Now you can add any additional functionality to control the source
-    > xplot, x_menu, y_menu, size_menu, ... = xp.draw(source)
+    > cds = xp.cds()
+        # Now you can add any additional functionality to control the cds
+    > xplot, x_menu, y_menu, size_menu, ... = xp.draw(cds)
         # Now you can show and draw the xplot and the different menus
 
     """
@@ -436,7 +436,7 @@ class CrossPlotter:
         _len = 0
         for _key, _item in self._data_sources.items():
             _var = self.common_variables[0]
-            _len += len(_item.source.data[_var])
+            _len += len(_item.cds.data[_var])
         return _len
 
     @property
@@ -479,10 +479,10 @@ class CrossPlotter:
         return _units
 
     @property
-    def source(self) -> ColumnDataSource:
+    def cds(self) -> ColumnDataSource:
         """
         Returns a merged CDS with all the common variables from all data_sources, plus the extra variables
-        created by add_x_y_to_source
+        created by add_x_y_to_cds
         :return:
         """
         _dict = {}
@@ -490,11 +490,11 @@ class CrossPlotter:
         for _key, _item in self._data_sources.items():
             _len = None
             for _var in self.common_variables:
-                _len = len(_item.source.data[_var])
+                _len = len(_item.cds.data[_var])
                 if _i == 0:
-                    _dict[_var] = _item.source.data[_var]
+                    _dict[_var] = _item.cds.data[_var]
                 else:
-                    _dict[_var] = np.append(_dict[_var], _item.source.data[_var])
+                    _dict[_var] = np.append(_dict[_var], _item.cds.data[_var])
             if _i == 0:
                 _dict['source_name'] = np.array([_key] * _len)
                 _dict['legend_group'] = np.array([_key] * _len)
@@ -511,7 +511,7 @@ class CrossPlotter:
                 _dict['mask'] = np.append(_dict['mask'], np.array([True] * _len))
             _i += 1
 
-        _dict = add_x_y_to_source(_dict, self.x, self.y)
+        _dict = add_x_y_to_cds(_dict, self.x, self.y)
         return ColumnDataSource(_dict)
 
     # def x_y_source(self,
@@ -862,7 +862,7 @@ class CrossPlotter:
         xplot.toolbar.logo = None
         return xplot
 
-    def draw(self, source: ColumnDataSource, set_all_intervals_active: bool = False, verbose: bool = False):
+    def draw(self, cds: ColumnDataSource, set_all_intervals_active: bool = False, verbose: bool = False):
         from bokeh.models import CDSView, BooleanFilter, Button, Div
         import blixt_utils.misc.masks as masks
         from pint import Quantity as Q_
@@ -893,30 +893,30 @@ class CrossPlotter:
         # x_y_source = ColumnDataSource(x_y_source_dict)
 
         # Draw the classification / cutoffs table
-        ct_source = None
+        ct_cds = None
         if self.cutoffs_table is not None:
-            ct_source = self.cutoffs_table.source
-            ct_guis = self.cutoffs_table.draw(ct_source, self.common_variables, self.common_units, verbose=verbose)
+            ct_cds = self.cutoffs_table.cds
+            ct_guis = self.cutoffs_table.draw(ct_cds, self.common_variables, self.common_units, verbose=verbose)
             # ct_guis = table, add_row, delete_row, update, use
         else:
             ct_guis = [Div(text='', width=10, height=10)]*5
 
         # Draw the working intervals table
-        wis_source = None
+        wis_cds = None
         if self.interval_table is not None:
-            wis_source = self.interval_table.source
-            wis_guis = self.interval_table.draw(wis_source, verbose=verbose)
+            wis_cds = self.interval_table.cdcds
+            wis_guis = self.interval_table.draw(wis_cds, verbose=verbose)
             # wis_guis = wis_table, apply
         else:
             wis_guis = [Div(text='', width=10, height=10)]*2
 
         # Create a BooleanFilter using the 'mask' column
-        boolean_filter = BooleanFilter(booleans=source.data['mask'])
+        boolean_filter = BooleanFilter(booleans=cds.data['mask'])
 
         # Create a CDSView using the BooleanFilter
         view = CDSView(filter=boolean_filter)
 
-        self.xplot.scatter(x='x', y='y', source=source, view=view, fill_color='color', marker='marker',
+        self.xplot.scatter(x='x', y='y', source=cds, view=view, fill_color='color', marker='marker',
                       legend_group='legend_group', size='size', fill_alpha=0.5, line_color=None)
 
         # Axes
@@ -958,8 +958,8 @@ class CrossPlotter:
                          # data_keys=[_key for _key in list(sources.keys())],
                          # data_sources=[_val for _val in list(sources.values())],
                          # orig_data_sources=[_val.source for _val in list(self._data_sources.values())],
-                         x_y_source=source,
-                         source=self.source,
+                         x_y_source=cds,
+                         source=self.cds,
                          min_max=self.min_and_max(),
                          # # cmap=exp_cmap,
                          title=self.xplot.title,
@@ -994,15 +994,15 @@ class CrossPlotter:
                 args=args_dict,
                 code=self.js_code()))
 
-        source.js_on_change('patching', CustomJS(
-            args=dict(source=source),
+        cds.js_on_change('patching', CustomJS(
+            args=dict(source=cds),
             code="""
             console.log('Patching event detected in CrossPlotter');
             """
         ))
 
         data_change_callback =  CustomJS(
-            args=dict(source=source, filter=boolean_filter),
+            args=dict(source=cds, filter=boolean_filter),
             code="""
             const new_filter = source.data['mask'];
             filter.booleans = new_filter;
@@ -1012,22 +1012,22 @@ class CrossPlotter:
 
         def apply_mask_function():
             if self.cutoffs_table is not None:
-                _mask_ct = self.cutoffs_table.create_mask(ct_source, source, verbose=True)
-                self.active_cutoffs = self.cutoffs_table.active_cutoffs(ct_source)
+                _mask_ct = self.cutoffs_table.create_mask(ct_cds, cds, verbose=True)
+                self.active_cutoffs = self.cutoffs_table.active_cutoffs(ct_cds)
             else:
-                _mask_ct = np.ones(len(source.data['mask']), dtype=bool)
+                _mask_ct = np.ones(len(cds.data['mask']), dtype=bool)
 
             if self.interval_table is not None:
                _mask_wis = self.interval_table.create_mask(
-                   wis_source,
-                   Q_(source.data['md'], 'm'),
-                   list(source.data['source_name']),
+                   wis_cds,
+                   Q_(cds.data['md'], 'm'),
+                   list(cds.data['source_name']),
                    verbose=True)
-               self.active_intervals = self.interval_table.active_intervals(wis_source)
+               self.active_intervals = self.interval_table.active_intervals(wis_cds)
             else:
-                _mask_wis = np.ones(len(source.data['mask']), dtype=bool)
+                _mask_wis = np.ones(len(cds.data['mask']), dtype=bool)
 
-            source.data['mask'] = masks.combine_masks([_mask_ct, _mask_wis])
+            cds.data['mask'] = masks.combine_masks([_mask_ct, _mask_wis])
 
         apply_mask = Button(label='Apply masks', button_type='success')
         apply_mask.on_click(apply_mask_function)
@@ -1040,7 +1040,7 @@ class CrossPlotter:
 
         reset_mask = Button(label='Reset mask', button_type='success')
         reset_mask.js_on_click(CustomJS(
-            args=dict(source=source, cb2=data_change_callback),
+            args=dict(source=cds, cb2=data_change_callback),
             code = """
                 var _data = source.data;
                 console.log('Mask is reset');
@@ -1054,16 +1054,16 @@ class CrossPlotter:
         # This is a test to see if reset_mask can update the plot, and with this extra call it did
         reset_mask.js_on_click(CustomJS(args=args_dict, code=self.js_code()))
 
-        source.js_on_change('data', data_change_callback)
+        cds.js_on_change('data', data_change_callback)
 
 
         return self.xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis
 
-    def show_plot(self, source, out_file):
+    def show_plot(self, cds, out_file):
         # This is a short cut to give a quick view of the cross plot
         from bokeh.io import output_file
         output_file(out_file)
-        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = self.draw(source)
+        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = self.draw(cds)
         show(column(xplot, row(x_menu, y_menu, size_menu, color_menu, reset_mask)))
 
 
@@ -1071,14 +1071,14 @@ class TestCases(unittest.TestCase):
     def test_data(self, size_1: int = 500, size_2: int = 800):
         from blixt_rp.core.core import Template, StratUnit, Interval, Intervals, CutoffRule, Cutoffs
         from pint import Quantity as Q_
-        md1 = np.linspace(1000., 2000., size_1)
-        md2 = np.linspace(800., 2500., size_2)
-        l1_1 = np.random.normal(10., 1., size_1)
-        l1_2 = np.random.normal(10., 1., size_2)
-        l2_1 = np.random.normal(100., 1., size_1) + np.linspace(-8, 8, size_1)
-        l2_2 = np.random.normal(100., 1., size_2) + np.linspace(-10, 10, size_2)
-        l3 = np.random.normal(50., 1., size_1)
-        l4 = np.random.normal(70., 1., size_2)
+        md1 = Q_(np.linspace(1000., 2000., size_1), 'm')
+        md2 = Q_(np.linspace(800., 2500., size_2), 'm')
+        l1_1 = Q_(np.random.normal(10., 1., size_1), 'm')
+        l1_2 = Q_(np.random.normal(10., 1., size_2), 'm')
+        l2_1 = Q_(np.random.normal(100., 1., size_1) + np.linspace(-8, 8, size_1), 'm/s')
+        l2_2 = Q_(np.random.normal(100., 1., size_2) + np.linspace(-10, 10, size_2), 'm/s')
+        l3 = Q_(np.random.normal(50., 1., size_1), 'kg')
+        l4 = Q_(np.random.normal(70., 1., size_2), 'feet')
 
         template_md = Template(name='md', units='m', marker='circle', fill_color='red')
         template_one = Template(name='var_one', units='m', min=5., max=15., marker='circle', fill_color='red')
@@ -1109,7 +1109,7 @@ class TestCases(unittest.TestCase):
 
         return ds1, ds2, wis, cutoffs
 
-    def test_data_source(self):
+    def test_data_cds(self):
 
         small = True
         if small:
@@ -1122,12 +1122,12 @@ class TestCases(unittest.TestCase):
         # print(xp.common_variables)
         # print(xp.templates)
         print(len(xp), xp.all_variables, xp.common_variables, xp.common_units)
-        d = xp.source
+        d = xp.cds
         _dict = dict(d.data)
         for _key, _item in _dict.items():
             print(_key, _item[:5], _item[-5:], len(_item))
         print('XXX')
-        # _d = add_x_y_to_source(_dict, x='var_one', y='var_two')
+        # _d = add_x_y_to_cds(_dict, x='var_one', y='var_two')
         # for _key, _item in _d.items():
         #     print(_key, _item[:5], _item[-5:], len(_item))
         # xp.show_plot('C:\\Users\marte\Downloads\plot.html')
@@ -1157,25 +1157,25 @@ class TestCases(unittest.TestCase):
         xp = CrossPlotter(
             {w.name: w.data_source() for w in project.wells}
         )
-        source = xp.source
-        xp.show_plot(source, 'C:\\Users\\emb\\Downloads\\plot.html')
+        cds = xp.cds
+        xp.show_plot(cds, 'C:\\Users\\emb\\Downloads\\plot.html')
 
     def test_data_classification(self):
         ds1, ds2, wis, cutoffs = self.test_data()
 
         xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]}, cutoffs=cutoffs)
-        d_source = xp.source
+        d_cds = xp.cds
 
-        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = xp.draw(d_source)
+        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = xp.draw(d_cds)
 
         return xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis
 
     def test_working_intervals(self):
         ds1, ds2, wis, cutoffs = self.test_data()
         xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]}, working_intervals=wis)
-        d_source = xp.source
+        d_cds = xp.cds
 
-        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = xp.draw(d_source)
+        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = xp.draw(d_cds)
 
         return xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, wis_guis
 
@@ -1187,10 +1187,10 @@ class TestCases(unittest.TestCase):
             ds1, ds2, wis, cutoffs = self.test_data()
 
         xp = CrossPlotter({_s.name:_s for _s in [ds1, ds2]}, cutoffs=cutoffs, working_intervals=wis)
-        d_source = xp.source
+        d_cds = xp.cds
 
         xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = (
-            xp.draw(d_source, verbose=True))
+            xp.draw(d_cds, verbose=True))
 
         return xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis
 

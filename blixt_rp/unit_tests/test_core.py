@@ -108,13 +108,13 @@ class CutoffTests(unittest.TestCase):
         rule5 = CutoffRule('param5', '><', [Q_(10, 'm'), Q_(1000, 'm')])
         ct = ClassificationTable([rule1, rule2, rule3, rule5])
         # ct = ClassificationTable()
-        rules_source = ct.source
-        # print(ct.source.data)
-        # table, add_row, delete_row, update, use = ct.draw(rules_source, ['log A', 'log B'], units=['m', 'km'])
-        table, add_row, delete_row, update, use = ct.draw(rules_source)
-        print(ct.active_cutoffs(rules_source))
-        rules_source.data['use'] = [True, True, True, True]
-        print(ct.active_cutoffs(rules_source))
+        rules_cds = ct.cds
+        # print(ct.cds.data)
+        # table, add_row, delete_row, update, use = ct.draw(rules_cds, ['log A', 'log B'], units=['m', 'km'])
+        table, add_row, delete_row, update, use = ct.draw(rules_cds)
+        print(ct.active_cutoffs(rules_cds))
+        rules_cds.data['use'] = [True, True, True, True]
+        print(ct.active_cutoffs(rules_cds))
 
         show(column(table, add_row, delete_row, update, use))
         # return table, add_row, delete_row, update, use
@@ -129,26 +129,26 @@ class CutoffTests(unittest.TestCase):
         rule1 = CutoffRule('param1', '>', Q_(100, 'm'))
         rule2 = CutoffRule('param2', '<', Q_(10, 'm'))
         ct = ClassificationTable([rule1, rule2])
-        rules_source = ct.source
-        table, add_row, delete_row, update, use = ct.draw(rules_source, ['param1', 'param2'], units=['m', 'km'])
+        rules_cds = ct.cds
+        table, add_row, delete_row, update, use = ct.draw(rules_cds, ['param1', 'param2'], units=['m', 'km'])
 
-        data_source = ColumnDataSource(dict(
+        data_cds = ColumnDataSource(dict(
             mask=np.ones(10, dtype=bool),
             param1=np.linspace(10, 200, 10),
             param2 = np.linspace(1, 12, 10)
         ))
 
         # Force the rules to be active as cutoffs
-        rules_source.data['use'] = [True, True]
-        mask = ct.create_mask(rules_source, data_source)
+        rules_cds.data['use'] = [True, True]
+        mask = ct.create_mask(rules_cds, data_cds)
         print('Both cutoff rules are active: ', mask)
 
-        rules_source.data['use'] = [True, False]
-        mask = ct.create_mask(rules_source, data_source)
+        rules_cds.data['use'] = [True, False]
+        mask = ct.create_mask(rules_cds, data_cds)
         print('First cutoff rules is active: ', mask)
 
-        rules_source.data['use'] = [False, True]
-        mask = ct.create_mask(rules_source, data_source)
+        rules_cds.data['use'] = [False, True]
+        mask = ct.create_mask(rules_cds, data_cds)
         print('Second cutoff rules is active: ', mask)
 
         # show(column(table, add_row, delete_row, update, use))
@@ -281,9 +281,9 @@ class TemplateTestCase(unittest.TestCase):
         print(tmpl_table.templates)
         for _t in tmpl_table.templates:
             print(_t.name)
-        tmpl_source = tmpl_table.source
-        print(tmpl_source.data)
-        table = tmpl_table.draw(tmpl_source)
+        tmpl_cds = tmpl_table.cds
+        print(tmpl_cds.data)
+        table = tmpl_table.draw(tmpl_cds)
         show(table)
 
 class IntervalTests(unittest.TestCase):
@@ -389,21 +389,21 @@ class IntervalTests(unittest.TestCase):
         wis.read_blixt_tops(project_table)
         wis.keep_wells(['WELL_B', 'WELL_C', 'WELL_F'])
         wis_table = WorkingIntervalsTable(wis)
-        wis_source = wis_table.source
-        print(wis_source.data['use'])
+        wis_cds = wis_table.cds
+        print(wis_cds.data['use'])
         print('-x1-')
-        print(wis_table.active_intervals_dict(wis_source))
-        print(wis_table.active_intervals(wis_source))
-        # Modify source
-        for i in range(len(wis_source.data['use'])):
-            wis_source.data['use'][i] = False
+        print(wis_table.active_intervals_dict(wis_cds))
+        print(wis_table.active_intervals(wis_cds))
+        # Modify Column Data Source
+        for i in range(len(wis_cds.data['use'])):
+            wis_cds.data['use'][i] = False
         # Add it back to wis_tabl
-        wis_table.source = wis_source
+        wis_table.cds = wis_cds
         # Read it out again
-        wis_source = wis_table.source
-        print(wis_table.active_intervals(wis_source))
+        wis_cds = wis_table.cds
+        print(wis_table.active_intervals(wis_cds))
 
-        # table = wis_table.draw(wis_table.source)
+        # table = wis_table.draw(wis_table.cds)
         # show(table)
 
     def test_intervals_table_2(self):
@@ -416,16 +416,16 @@ class IntervalTests(unittest.TestCase):
                 Interval( well='two', top=Q_(1800, 'm'), base=Q_(1950, 'm'), interval_info=StratUnit('wi_2', 1))
             ] )
         wis_table = WorkingIntervalsTable(wis)
-        wis_source = wis_table.source
-        mask = wis_table.create_mask(wis_source, md=Q_(np.linspace(1000., 2000., 10), 'm'),
+        wis_cds = wis_table.cds
+        mask = wis_table.create_mask(wis_cds, md=Q_(np.linspace(1000., 2000., 10), 'm'),
                                      wells=None)
         self.assertTrue(np.array_equal(mask, np.array([0, 1, 1, 1, 0, 1, 0, 0, 1, 0], dtype=bool)))
         print('-x1-')
-        mask = wis_table.create_mask(wis_source, md=Q_(np.linspace(1000., 2000., 10), 'm'),
+        mask = wis_table.create_mask(wis_cds, md=Q_(np.linspace(1000., 2000., 10), 'm'),
                                      wells=['one'] * 10)
         self.assertTrue(np.array_equal(mask, np.array([0, 1, 1, 1, 0, 0, 0, 0, 0, 0], dtype=bool)))
         print('-x2-')
-        mask = wis_table.create_mask(wis_source, md=Q_(np.linspace(1000., 2000., 10), 'm'),
+        mask = wis_table.create_mask(wis_cds, md=Q_(np.linspace(1000., 2000., 10), 'm'),
                                      wells=['two'] * 10)
         self.assertTrue(np.array_equal(mask, np.array([0, 0, 0, 0, 0, 1, 0, 0, 1, 0], dtype=bool)))
 

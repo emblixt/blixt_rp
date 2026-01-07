@@ -371,7 +371,7 @@ class FluidsTable:
                      'temp_gradient', 'pressure_gradient',
                      'salinity', 'gor', 'oil_api', 'gas_gravity', 'gas_mixing', 'brie_exponent']
     @property
-    def source(self) -> ColumnDataSource:
+    def cds(self) -> ColumnDataSource:
         _dict = {_x:[] for _x in self.keys}
         for _fluid in self.fluids:
             for _key in self.keys:
@@ -422,31 +422,31 @@ class FluidsTable:
         return table_columns
 
     def draw(self,
-             source: ColumnDataSource):
+             cds: ColumnDataSource):
         from bokeh.models import DataTable, Button, CheckboxGroup
 
         def add_row_function():
-            new_data = dict(source.data)
+            new_data = dict(cds.data)
             for _key in list(new_data.keys()):
                 if _key == 'name':
                     new_data[_key].append('default')
                 else:
                     new_data[_key].append(def_fluid_vals[_key])
-            source.data = new_data
+            cds.data = new_data
 
         def delete_row_function():
-            selected_index = source.selected.indices
+            selected_index = cds.selected.indices
             new_data = {_x:[] for _x in self.keys}
-            for _i in range(len(source.data['name'])):
+            for _i in range(len(cds.data['name'])):
                 if _i  in selected_index:
                     continue
                 for _x in self.keys:
-                    new_data[_x].append(source.data[_x][_i])
-            source.selected.indices = []
-            source.data = new_data
+                    new_data[_x].append(cds.data[_x][_i])
+            cds.selected.indices = []
+            cds.data = new_data
 
         def update_table_function():
-            new_data = dict(source.data)
+            new_data = dict(cds.data)
             _fluids = []
             for _i in range(len(new_data['name'])):
                 # print(' - Iteration: {} of {}'.format( _i, len(new_data['name'])))
@@ -469,10 +469,10 @@ class FluidsTable:
             self.fluids = _fluids
 
             print(self.fluid_names)
-            source.data = new_data
+            cds.data = new_data
 
         dt = DataTable(
-            source=source,
+            source=cds,
             columns=self.table_columns(),
             editable=True,
             width=self.width,
@@ -674,10 +674,10 @@ class TestCases(unittest.TestCase):
 
         all_fluids, fluid_mix = self.test_data()
         ft = FluidsTable(fluids=list(all_fluids.values()))
-        source = ft.source
-        # for _key in list(source.data.keys()):
-        #     print(_key, source.data[_key])
-        table, add_row, delete_row, update = ft.draw(source)
+        cds = ft.cds
+        # for _key in list(cds.data.keys()):
+        #     print(_key, cds.data[_key])
+        table, add_row, delete_row, update = ft.draw(cds)
         show(column(table, row(add_row, delete_row, update)))
         # return table, add_row, delete_row, update
 
@@ -772,6 +772,6 @@ class TestCases(unittest.TestCase):
 
 
         xp = CrossPlotter({w.name: w.data_source() for w in [w1, w2]})
-        source = xp.source
-        xp.show_plot(source, out_file='C:/Users/emb/Downloads/plot.html')
+        cds = xp.cds
+        xp.show_plot(cds, out_file='C:/Users/emb/Downloads/plot.html')
 

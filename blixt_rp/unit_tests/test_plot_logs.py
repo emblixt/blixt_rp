@@ -94,7 +94,7 @@ class TestPlot(unittest.TestCase):
         column_content = [['vsh'], ['phie'], ['vp_dry', 'vp_sg08']]
         plotter = bupp.plot_logs(well1, column_content, rel_widths=[1., 1., 1.])
         grid = plotter.figure()
-        print(plotter.line_source.data.keys())
+        print(plotter.line_cds.data.keys())
         settings = plotter.add_settings(grid)
         show(row(grid, settings))
 
@@ -161,14 +161,14 @@ class TestPlot(unittest.TestCase):
         rho0 = well1.get_log_curve('rho_brine').values
         md = well1.get_log_curve('vp_brine').depth
         ba = bra.backus(vp0, vs0, rho0, ba_length.value, md.step().magnitude)
-        line_source_dict = dict( ai=vp0 * rho0, ai_backus=ba[0] * ba[2], md=md.values )
-        line_source = ColumnDataSource(line_source_dict)
+        line_cds_dict = dict( ai=vp0 * rho0, ai_backus=ba[0] * ba[2], md=md.values )
+        line_cds = ColumnDataSource(line_cds_dict)
         orig_template = Template(**dict(line_color='black', line_style = 'solid', line_width = 1, name = 'Orig AI'))
-        orig_line = Line(x='ai', y='md', source=line_source, style=orig_template)
+        orig_line = Line(x='ai', y='md', cds=line_cds, style=orig_template)
         backus_template = Template(**dict(line_color='red', line_style = 'solid', line_width = 2,
                                           name = 'AI {}m Backus'.format(ba_length.value),
                                           min=orig_line.x_range()[0], max=orig_line.x_range()[1]))
-        backus_line = Line(x='ai_backus', y='md', source=line_source, style=backus_template)
+        backus_line = Line(x='ai_backus', y='md', cds=line_cds, style=backus_template)
         ai_column.lines = [backus_line, orig_line]
         add_lines(_p, ai_column)
         _p.legend.click_policy = 'hide'
@@ -208,7 +208,7 @@ class TestPlot(unittest.TestCase):
         plotter = bupp.plot_logs(well1, column_content)
 
         # add the smoothened data to each column
-        line_sources = []
+        line_cdss = []
         for _i, _column in enumerate(plotter.columns):
             # print(_column)
             _log_name = column_content[_i][0]
@@ -217,13 +217,13 @@ class TestPlot(unittest.TestCase):
                 method=smooth_method_sel.value,
                 window=smooth_window_sel.value
             )
-            _this_source = ColumnDataSource(dict(smooth=_this_smooth_res.values, md=_this_smooth_res.depth.values))
+            _this_cds = ColumnDataSource(dict(smooth=_this_smooth_res.values, md=_this_smooth_res.depth.values))
             _this_style = _this_smooth_res.style
             _this_style.line_width = 3.
             _this_style.line_color = 'red'
             _this_style.name = _this_style.name + '_smooth'
-            line_sources.append(_this_source)
-            _column.add_line(Line(x='smooth', y='md', source=_this_source, style=_this_style))
+            line_cdss.append(_this_cds)
+            _column.add_line(Line(x='smooth', y='md', cds=_this_cds, style=_this_style))
 
         def callback():
             _step = None
@@ -254,15 +254,15 @@ class TestPlot(unittest.TestCase):
                         method=smooth_method_sel.value,
                         window=smooth_window_sel.value
                     )
-                line_sources[_i].data['smooth'] = _this_smooth_res.values
+                line_cdss[_i].data['smooth'] = _this_smooth_res.values
             if select_editors.active.count(3) > 0:  # Run Backus average
                 # HARD CODED TO ONLY WORK WHEN Vp, Vs and Rho COMES IN THIS SPECIFIC ORDER
-                _vp = line_sources[0].data['smooth']
-                _vs = line_sources[1].data['smooth']
-                _rho = line_sources[2].data['smooth']
+                _vp = line_cdss[0].data['smooth']
+                _vs = line_cdss[1].data['smooth']
+                _rho = line_cdss[2].data['smooth']
                 ba = bra.backus(_vp, _vs, _rho, backus_window_len.value, _step)
                 for _i in range(3):
-                    line_sources[_i].data['smooth'] = ba[_i]
+                    line_cdss[_i].data['smooth'] = ba[_i]
 
         def save():
             file_name = save_as_las()
@@ -375,7 +375,7 @@ class TestPlot(unittest.TestCase):
             x=chi_angles, y=vp.depth.values,
             # traces=result, trace_type='chi')
             traces=None,
-            source=ColumnDataSource({'value': [result.T]}),
+            cds=ColumnDataSource({'value': [result.T]}),
             trace_type='chi')
 
         plotter = LogPlotter(width=800, height=1000)
@@ -442,7 +442,7 @@ class TestPlot(unittest.TestCase):
                                 y=log_curves['near'].depth.values,
                                 # traces=traces,
                                 traces=None,
-                                source=ColumnDataSource({'value': [_traces.T]}),
+                                cds=ColumnDataSource({'value': [_traces.T]}),
                                 trace_type='avo',
                                 title='CGG18M01-NVG-PSDM'
                                 )

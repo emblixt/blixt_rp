@@ -348,7 +348,7 @@ class ClassificationTable:
         return _classes
 
     @property
-    def source(self) -> ColumnDataSource:
+    def cds(self) -> ColumnDataSource:
         """
         Returns a ColumnDataSource with the following columns:
             'use', 'name', 'log', 'units', 'operator', 'limits'
@@ -376,39 +376,39 @@ class ClassificationTable:
 
         return ColumnDataSource(_dict)
 
-    def create_mask(self, rules_source: ColumnDataSource, data_source: ColumnDataSource,
+    def create_mask(self, rules_cds: ColumnDataSource, data_cds: ColumnDataSource,
                     verbose: bool = False) -> np.array:
         """
-        Creates a mask for the data_source using the rules in rules_source and returns a boolean mask
+        Creates a mask for the data_cds using the rules in rules_cds and returns a boolean mask
 
-        NOTE the data_source does not contain information about the units of the data, so we need to make sure the
+        NOTE the data_cds does not contain information about the units of the data, so we need to make sure the
         data and the rules are having the same units
 
-        :param rules_source:
+        :param rules_cds:
             ColumnDataSource
-            The source of this class (self.source)
+            The cds of this class (self.cds)
 
-        :param data_source:
+        :param data_cds:
             ColumnDataSource
             The data that to be masked or classified
-            The data source is in the format specified by the CrossPlotter class
+            The data cds is in the format specified by the CrossPlotter class
         :return:
         """
         import blixt_utils.misc.masks as masks
         cutoffs = []
         rules = []
         use_status = []
-        for i, use in enumerate(rules_source.data['use']):
-            if ',' in rules_source.data['limits'][i]:
-                this_limit = [Q_(float(_s), rules_source.data['units'][i]) for _s in rules_source.data['limits'][i].split(',')]
+        for i, use in enumerate(rules_cds.data['use']):
+            if ',' in rules_cds.data['limits'][i]:
+                this_limit = [Q_(float(_s), rules_cds.data['units'][i]) for _s in rules_cds.data['limits'][i].split(',')]
             else:
-                this_limit = Q_(float(rules_source.data['limits'][i]), rules_source.data['units'][i])
+                this_limit = Q_(float(rules_cds.data['limits'][i]), rules_cds.data['units'][i])
             use_status.append(use)
             _rule = CutoffRule(
-                param=rules_source.data['log'][i],
-                operator=rules_source.data['operator'][i],
+                param=rules_cds.data['log'][i],
+                operator=rules_cds.data['operator'][i],
                 limit=this_limit,
-                name=rules_source.data['name'][i]
+                name=rules_cds.data['name'][i]
             )
             rules.append(_rule)
             if use:
@@ -417,13 +417,13 @@ class ClassificationTable:
         # self.use_status = use_status
         # self.cutoffs = cutoffs
 
-        _mask = np.ones(len(data_source.data['mask']), dtype=bool)
+        _mask = np.ones(len(data_cds.data['mask']), dtype=bool)
         if len(cutoffs) > 0:  # There are active cutoffs
             for _i, _rule in enumerate(cutoffs):
                 if verbose:
                     print('XXX1: Creating cutoffs for param {}'.format(_rule.param) )
                 _this_mask = masks.create_mask(
-                    data_source.data[_rule.param],
+                    data_cds.data[_rule.param],
                     _rule.operator,
                     _rule.limit
                 )
@@ -448,24 +448,24 @@ class ClassificationTable:
         ]
         return table_columns
 
-    def active_cutoffs(self, source: ColumnDataSource) -> list:
+    def active_cutoffs(self, cds: ColumnDataSource) -> list:
         _list = []
-        for i, _use in enumerate(source.data['use']):
+        for i, _use in enumerate(cds.data['use']):
             if _use:
                 _list.append('{}{}{}'.format(
-                    source.data['log'][i], source.data['operator'][i], source.data['limits'][i]))
+                    cds.data['log'][i], cds.data['operator'][i], cds.data['limits'][i]))
         return _list
 
 
     def draw(self,
-             source: ColumnDataSource,
+             cds: ColumnDataSource,
              parameters: list | None = None,
              units: list | None = None,
              color_menu: Select | None = None,
              verbose: bool = False):
         """
 
-        :param source:
+        :param cds:
             ColumnDataSource
             Source containing the rules
         :param parameters:
@@ -490,12 +490,12 @@ class ClassificationTable:
         orig_data = None
 
         if parameters is None:
-            # Use the parameters defined in the source
-            parameters = source.data['log']
+            # Use the parameters defined in the cds
+            parameters = cds.data['log']
             parameters = list(set(parameters))
         if units is None:
-            # Use the units defined in the source
-            units = source.data['units']
+            # Use the units defined in the cds
+            units = cds.data['units']
             units = list(set(units))
 
         def update_table_callback():
@@ -505,17 +505,17 @@ class ClassificationTable:
             cutoffs = []
             rules = []
             use_status = []
-            for i, use in enumerate(source.data['use']):
-                if ',' in source.data['limits'][i]:
-                    this_limit = [Q_(float(_s), source.data['units'][i]) for _s in source.data['limits'][i].split(',')]
+            for i, use in enumerate(cds.data['use']):
+                if ',' in cds.data['limits'][i]:
+                    this_limit = [Q_(float(_s), cds.data['units'][i]) for _s in cds.data['limits'][i].split(',')]
                 else:
-                    this_limit = Q_(float(source.data['limits'][i]), source.data['units'][i])
+                    this_limit = Q_(float(cds.data['limits'][i]), cds.data['units'][i])
                 use_status.append(use)
                 _rule = CutoffRule(
-                    param=source.data['log'][i],
-                    operator=source.data['operator'][i],
+                    param=cds.data['log'][i],
+                    operator=cds.data['operator'][i],
                     limit=this_limit,
-                    name=source.data['name'][i]
+                    name=cds.data['name'][i]
                 )
                 rules.append(_rule)
                 if use:
@@ -526,36 +526,36 @@ class ClassificationTable:
 
         # def use_cutoffs_callback(attr, old, new):
         #     # Test using the create_mask() function instead
-        #     if data_source is not None:
+        #     if data_cds is not None:
         #         # Take a copy of the original data, and original mask
-        #         _dict = dict(data_source.data)
-        #         orig_mask = data_source.data['mask']
+        #         _dict = dict(data_cds.data)
+        #         orig_mask = data_cds.data['mask']
 
         #         if len(new) == 1:  # 'Use cutoffs' is active
         #             if verbose:
         #                 print('Use cutoffs, ', old, new)
-        #             mask = masks.combine_masks([orig_mask, self.create_mask(source, data_source)])
+        #             mask = masks.combine_masks([orig_mask, self.create_mask(cds, data_cds)])
         #         else:
         #             if verbose:
         #                 print('Reset cutoffs, ', old, new)
-        #             # mask = np.ones(len(data_source.data['mask']), dtype=bool)
+        #             # mask = np.ones(len(data_cds.data['mask']), dtype=bool)
         #             mask = orig_mask
 
 
-        #         # Modify the mask in the data_source
+        #         # Modify the mask in the data_cds
         #         _dict['mask'] = mask
-        #         # Update the source
-        #         data_source.data = _dict
+        #         # Update the cds
+        #         data_cds.data = _dict
 
-            # if len(new) == 1 and data_source is not None:
+            # if len(new) == 1 and data_cds is not None:
             #     print('Use cutoffs, ', old, new)
             #     update_table_callback()
             #     if len(self.cutoffs) > 0:  # There are active cutoffs
-            #         new_data = dict(data_source.data)
+            #         new_data = dict(data_cds.data)
             #         _mask = None
             #         for _i, _rule in enumerate(self.cutoffs):
             #             _this_mask = masks.create_mask(
-            #                 data_source.data[_rule.param],
+            #                 data_cds.data[_rule.param],
             #                 _rule.operator,
             #                 _rule.limit
             #             )
@@ -566,32 +566,32 @@ class ClassificationTable:
             #         # apply mask
             #         for _key in list(new_data.keys()):
             #             new_data[_key] = new_data[_key][_mask]
-            #         data_source.data = new_data
+            #         data_cds.data = new_data
             # else:
             #     print('Do not use cutoffs, ', old, new)
-            #     data_source.data = orig_data
+            #     data_cds.data = orig_data
 
         def add_row_function():
-            new_data = dict(source.data)
+            new_data = dict(cds.data)
             new_data['use'].append(False)
             new_data['name'].append('Class A')
             new_data['log'].append(parameters[0])
             new_data['units'].append(units[0])
             new_data['operator'].append('>')
             new_data['limits'].append('1500.')
-            source.data = new_data
+            cds.data = new_data
 
         def delete_row_function():
-            selected_index = source.selected.indices
+            selected_index = cds.selected.indices
             # new_data = dict(use=[], name=[], log=[], units=[], operator=[], limits=[])
             new_data = {_x:[] for _x in self.keys}
-            for _i in range(len(source.data['use'])):
+            for _i in range(len(cds.data['use'])):
                 if _i in selected_index:
                     continue
                 for _x in self.keys:
-                    new_data[_x].append(source.data[_x][_i])
-            source.selected.indices = []
-            source.data = new_data
+                    new_data[_x].append(cds.data[_x][_i])
+            cds.selected.indices = []
+            cds.data = new_data
 
         # def use_color_classification(attr, old, new):
         #     print(attr, old, new)
@@ -599,7 +599,7 @@ class ClassificationTable:
         #         update_table_callback()
         #         if len(self.rules) > 0:
         #             print(list(self.classes.keys()))
-        #             new_data = dict(data_source.data)
+        #             new_data = dict(data_cds.data)
         #             # Add 'non-classified' to all data points first
         #             new_data['legend_group'][:] = 'No class'
         #             new_data['color'][:] = 'gray'
@@ -609,7 +609,7 @@ class ClassificationTable:
         #                 _mask = None
         #                 for _j, _rule in enumerate(self.classes[_class]):  # iterate over all rules within this class
         #                     _this_mask = masks.create_mask(
-        #                         data_source.data[_rule.param],
+        #                         data_cds.data[_rule.param],
         #                         _rule.operator,
         #                         _rule.limit
         #                     )
@@ -622,16 +622,16 @@ class ClassificationTable:
         #                 new_data['marker'][_mask] = markers[_i]
         #             print('Classification ON. {} data points with classes {} '.format(
         #                 len(new_data['legend_group']), list(set(new_data['legend_group']))))
-        #             data_source.data = new_data
+        #             data_cds.data = new_data
         #     else:
         #         # TODO
         #        # This doesnt work properly. The classification doesn't reset
         #         print('Classification OFF. {} data points with classes {} '.format(
         #             len(orig_data['legend_group']), list(set(list(orig_data['legend_group'])))))
-        #         data_source.data = orig_data
+        #         data_cds.data = orig_data
 
         dt = DataTable(
-            source=source,
+            source=cds,
             columns=self.table_columns(parameters, units),
             editable=True,
             width=self.width,
@@ -653,7 +653,7 @@ class ClassificationTable:
         # use_cutoffs.on_change('active', use_cutoffs_callback)
         use_cutoffs = Div(text='', width=10, height=10)
 
-        # if (color_menu is not None) and (data_source is not None):
+        # if (color_menu is not None) and (data_cds is not None):
         #     color_menu.on_change('value', use_color_classification)
 
         return dt, add_row, delete_row, update_table, use_cutoffs
@@ -861,7 +861,7 @@ class TemplatesTable:
             for _key in self.keys:
                 _dict[_key].append(_t.__dict__[_key])
 
-        self._source = ColumnDataSource(_dict)
+        self._cds = ColumnDataSource(_dict)
 
     @property
     def templates(self):
@@ -872,18 +872,18 @@ class TemplatesTable:
         self._templates = new_templates
 
     @property
-    def source(self) -> ColumnDataSource:
-        return self._source
+    def cds(self) -> ColumnDataSource:
+        return self._cds
 
-    @source.setter
-    def source(self, new_source):
-        if isinstance(new_source, ColumnDataSource):
-            self._source = new_source
-        elif isinstance(new_source, dict):
-            self._source = ColumnDataSource(new_source)
+    @cds.setter
+    def cds(self, new_cds):
+        if isinstance(new_cds, ColumnDataSource):
+            self._cds = new_cds
+        elif isinstance(new_cds, dict):
+            self._cds = ColumnDataSource(new_cds)
         else:
-            raise IOError('New source must be either ColumnDataSource or Dict, not {}'.format(
-                type(new_source)
+            raise IOError('New cds must be either ColumnDataSource or Dict, not {}'.format(
+                type(new_cds)
             ))
 
     def table_columns(self):
@@ -909,18 +909,18 @@ class TemplatesTable:
         return table_columns
 
     def draw(self,
-             source: ColumnDataSource) -> DataTable:
+             cds: ColumnDataSource) -> DataTable:
         """
         Returns a table
 
-        :param source:
+        :param cds:
             ColumnDataSource
             Source for style used for plotting data
         :return:
         """
 
         return DataTable(
-            source=source,
+            source=cds,
             columns=self.table_columns(),
             editable=True,
             width=self.width,
@@ -1350,38 +1350,38 @@ class WorkingIntervalsTable:
 
         _dict['wells'] = [', '.join(_w) for _w in _wells]
 
-        self._source =  ColumnDataSource(_dict)
+        self._cds =  ColumnDataSource(_dict)
 
     @property
     def intervals(self):
         return self._intervals
 
     @property
-    def source(self) -> ColumnDataSource:
-        return self._source
+    def cds(self) -> ColumnDataSource:
+        return self._cds
 
-    @source.setter
-    def source(self, new_source):
-        if isinstance(new_source, ColumnDataSource):
-            self._source = new_source
-        elif isinstance(new_source, dict):
-            self._source = ColumnDataSource(new_source)
+    @cds.setter
+    def cds(self, new_cds):
+        if isinstance(new_cds, ColumnDataSource):
+            self._cds = new_cds
+        elif isinstance(new_cds, dict):
+            self._cds = ColumnDataSource(new_cds)
         else:
-            raise IOError('New source must be either ColumnDataSource or Dict, not {}'.format(
-                type(new_source)
+            raise IOError('New cds must be either ColumnDataSource or Dict, not {}'.format(
+                type(new_cds)
             ))
 
     def __dict__(self):
         return self.intervals.get_intervals_dict()
 
-    def active_intervals_dict(self, source: ColumnDataSource) -> dict:
+    def active_intervals_dict(self, cds: ColumnDataSource) -> dict:
         """
         Returns a dictionary suitable for a ColumnDataSource which contains all intervals for all wells
-        with their top (m MD) and base and "active" status (status determined by the 'source' input)
+        with their top (m MD) and base and "active" status (status determined by the 'cds' input)
 
-        :param source:
+        :param cds:
             ColumnDataSource
-            The self.source of WorkingIntervalsTable
+            The self.cds of WorkingIntervalsTable
             It is used to set which intervals are active or not
 
         :return:
@@ -1402,27 +1402,27 @@ class WorkingIntervalsTable:
                     _dict['well'].append(_wname)
                     _dict['top'].append(_int.top.to('m').magnitude)
                     _dict['base'].append(_int.base.to('m').magnitude)
-                    # iterate over all working intervals in 'source' to see which are active or not
+                    # iterate over all working intervals in 'cds' to see which are active or not
                     _active = False
-                    for _i, _i_n in enumerate(source.data['name']):
-                        if _i_n == _int_name and _wname in source.data['wells'][_i] and source.data['use'][_i]:
+                    for _i, _i_n in enumerate(cds.data['name']):
+                        if _i_n == _int_name and _wname in cds.data['wells'][_i] and cds.data['use'][_i]:
                             _active = True
                     _dict['active'].append(_active)
         return _dict
 
-    def active_intervals(self, source: ColumnDataSource) -> list:
+    def active_intervals(self, cds: ColumnDataSource) -> list:
         _list = []
-        for _i, _i_n in enumerate(source.data['name']):
-            if source.data['use'][_i]:
+        for _i, _i_n in enumerate(cds.data['name']):
+            if cds.data['use'][_i]:
                 _list.append(_i_n)
         return _list
 
-    def create_mask(self, source: ColumnDataSource, md: pint.Quantity, wells: list | None = None, verbose:bool = False) -> np.array:
+    def create_mask(self, cds: ColumnDataSource, md: pint.Quantity, wells: list | None = None, verbose:bool = False) -> np.array:
         """
         Returns a boolean mask which is True within the intervals that are set Active in the table.
-        :param source:
+        :param cds:
             ColumnDataSource
-            The internal source property of self.
+            The internal cds property of self.
             Needed as input to active_intervals_dict()
         :param md:
             pint.Quantity
@@ -1435,7 +1435,7 @@ class WorkingIntervalsTable:
             comes from
         :return:
         """
-        _intervals = self.active_intervals_dict(source)
+        _intervals = self.active_intervals_dict(cds)
         _mask = np.zeros(len(md), dtype=bool)  # initial mask with all False
         any_active_wis = False
         if wells is None:
@@ -1495,13 +1495,13 @@ class WorkingIntervalsTable:
         return table_columns
 
     def draw(self,
-             source: ColumnDataSource,
+             cds: ColumnDataSource,
              verbose: bool = False
              ):
         """
         Returns a table and some buttons
 
-        :param source:
+        :param cds:
             ColumnDataSource
             Source for all working intervals
         :param verbose:
@@ -1511,7 +1511,7 @@ class WorkingIntervalsTable:
         import blixt_utils.misc.masks as masks
 
 
-        active_intervals = ColumnDataSource(self.active_intervals_dict(source))
+        active_intervals = ColumnDataSource(self.active_intervals_dict(cds))
 
         active_callback = CustomJS(
             args=dict(act_int=active_intervals),
@@ -1525,7 +1525,7 @@ class WorkingIntervalsTable:
         )
 
         source_callback = CustomJS(
-            args=dict(source=source, act_int=active_intervals, cb=active_callback),
+            args=dict(source=cds, act_int=active_intervals, cb=active_callback),
             code="""
                 const data_table = source.data;
                 var data_active = act_int.data;
@@ -1543,7 +1543,7 @@ class WorkingIntervalsTable:
             """
         )
 
-        source.js_on_change('patching', source_callback)  # 'patching' is necessary. Don't know what it means
+        cds.js_on_change('patching', source_callback)  # 'patching' is necessary. Don't know what it means
 
         # def use_wis_callback(attr, old, new):
         #     if verbose:
@@ -1580,7 +1580,7 @@ class WorkingIntervalsTable:
 
 
         dt = DataTable(
-            source=source,
+            source=cds,
             columns=self.table_columns(),
             editable=True,
             width=self.width,

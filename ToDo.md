@@ -39,3 +39,7 @@ Figure out why the LithoFluidsTable doesnt work in avo_chi_plotter.py
 Merge the WorkingIntervalsTable of core.py into the add_strat_table() in log_plotter.py
 
 Try to replace the python callback that is used for line adding / removal in the different Tables to a CustomJS callback
+
+### 2025-12-30
+Update models.py so that we don't need both the older Model and Layer class AND the newer ModelTable and ModelLayer
+(Merge)

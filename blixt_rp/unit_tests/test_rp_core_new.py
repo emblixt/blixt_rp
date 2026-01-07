@@ -53,8 +53,8 @@ class SomeTests(unittest.TestCase):
         lfs.from_excel(excel_file)
         # table = brrp.LithoFluidsTable(lfs, advanced=True)
         table = brrp.LithoFluidsTable(lfs, advanced=False)
-        source = table.source
-        table, add_row, delete_row, update = table.draw(source)
+        cds = table.cds
+        table, add_row, delete_row, update = table.draw(cds)
         if unit_test:
             show(column(table, row(add_row, delete_row, update)))
             return None

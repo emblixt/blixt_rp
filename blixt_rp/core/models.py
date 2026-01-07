@@ -7,8 +7,9 @@ import logging
 import types
 from copy import deepcopy
 import pint
-from bokeh.models import Column, ColumnDataSource
+from bokeh.models import Column, ColumnDataSource, IntEditor
 
+from .log_curve_new import LogCurve, Depth
 from .. import ureg, Q_
 from ..rp.rp_core_new import LithoFluids, LithoFluidsTable
 
@@ -1349,7 +1350,7 @@ class ModelLayer(Layer):
     """
     def __init__(self,
                  number: int,
-                 case: str | None  = 'Base',
+                 case: str | None,
                  color: str | None  = '#D9D9D9',
                  thickness: pint.Quantity | None  = Q_(25., 'm'),
                  litho_fluid: LithoFluid | None = None,
@@ -1423,6 +1424,43 @@ class ModelLayer(Layer):
         self.vs = new_litho_fluid.vs.to('m/s').magnitude
         self.rho = new_litho_fluid.rho.to('grams/cm^3').magnitude
 
+    def realize_layer(self,
+                      resolution: pint.Quantity, voigt_reuss_hill: bool =False, index: int = 0):
+        """
+        Overrides the 'realize_layer' of the parent Layer class, which is a bit old-fashioned and does not
+        take some new methods into account.
+        BUT it doesn't accept cases where vp, vs and rho are functions - which the parent class (Layer) does.
+
+        Realize the current layer by returning arrays of the elastic properties with the given resolution
+
+        :param resolution:
+            pint.Quantity
+            Determines the resolution of the layer.
+            Must match the dimension of the thickness of the layer
+
+        :param voigt_reuss_hill:
+        :param index:
+        :return:
+        """
+        raise_domain_error = False
+        if resolution.check('[length]'):
+            if not self.domain == 'Z':
+                raise_domain_error = True
+        elif resolution.check('[time]'):
+            if not self.domain == 'TWT':
+                raise_domain_error = True
+        if raise_domain_error:
+            err_txt = 'The dimensions of resolution ({}) and domain ({}) does not match'.format(
+                resolution.units, self.domain
+            )
+            print_info(err_txt, 'error', logger, 'IOError')
+
+        n = int(self.thickness.magnitude / resolution.to(self.thickness.units).magnitude)
+        this_vp = np.ones(n) * self.vp
+        this_vs = np.ones(n) * self.vs
+        this_rho = np.ones(n) * self.rho
+        return this_vp, this_vs, this_rho
+
 class ModelTable:
     """
     Returns a bokeh DataTable populated with rows of single layers
@@ -1431,23 +1469,34 @@ class ModelTable:
 
     def __init__(self,
                  layers: list | None = None,
-                 litho_fluid_source:ColumnDataSource | None = None,
+                 litho_fluid_cds:ColumnDataSource | None = None,
+                 depth_to_top: pint.Quantity | None = None,
+                 base_case_name: str | None = None,
                  width: int | None = None,
                  height: int | None = None):
         """
 
         :param layers:
             List of TableLayer objects
-        :param litho_fluid_source:
+        :param litho_fluid_cds:
             ColumnDataSource of the LithoFluidsTable that contains all the different LithoFluids we can use to
             populate the model
+        :param  base_case_name
+            str
+            Name of the default base case
         :param width:
         :param height:
         """
         if layers is None:
             layers = []
         self.layers = layers
-        self.litho_fluid_source = litho_fluid_source
+        self.litho_fluid_cds = litho_fluid_cds
+        if base_case_name is None:
+            base_case_name = 'Base'
+        self.base_case_name = base_case_name
+        if depth_to_top is None:
+            depth_to_top = Q_(3000., 'm')
+        self.depth_to_top = depth_to_top
         if width is None:
             width = 700
         self.width = width
@@ -1458,15 +1507,27 @@ class ModelTable:
 
     @property
     def input_litho_fluids(self):
-        if self.litho_fluid_source is not None:
-            return self.litho_fluid_source.data['name']
+        if self.litho_fluid_cds is not None:
+            return self.litho_fluid_cds.data['name']
         else:
             return []
 
     @property
-    def source(self):
+    def cds(self):
         _dict = {_x: [] for _x in self.keys}
-        for _layer in self.layers:
+        _dict['top'] = []
+        previous_thickness = 0.
+        previous_top = float(self.depth_to_top.to('m').magnitude)
+        for _i, _layer in enumerate(self.layers):
+            # TODO The top attribute is not calculated correctly, it should iterate under 'number' first of all,
+            # But there is probably something more to
+            if _i == 0:
+                _dict['top'].append(previous_top)
+                previous_thickness = float(_layer.thickness.to('m').magnitude)
+            else:
+                _dict['top'].append(previous_top + previous_thickness)
+                previous_thickness = float(_layer.thickness.to('m').magnitude)
+                previous_top += previous_thickness
             for _key in self.keys:
                 if _key == 'thickness':
                     _dict[_key].append(_layer.thickness.magnitude)
@@ -1480,32 +1541,155 @@ class ModelTable:
                     _dict[_key].append(_layer.__dict__[_key])
         return ColumnDataSource(_dict)
 
-
     @property
     def numbers(self):
-        return self.source.data['number']
+        return list(set([int(_n) for _n in self.cds.data['number']]))
+
+    @property
+    def duplicate_numbers(self) -> list:
+        """
+        Identify which layers that have more than one case
+        :return:
+        """
+        seen = set()
+        duplicates = []
+
+        for item in [int(_n) for _n in self.cds.data['number']]:
+            if item in seen:
+                if item not in duplicates:  # Optional: to ensure the duplicates list itself has no repeated entries
+                    duplicates.append(item)
+            else:
+                seen.add(item)
+        return duplicates
 
     @property
     def cases(self):
-        return self.source.data['case']
+        return list(set(self.cds.data['case']))
 
     @property
     def litho_fluids(self):
-        return self.source.data['litho_fluid']
+        return self.cds.data['litho_fluid']
 
     @litho_fluids.setter
     def litho_fluids(self, new_litho_fluids):
         if isinstance(new_litho_fluids, list):
-            self.source.data['litho_fluid'] = new_litho_fluids
+            self.cds.data['litho_fluid'] = new_litho_fluids
         else:
             print_info('new_litho_fluids is not a list', 'warning', logger)
 
     def add_litho_fluid(self, litho_fluid: str):
-        self.source.data['litho_fluid'].append(litho_fluid)
+        self.cds.data['litho_fluid'].append(litho_fluid)
+
+    def get_layer(self, number: int, case: str, base_case: str | None = None) -> ModelLayer | None:
+        """
+        Returns the layer with the given number and case if that case exists. Else it returns the base case layer
+        :param number:
+        :param case:
+        :param base_case:
+            str
+            Name of the base case scenario
+        :return:
+        """
+        if base_case is None:
+            base_case = self.base_case_name
+        base_case_layer = None
+        for _layer in self.layers:
+            if _layer.number == number and _layer.case.lower() == base_case.lower():
+                base_case_layer = _layer
+            if _layer.number == number and _layer.case.lower() == case.lower():
+                return _layer
+        return base_case_layer
+
+    def depth_range(self):
+        """
+        Returns the total thickness of the model.
+        NOTE. Only sums up the unique layers (which have different layer numbers)
+        :return:
+        """
+        i = 0
+        previous_layers = []
+        thickness = None
+        for _layer in self.layers:
+            if int(_layer.number) in previous_layers:
+                # Skip layers which are non-unique
+                continue
+            previous_layers.append(int(_layer.number))
+
+            if i == 0:
+                thickness = _layer.thickness
+            else:
+                thickness += _layer.thickness
+            i += 1
+        return thickness
+
+    def md_array(self, resolution: pint.Quantity) -> pint.Quantity:
+        """
+        Returns a pint.Quantity array with length similar to the total length of the model (sum layer thicknesses)
+        with a sampling matching the desired resolution
+
+        :param resolution:
+            pint.Quantity
+            Determines the resolution of the layer.
+            Must match the dimension of the model
+        :return:
+        """
+        md = self.depth_to_top + Q_(
+            np.arange(
+                0.,
+                self.depth_range().magnitude,
+                resolution.to(self.depth_range().units).magnitude),
+            self.depth_range().units)
+        return md
+
+    def interface_depths(self, cds: ColumnDataSource) -> list:
+        """
+        Returns a list of depths, one for each interface (except top and bottom) that are found in the Column Data Source
+        of the ModelTable
+        :param cds:
+        :return:
+        """
+        _list = []
+        i = 0
+        previous_layers = []
+        previous_thickness = 0.
+        interface_depth = self.depth_to_top
+        for _layer in self.layers:
+            if int(_layer.number) in previous_layers:
+                # Skip layers which are non-unique
+                continue
+            previous_layers.append(int(_layer.number))
+
+            if i > 0:
+                # interface_depth += _layer.thickness
+                interface_depth += previous_thickness
+                _list.append(interface_depth)
+            previous_thickness = _layer.thickness
+            i += 1
+
+        return _list
+
+    def interface_indexes(self, md, cds: ColumnDataSource) -> list:
+        """
+        Returns a list of indexes, one for each interface (except top and bottom) that are found in the Column Data Source
+        of the ModelTable
+        :param md:
+            output from self.md_array()
+        :param cds:
+            ColumnDataSource of the model table
+        :return:
+        """
+
+        interface_depths = self.interface_depths(cds)
+        i_inds = []
+        for _depth in interface_depths:
+            i_inds.append(int(
+                np.argmin(np.sqrt((md - _depth)**2))
+            ))
+        return i_inds
 
     def table_columns(self):
         from bokeh.models import (SelectEditor, StringEditor, TableColumn, HTMLTemplateFormatter)
-        from bokeh.models import ColumnDataSource, StringFormatter, NumberEditor, NumberFormatter
+        from bokeh.models import ColumnDataSource, StringFormatter, IntEditor, NumberEditor, NumberFormatter
         colored_cell_template = """
                 <div style="background:<%= 
                     (function color_from_val(){
@@ -1518,6 +1702,7 @@ class ModelTable:
         formatter = HTMLTemplateFormatter(template=colored_cell_template)
 
         column_names = [_s.capitalize().replace('_', ' ') for _s in self.keys]
+        column_names[0] = 'Layer'
         table_columns = []
         for i, column_key in enumerate(self.keys):
             if column_key == 'litho_fluid':
@@ -1527,6 +1712,9 @@ class ModelTable:
             elif column_key == 'thickness':
                 _editor = NumberEditor()
                 _formatter = NumberFormatter(format='0.0[0]')
+            elif column_key == 'number':
+                _editor = IntEditor()
+                _formatter = NumberFormatter(format='0.')
             elif column_key == 'color':
                 _editor=StringEditor()
                 _formatter=formatter
@@ -1544,11 +1732,70 @@ class ModelTable:
             )
         return table_columns
 
+    def realize(self, resolution: pint.Quantity, mod_cds: ColumnDataSource) -> dict:
+        """
 
-    def draw(self, source: ColumnDataSource):
+        :param resolution:
+            pint.Quantity
+            Determines the resolution of the layer.
+            Must match the dimension of the model
+        :param mod_cds:
+        :return:
+        """
+        if len(self.cases) > 2:
+            print_info('More than two cases might not be realized as desired', 'error', logger, IOError)
+        _dict = {_case: {} for _case in self.cases}
+        _nrs = self.numbers  # Layer numbers. Low number are above higher numbers
+        _target_layers = self.duplicate_numbers  # Duplicate numbers indicate that a layer has different cases
+
+        md = self.md_array(resolution)
+
+        i_inds = self.interface_indexes(md, mod_cds)
+
+        # iterate over all layers
+        for _case in self.cases:
+            # Populate arrays with the values of each layer. Units are not important as each layer is
+            # converted to m/s and gr/cm3 when initiated
+            _vp = np.zeros(len(md))
+            _vs = np.zeros(len(md))
+            _rho = np.zeros(len(md))
+            _twt = np.zeros(len(md))
+            for i, n in enumerate(_nrs):  # This is also the correct order, as lower numbers are at the top :-)
+                this_layer = self.get_layer(n, _case)
+                print('XXX', i, n, _case, this_layer.case)
+                if i == 0:  # First layer
+                    _vp[:i_inds[i]] = this_layer.vp
+                    _vs[:i_inds[i]] = this_layer.vs
+                    _rho[:i_inds[i]] = this_layer.rho
+                elif i > len(i_inds) - 1:  # last layer
+                    _vp[i_inds[i-1]:] = this_layer.vp
+                    _vs[i_inds[i-1]:] = this_layer.vs
+                    _rho[i_inds[i-1]:] = this_layer.rho
+                else:
+                    _vp[i_inds[i-1]:i_inds[i]] = this_layer.vp
+                    _vs[i_inds[i-1]:i_inds[i]] = this_layer.vs
+                    _rho[i_inds[i-1]:i_inds[i]] = this_layer.rho
+
+            _twt = np.cumsum(2.0 * resolution / _vp)
+
+            _dict[_case]['vp'] = LogCurve('vp_{}'.format(_case), Q_(_vp, 'm/s'), Depth(md), log_type='P velocity')
+            _dict[_case]['vs'] = LogCurve('vs_{}'.format(_case), Q_(_vs, 'm/s'), Depth(md), log_type='S velocity')
+            _dict[_case]['rho'] = LogCurve('rho_{}'.format(_case), Q_(_rho, 'grams/cm^3'), Depth(md), log_type='Density')
+            _dict[_case]['ai'] = LogCurve('ai_{}'.format(_case), (Q_(_vp, 'm/s') * Q_(_rho, 'grams/cm^3')).to('kiloPa * s / m'), Depth(md), log_type='Impedance')
+            _dict[_case]['vpvs'] = LogCurve('vpvs_{}'.format(_case), Q_(_vp, 'm/s') / Q_(_vs, 'm/s'), Depth(md), log_type='VpVs')
+            _dict[_case]['twt'] = LogCurve('twt_{}'.format(_case), Q_(_twt, 's'), Depth(md), log_type='TWT')
+
+        return _dict
+
+    def line_cds(self, resolution: pint.Quantity, mod_cds: ColumnDataSource) -> ColumnDataSource:
+        elastics = self.realize(resolution, mod_cds)
+        _dict = modify_dict(elastics)
+        return ColumnDataSource(_dict)
+
+    def draw(self, cds: ColumnDataSource):
         """
         Returns a table that is used for defining a model
-        :param source:
+        :param cds:
             ColumnDataSource of the initial model, with N layers
         :return:
         """
@@ -1556,41 +1803,46 @@ class ModelTable:
         from blixt_rp.rp.rp_core_new import LithoFluid
 
         def add_row_function():
-            new_data = dict(source.data)
+            new_data = dict(cds.data)
             n = len(new_data['number'])
             new_row_number = n + 1
             for _key in list(new_data.keys()):
                 if _key == 'number':
                     new_data[_key].append(new_row_number)
                 elif _key == 'case':
-                    new_data[_key].append('Base')
+                    new_data[_key].append(self.base_case_name)
+                elif _key == 'thickness':
+                    new_data[_key].append(30.)
                 else:
                     if n == 0:
                         new_data[_key].append(None)
                     else:
                         new_data[_key].append(new_data[_key][-1])
-            source.data = new_data
+            cds.data = new_data
 
         def delete_row_function():
-            selected_index = source.selected.indices
+            selected_index = cds.selected.indices
             new_data = {_x:[] for _x in self.keys}
-            for _i in range(len(source.data['number'])):
+            for _i in range(len(cds.data['number'])):
                 if _i  in selected_index:
                     continue
                 for _x in self.keys:
-                    new_data[_x].append(source.data[_x][_i])
-            source.selected.indices = []
-            source.data = new_data
+                    new_data[_x].append(cds.data[_x][_i])
+            cds.selected.indices = []
+            cds.data = new_data
 
         def update_table_function():
-            new_data = dict(source.data)
+            new_data = dict(cds.data)
             layers = []
             print(self.input_litho_fluids)
             for _i in range(len(new_data['number'])):
+                _thickness =  new_data['thickness'][_i]
+                if _thickness is None:
+                    _thickness = 10.
                 this_lf = new_data['litho_fluid'][_i]
                 this_i = 0
                 try:
-                    this_i = [_x.lower() for _x in self.litho_fluid_source.data['name']].index(this_lf.lower())
+                    this_i = [_x.lower() for _x in self.litho_fluid_cds.data['name']].index(this_lf.lower())
                 except ValueError as e:
                     warn_txt = 'Litho fluid {} is not found in LithoFluidTable. Using first'.format(this_lf)
                     print_info(warn_txt, 'warning', logger)
@@ -1599,20 +1851,21 @@ class ModelTable:
                     number=new_data['number'][_i],
                     case=new_data['case'][_i],
                     color=new_data['color'][_i],
-                    thickness=  Q_(new_data['thickness'][_i] , 'm'),
+                    thickness=Q_(_thickness, 'm'),
                     litho_fluid=LithoFluid(
-                        name=self.litho_fluid_source.data['name'][this_i],
-                        vp=self.litho_fluid_source.data['vp'][this_i],
-                        vs=self.litho_fluid_source.data['vs'][this_i],
-                        rho=self.litho_fluid_source.data['rho'][this_i]
+                        name=self.litho_fluid_cds.data['name'][this_i],
+                        vp=self.litho_fluid_cds.data['vp'][this_i],
+                        vs=self.litho_fluid_cds.data['vs'][this_i],
+                        rho=self.litho_fluid_cds.data['rho'][this_i]
                     )
                 )
                 layers.append(this_layer)
             self.layers = layers
-            source.data = new_data
+            cds.data = new_data
+            print(self.depth_range())
 
         dt = DataTable(
-            source=source,
+            source=cds,
             columns=self.table_columns(),
             editable=True,
             width=self.width,
@@ -1635,36 +1888,157 @@ class ModelTable:
 class LaminarModel:
     """
     Creates an interactive laminar (1D) model together with a display of the synthetic response
+    NOTE! Only works in depth domain ('Z')
     """
     from blixt_rp.rp.rp_core_new import LithoFluids
     from blixt_rp.plotting.cross_plotter import DataSource
 
     def __init__(self,
                  litho_fluids: LithoFluids,
-                 sample_rate: pint.Quantity | None = None,
+                 resolution: pint.Quantity | None = None,
                  wavelet: dict | None = None,
-                 domain: str = 'Z',
-                 depth_to_top: int | float | None = None,
+                 depth_to_top: pint.Quantity | None = None,
                  **kwargs
     ):
         self._litho_fluids = litho_fluids
+        self.resolution = resolution
+        self.depth_to_top = depth_to_top
         self.lf_width = kwargs.pop('lf_width', 300)
         self.model_width = kwargs.pop('model_width', None)
+        self.model = None
+        self.lf_table = None
+        self.previous_cases = None
 
-    def draw_lf_table(self, lf_source):
+    def initiate_lf_table(self):
+        self.lf_table = LithoFluidsTable(self._litho_fluids, width=self.lf_width, advanced=False)
+
+    def draw_lf_table(self, lf_cds: ColumnDataSource):
         # Returns the LithoFluidsTable with control buttons
         # Returns: lf_table, lf_add_row, lf_delete_row, lf_update
-        lf_obj = LithoFluidsTable(self._litho_fluids, width=self.lf_width)
-        return lf_obj.draw(lf_source)
+        # lf_obj = LithoFluidsTable(self._litho_fluids, width=self.lf_width)
+        return self.lf_table.draw(lf_cds)
 
-    def draw_model_table(self, mod_source, lf_source):
+    def initiate_model_table(self, lf_cds: ColumnDataSource):
+        initial_layers = [_lf.to_model_layer(_i+1) for _i, _lf in enumerate(self._litho_fluids.litho_fluids)]
+        mod_obj = ModelTable(initial_layers, lf_cds, self.depth_to_top)
+        self.depth_to_top = mod_obj.depth_to_top
+        self.model = mod_obj
+
+    def draw_model_table(self, mod_cds: ColumnDataSource):
         # Returns the ModelTable with control buttons
         # Returns: model_table, model_add_row, model_delete_row, model_update
-        initial_layers = [_lf.to_model_layer(_i+1) for _i, _lf in enumerate(self._litho_fluids.litho_fluids)]
-        mod_obj = ModelTable(initial_layers, lf_source)
-        return mod_obj.draw(mod_source)
+        return self.model.draw(mod_cds)
 
-    def line_source(self):
-        # TODO CONTINUE HERE
-        # Create a DataSource which contains the AI and Vp/Vs ratio for the different cases
-        pass
+    def draw(self):
+        from bokeh.models import Span
+        from blixt_rp.plotting.log_plotter import LogPlotter, LogColumn, Line, select_column, select_line
+        from blixt_rp.core.core import Template
+        # Create the litho fluids table
+        self.initiate_lf_table()
+        cds_lf = self.lf_table.cds
+        lf_table, add_row, delete_row, update = self.draw_lf_table(cds_lf)
+
+        # Create the models table
+        self.initiate_model_table(cds_lf)
+        cds_m = self.model.cds
+        model_table, add_row_m, delete_row_m, update_m = self.draw_model_table(cds_m)
+
+        # Initiate the elastics and draw the initial data
+        cds_lines = self.model.line_cds(self.resolution, cds_m)
+
+        def spans():
+            _tmp = []
+            for _i, _name in enumerate(cds_m.data['top']):
+                _tmp.append(Span(location=cds_m.data['top'][_i], dimension='width',
+                                 line_width=1,
+                                 line_dash='solid',
+                                 line_color='black'))
+            return _tmp
+
+        # Create log plot object
+        plotter = LogPlotter(width=800, height=1000)
+
+        def draw_lines():
+            # NOTE This does not respond when new lines (cases) are added
+            ais_lines = []
+            vpvs_lines = []
+            for _case in self.model.cases:
+                ais_lines.append(Line(x='ai_{}'.format(_case), y='depth', cds=cds_lines,
+                                      style=Template(**{'name': 'AI {}'.format(_case)})))
+                vpvs_lines.append(Line(x='vpvs_{}'.format(_case), y='depth', cds=cds_lines,
+                                       style=Template(**{'name': 'VpVs {}'.format(_case)})))
+
+            ai_column = LogColumn('AI', lines=ais_lines, rel_width=1.)
+            vpvs_column = LogColumn('VpVs', lines=vpvs_lines, rel_width=1.)
+            plotter.columns = [ai_column, vpvs_column]
+
+        self.previous_cases = self.model.cases
+        draw_lines()
+        grid = plotter.figure()
+
+        _spans = spans()
+        for _span in _spans:
+            for i, _child in enumerate(grid.children):
+                _child[0].add_layout(_span)
+
+
+        def update_m_function():
+            print(self.model.cases)
+            # print(self.model.numbers)
+            # print(self.model.duplicate_numbers)
+
+            # Update the ColumnDataSources
+            cds_lines.data = dict(self.model.line_cds(self.resolution, cds_m).data)
+            cds_m.data = dict(self.model.cds.data)
+            print(cds_m.data['top'], cds_m.data['thickness'])
+
+            # Update the Spans
+            for _i, _span in enumerate(_spans):
+                _span.location = cds_m.data['top'][_i]
+
+            # Detect changes in number of cases
+            case_changes = detect_change_in_cases(self.model.cases, self.previous_cases)
+            # Only handle the situation when a new case is added, for now (TODO)
+            if len(case_changes['new']) > 0:
+                # get AI, and VpVs columns
+                _p_ai = select_column(grid, 'AI')
+                _p_vpvs = select_column(grid, 'VpVs')
+                for _case in case_changes['new']:
+                    _y = 'ai_{}'.format(_case)
+                    print('Trying to plot the new case:', _case, _y)
+                    _p_ai.line(x='ai_{}'.format(_case), y='depth', source=cds_lines,
+                               **{'line_color': 'red', 'legend_label': 'AI_{}'.format(_case)})
+                    _p_vpvs.line(x='vpvs_{}'.format(_case), y='depth', source=cds_lines,
+                               **{'line_color': 'red', 'legend_label': 'VpVs_{}'.format(_case)})
+
+            self.previous_cases = self.model.cases
+
+        print('XXX Print TWT data')
+        print(cds_lines.data['twt_Base'])
+        update_m.on_click(update_m_function)
+
+        return lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid
+
+
+def modify_dict(_input):
+    _dict = {}
+    for _case in list(_input.keys()):
+        for _log in list(_input[_case].keys()):
+            # Each LogCurve has its own ColumnDataSource (log values and depth)
+            _log_cds = _input[_case][_log].cds
+            for _var in list(_log_cds.data.keys()):
+                # Join all logs to one common ColumnDataSource
+                _dict[_var] = _log_cds.data[_var]
+    return _dict
+
+def detect_change_in_cases(new_cases, prev_cases):
+    _dict = {'new': [], 'removed': []}
+    if new_cases == prev_cases:
+        return _dict
+    for _case in new_cases:
+        if _case not in prev_cases:
+            _dict['new'].append(_case)
+    for _case in prev_cases:
+        if _case not in new_cases:
+            _dict['removed'].append(_case)
+    return _dict

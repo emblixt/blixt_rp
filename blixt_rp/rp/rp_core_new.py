@@ -323,7 +323,7 @@ class LithoFluidsTable:
         self.advanced = advanced
 
     @property
-    def source(self) -> ColumnDataSource:
+    def cds(self) -> ColumnDataSource:
         _dict = {_x:[] for _x in self.keys}
         for _litho_fluid in self.litho_fluids.litho_fluids:
             for _key in self.keys:
@@ -366,32 +366,32 @@ class LithoFluidsTable:
         return table_columns
 
     def draw(self,
-             source: ColumnDataSource):
+             cds: ColumnDataSource):
         from bokeh.models import DataTable, Button, CheckboxGroup
 
         def add_row_function():
-            new_data = dict(source.data)
+            new_data = dict(cds.data)
             lf = LithoFluid(default='brine_sst')
             for _key in list(new_data.keys()):
                 if _key == 'name':
                     new_data[_key].append('brine sst')
                 else:
                     new_data[_key].append(lf.__dict__[_key])
-            source.data = new_data
+            cds.data = new_data
 
         def delete_row_function():
-            selected_index = source.selected.indices
+            selected_index = cds.selected.indices
             new_data = {_x:[] for _x in self.keys}
-            for _i in range(len(source.data['name'])):
+            for _i in range(len(cds.data['name'])):
                 if _i  in selected_index:
                     continue
                 for _x in self.keys:
-                    new_data[_x].append(source.data[_x][_i])
-            source.selected.indices = []
-            source.data = new_data
+                    new_data[_x].append(cds.data[_x][_i])
+            cds.selected.indices = []
+            cds.data = new_data
 
         def update_table_function():
-            new_data = dict(source.data)
+            new_data = dict(cds.data)
             _litho_fluids = []
             for _i in range(len(new_data['name'])):
                 # print(' - Iteration: {} of {}'.format( _i, len(new_data['name'])))
@@ -420,10 +420,10 @@ class LithoFluidsTable:
 
             self.litho_fluids.litho_fluids = _litho_fluids
 
-            source.data = new_data
+            cds.data = new_data
 
         dt = DataTable(
-            source=source,
+            source=cds,
             columns=self.table_columns(),
             editable=True,
             width=self.width,

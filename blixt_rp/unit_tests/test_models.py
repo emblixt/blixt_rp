@@ -3,13 +3,15 @@ import os
 import sys
 import matplotlib.pyplot as plt
 import numpy as np
+from pint import Quantity as Q_
 
 # Add to path to avoid having to install libraries, useful in development
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from blixt_rp.core.models import (Model, Layer, ModelTable, ModelLayer, plot_wiggles, build_layered_model, laminar_model_analysis,
-                                  build_saturation_wedge)
+from blixt_rp.core.models import (Model, Layer, ModelTable, ModelLayer, LaminarModel,
+                                  plot_wiggles, build_layered_model, laminar_model_analysis,
+                                  build_saturation_wedge, detect_change_in_cases)
 import blixt_utils.misc.wavelets as bumw
 
 l1 = {'vp': 3000, 'vs': 1820, 'rho': 2.6}
@@ -212,14 +214,14 @@ class TestCase(unittest.TestCase):
         lfs.from_excel(excel_file)
         lfs.litho_fluids = lfs.litho_fluids[:3]
         table_lf = brrp.LithoFluidsTable(lfs, width=300, advanced=False)
-        source_lf = table_lf.source
-        lf_table, add_row, delete_row, update = table_lf.draw(source_lf)
+        cds_lf = table_lf.cds
+        lf_table, add_row, delete_row, update = table_lf.draw(cds_lf)
 
-        # layers = [_lf.to_model_layer(_i+1) for _i, _lf in enumerate(lfs.litho_fluids)]
-        layers = []
-        table_model = ModelTable(layers, source_lf)
-        source_model = table_model.source
-        model_table, add_row_m, delete_row_m, update_m = table_model.draw(source_model)
+        layers = [_lf.to_model_layer(_i+1) for _i, _lf in enumerate(lfs.litho_fluids)]
+        # layers = []
+        table_model = ModelTable(layers, cds_lf)
+        cds_model = table_model.cds
+        model_table, add_row_m, delete_row_m, update_m = table_model.draw(cds_model)
 
         if unit_test:
             show(
@@ -231,3 +233,38 @@ class TestCase(unittest.TestCase):
             return None
         else:
             return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update
+
+    def test_laminar_model(self, unit_test=True):
+        from bokeh.io import output_file
+        from bokeh.plotting import show, row, column
+        import blixt_rp.rp.rp_core_new as brrp
+        excel_file = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\PL1221\\SumsAndAverages.xlsx"
+        output_file('C:\\Users\\emb\\Downloads\\plot.html')
+
+        # Create litho fluids
+        lfs = brrp.LithoFluids()
+        lfs.from_excel(excel_file)
+        lfs.litho_fluids = lfs.litho_fluids[:3]
+
+        # Create the laminar model
+        lm = LaminarModel(lfs, Q_(0.5, 'm'))
+
+        lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid = lm.draw()
+
+        if unit_test:
+            show(column(grid,
+                row(
+                    column(model_table, row(add_row_m, delete_row_m, update_m)),
+                    column(lf_table, row(add_row, delete_row, update))
+                ))
+            )
+            return None
+        else:
+            return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid
+
+    def test_catch_change_in_cases(self):
+        prev_cases = [[1, 2], [1,2,3], [1,2], [1,4]]
+        new_cases =  [[1,2], [1,2], [1,2,3], [1,3]]
+        for new_case, prev_case in zip(new_cases, prev_cases):
+            _dict = detect_change_in_cases(new_case, prev_case)
+            print('New:', _dict['new'], ', Removed: ', _dict['removed'])

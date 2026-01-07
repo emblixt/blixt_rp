@@ -138,7 +138,7 @@ class LogPlotter:
         return int(self.width / n_cols)
 
     @property
-    def line_source(self) -> ColumnDataSource:
+    def line_cds(self) -> ColumnDataSource:
         """
         Returns a merged CDS for all Line objects in all columns.
         This is necessary when using the BooleanFilter possibility of a CDS on each LogColumn
@@ -150,11 +150,11 @@ class LogPlotter:
         _len = 0
         for _col in self.columns:
             for _line in _col.lines:
-                if _line.source is None:
+                if _line.cds is None:
                     warn_txt = 'Line {} in column {} has no source (CDS)'.format(_line.name, _col.name)
                     print_info(warn_txt, 'warning', logger)
                     continue
-                for _key, _var in _line.source.data.items():
+                for _key, _var in _line.cds.data.items():
                     if _i == 0:
                         _len = len(_var)
                     elif _len != len(_var):
@@ -214,23 +214,23 @@ class LogPlotter:
             for _line in _col.lines:
                 templates.append(_line.style)
         table = TemplatesTable(templates, width)
-        source = table.source
+        cds = table.cds
 
         # js_on_change with 'patching' works
-        source_callback = CustomJS(args=dict(source=source, grid=grid, styles=line_dashes), code=code)
-        source.js_on_change('patching', source_callback)
+        source_callback = CustomJS(args=dict(source=cds, grid=grid, styles=line_dashes), code=code)
+        cds.js_on_change('patching', source_callback)
 
-        return table.draw(source)
+        return table.draw(cds)
 
-    def add_cutoffs(self, grid: gridplot, line_source: ColumnDataSource, width=None):
+    def add_cutoffs(self, grid: gridplot, line_cds: ColumnDataSource, width=None):
         """
 
         :param grid:
             gridplot
-        :param line_source:
+        :param line_cds:
             ColumnDataSource
             CDS of all line objects in the plot.
-            e.g. self.line_source
+            e.g. self.line_cds
         :param width:
             int
         :return:
@@ -240,9 +240,9 @@ class LogPlotter:
 
         if self.cutoffs is not None:
             self._cutoffs_table = ClassificationTable(rules=self.cutoffs.cutoffs, width=width)
-        source = self._cutoffs_table.source
+        cds = self._cutoffs_table.cds
         # ct_guis consists of: table, add_row, delete_row, update, use
-        ct_guis = self._cutoffs_table.draw(source, parameters=None, units=None)
+        ct_guis = self._cutoffs_table.draw(cds, parameters=None, units=None)
 
         # TODO
         # If a column contains one or more Line objects, they will have a CDS attached to each of them.
@@ -250,13 +250,14 @@ class LogPlotter:
         # But the mask is dependent on the data in the other columns too! To make this happen, we need to create
         # a CDS which is common for all Lines in the LogPlotter
         # Create a BooleanFilter,
-        boolean_filter = BooleanFilter(booleans=line_source.data['mask'])
+        boolean_filter = BooleanFilter(booleans=line_cds.data['mask'])
         #   ># Create a CDSView using the BooleanFilter
         #   >view = CDSView(filter=boolean_filter)
 
 
 
     def figure(self, title: str | None = None) -> gridplot:
+        # TODO Maybe rename this to draw() which makes it more consistent with cross_plotter.py
         children = []
         lines = []
         _w = Span(dimension="width", line_dash="dashed", line_width=1)
@@ -388,10 +389,10 @@ class Line:
                  x=None,
                  y=None,
                  style: Template | None = None,
-                 source: ColumnDataSource | None = None
+                 cds: ColumnDataSource | None = None
     ):
         # TODO
-        # TODO Force this to use source (CDS) as mandatory, and add a view (CDSView object)
+        # TODO Force this to use cds (ColumnDataSource) as mandatory, and add a view (CDSView object)
         """
 
         :param x:
@@ -403,11 +404,11 @@ class Line:
             Template object which we use to create the line arguments that goes to the bokeh.figure.line() method.
             Most important arguments are:
             line_color='black', line_style='solid,  line_width=1, name='name'
-        :param source:
+        :param cds:
             ColumnDataSource that can be updated interactively in bokeh.
-            If given, the x and y must be strings that exists within this source. E.G.
+            If given, the x and y must be strings that exists within this cds. E.G.
             > source = ColumnDataSource(dict(alpha=<some data>, beta=<some other data>))
-            > Line(x='alpha', y='beta', source=source)
+            > Line(x='alpha', y='beta', cds=cds)
         """
         if x is None:
             x = np. random.normal(0., 1., test_data_length)
@@ -419,7 +420,7 @@ class Line:
             style = Template(**dict(line_color='black', line_style = 'solid', line_width = 2, name = 'TEST',
                                     min=1000., max=13000.))
         self.style = style
-        self.source = source
+        self.cds = cds
         self._name = style.name
 
     @property
@@ -462,17 +463,17 @@ class Line:
 
     @property
     def min(self):
-        if self.source is None:
+        if self.cds is None:
             return np.nanmin(self.x)
         else:
-            return np.nanmin(self.source.data[self.x])
+            return np.nanmin(self.cds.data[self.x])
 
     @property
     def max(self):
-        if self.source is None:
+        if self.cds is None:
             return np.nanmax(self._x)
         else:
-            return np.nanmax(self.source.data[self.x])
+            return np.nanmax(self.cds.data[self.x])
 
     def x_range(self, from_style=False):
         _min = None
@@ -590,19 +591,21 @@ def add_lines(_p: bokeh.plotting.figure,
     for j, _line in enumerate(_column.lines):
         _legend_label = _line.line_args['legend_label']
         if j == 0:
-            if _line.source is None:
+            if _line.cds is None:
+                print_info('Specifying a line with X and Y arrays is to be deprecated, Use a CDS',
+                           'warning', logger)
                 _p.line(x=_line.x, y=_line.y, name=_line.name,  **_line.line_args)
             else:
-                _p.line(x=_line.x, y=_line.y, source=_line.source, name=_line.name, **_line.line_args)
+                _p.line(x=_line.x, y=_line.y, source=_line.cds, name=_line.name, **_line.line_args)
             _p.xaxis.axis_label = _legend_label
             _p.x_range = Range1d(*_line.x_range(from_style=True))
             # print('XXX', _p.x_range.start, _p.x_range.end)
         else:
             _p.extra_x_ranges[_legend_label] = Range1d(*_line.x_range(from_style=True))
-            if _line.source is None:
+            if _line.cds is None:
                 _p.line(x=_line.x, y=_line.y, name=_line.name, **_line.line_args, x_range_name=_legend_label)
             else:
-                _p.line(x=_line.x, y=_line.y, source=_line.source, name=_line.name, **_line.line_args, x_range_name=_legend_label)
+                _p.line(x=_line.x, y=_line.y, source=_line.cds, name=_line.name, **_line.line_args, x_range_name=_legend_label)
             if _column.scale == 'log':
                 this_ax = LogAxis(axis_label=_legend_label, x_range_name=_legend_label,
                                      axis_label_text_font_size='10px',
@@ -626,23 +629,23 @@ def add_seismic_traces(_p: bokeh.plotting.figure,
     :param _column:
     :return:
     """
-    trace_source = None
+    trace_cds = None
     _seismic_color_map = None
     if _column.seismic_traces is not None:
         _seismic = _column.seismic_traces
-        if _seismic.source is None:
-            trace_source = ColumnDataSource({'value': [_seismic.traces.T]})
+        if _seismic.cds is None:
+            trace_cds = ColumnDataSource({'value': [_seismic.traces.T]})
             min_val = np.nanmin(_seismic.traces)
             max_val = np.nanmax(_seismic.traces)
         else:
-            trace_source = _seismic.source
-            min_val = np.nanmin(trace_source.data['value'])
-            max_val = np.nanmax(trace_source.data['value'])
+            trace_cds = _seismic.cds
+            min_val = np.nanmin(trace_cds.data['value'])
+            max_val = np.nanmax(trace_cds.data['value'])
         _seismic_color_map = seismic_color_map(min_val=min_val, max_val=max_val)
-        if trace_source is not None:
-            # _p.image('value', source=trace_source, color_mapper=_seismic_color_map, dh=test_data_length, dw=128,
+        if trace_cds is not None:
+            # _p.image('value', source=trace_cds, color_mapper=_seismic_color_map, dh=test_data_length, dw=128,
             #          x=0, y=0)
-            _p.image('value', source=trace_source, color_mapper=_seismic_color_map,
+            _p.image('value', source=trace_cds, color_mapper=_seismic_color_map,
                      dh=np.max(_seismic.y) - np.min(_seismic.y),
                      dw=np.max(_seismic.x) - np.min(_seismic.x),
                      x=np.min(_seismic.x),
@@ -813,26 +816,26 @@ def add_strat_table(_p: bokeh.plotting.figure,
 
     ]
 
-    strati_source = ColumnDataSource(stratigraphy_frame)
+    strati_cds = ColumnDataSource(stratigraphy_frame)
 
     # mid_point = CustomJSTransform(func=mid_point_func)  # the bokeh transform method seems to only handle one input variable!
 
     def spans():
         _tmp = []
-        for _i, _name in enumerate(strati_source.data['name']):
-            _tmp.append(Span(location=strati_source.data['top'][_i], dimension='width',
-                             line_width=strati_source.data['line_width'][_i],
-                             line_dash=strati_source.data['line_style'][_i],
-                             line_color=strati_source.data['color'][_i]))
+        for _i, _name in enumerate(strati_cds.data['name']):
+            _tmp.append(Span(location=strati_cds.data['top'][_i], dimension='width',
+                             line_width=strati_cds.data['line_width'][_i],
+                             line_dash=strati_cds.data['line_style'][_i],
+                             line_color=strati_cds.data['color'][_i]))
         return _tmp
 
     def strati_units():
         if column_index is not None:
-            for _i, _name in enumerate(strati_source.data['name']):
+            for _i, _name in enumerate(strati_cds.data['name']):
                 glyph = Rect(x="level", y="mid", width=1, height="height", angle=0, fill_color="color",
                              fill_alpha='visible', line_width=0.)
                 # glyph = Rect(x=0, y=transform('top', 'base'), width=10, height=100, angle=0, fill_color="color")
-                _p.children[column_index][0].add_glyph(strati_source, glyph)
+                _p.children[column_index][0].add_glyph(strati_cds, glyph)
             _p.children[column_index][0].xgrid.grid_line_color = None
 
     strati_units()
@@ -840,18 +843,18 @@ def add_strat_table(_p: bokeh.plotting.figure,
     # Add text
 
     # Tried to hide texts that overlap
-    # _l = strati_source.data['level']
+    # _l = strati_cds.data['level']
     # _text_alpha = [float(_l[_i] != _l[_i + 1]) for _i in range(len(_l) - 1)] + [1.]
     text_glyph = Text(x=_p.children[0][0].x_range.start, y='top',
                       text='name', text_font_size='font_size', text_alpha='visible')
-                      # text='name', text_font_size='font_size', text_alpha=_text_alpha)  # This didn't work, need to modify source!
-    _p.children[0][0].add_glyph(strati_source, text_glyph)
+                      # text='name', text_font_size='font_size', text_alpha=_text_alpha)  # This didn't work, need to modify cds!
+    _p.children[0][0].add_glyph(strati_cds, text_glyph)
     if column_index is not None:
         text_glyph = Text(x='level', y='mid',
                           text='name', text_font_size='font_size', text_font_style='bold',
                           text_alpha='visible', text_align='center', text_baseline='middle',
                           angle=90., angle_units='deg')
-        _p.children[column_index][0].add_glyph(strati_source, text_glyph)
+        _p.children[column_index][0].add_glyph(strati_cds, text_glyph)
 
     # text_glyph = None
     _spans = spans()
@@ -861,7 +864,7 @@ def add_strat_table(_p: bokeh.plotting.figure,
     #         if i == 0:
     #             text_glyph = Text(x=_child[0].x_range.start, y='top',
     #                               text='name', text_font_size='font_size', text_alpha='visible')
-    #             _child[0].add_glyph(strati_source, text_glyph)
+    #             _child[0].add_glyph(strati_cds, text_glyph)
     #     if column_index is not None:
     #         for i, _child in enumerate(_p.children):
     #             if i == column_index:
@@ -869,14 +872,14 @@ def add_strat_table(_p: bokeh.plotting.figure,
     #                                   text='name', text_font_size='font_size', text_font_style='bold',
     #                                   text_alpha='visible', text_align='center', text_baseline='middle',
     #                                   angle=90., angle_units='deg')
-    #                 _child[0].add_glyph(strati_source, text_glyph)
+    #                 _child[0].add_glyph(strati_cds, text_glyph)
 
-    span_callback = CustomJS(args=dict(source=strati_source, spans=_spans), code=code)
+    span_callback = CustomJS(args=dict(source=strati_cds, spans=_spans), code=code)
 
-    strati_source.js_on_change('patching', span_callback)  # 'patching' is important!
+    strati_cds.js_on_change('patching', span_callback)  # 'patching' is important!
 
     return DataTable(
-        source=strati_source,
+        source=strati_cds,
         columns=table_columns,
         editable=True,
         width=width,

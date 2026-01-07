@@ -117,7 +117,7 @@ class SeismicTraces:
                  x: np.ndarray | None = None,
                  y: np.ndarray | None = None,
                  traces: np.ndarray | None = None,
-                 source: ColumnDataSource | None = None,
+                 cds: ColumnDataSource | None = None,
                  trace_type: Literal['avo', 'eei', 'index'] | None = None,
                  title: str | None = None
                  ):
@@ -131,7 +131,7 @@ class SeismicTraces:
             Numpy array of depth/time values, length N
         :param traces:
             np.ndarray of size MxN, contains M number of seismic traces, each of length N
-        :param source:
+        :param cds:
             ColumnDataSource({'value': [_seismic.traces.T]})
             Must have the key 'value'
         :param trace_type:
@@ -150,9 +150,9 @@ class SeismicTraces:
             trace_type = 'avo'
         self._trace_type = trace_type
 
-        self.source = source
+        self.cds = cds
 
-        if traces is None and source is None:
+        if traces is None and cds is None:
             _synts = SyntheticTraces(trace_length=test_data_length, n_traces=len(x))
             traces = _synts.get_traces(simulate_avo=self._trace_type=='avo')
             if title is None:
@@ -308,19 +308,19 @@ def add_selection(_p, _x, _y, x_resamp=5, y_resamp=3, visible=False):
     _xx = np.array([list(_x[::x_resamp]) for _i in _y[::y_resamp]])
     _yy = np.array([list(_y[::y_resamp]) for _i in _x[::x_resamp]])
     _yy = _yy.T
-    fake_source = ColumnDataSource(dict(x=_xx.ravel(),
+    fake_cds = ColumnDataSource(dict(x=_xx.ravel(),
                                         y=_yy.ravel()))
     if visible:
-        _p.scatter(x='x', y='y', source=fake_source,
+        _p.scatter(x='x', y='y', source=fake_cds,
                    fill_color='black', line_color=None, size=8.)
     else:
-        _p.scatter(x='x', y='y', source=fake_source,
+        _p.scatter(x='x', y='y', source=fake_cds,
                    fill_color=None, line_color=None, size=0.)
 
-    selected_source = ColumnDataSource(data=dict(x=[], y=[]))
-    _p.scatter(x='x', y='y', source=selected_source, fill_color='gray', fill_alpha=0.6, size=8.)
+    selected_cds = ColumnDataSource(data=dict(x=[], y=[]))
+    _p.scatter(x='x', y='y', source=selected_cds, fill_color='gray', fill_alpha=0.6, size=8.)
 
-    draw_selected = CustomJS(args=dict(s1=fake_source, s2=selected_source), code="""
+    draw_selected = CustomJS(args=dict(s1=fake_cds, s2=selected_cds), code="""
         const inds = cb_obj.indices;
         const d1 = s1.data;
         const d2 = s2.data;
@@ -337,11 +337,11 @@ def add_selection(_p, _x, _y, x_resamp=5, y_resamp=3, visible=False):
             global selected_cells
             already_selected = []
             selected_cells = []
-            for _index in fake_source.selected.indices:
+            for _index in fake_cds.selected.indices:
                 if _index in already_selected:
                     continue
-                _i = closest(fake_source.data['x'][_index], _x)
-                _j = closest(fake_source.data['y'][_index], _y)
+                _i = closest(fake_cds.data['x'][_index], _x)
+                _j = closest(fake_cds.data['y'][_index], _y)
                 selected_cells.append((_i, _j))
                 already_selected.append(_index)
 
@@ -349,7 +349,7 @@ def add_selection(_p, _x, _y, x_resamp=5, y_resamp=3, visible=False):
     _p.select(LassoSelectTool).overlay.fill_alpha = 0.5
     _p.on_event(SelectionGeometry, callback)
     # _p.js_on_event(SelectionGeometry, draw_selected)
-    fake_source.selected.js_on_change('indices', draw_selected)
+    fake_cds.selected.js_on_change('indices', draw_selected)
 
 
 def test_add_selection(_p,
@@ -386,9 +386,9 @@ def test_add_selection(_p,
     _xx = np.array([list(_x[::40]) for _i in _y[::20]])
     _yy = np.array([list(_y[::20]) for _i in _x[::40]])
     _yy = _yy.T
-    fake_source = ColumnDataSource(dict(x=_xx.ravel(),
+    fake_cds = ColumnDataSource(dict(x=_xx.ravel(),
                                         y=_yy.ravel()))
-    _p.scatter(x='x', y='y', source=fake_source,
+    _p.scatter(x='x', y='y', source=fake_cds,
                fill_color='black', line_color=None, size=8.)
 
 
@@ -404,11 +404,11 @@ def test_add_selection(_p,
             # container = {_stack: [] for _stack in _angle_source.data['name']}
             # for _stack in list(_angles.keys()):
             #     selected_cells[_stack] = []
-            for _index in fake_source.selected.indices:
+            for _index in fake_cds.selected.indices:
                 if _index in already_selected:
                     continue
-                _i = closest(fake_source.data['x'][_index], _x)
-                _j = closest(fake_source.data['y'][_index], _y)
+                _i = closest(fake_cds.data['x'][_index], _x)
+                _j = closest(fake_cds.data['y'][_index], _y)
                 # for _stack in _angle_source.data['name']:
                 #     container[_stack].append(_seismic_sources[_stack][_i, _j].data)
                 #     print(_seismic_sources[_stack][_i, _j].data)
@@ -435,16 +435,16 @@ def test_add_selection(_p,
 
 def add_seismic_to_figure(
         _p: figure,
-        _seismic_source: ColumnDataSource,
+        _seismic_cds: ColumnDataSource,
         _x: np.array,
         _y: np.array,
         title: str | None = None
 ) -> NumericInput():
     """
-    Adds the given seismic source data to the figure and return a numeric input that controls the
+    Adds the given seismic cds data to the figure and return a numeric input that controls the
     range of the color bar
     :param _p:
-    :param _seismic_source:
+    :param _seismic_cds:
         Column data source with key 'value' containing the data
     :param _x:
     :param _y:
@@ -453,10 +453,10 @@ def add_seismic_to_figure(
         str
     :return:
     """
-    min_val = np.nanmin(_seismic_source.data['value'])
-    max_val = np.nanmax(_seismic_source.data['value'])
+    min_val = np.nanmin(_seismic_cds.data['value'])
+    max_val = np.nanmax(_seismic_cds.data['value'])
     _seismic_color_map = seismic_color_map(min_val=min_val, max_val=max_val)
-    _p.image('value', source=_seismic_source, color_mapper=_seismic_color_map,
+    _p.image('value', source=_seismic_cds, color_mapper=_seismic_color_map,
              dh=_y[-1] - _y[0],
              dw=_x[-1] - _x[0],
              x=_x[0],
@@ -500,7 +500,7 @@ def avo_qc(
     xline0 = int(xlines[int(len(xlines)/2)])
 
     def _load_angle_stacks(_angle_stacks, _voi, _inline, _xline, _verbose=False):
-        _seismic_sources = {}
+        _seismic_cdss = {}
         _x = None
         _y = None
         _line = None
@@ -519,20 +519,20 @@ def avo_qc(
                 _suffix = 'Xline: {}'.format(_xline)
             else:
                 print_info("Either 'inline' or 'xline' must be set", 'error', logger, 'IOError')
-            # _seismic_sources[_as.name] = ColumnDataSource(dict(value=[_line.data.T]))
-            _seismic_sources[_as.name] = _line.data
+            # _seismic_cdss[_as.name] = ColumnDataSource(dict(value=[_line.data.T]))
+            _seismic_cdss[_as.name] = _line.data
             _y = zgy['data'].coords['samples'].data
-        return _seismic_sources, _x, _y, _suffix
+        return _seismic_cdss, _x, _y, _suffix
 
-    # seismic_sources, x, y, suffix = _load_angle_stacks(angle_stacks, voi, inline, xline, verbose)
+    # seismic_cdss, x, y, suffix = _load_angle_stacks(angle_stacks, voi, inline, xline, verbose)
     if line_direction == 'inline':
-        seismic_sources, x, y, suffix = _load_angle_stacks(angle_stacks, voi, inline0, None, verbose)
+        seismic_cdss, x, y, suffix = _load_angle_stacks(angle_stacks, voi, inline0, None, verbose)
     else:
-        seismic_sources, x, y, suffix = _load_angle_stacks(angle_stacks, voi, None, xline0, verbose)
+        seismic_cdss, x, y, suffix = _load_angle_stacks(angle_stacks, voi, None, xline0, verbose)
 
     if verbose:
-        for _key in list(seismic_sources.keys()):
-            info_txt = '{}: {}'.format(_key, seismic_sources[_key].shape)
+        for _key in list(seismic_cdss.keys()):
+            info_txt = '{}: {}'.format(_key, seismic_cdss[_key].shape)
             print_info(info_txt, 'info', logger)
     names = [_as.name for _as in angle_stacks]
     titles = {_name: angle_stacks[_i].title for _i, _name in enumerate(names)}
@@ -541,7 +541,7 @@ def avo_qc(
     # Create data set to hold different angle stacks
     def add_angle_table(_angle_stacks):
         formatter = NumberFormatter(format='0.0')
-        _angle_source = ColumnDataSource(dict(
+        _angle_cds = ColumnDataSource(dict(
             use=[True] * len(_angle_stacks),
             name=[_as.name for _as in _angle_stacks],
             angles=[_as.angle for _as in _angle_stacks],
@@ -557,34 +557,34 @@ def avo_qc(
             TableColumn(field='avg_amp', title='Average amp.', formatter=formatter)
         ]
         _angle_table = DataTable(
-            source=_angle_source,
+            source=_angle_cds,
             columns=table_columns,
             editable=True,
             height=150
         )
 
-        return _angle_table, _angle_source
+        return _angle_table, _angle_cds
 
-    angle_table, angle_source = add_angle_table(angle_stacks)
+    angle_table, angle_cds = add_angle_table(angle_stacks)
 
     p = create_seismic_figure(900, 600)
-    current_source = ColumnDataSource(dict(value=[seismic_sources[names[0]].T]))
-    # _test = current_source.data['value'][0].data
+    current_cds = ColumnDataSource(dict(value=[seismic_cdss[names[0]].T]))
+    # _test = current_cds.data['value'][0].data
     # print(_test.shape)
 
-    c_amp = add_seismic_to_figure(p, current_source, x, y,
+    c_amp = add_seismic_to_figure(p, current_cds, x, y,
                                  '{}, {}'.format(titles[names[0]], suffix))
 
     # Add possibility to select an area of interest
     add_selection(p, x, y, visible=False)
 
     # add points to extract Intercept and Gradient from
-    points_table, points_source = add_i_g_point(p, x, y, names)
+    points_table, points_cds = add_i_g_point(p, x, y, names)
 
-    def calc_new_point_source_dict(_point_source, _angles)->dict:
+    def calc_new_point_cds_dict(_point_cds, _angles)->dict:
         """
 
-        :param _point_source:
+        :param _point_cds:
         :param _angles:
             dictionary with angles for each angle stack
         :return:
@@ -595,16 +595,16 @@ def avo_qc(
             sin2theta=[],
             color=[]
         )
-        # Iterate over all points in _point_source
-        for _i in range(len(_point_source.data['x'])):
+        # Iterate over all points in _point_cds
+        for _i in range(len(_point_cds.data['x'])):
             for _key in list(_angles.keys()):
                 _out['point'].append(_i)
-                _out['color'].append(_point_source.data['color'][_i])
-                _out['amp'].append(_point_source.data[_key][_i])
+                _out['color'].append(_point_cds.data['color'][_i])
+                _out['amp'].append(_point_cds.data[_key][_i])
                 _out['sin2theta'].append( (np.sin(_angles[_key] * np.pi / 180.))**2 )
         return _out
 
-    def calc_avo_curve_dict(_point_source)->dict:
+    def calc_avo_curve_dict(_point_cds)->dict:
         sin2theta_range = [0, 0.4]
         _out = dict(
             point=[],
@@ -612,26 +612,26 @@ def avo_qc(
             y=[],
             color=[]
         )
-        # Iterate over all points in _point_source
-        for _i in range(len(_point_source.data['x'])):
+        # Iterate over all points in _point_cds
+        for _i in range(len(_point_cds.data['x'])):
             _out['point'].append(_i)
-            _out['color'].append(_point_source.data['color'][_i])
+            _out['color'].append(_point_cds.data['color'][_i])
             _out['sin2theta'].append(sin2theta_range),
-            _out['y'].append([_point_source.data['i'][_i], _point_source.data['i'][_i] +
-                              sin2theta_range[1] * _point_source.data['g'][_i]])
+            _out['y'].append([_point_cds.data['i'][_i], _point_cds.data['i'][_i] +
+                              sin2theta_range[1] * _point_cds.data['g'][_i]])
         return _out
 
     # Create figure to hold scatter points of offset amplitudes
     sp = figure(width=600, height=400)
 
-    scatter_point_dict = calc_new_point_source_dict(points_source, angles)
-    scatter_point_source = ColumnDataSource(scatter_point_dict)
+    scatter_point_dict = calc_new_point_cds_dict(points_cds, angles)
+    scatter_point_cds = ColumnDataSource(scatter_point_dict)
 
-    avo_curve_dict = calc_avo_curve_dict(points_source)
-    avo_curve_source = ColumnDataSource(avo_curve_dict)
+    avo_curve_dict = calc_avo_curve_dict(points_cds)
+    avo_curve_cds = ColumnDataSource(avo_curve_dict)
 
-    draw_calculated_avo_amps(sp, scatter_point_source, angle_source=angle_source)
-    draw_avo_curves(sp, avo_curve_source)
+    draw_calculated_avo_amps(sp, scatter_point_cds, angle_cds=angle_cds)
+    draw_avo_curves(sp, avo_curve_cds)
 
     # Add interactivity
     select_stack = Select(title='Select angle stack to view', value=names[0], options=names)
@@ -677,32 +677,32 @@ def avo_qc(
     def switch_seismic_callback():
         global selected_cells
         if select_direction.value == 'Inline':
-            _seismic_sources, _x, _y, _suffix = _load_angle_stacks(angle_stacks, voi, int(select_line.value), None, verbose)
+            _seismic_cdss, _x, _y, _suffix = _load_angle_stacks(angle_stacks, voi, int(select_line.value), None, verbose)
         else:
-            _seismic_sources, _x, _y, _suffix = _load_angle_stacks(angle_stacks, voi, None, int(select_line.value), verbose)
+            _seismic_cdss, _x, _y, _suffix = _load_angle_stacks(angle_stacks, voi, None, int(select_line.value), verbose)
 
-        # current_source.data['value'] = [seismic_sources[new].T]
-        current_source.data['value'] = [_seismic_sources[select_stack.value].T]
-        calc_offset_amplitudes(use_updated_seismic=_seismic_sources)
-        calc_avg_offset_amplitudes(_seismic_sources, angle_source, selected_cells, verbose=True)
+        # current_cds.data['value'] = [seismic_cdss[new].T]
+        current_cds.data['value'] = [_seismic_cdss[select_stack.value].T]
+        calc_offset_amplitudes(use_updated_seismic=_seismic_cdss)
+        calc_avg_offset_amplitudes(_seismic_cdss, angle_cds, selected_cells, verbose=True)
         selected_cells = []
 
     def calc_i_g():
         # calculate intercept and gradient for each point
-        # For the changes in point_source to be detected by the browser, we need to
+        # For the changes in point_cds to be detected by the browser, we need to
         # change the whole .data property
         # It is not a large data set, so we take a copy of it:
-        new_data = deepcopy(points_source.data)
+        new_data = deepcopy(points_cds.data)
         for _i in range(len(new_data['x'])):
             _angles = []
             _amps = []
             for _a, _stack in enumerate(names):
-                if _stack != angle_source.data['name'][_a]:
-                    info_txt = 'Mix up of angle stacks. {} != {}'.format(_stack, angle_source.data['name'][_a])
+                if _stack != angle_cds.data['name'][_a]:
+                    info_txt = 'Mix up of angle stacks. {} != {}'.format(_stack, angle_cds.data['name'][_a])
                     print_info(info_txt, 'error', logger, 'IOError')
-                # print(_stack, angle_source.data['name'][_a], angle_source.data['use'][_a], angle_source.data['angles'][_a])
-                if angle_source.data['use'][_a]:
-                    _angles.append(angle_source.data['angles'][_a])
+                # print(_stack, angle_cds.data['name'][_a], angle_cds.data['use'][_a], angle_cds.data['angles'][_a])
+                if angle_cds.data['use'][_a]:
+                    _angles.append(angle_cds.data['angles'][_a])
                     _amps.append(new_data[_stack][_i])
             _angles = np.array(_angles)
             _amps = np.array(_amps)
@@ -718,41 +718,41 @@ def avo_qc(
                     _i,
                     [str(new_data[_stack][_i]) for _stack in names],
                     _int, _grad, _qual))
-        points_source.data = dict(new_data)
-        scatter_point_dict = calc_new_point_source_dict(points_source, angles)
-        scatter_point_source.data = scatter_point_dict
+        points_cds.data = dict(new_data)
+        scatter_point_dict = calc_new_point_cds_dict(points_cds, angles)
+        scatter_point_cds.data = scatter_point_dict
 
     def calc_offset_amplitudes(use_updated_seismic=None):
         _count = 0
         if use_updated_seismic is not None:
-            _seismic_sources = use_updated_seismic
+            _seismic_cdss = use_updated_seismic
         else:
-            _seismic_sources = seismic_sources
-        for _x, _y in zip(points_source.data['x'], points_source.data['y']):
+            _seismic_cdss = seismic_cdss
+        for _x, _y in zip(points_cds.data['x'], points_cds.data['y']):
             _i = closest(_x, x)
             _j = closest(_y, y)
             for _row, _stack in enumerate(names):
                 if verbose:
                     print('{}: On {}, from point {}:{} add {}'.format(
-                        angle_source.data['use'][_row], _stack, _x, _y, _seismic_sources[_stack][_i, _j].data))
-                points_source.data[_stack][_count] = _seismic_sources[_stack][_i, _j].data
+                        angle_cds.data['use'][_row], _stack, _x, _y, _seismic_cdss[_stack][_i, _j].data))
+                points_cds.data[_stack][_count] = _seismic_cdss[_stack][_i, _j].data
             _count += 1
         calc_i_g()
 
-    def calc_avg_offset_amplitudes(_seismic_sources, _angle_source, _selected_cells, verbose=False):
+    def calc_avg_offset_amplitudes(_seismic_cdss, _angle_cds, _selected_cells, verbose=False):
         """
         Should calculate the average seismic amplitude for the selected cells for all angle stacks
-        :param _seismic_sources:
-        :param _angle_source:
+        :param _seismic_cdss:
+        :param _angle_cds:
         :param _selected_cells:
         :return:
         """
-        _new_data = deepcopy(_angle_source.data)
+        _new_data = deepcopy(_angle_cds.data)
         container = {}
         for _i, _stack in enumerate(_new_data['name']):
             container[_stack] = []
             for _index in _selected_cells:
-                container[_stack].append(_seismic_sources[_stack][_index].data)
+                container[_stack].append(_seismic_cdss[_stack][_index].data)
             if len(container[_stack]) > 0:
                 # As pointed out by Ben, the average of a value oscillating around zero will be near zero,
                 # _new_data['avg_amp'][_i] = np.nanmean(np.array(container[_stack]))
@@ -760,21 +760,21 @@ def avo_qc(
                 _new_data['avg_amp'][_i] = np.nanmean(np.abs(np.array(container[_stack])))
             else:
                 _new_data['avg_amp'][_i] = 0.0
-        _angle_source.data = dict(_new_data)
+        _angle_cds.data = dict(_new_data)
         if verbose:
-            for _i, _stack in enumerate(_angle_source.data['name']):
+            for _i, _stack in enumerate(_angle_cds.data['name']):
                 print('At {}, the avg. absolute amplitude of {} is calculated from {}'.format(_stack,
-                                                                                     _angle_source.data['avg_amp'][_i],
+                                                                                     _angle_cds.data['avg_amp'][_i],
                                                                                      ['{:.2}'.format(np.abs(_amp)) for _amp in container[_stack]]))
 
     def changing_stacks_callback(attr, old, new):
         calc_i_g()
 
     def changing_points_callback(attr, old, new):
-        avo_curve_dict = calc_avo_curve_dict(points_source)
-        avo_curve_source.data = avo_curve_dict
-        scatter_point_dict = calc_new_point_source_dict(points_source, angles)
-        scatter_point_source.data = scatter_point_dict
+        avo_curve_dict = calc_avo_curve_dict(points_cds)
+        avo_curve_cds.data = avo_curve_dict
+        scatter_point_dict = calc_new_point_cds_dict(points_cds, angles)
+        scatter_point_cds.data = scatter_point_dict
 
     # connect interactive input to callbacks
     # select_stack.js_on_change('value', title_callback)
@@ -784,27 +784,27 @@ def avo_qc(
     update_seismic.js_on_click(title_callback)
     # run_calc.on_click(calc_offset_amplitudes)  # this uses the old seismic (e.g. inline = inline0)
     # run_calc.on_click(switch_seismic_callback)
-    angle_source.on_change('data', changing_stacks_callback)
-    points_source.on_change('data', changing_points_callback)
+    angle_cds.on_change('data', changing_stacks_callback)
+    points_cds.on_change('data', changing_points_callback)
 
     return p, c_amp, select_direction, select_line, select_stack, update_seismic, points_table, angle_table, sp
 
 def draw_calculated_avo_amps(
         p: figure,
-        point_source: ColumnDataSource,
-        angle_source=None,
+        point_cds: ColumnDataSource,
+        angle_cds=None,
 ):
     """
     Should draw the extracted input amplitude points
     Need to respond to changes in calculated points
     :param p:
         Bokeh figure to add the glyphs to
-    :param point_source:
+    :param point_cds:
         ColumnDataSource
         with keys: 'point', 'amp', 'sin2theta', 'color'
-    :param angle_source
+    :param angle_cds
         ColumnDataSource
-        optional data source with average values
+        optional data cds with average values
         with keys: 'avg_amp', 'sin2theta'
     :return:
     """
@@ -813,15 +813,15 @@ def draw_calculated_avo_amps(
         y='amp',
         fill_color='color',
         legend_field='point',
-        source=point_source,
+        source=point_cds,
         line_color='black',
         size=10
     )
-    if angle_source is not None:
+    if angle_cds is not None:
         p.scatter(
             x='sin2theta',
             y='avg_amp',
-            source=angle_source,
+            source=angle_cds,
             legend_label='AOI avg. amp.',
             marker='square',
             size=15,
@@ -837,14 +837,14 @@ def draw_calculated_avo_amps(
 
 def draw_avo_curves(
         p: figure,
-        line_source: ColumnDataSource
+        line_cds: ColumnDataSource
 ):
     """
     Should draw the extracted AVO curves
     Need to respond to changes in calculated I & G
     :param p:
         Bokeh figure to add the glyphs to
-    :param line_source:
+    :param line_cds:
         ColumnDataSource
         with keys: 'point', 'y', 'sin2theta', 'color'
     :return:
@@ -854,7 +854,7 @@ def draw_avo_curves(
         ys='y',
         color='color',
         legend_field='point',
-        source=line_source
+        source=line_cds
     )
 
 
@@ -1006,17 +1006,17 @@ def add_i_g_point(_p, _x, _y, _angle_stack_names):
     _dy = (_y[-1] - _y[0]) / 4.
     xs = [_x[0] + (_i + 1) * _dx for _i in range(2)]
     ys = [_y[0] + (_i + 1) * _dy for _i in range(2)]
-    _source_dict = dict(
+    _cds_dict = dict(
         # x=xs, y=ys, color=['red', 'blue', 'yellow'], i=[0., 0., 0.], g=[0., 0., 0.], q=[None, None, None])
         x=xs, y=ys, color=['red', 'blue'], i=[0., 0.], g=[0., 0.], q=[None, None])
 
     # Add a key: value pair for each angle stack to hold the amplitudes at each point
     for _name in _angle_stack_names:
-        _source_dict[_name] = [None, None]
+        _cds_dict[_name] = [None, None]
 
-    _source = ColumnDataSource(_source_dict)
+    _cds = ColumnDataSource(_cds_dict)
 
-    _renderer = _p.scatter(x='x', y='y', fill_color='color', source=_source, line_color='black', size=10)
+    _renderer = _p.scatter(x='x', y='y', fill_color='color', source=_cds, line_color='black', size=10)
     formatter = NumberFormatter(format='0.0')
 
     # Try to color the cells of the 'color' column by their value
@@ -1038,25 +1038,25 @@ def add_i_g_point(_p, _x, _y, _angle_stack_names):
                 TableColumn(field='g', title='G', formatter=formatter),
                 TableColumn(field='q', title='Qual.', formatter=NumberFormatter(format='0.00')),
                 ]
-    _table = DataTable(source=_source, columns=_columns, editable=True, height=200)
+    _table = DataTable(source=_cds, columns=_columns, editable=True, height=200)
     draw_tool = PointDrawTool(renderers=[_renderer], empty_value='black')
     _p.add_tools(draw_tool)
     _p.toolbar.active_tap = draw_tool
-    return _table, _source
+    return _table, _cds
 
 
     # switch_seismic_callback = CustomJS(
     #     args = dict(
-    #         cs=current_source,
-    #         new_source=[seismic_sources[select_stack.value].T],  # this doesn't update the selected seismic!
-    #         #  new_source=seismic_sources,
+    #         cs=current_cds,
+    #         new_cds=[seismic_cdss[select_stack.value].T],  # this doesn't update the selected seismic!
+    #         #  new_cds=seismic_cdss,
     #         selected=select_stack
     #     ),
     #     code="""
     #     const stack = selected.value;
-    #     cs.data['value'] = new_source;
-    #     //cs.data['value'][0] = new_source[stack].T;  //Can't use pythons transpose function in JavaScript
-    #     //cs.data['value'][0] = new_source[stack];
+    #     cs.data['value'] = new_cds;
+    #     //cs.data['value'][0] = new_cds[stack].T;  //Can't use pythons transpose function in JavaScript
+    #     //cs.data['value'][0] = new_cds[stack];
     #     cs.change.emit();
     #     console.log('test: ', stack, cs.data['value'][0,0][0]);
     #     """
@@ -1104,7 +1104,7 @@ class TestCases(unittest.TestCase):
                                  y=log_curves['near'].depth.values,
                                  # traces=traces,
                                  traces=None,
-                                 source=ColumnDataSource({'value': [traces.T]}),
+                                 cds=ColumnDataSource({'value': [traces.T]}),
                                  trace_type='avo'
                                  )
         lc_orig = LogColumn('orig',
@@ -1116,7 +1116,7 @@ class TestCases(unittest.TestCase):
                                  y=log_curves['near'].depth.values,
                                  # traces=new_traces,
                                  traces=None,
-                                 source=ColumnDataSource({'value': [new_traces.T]}),
+                                 cds=ColumnDataSource({'value': [new_traces.T]}),
                                  trace_type='avo')
         lc_intrp = LogColumn('interpolated', seismic_traces=st_intrp)
 
@@ -1135,12 +1135,12 @@ class TestCases(unittest.TestCase):
         _synts = SyntheticTraces()
         synts = _synts.get_traces(simulate_avo=True)
         print(synts.shape)
-        source = ColumnDataSource({'value': [synts.T]})
+        cds = ColumnDataSource({'value': [synts.T]})
         print(np.min(synts))
         _seismic_color_map = seismic_color_map(min_val=np.min(synts), max_val=np.max(synts))
 
         p = figure()
-        p.image('value', source=source,
+        p.image('value', source=cds,
                 color_mapper=_seismic_color_map, dh=synts.shape[1], dw=synts.shape[0], x=0, y=0)
         show(p)
 
@@ -1402,13 +1402,13 @@ class TestCases(unittest.TestCase):
         lp = bupp.LogPlotter(width=1000, columns=[cl])
         grid = lp.figure()
         # Try with a PointDrawTool
-        source = ColumnDataSource(dict(
+        cds = ColumnDataSource(dict(
             x=[4700, 4900, 5000], y=[3000, 3500, 4000], color=['red', 'green', 'yellow'] ) )
-        renderer = grid.children[0][0].scatter(x='x', y='y', color='color', source=source, size=10)
+        renderer = grid.children[0][0].scatter(x='x', y='y', color='color', source=cds, size=10)
         columns = [TableColumn(field="x", title="x"),
                    TableColumn(field="y", title="y"),
                    TableColumn(field='color', title='color')]
-        table = DataTable(source=source, columns=columns, editable=True, height=200)
+        table = DataTable(source=cds, columns=columns, editable=True, height=200)
         draw_tool = PointDrawTool(renderers=[renderer], empty_value='black')
         grid.children[0][0].add_tools(draw_tool)
         grid.children[0][0].toolbar.active_tap = draw_tool
@@ -1424,10 +1424,10 @@ class TestCases(unittest.TestCase):
         x = zgy['data'].coords['iline'].data
         y = zgy['data'].coords['samples'].data
         amps = xline.data
-        seismic_source = ColumnDataSource(dict(value=[amps.T]))
+        seismic_cds = ColumnDataSource(dict(value=[amps.T]))
 
         p = create_seismic_figure(900, 600)
-        c_amp = add_seismic_to_figure(p, seismic_source, x, y, title='CGG22M01_NVG21PH1-EW_FINAL_KPSDM_T_FAR_STK')
+        c_amp = add_seismic_to_figure(p, seismic_cds, x, y, title='CGG22M01_NVG21PH1-EW_FINAL_KPSDM_T_FAR_STK')
         # # Test how to access the limits of the colorbar ColorBar
         # print(inspect.getmembers(p._property_values['right'][0].color_mapper))
         # print(p._property_values['right'][0].color_mapper.high)
@@ -1436,7 +1436,7 @@ class TestCases(unittest.TestCase):
 
 
         # Add points
-        table, point_source = add_i_g_point(p, x, y, ['far'])
+        table, point_cds = add_i_g_point(p, x, y, ['far'])
 
         show(column(p, row(table, c_amp)))
 

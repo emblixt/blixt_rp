@@ -1213,6 +1213,10 @@ class LogCurve(object):
     def get_dataframe(self):
         return DataFrame({'depth': self.depth.values, 'data': self.values})
 
+    @property
+    def cds(self):
+        return ColumnDataSource( {str(self.name): self.data.magnitude, 'depth': self.depth.magnitude} )
+
     def get_line(self):
         """
         Returns a (blixt_utils specific) Line object, which can be directly used in plot_logs_new.py
@@ -1220,11 +1224,9 @@ class LogCurve(object):
         """
         from blixt_rp.plotting.log_plotter import Line
         self.style.name = self.name
-        # TODO
-        # Need to rebuild this to use the source initiation instead of x and y as arrays
-        _source = ColumnDataSource(
-            {str(self.name): self.data.magnitude, 'depth': self.depth.magnitude}
-        )
+        # _cds = ColumnDataSource(
+        #     {str(self.name): self.data.magnitude, 'depth': self.depth.magnitude}
+        # )
         # return Line(
         #     x=self.data.magnitude,
         #     y=self.depth.magnitude,
@@ -1240,7 +1242,7 @@ class LogCurve(object):
             x=self.name,
             y='depth',
             style=self.style,
-            source=_source
+            cds=self.cds
         )
 
 

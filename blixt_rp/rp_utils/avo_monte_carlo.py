@@ -19,7 +19,6 @@ import blixt_rp.rp.rp_core as rp
 from blixt_utils.plotting import crossplot as myxp
 from blixt_rp.plotting import plot_reflectivity as mypr
 
-from blixt_rp.core.models import build_layered_model, laminar_model_analysis
 import blixt_utils.misc.wavelets as bumw
 from blixt_utils.utils import find_value
 
@@ -354,6 +353,7 @@ def layered_model(target_thickness, target,  background,
     :param verbose:
     :return:
     """
+    from blixt_rp.core.models import build_layered_model, laminar_model_analysis
 
     dt = wavelet['header']['Sample rate']  # should be given in seconds
     if dt > 0.1:
@@ -387,6 +387,7 @@ def evaluate_layered_model(model, wavelet, extract_at, extract_on='exact', verbo
     :param verbose:
     :return:
     """
+    from blixt_rp.core.models import laminar_model_analysis
     def signed_max_amplitude(_x, _center, _width):
         _data = _x[_center - _width:_center + _width]
         _max = np.max(_data)

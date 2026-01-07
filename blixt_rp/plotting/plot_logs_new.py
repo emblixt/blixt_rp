@@ -289,35 +289,35 @@ def plot_chi_rotation(well: cw.Well,
 
     eei_min, eei_max, chi_at_max_diff, cc_litho_b, cc_litho_h, cc_fluid_b, cc_fluid_h = (
         find_eei_extremes_and_correlations())
-    cc_fluid_source = ColumnDataSource(dict(x=chi_angles, cc_b=cc_fluid_b, cc_h=cc_fluid_h))
-    cc_litho_source = ColumnDataSource(dict(x=chi_angles, cc_b=cc_litho_b, cc_h=cc_litho_h))
+    cc_fluid_cds = ColumnDataSource(dict(x=chi_angles, cc_b=cc_fluid_b, cc_h=cc_fluid_h))
+    cc_litho_cds = ColumnDataSource(dict(x=chi_angles, cc_b=cc_litho_b, cc_h=cc_litho_h))
 
-    def create_lines_from_line_source(_line_source):
-        _line_brine = Line(x='eei_brine', y='md', source=_line_source, style=Template(**{
+    def create_lines_from_line_cds(_line_cds):
+        _line_brine = Line(x='eei_brine', y='md', cds=_line_cds, style=Template(**{
             'name': 'EEI brine, chi: {}, ba: {}'.format(chi_slider.value, backus_slider.value),
             'line_color': 'blue', 'min': 1.2 * eei_min, 'max': 0.8 * eei_max
         }))
-        _line_hc = Line(x='eei_hc', y='md', source=_line_source, style=Template(**{
+        _line_hc = Line(x='eei_hc', y='md', cds=_line_cds, style=Template(**{
             'name': 'EEI hc, chi: {}, ba: {}'.format(chi_slider.value, backus_slider.value),
             'line_color': 'red', 'min': 1.2 * eei_min, 'max': 0.8 * eei_max
         }))
-        _line_diff = Line(x='eei_diff', y='md', source=_line_source, style=Template(**{
+        _line_diff = Line(x='eei_diff', y='md', cds=_line_cds, style=Template(**{
             'name': 'DIFF., chi: {}, ba: {}'.format(chi_slider.value, backus_slider.value),
             'line_color': 'black', 'min': -0.1, 'max': 0.3
         }))
         return _line_brine, _line_hc, _line_diff
 
-    line_source = ColumnDataSource(
+    line_cds = ColumnDataSource(
         calc_all(
             vp_brine.values, vs_brine.values, rho_brine.values,
             vp_hc.values, vs_hc.values, rho_hc.values,
             depth, backus_slider.value, step, chi_slider.value
         )
     )
-    line_brine, line_hc, line_diff = create_lines_from_line_source(line_source)
+    line_brine, line_hc, line_diff = create_lines_from_line_cds(line_cds)
 
     # Calculate synthetic EEI seismic
-    def get_amp_sources(_ba, _freq):
+    def get_amp_cdss(_ba, _freq):
         if _ba > 0:
             _vp_b_ba, _vs_b_ba, _rho_b_ba, _vp_h_ba, _vs_h_ba, _rho_h_ba = calc_backus_avg(
                 vp_brine.values, vs_brine.values, rho_brine.values,
@@ -350,7 +350,7 @@ def plot_chi_rotation(well: cw.Well,
             chi_angles=chi_angles,
             center_frequency=_freq
         )
-        # _amp_brine_source = ColumnDataSource({'value': [_amp_brine.T]})
+        # _amp_brine_cds = ColumnDataSource({'value': [_amp_brine.T]})
         _amp_hc = get_wiggles_in_depth(
             _vp_hc_ba,
             _vs_hc_ba,
@@ -362,24 +362,24 @@ def plot_chi_rotation(well: cw.Well,
         )
         return _amp_brine, _amp_hc
 
-    amp_brine, amp_hc = get_amp_sources(backus_slider.value, freq_slider.value)
+    amp_brine, amp_hc = get_amp_cdss(backus_slider.value, freq_slider.value)
 
-    amp_hc_source = ColumnDataSource({'value': [amp_hc.T]})
-    amp_diff_source = ColumnDataSource({'value': [(amp_brine - amp_hc).T]})  # TESTING
+    amp_hc_cds = ColumnDataSource({'value': [amp_hc.T]})
+    amp_diff_cds = ColumnDataSource({'value': [(amp_brine - amp_hc).T]})  # TESTING
 
-    def create_traces(_amp_brine_source, _amp_hc_source):
+    def create_traces(_amp_brine_cds, _amp_hc_cds):
         _seismic_traces_brine = SeismicTraces(
             x=chi_angles, y=vp_brine.depth.values,
-            traces=None, source=_amp_brine_source,
+            traces=None, cds=_amp_brine_cds,
             trace_type='chi')
         _seismic_traces_hc = SeismicTraces(
             x=chi_angles, y=vp_brine.depth.values,
-            traces=None, source=_amp_hc_source,
+            traces=None, cds=_amp_hc_cds,
             trace_type='chi')
         return _seismic_traces_brine, _seismic_traces_hc
 
-    # seismic_traces_brine, seismic_traces_hc = create_traces(amp_brine_source, amp_hc_source)
-    seismic_traces_diff, seismic_traces_hc = create_traces(amp_diff_source, amp_hc_source)
+    # seismic_traces_brine, seismic_traces_hc = create_traces(amp_brine_cds, amp_hc_cds)
+    seismic_traces_diff, seismic_traces_hc = create_traces(amp_diff_cds, amp_hc_cds)
 
     def spans(_chi):
         _span = Span(
@@ -439,52 +439,52 @@ def plot_chi_rotation(well: cw.Well,
                                 legend_label='HC, ba: {}, Hz: {}'.format(backus_slider.value, freq_slider.value))
     grid.children[4][0].scatter([0], [0], fill_color=None, line_color=None, size=0,
                                 legend_label='Brine - HC, ba: {}, Hz: {}'.format(backus_slider.value, freq_slider.value))
-    def calc_xplot_source_dict(_ba, _chi, _mask):
+    def calc_xplot_cds_dict(_ba, _chi, _mask):
         return calc_all(
                 vp_brine.values[_mask], vs_brine.values[_mask], rho_brine.values[_mask],
                 vp_hc.values[_mask], vs_hc.values[_mask], rho_hc.values[_mask],
                 depth[_mask], _ba, step, _chi
             )
     mask = np.array(np.ones(len(depth)), bool)
-    xplot_source = ColumnDataSource(calc_xplot_source_dict(
+    xplot_cds = ColumnDataSource(calc_xplot_cds_dict(
         backus_slider.value, chi_slider.value, mask
     ))
 
     # xplot.scatter(
-    #     x='int_brine', y='grad_brine', source=xplot_source, color='blue', marker='circle',
+    #     x='int_brine', y='grad_brine', source=xplot_cds, color='blue', marker='circle',
     #     legend_label='Brine, ba: {}'.format(backus_slider.value), alpha=0.7
     # )
     # xplot.scatter(
-    #     x='int_hc', y='grad_hc', source=xplot_source, color='red', marker='circle',
+    #     x='int_hc', y='grad_hc', source=xplot_cds, color='red', marker='circle',
     #     legend_label='HC, ba: {}'.format(backus_slider.value), alpha=0.7
     # )
-    # y_range = np.max([np.abs(np.nanmin(xplot_source.data['grad_hc'])), np.abs(np.nanmax(xplot_source.data['grad_hc']))])
-    # x_range = np.max([np.abs(np.nanmin(xplot_source.data['int_hc'])), np.abs(np.nanmax(xplot_source.data['int_hc']))])
+    # y_range = np.max([np.abs(np.nanmin(xplot_cds.data['grad_hc'])), np.abs(np.nanmax(xplot_cds.data['grad_hc']))])
+    # x_range = np.max([np.abs(np.nanmin(xplot_cds.data['int_hc'])), np.abs(np.nanmax(xplot_cds.data['int_hc']))])
     xplot.scatter(
-        x='log_ai_b', y='log_gi_b', source=xplot_source, color='blue', marker='circle',
+        x='log_ai_b', y='log_gi_b', source=xplot_cds, color='blue', marker='circle',
         legend_label='Brine, ba: {}'.format(backus_slider.value), alpha=0.7
     )
     xplot.scatter(
-        x='log_ai_h', y='log_gi_h', source=xplot_source, color='red', marker='circle',
+        x='log_ai_h', y='log_gi_h', source=xplot_cds, color='red', marker='circle',
         legend_label='HC, ba: {}'.format(backus_slider.value), alpha=0.7
     )
 
     # x_r = xplot.x_range
     # y_r = xplot.~
-    y_range = 0.5 * (np.nanmax(xplot_source.data['log_gi_h']) - np.nanmin(xplot_source.data['log_gi_h']))
-    x_center = float(np.nanmedian(np.append(xplot_source.data['log_ai_h'], xplot_source.data['log_ai_b'])))
-    y_center = float(np.nanmedian(np.append(xplot_source.data['log_gi_h'], xplot_source.data['log_gi_b'])))
-    # y_range = np.max([np.abs(np.nanmin(xplot_source.data['log_gi_h'])), np.abs(np.nanmax(xplot_source.data['log_gi_h']))])
-    # x_range = np.max([np.abs(np.nanmin(xplot_source.data['log_ai_h'])), np.abs(np.nanmax(xplot_source.data['log_ai_h']))])
-    x_start = 0.8 * np.nanmin(xplot_source.data['log_ai_h'])
-    x_end = 1.2 * np.nanmax(xplot_source.data['log_ai_h'])
-    y_start = 0.8 * np.nanmin(xplot_source.data['log_gi_h'])
-    y_end = 1.2 * np.nanmax(xplot_source.data['log_gi_h'])
+    y_range = 0.5 * (np.nanmax(xplot_cds.data['log_gi_h']) - np.nanmin(xplot_cds.data['log_gi_h']))
+    x_center = float(np.nanmedian(np.append(xplot_cds.data['log_ai_h'], xplot_cds.data['log_ai_b'])))
+    y_center = float(np.nanmedian(np.append(xplot_cds.data['log_gi_h'], xplot_cds.data['log_gi_b'])))
+    # y_range = np.max([np.abs(np.nanmin(xplot_cds.data['log_gi_h'])), np.abs(np.nanmax(xplot_cds.data['log_gi_h']))])
+    # x_range = np.max([np.abs(np.nanmin(xplot_cds.data['log_ai_h'])), np.abs(np.nanmax(xplot_cds.data['log_ai_h']))])
+    x_start = 0.8 * np.nanmin(xplot_cds.data['log_ai_h'])
+    x_end = 1.2 * np.nanmax(xplot_cds.data['log_ai_h'])
+    y_start = 0.8 * np.nanmin(xplot_cds.data['log_gi_h'])
+    y_end = 1.2 * np.nanmax(xplot_cds.data['log_gi_h'])
     bins = np.linspace(1.2 * eei_min, 0.8 * eei_max, 100)
     # bins = 40
     _x, _y = return_chi_line(y_range, chi_slider.value, x_center=x_center, y_center=y_center)
-    chi_line_source = ColumnDataSource(dict(x=_x, y=_y))
-    xplot.line(x='x', y='y', source=chi_line_source)
+    chi_line_cds = ColumnDataSource(dict(x=_x, y=_y))
+    xplot.line(x='x', y='y', source=chi_line_cds)
 
     def draw_histogram(_eei_brine, _eei_hc):
         hplot.legend.items = []
@@ -498,17 +498,17 @@ def plot_chi_rotation(well: cw.Well,
         hplot.quad(top=hist, bottom=0, fill_color='red', alpha=0.7, line_color='white',
                    left=edges[:-1], right=edges[1:], legend_label='HC, ba: {}'.format(backus_slider.value))
 
-    draw_histogram(xplot_source.data['eei_brine'], xplot_source.data['eei_hc'])
+    draw_histogram(xplot_cds.data['eei_brine'], xplot_cds.data['eei_hc'])
 
     def draw_cc():
         if fluid_log is not None:
-            cc_fluid_fig.line(x='x', y='cc_b', source=cc_fluid_source, color='blue', legend_label='CC brine')
-            cc_fluid_fig.line(x='x', y='cc_h', source=cc_fluid_source, color='red', legend_label='CC hc')
+            cc_fluid_fig.line(x='x', y='cc_b', source=cc_fluid_cds, color='blue', legend_label='CC brine')
+            cc_fluid_fig.line(x='x', y='cc_h', source=cc_fluid_cds, color='red', legend_label='CC hc')
             cc_fluid_fig.x_range.start = -90; cc_fluid_fig.x_range.end = 90
             cc_fluid_fig.y_range.start = -0.7; cc_fluid_fig.y_range.end = 0.7
         if litho_log is not None:
-            cc_litho_fig.line(x='x', y='cc_b', source=cc_litho_source, color='blue', legend_label='CC brine')
-            cc_litho_fig.line(x='x', y='cc_h', source=cc_litho_source, color='red', legend_label='CC hc')
+            cc_litho_fig.line(x='x', y='cc_b', source=cc_litho_cds, color='blue', legend_label='CC brine')
+            cc_litho_fig.line(x='x', y='cc_h', source=cc_litho_cds, color='red', legend_label='CC hc')
             cc_litho_fig.x_range.start = -90; cc_litho_fig.x_range.end = 90
             cc_litho_fig.y_range.start = -0.7; cc_litho_fig.y_range.end = 0.7
         cc_litho_fig.xaxis.axis_label = 'Chi angle [deg]'
@@ -536,7 +536,7 @@ def plot_chi_rotation(well: cw.Well,
 
     # Call back functions
     def chi_callback(attr, old, new):
-        line_source.data = calc_all(
+        line_cds.data = calc_all(
             vp_brine.values, vs_brine.values, rho_brine.values,
             vp_hc.values, vs_hc.values, rho_hc.values,
             depth, backus_slider.value, step, new
@@ -545,42 +545,42 @@ def plot_chi_rotation(well: cw.Well,
         _mask = mask_based_on_depth(vp_orig.depth.values,
                                    grid.children[0][0].y_range.end, grid.children[0][0].y_range.start)
 
-        _xplot_dict = calc_xplot_source_dict(backus_slider.value, new, _mask)
-        xplot_source.data = _xplot_dict
+        _xplot_dict = calc_xplot_cds_dict(backus_slider.value, new, _mask)
+        xplot_cds.data = _xplot_dict
 
         draw_histogram(_xplot_dict['eei_brine'], _xplot_dict['eei_hc'])
 
-        # _y_range = 0.5 * (np.nanmax(xplot_source.data['log_gi_h']) - np.nanmin(xplot_source.data['log_gi_h']))
-        _x_center = float(np.nanmedian(np.append(xplot_source.data['log_ai_h'], xplot_source.data['log_ai_b'])))
-        _y_center = float(np.nanmedian(np.append(xplot_source.data['log_gi_h'], xplot_source.data['log_gi_b'])))
+        # _y_range = 0.5 * (np.nanmax(xplot_cds.data['log_gi_h']) - np.nanmin(xplot_cds.data['log_gi_h']))
+        _x_center = float(np.nanmedian(np.append(xplot_cds.data['log_ai_h'], xplot_cds.data['log_ai_b'])))
+        _y_center = float(np.nanmedian(np.append(xplot_cds.data['log_gi_h'], xplot_cds.data['log_gi_b'])))
         _x, _y = return_chi_line(
             y_range, new, x_center=_x_center, y_center=_y_center)
-        chi_line_source.data = dict(x=_x, y=_y)
-        xplot.x_range.start = np.nanmin(xplot_source.data['log_ai_h'])
-        xplot.x_range.end = np.nanmax(xplot_source.data['log_ai_h'])
-        xplot.y_range.start = np.nanmin(xplot_source.data['log_gi_h'])
-        xplot.y_range.end = np.nanmax(xplot_source.data['log_gi_h'])
+        chi_line_cds.data = dict(x=_x, y=_y)
+        xplot.x_range.start = np.nanmin(xplot_cds.data['log_ai_h'])
+        xplot.x_range.end = np.nanmax(xplot_cds.data['log_ai_h'])
+        xplot.y_range.start = np.nanmin(xplot_cds.data['log_gi_h'])
+        xplot.y_range.end = np.nanmax(xplot_cds.data['log_gi_h'])
 
         _eei_min, _eei_max, _chi_at_max_diff, _cc_litho_b, _cc_litho_h, _cc_fluid_b, _cc_fluid_h = (
             find_eei_extremes_and_correlations(_mask))
-        cc_fluid_source.data = dict(x=chi_angles, cc_b=_cc_fluid_b, cc_h=_cc_fluid_h)
-        cc_litho_source.data = dict(x=chi_angles, cc_b=_cc_litho_b, cc_h=_cc_litho_h)
+        cc_fluid_cds.data = dict(x=chi_angles, cc_b=_cc_fluid_b, cc_h=_cc_fluid_h)
+        cc_litho_cds.data = dict(x=chi_angles, cc_b=_cc_litho_b, cc_h=_cc_litho_h)
 
     def backus_callback(attr, old, new):
-        _amp_brine, _amp_hc = get_amp_sources(new, freq_slider.value)
-        amp_hc_source.data['value'] = [_amp_hc.T]
-        amp_diff_source.data['value'] = [(_amp_brine - _amp_hc).T]
+        _amp_brine, _amp_hc = get_amp_cdss(new, freq_slider.value)
+        amp_hc_cds.data['value'] = [_amp_hc.T]
+        amp_diff_cds.data['value'] = [(_amp_brine - _amp_hc).T]
 
-        line_source.data = calc_all(
+        line_cds.data = calc_all(
             vp_brine.values, vs_brine.values, rho_brine.values,
             vp_hc.values, vs_hc.values, rho_hc.values,
             depth, new, step, chi_slider.value
         )
 
     def freq_callback(attr, old, new):
-        _amp_brine, _amp_hc = get_amp_sources(chi_slider.value, new)
-        amp_hc_source.data['value'] = [_amp_hc.T]
-        amp_diff_source.data['value'] = [(_amp_brine - _amp_hc).T]
+        _amp_brine, _amp_hc = get_amp_cdss(chi_slider.value, new)
+        amp_hc_cds.data['value'] = [_amp_hc.T]
+        amp_diff_cds.data['value'] = [(_amp_brine - _amp_hc).T]
 
     # Call backs
     legend_callback = CustomJS(args=dict(chi=chi_slider, ba=backus_slider, freq=freq_slider, spans=_spans,
@@ -671,9 +671,9 @@ def compare_synth_with_seismic(
     dt = Q_(1, 'millisecond')
     avo_angles = np.arange(seismic_traces.x[0], seismic_traces.x[-1], 1)
 
-    def create_ai_line(_line_source):
+    def create_ai_line(_line_cds):
         return Line(
-            x='ai_ba', y='md', source=_line_source, style=Template(**{
+            x='ai_ba', y='md', cds=_line_cds, style=Template(**{
                 'name': 'AI ba: {}m'.format(backus_slider.value),
                 'line_color': 'blue', 'min': ai_min, 'max': ai_max
             })
@@ -696,17 +696,17 @@ def compare_synth_with_seismic(
             md=_depth
         )
 
-    line_source = ColumnDataSource(
+    line_cds = ColumnDataSource(
         calc_ai(
             vp_orig.values, vs_orig.values, rho_orig.values,
             depth, backus_slider.value, step
         )
     )
 
-    line_ai = create_ai_line(line_source)
+    line_ai = create_ai_line(line_cds)
 
     # Calculate synthetic seismic
-    def get_amp_source(_ba, _freq):
+    def get_amp_cds(_ba, _freq):
         if _ba == 0.:
             _vp_b_ba = vp_orig.values
             _vs_b_ba = vs_orig.values
@@ -730,33 +730,33 @@ def compare_synth_with_seismic(
                                     center_frequency=_freq)
         return _amp
 
-    amp = get_amp_source(backus_slider.value, freq_slider.value)
-    amp_source = ColumnDataSource({'value': [amp.T]})
+    amp = get_amp_cds(backus_slider.value, freq_slider.value)
+    amp_cds = ColumnDataSource({'value': [amp.T]})
 
-    def create_synth_traces(_amp_source, _ba, _freq):
+    def create_synth_traces(_amp_cds, _ba, _freq):
         _seismic_traces = SeismicTraces(
             x=avo_angles, y=depth,
-            traces=None, source=_amp_source,
+            traces=None, cds=_amp_cds,
             trace_type='avo',
             title='Synth. ba: {}m, f: {}Hz'.format(_ba, _freq)
         )
         return _seismic_traces
 
-    synth_traces = create_synth_traces(amp_source, backus_slider.value, freq_slider.value)
+    synth_traces = create_synth_traces(amp_cds, backus_slider.value, freq_slider.value)
 
-    # This is necessary to get the source of the real seismic, so that we can shift it later
-    def create_real_traces(_seismic_traces, _source):
+    # This is necessary to get the cds of the real seismic, so that we can shift it later
+    def create_real_traces(_seismic_traces, _cds):
         _seismic_traces = SeismicTraces(
             x=_seismic_traces.x, y=_seismic_traces.y,
-            traces=None, source=_source,
+            traces=None, cds=_cds,
             trace_type=_seismic_traces.trace_type,
             title=_seismic_traces._title
         )
         return _seismic_traces
 
-    orig_seismic_values = deepcopy(seismic_traces.source.data['value'][0])
-    data_source = seismic_traces.source
-    real_traces = create_real_traces(seismic_traces, data_source)
+    orig_seismic_values = deepcopy(seismic_traces.cds.data['value'][0])
+    data_cds = seismic_traces.cds
+    real_traces = create_real_traces(seismic_traces, data_cds)
 
 
     # create a grid plot
@@ -790,22 +790,22 @@ def compare_synth_with_seismic(
 
     # call back functions
     def backus_callback(attr, old, new):
-        _amp = get_amp_source(new, freq_slider.value)
-        amp_source.data['value'] = [_amp.T]
+        _amp = get_amp_cds(new, freq_slider.value)
+        amp_cds.data['value'] = [_amp.T]
         # print(grid.children[2][0].xaxis[0].axis_label)
 
-        line_source.data = calc_ai(
+        line_cds.data = calc_ai(
             vp_orig.values, vs_orig.values, rho_orig.values,
             depth, new, step
         )
 
     def freq_callback(attr, old, new):
-        _amp = get_amp_source(backus_slider.value, new)
-        amp_source.data['value'] = [_amp.T]
+        _amp = get_amp_cds(backus_slider.value, new)
+        amp_cds.data['value'] = [_amp.T]
 
     def shift_callback(attr, old, new):
         _shifted_data = np.roll(orig_seismic_values, int(new/step), 0)
-        data_source.data['value'] = [_shifted_data]
+        data_cds.data['value'] = [_shifted_data]
 
     legend_callback = CustomJS(args=dict(ba=backus_slider, freq=freq_slider, shift=shift_slider,
                                          c3_axis=grid.children[2][0].xaxis[0],
@@ -885,7 +885,7 @@ def interactive_edits(well: cw.Well,
     plotter = plot_logs(well, log_columns)
 
     # add the smoothened data to each column
-    line_sources = []
+    line_cdss = []
     for _i, _column in enumerate(plotter.columns):
         # print(_column)
         # Instead of plotting the smoothened version of each log, we only show the first
@@ -898,13 +898,13 @@ def interactive_edits(well: cw.Well,
             )
             # Because each log in this column is added with same name ('smooth') to the ColumnDataSource
             # only one will be plotted
-            _this_source = ColumnDataSource(dict(smooth=_this_smooth_res.values, md=_this_smooth_res.depth.values))
+            _this_cds = ColumnDataSource(dict(smooth=_this_smooth_res.values, md=_this_smooth_res.depth.values))
             _this_style = _this_smooth_res.style
             _this_style.line_width = 3.
             _this_style.line_color = 'red'
             _this_style.name = _this_style.name + '_smooth'
-            line_sources.append(_this_source)
-            _column.add_line(Line(x='smooth', y='md', source=_this_source, style=_this_style))
+            line_cdss.append(_this_cds)
+            _column.add_line(Line(x='smooth', y='md', source=_this_cds, style=_this_style))
 
     def callback():
         _step = None
@@ -939,7 +939,7 @@ def interactive_edits(well: cw.Well,
                         method=smooth_method_sel.value,
                         window=smooth_window_sel.value
                     )
-                line_sources[_i].data['smooth'] = _this_smooth_res.values
+                line_cdss[_i].data['smooth'] = _this_smooth_res.values
                 well.add_log(_this_smooth_res, if_log_exists='overwrite')
         # l_names = well.get_log_names
         # print(l_names)
@@ -1190,8 +1190,6 @@ def plot_trends(x_name: str, wells: list, log_table: LogTable, wis:Intervals, wi
                 plt.show()
 
     return x_trends, data, x, data_detrended, x_detrended
-
-
 
 
 def get_wiggles_in_depth(

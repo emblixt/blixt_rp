@@ -91,7 +91,7 @@ class TrendPlotter(CrossPlotter):
     def calc_trend(self,
                    x_param: str,
                    y_param: str,
-                   source: ColumnDataSource,
+                   cds: ColumnDataSource,
                    verbose: bool = False):
         """
         :param x_param:
@@ -100,7 +100,7 @@ class TrendPlotter(CrossPlotter):
         :param y_param:
             str
             Name of the y parameter (dependent variable)
-        :param source:
+        :param cds:
         :param p:
             bokeh.plotting figure
         :param verbose:
@@ -111,16 +111,16 @@ class TrendPlotter(CrossPlotter):
         target_function = linear_function
 
         result = calculate_depth_trend(
-            source.data[y_param],
-            source.data[x_param],
+            cds.data[y_param],
+            cds.data[x_param],
             target_function,
             [1., 1.],
-            mask = source.data['mask'],
+            mask = cds.data['mask'],
             verbose=verbose,
             xlabel=y_param,
             ylabel=x_param
         )
-        # Create a line_source of the fitted trend curve
+        # Create a line_cds of the fitted trend curve
         m_m = self.min_and_max()
         x = np.linspace(m_m[self.x][0], m_m[self.x][1], 100)
         _dict = dict(x = np.linspace(m_m[self.x][0], m_m[self.x][1], 100),
@@ -135,12 +135,12 @@ class TrendPlotter(CrossPlotter):
 
     def plot_trend(self,
                    p: figure,
-                   line_source: ColumnDataSource):
+                   line_cds: ColumnDataSource):
         """
-        Draws the line given by the line_source (keys x and y) in the figur p
+        Draws the line given by the line_cds (keys x and y) in the figur p
         
         :param p: 
-        :param line_source:
+        :param line_cds:
         :param line_renderer
         :return: 
         """
@@ -150,15 +150,15 @@ class TrendPlotter(CrossPlotter):
         line_renderer = p.line(
             x='x',
             y='y',
-            legend_label=line_source.data['label'][0],
+            legend_label=line_cds.data['label'][0],
             line_width=2,
-            source=line_source
+            source=line_cds
         )
 
         # Clear the legend from the previous legend
         p.legend.items = [item for item in p.legend.items if line_renderer in item.renderers]
 
-    def draw(self, source: ColumnDataSource, set_all_intervals_active: bool = False, verbose: bool = False):
+    def draw(self, cds: ColumnDataSource, set_all_intervals_active: bool = False, verbose: bool = False):
         from bokeh.models import Button, Tooltip
         calc_trend_tooltip = Tooltip(content='Calculate trend for shown data', position='right')
         calc_save_tooltip = Tooltip(content=
@@ -174,26 +174,26 @@ class TrendPlotter(CrossPlotter):
         #  button.js_on_event('document_ready', tooltip_js)
 
         if verbose:
-            source.js_on_change('patching', CustomJS(
-                args=dict(source=source),
+            cds.js_on_change('patching', CustomJS(
+                args=dict(source=cds),
                 code="""
                 console.log('Patching event detected in TrendPlotter');
                 """
             ))
 
-            source.js_on_change('data', CustomJS(
-                args=dict(source=source),
+            cds.js_on_change('data', CustomJS(
+                args=dict(source=cds),
                 code="""
                 console.log('Data event detected in TrendPlotter');
                 """
             ))
 
-        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = super().draw(source)
+        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = super().draw(cds)
         x_menu.disabled = True
 
         def calc_trend_func():
-            line_source, res = self.calc_trend(x_menu.value, y_menu.value, source, verbose=verbose)
-            self.plot_trend(xplot, line_source)
+            line_cds, res = self.calc_trend(x_menu.value, y_menu.value, cds, verbose=verbose)
+            self.plot_trend(xplot, line_cds)
 
         calc_trend = Button(label='Calculate trend', button_type='success')
         calc_trend.on_click(calc_trend_func)
@@ -203,7 +203,7 @@ class TrendPlotter(CrossPlotter):
             for y_param in y_menu.options:
                 if y_param in ['md', 'tvd', 'twt']:  # don't calculate trends for these
                     continue
-                line_source, res = self.calc_trend(x_menu.value, y_param, source, verbose=verbose)
+                line_cds, res = self.calc_trend(x_menu.value, y_param, cds, verbose=verbose)
                 print(y_param, res['success'], res['x'])
                 if res['success'] and self.project_table is not None:
                     print('Trying to save results')
@@ -213,7 +213,7 @@ class TrendPlotter(CrossPlotter):
                                      ', '.join(list(self._data_sources.keys())),
                                      ', '.join(self.active_intervals),
                                      'Linear',
-                                     note=line_source.data['label'][0])
+                                     note=line_cds.data['label'][0])
 
         calc_all_and_save = Button(label='Calculate trends and save',
                                    button_type='success')
@@ -226,7 +226,7 @@ class TrendPlotter(CrossPlotter):
 
 class TestCases(unittest.TestCase):
 
-    def test_data_source(self):
+    def test_data_cds(self):
         import blixt_rp.plotting.cross_plotter as xp
         test = xp.TestCases()
 
@@ -239,9 +239,9 @@ class TestCases(unittest.TestCase):
                           working_intervals=wis,
                           project_table="C:\\Users\\emb\\Downloads\\Book.xlsx")
 
-        d_source = tp.source
+        d_cds = tp.cds
 
-        return tp.draw(d_source)
+        return tp.draw(d_cds)
 
     def test_calc_trend(self):
         import matplotlib.pyplot as plt
@@ -255,7 +255,7 @@ class TestCases(unittest.TestCase):
                           y='var_two',
                           cutoffs=coffs,
                           working_intervals=wis)
-        source = tp.source
-        tp.calc_trend(source, verbose=True)
+        cds = tp.cds
+        tp.calc_trend(cds, verbose=True)
 
         plt.show()
