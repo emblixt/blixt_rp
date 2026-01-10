@@ -245,7 +245,7 @@ class TestCase(unittest.TestCase):
         lfs = LithoFluids([LithoFluid(name=_x, default=_x) for _x in ['shale', 'brine_sst', 'oil_sst', 'shale']])
 
         # Create the laminar model
-        lm = LaminarModel(lfs, Q_(0.1, 'm'), avo_or_eei='eei')
+        lm = LaminarModel(lfs, resolution=Q_(0.1, 'm'), avo_or_eei='eei')
 
         lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, freq_slider = lm.draw()
 

@@ -2,11 +2,15 @@
 # C:\Users\emb\Documents\PycharmProjects\blixt_rp\blixt_rp>C:\Users\emb\Documents\PycharmProjects\venv\Scripts\bokeh serve --show unit_tests
 
 import sys
+import os
 from bokeh.plotting import column, figure, show, curdoc, row
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
-sys.path.append('C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp')
-sys.path.append('C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_utils')
+project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
+sys.path.append(os.path.join(project_dir, 'blixt_rp'))
+sys.path.append(os.path.join(project_dir, 'blixt_utils'))
+# sys.path.append('C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp')
+# sys.path.append('C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_utils')
 
 # test = 'rp_core_new__test_litho_fluid_table'
 # test = 'models__test_model_table'

@@ -1445,16 +1445,16 @@ class TestCases(unittest.TestCase):
 
     def test_avo_qc(self):
         near = AngleStack('near',
-                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01_NVG21PH1-EW_FINAL_KPSDM_T_NEAR_STK_16bit.zgy",
+                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-NEARSTACK_MIG-FIN_16bit.zgy",
                           angle=10.)
         mid = AngleStack('mid',
-                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01_NVG21PH1-EW_FINAL_KPSDM_T_MID_STK_16bit.zgy",
+                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-MIDSTACK_MIG-FIN_16bit.zgy",
                           angle=18.)
         far = AngleStack('far',
-                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01_NVG21PH1-EW_FINAL_KPSDM_T_FAR_STK_16bit.zgy",
+                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-FARSTACK_MIG_FIN_16bit.zgy",
                           angle=26.)
         ufar = AngleStack('ufar',
-                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01_NVG21PH1-EW_FINAL_KPSDM_T_UFAR_STK_16bit.zgy",
+                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-UFARSTACK_MIG-FIN_16bit.zgy",
                           angle=34.)
 
         voi = VolumeOfInterest(
@@ -1464,7 +1464,7 @@ class TestCases(unittest.TestCase):
 
         xline = 32254
 
-        return avo_qc([near, mid, far, ufar], voi, xline=xline, verbose=True)
+        return avo_qc([near, mid, far, ufar], voi, line_direction='xline', verbose=True)
         # return avo_qc([near, ufar], voi, xline=xline, verbose=True)
 
     def test_closest(self):
