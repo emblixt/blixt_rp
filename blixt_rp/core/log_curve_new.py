@@ -652,7 +652,7 @@ class LogCurve(object):
             style=self.style
         )
 
-    def to_twt(self, twt: pint.Quantity, dt: pint.Quantity):
+    def to_twt(self, twt: pint.Quantity, dt: pint.Quantity, verbose: bool | None = False):
         """
         Returns a LogCurve object with a regularly sampled TWT as Depth, with the
         log curve data resampled to match the range of the input TWT
@@ -660,13 +660,21 @@ class LogCurve(object):
             The twt data for the depth-time relation
         :param dt:
             The sample rate of the new twt
+        :param verbose:
         :return:
             LogCurve object where Depth is a regularly sampled TWT array and with original LogCurve data resampled
             to match this new Depth
         """
         info_txt = 'Converting log {}, in {} domain to Time domain with a regularly sampled TWT Depth (dt: {})'.format(
             self.name, self.depth_type, dt)
-        twt, data = _to_twt(twt, self.values, dt)
+        if verbose:
+            print(info_txt)
+            print(' Input twt: {}-{}'.format(np.nanmin(twt.magnitude), np.nanmax(twt.magnitude)))
+        twt, data = _to_twt(twt, self.values, dt, verbose=verbose)
+        if verbose:
+            print(' Output twt: {}-{}'.format(np.nanmin(twt.magnitude), np.nanmax(twt.magnitude)))
+            print(' Output data: {}-{}'.format(np.nanmin(data), np.nanmax(data)))
+
         return  replace_data(self,
                              Q_(data, self.units),
                              Depth(twt, depth_type='twt'),
@@ -1814,7 +1822,8 @@ def _to_twt(
         twt: pint.Quantity,
         data: np.ndarray,
         dt: pint.Quantity = Q_(1, 'millisecond'),
-        axis: int = -1
+        axis: int = -1,
+        verbose: bool | None = False
 ):
     """
     Converts the input depth domain data to a regularly sampled array in TWT
@@ -1840,7 +1849,7 @@ def _to_twt(
         np.nanmax(twt).to('millisecond').magnitude,
         dt.to('millisecond').magnitude
     )
-    return Q_(new_twt, 'millisecond'), _interpolate(twt.magnitude, data, new_twt, kind='linear', axis=axis)
+    return Q_(new_twt, 'millisecond'), _interpolate(twt.to('millisecond').magnitude, data, new_twt, kind='linear', axis=axis)
 
 def _to_depth(
         time_depth_twt: pint.Quantity,

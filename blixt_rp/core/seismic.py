@@ -37,6 +37,7 @@ from blixt_utils.plotting.helpers import wiggle_plot
 import blixt_utils.plotting.crossplot as xp
 from blixt_rp.core.core import Template, CutoffRule, Cutoffs, LogTable, Header
 from blixt_rp.core.log_curve_new import read_las
+from blixt_utils.utils import print_info
 
 # global variables
 # output_file('C:\\Users\marte\Documents\plot.html')
@@ -118,7 +119,7 @@ class SeismicTraces:
                  y: np.ndarray | None = None,
                  traces: np.ndarray | None = None,
                  cds: ColumnDataSource | None = None,
-                 trace_type: Literal['avo', 'eei', 'index'] | None = None,
+                 trace_type: str | None = None,
                  title: str | None = None
                  ):
         """
@@ -148,6 +149,8 @@ class SeismicTraces:
         self._y = y
         if trace_type is None:
             trace_type = 'avo'
+        if trace_type not in ['avo', 'eei', 'index']:
+            print_info('trace_type is not recognized: {}'.format(trace_type), 'error', logger, 'IOError')
         self._trace_type = trace_type
 
         self.cds = cds

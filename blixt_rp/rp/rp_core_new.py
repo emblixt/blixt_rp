@@ -17,9 +17,10 @@ from .. import ureg, Q_
 import pint
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
-project_dir = str(os.path.basename(__file__).replace('blixt_rp\\blixt_rp\\rp', ''))
+project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\rp', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
+
 
 import blixt_rp.rp_utils.definitions as udo
 import blixt_utils.io.io as bui
@@ -220,8 +221,10 @@ class LithoFluid:
                        number,
                        case: str | None = None,
                        color: str | None = None,
-                       thickness: pint.Quantity = Q_(25., 'm')):
+                       thickness: float | pint.Quantity = Q_(25., 'm')):
         from blixt_rp.core.models import ModelLayer
+        if isinstance(thickness, float):
+            thickness = Q_(thickness, 'm')
         return ModelLayer(number, case, color, thickness, self)
 
 

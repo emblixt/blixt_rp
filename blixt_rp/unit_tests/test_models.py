@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pint import Quantity as Q_
 
+from blixt_rp.rp.rp_core_new import LithoFluid, LithoFluids, LithoFluidsTable
+
 # Add to path to avoid having to install libraries, useful in development
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
@@ -210,10 +212,10 @@ class TestCase(unittest.TestCase):
         import blixt_rp.rp.rp_core_new as brrp
         excel_file = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\PL1221\\SumsAndAverages.xlsx"
         output_file('C:\\Users\\emb\\Downloads\\plot.html')
-        lfs = brrp.LithoFluids()
+        lfs = LithoFluids()
         lfs.from_excel(excel_file)
         lfs.litho_fluids = lfs.litho_fluids[:3]
-        table_lf = brrp.LithoFluidsTable(lfs, width=300, advanced=False)
+        table_lf = LithoFluidsTable(lfs, width=300, advanced=False)
         cds_lf = table_lf.cds
         lf_table, add_row, delete_row, update = table_lf.draw(cds_lf)
 
@@ -237,22 +239,18 @@ class TestCase(unittest.TestCase):
     def test_laminar_model(self, unit_test=True):
         from bokeh.io import output_file
         from bokeh.plotting import show, row, column
-        import blixt_rp.rp.rp_core_new as brrp
-        excel_file = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\PL1221\\SumsAndAverages.xlsx"
         output_file('C:\\Users\\emb\\Downloads\\plot.html')
 
         # Create litho fluids
-        lfs = brrp.LithoFluids()
-        lfs.from_excel(excel_file)
-        lfs.litho_fluids = lfs.litho_fluids[:3]
+        lfs = LithoFluids([LithoFluid(name=_x, default=_x) for _x in ['shale', 'brine_sst', 'oil_sst', 'shale']])
 
         # Create the laminar model
-        lm = LaminarModel(lfs, Q_(0.5, 'm'))
+        lm = LaminarModel(lfs, Q_(0.1, 'm'), avo_or_eei='eei')
 
-        lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid = lm.draw()
+        lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, freq_slider = lm.draw()
 
         if unit_test:
-            show(column(grid,
+            show(column(grid, freq_slider,
                 row(
                     column(model_table, row(add_row_m, delete_row_m, update_m)),
                     column(lf_table, row(add_row, delete_row, update))
@@ -260,7 +258,7 @@ class TestCase(unittest.TestCase):
             )
             return None
         else:
-            return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid
+            return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid, freq_slider
 
     def test_catch_change_in_cases(self):
         prev_cases = [[1, 2], [1,2,3], [1,2], [1,4]]

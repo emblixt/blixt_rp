@@ -33,9 +33,9 @@ elif test == 'models__test_model_table':
 elif test == 'models__test_laminar_model':
     import test_models
     test = test_models.TestCase()
-    model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid = test.test_laminar_model(unit_test=False)
+    model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid, freq_slider = test.test_laminar_model(unit_test=False)
     curdoc().add_root(column(
-        grid,
+        grid, freq_slider,
         row(
             column(model_table, row(add_row_m, delete_row_m, update_m)),
             column(lf_table, row(add_row, delete_row, update))

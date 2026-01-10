@@ -336,7 +336,8 @@ class TestPlot(unittest.TestCase):
             time_depth_twt,
             dt,
             avo_angles=np.linspace(0, 35, 36),
-            chi_angles=np.arange(-90, 91, 1)
+            chi_angles=np.arange(-90, 91, 1),
+            verbose=True
         )
         plt.imshow(result[:, ::100])
         plt.show()

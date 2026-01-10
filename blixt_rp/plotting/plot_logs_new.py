@@ -1242,7 +1242,7 @@ def get_wiggles_in_depth(
     # Get kwargs:
     c_f = kwargs.pop('center_frequency', 30.)  # Hz
     duration = kwargs.pop('duration', 0.512)  # seconds
-
+    verbose = kwargs.pop('verbose', False)
 
     # Check input data:
     _length = len(vp)
@@ -1251,6 +1251,12 @@ def get_wiggles_in_depth(
             err_txt = 'Each log curve must have same length: {} != {}'.format(
                 _length, len(lc))
             print_info(err_txt, 'error', logger, 'IOError')
+
+    if verbose:
+        print('get_wiggles_in_depth: vp: {}-{}'.format(np.nanmin(vp.values), np.nanmax(vp.values)))
+        print('get_wiggles_in_depth: twt: {}-{}'.format(
+            np.nanmin(time_depth_twt.magnitude), np.nanmax(time_depth_twt.magnitude)))
+        print('get_wiggles_in_depth: center_frequency: {}'.format(c_f))
 
     if chi_angles is None and avo_angles is None:
         angles = np.linspace(0, 35, 100)
@@ -1270,9 +1276,11 @@ def get_wiggles_in_depth(
         wavelet = bumw.ricker(duration, dt.to('second').magnitude, c_f)
 
     # Convert the input logs to TWT domain, with a regular sampling rate
-    vp_t = vp.to_twt(time_depth_twt, dt)
+    vp_t = vp.to_twt(time_depth_twt, dt, verbose=verbose)
     vs_t = vs.to_twt(time_depth_twt, dt)
     rho_t = rho.to_twt(time_depth_twt, dt)
+    if verbose:
+        print('get_wiggles_in_depth: vp_t: {}-{}'.format(np.nanmin(vp_t.values), np.nanmax(vp_t.values)))
 
     # calculate reflectivity as a function of incidence or chi angle
     refl_func = reflectivity(vp_t.values, None,
