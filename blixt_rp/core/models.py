@@ -1465,12 +1465,14 @@ class ModelLayer(Layer):
 
 class ModelTable:
     """
-    Returns a bokeh DataTable populated with rows of single layers
+    Returns a bokeh DataTable populated with rows of single layers of a model
     """
     from bokeh.models import ColumnDataSource
 
     # TODO IMPORTANT: It is the order of the layers in the input list which determines the order of the layers
-    # TODO IMPORTANT: Not the 'number' attribute of the layer - which is the intention!
+    # TODO IMPORTANT: Not the 'number' attribute of the layer - which was the intention!
+    # Maybe keep it with this limitation?
+    # TODO Make it a child of the Model() class (?)
     def __init__(self,
                  layers: list | None = None,
                  litho_fluid_cds:ColumnDataSource | None = None,
@@ -2054,7 +2056,7 @@ class LaminarModel:
         # end of draw_plot()
 
         self.previous_cases = self.model.cases
-        grid = plotter.figure()
+        grid = plotter.draw()
 
         def update_m_function():
             print('XXX Update function', self.model.cases)

@@ -149,9 +149,9 @@ class TestCase(unittest.TestCase):
         # third_layer = Layer(thickness=reverse_wedge, vp=2800, vs=1350, rho=2.46, target=False)
 
         # gas lens model
-        first_layer = Layer(thickness=0.05, vp=3400., vs=1820., rho=2.6)
-        second_layer = Layer(thickness=0.03, vp=vp, vs=vs, rho=rho, target=True)
-        third_layer = Layer(thickness=0.05, vp=3400., vs=1820., rho=2.6)
+        first_layer = Layer(thickness=Q_(0.05, 's'), vp=Q_(3400., 'm/s'), vs=Q_(1820., 'm/s'), rho=Q_(2.6, 'gram/cm^3'))
+        second_layer = Layer(thickness=Q_(0.03, 's'), vp=Q_(vp, 'm/s'), vs=Q_(vs, 'm/s'), rho=Q_(rho, 'gram/cm^3'), target=True)
+        third_layer = Layer(thickness=Q_(0.05, 's'), vp=Q_(3400., 'm/s'), vs=Q_(1820., 'm/s'), rho=Q_(2.6, 'gram/cm^3'))
 
         m = Model(depth_to_top=1.94, layers=[first_layer, second_layer, third_layer],
                   trace_index_range=np.arange(n_samplings))
