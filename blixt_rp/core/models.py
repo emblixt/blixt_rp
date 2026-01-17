@@ -29,6 +29,8 @@ from blixt_utils.utils import print_info
 
 logger = logging.getLogger(__name__)
 
+# TODO JUST A TEST TO SEE IF GIT IS WORKING IN CEGAL CETEGRA
+
 text_style = {'fontsize': 'x-small', 'bbox': {'facecolor': 'w', 'alpha': 0.5}}
 
 
