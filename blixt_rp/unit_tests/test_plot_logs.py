@@ -72,7 +72,7 @@ class TestPlot(unittest.TestCase):
         print(well1.name)
         column_content = [['vsh'], ['phie'], ['vp_dry', 'vp_sg08']]
         plotter = bupp.plot_logs(well1, column_content, rel_widths=[1., 1., 1.])
-        grid = plotter.figure()
+        grid = plotter.draw()
         _p_one = select_column(grid, 'column_1')
         print(_p_one)
         _p_none = select_column(grid, 'XXX')
@@ -93,8 +93,8 @@ class TestPlot(unittest.TestCase):
         print(well1.name)
         column_content = [['vsh'], ['phie'], ['vp_dry', 'vp_sg08']]
         plotter = bupp.plot_logs(well1, column_content, rel_widths=[1., 1., 1.])
-        grid = plotter.figure()
-        print(plotter.line_cds.data.keys())
+        grid = plotter.draw()
+        print(plotter.cds.data.keys())
         settings = plotter.add_settings(grid)
         show(row(grid, settings))
 
@@ -113,8 +113,9 @@ class TestPlot(unittest.TestCase):
         print(well1.name)
         column_content = [['vsh'], ['phie'], ['vp_dry', 'vp_sg08']]
         plotter = bupp.plot_logs(well1, column_content, rel_widths=[1., 1., 1.])
-        grid = plotter.figure()
-        cutoffs, add_row, delete_row, update, use  = plotter.add_cutoffs(grid, rules=[rule1, rule2, rule3])
+        plot_cds = plotter.cds
+        grid = plotter.draw()
+        cutoffs, add_row, delete_row, update, use  = plotter.draw_cutoffs_table(grid, rules=[rule1, rule2, rule3])
         show(row(grid, cutoffs))
 
     def test_plot_with_backus(self):
@@ -148,7 +149,7 @@ class TestPlot(unittest.TestCase):
         plotter.add_column(ai_column, keep_column_width=False)
 
         # "Realize" the figure
-        grid = plotter.figure()
+        grid = plotter.draw()
 
         # access the last figure in grid plot, and let it display the x-axis
         _p = grid.children[-1][0]
@@ -271,7 +272,7 @@ class TestPlot(unittest.TestCase):
         run_smoothing.on_click(callback)
         save_result.on_click(save)
         # "Realize" the figure
-        grid = plotter.figure()
+        grid = plotter.draw()
 
         # show(grid)
         return (grid, select_editors, despike_clip_sel, despike_window_len,
@@ -309,7 +310,7 @@ class TestPlot(unittest.TestCase):
         # Create a four-column plot
         column_content = [['vsh'], [], ['phie'], ['vp_dry', 'vp_sg08']]
         plotter = bupp.plot_logs(well1, column_content, rel_widths=[1., 0.3, 1., 1.])
-        grid = plotter.figure()
+        grid = plotter.draw()
         data_table = add_strat_table(grid,
                                      stratigraphy=wis.get_intervals_dict(well1.name), width=800, column_index=1)
         title = Div(text='<h2>{}</h2>'.format(well1.name))
@@ -336,7 +337,8 @@ class TestPlot(unittest.TestCase):
             time_depth_twt,
             dt,
             avo_angles=np.linspace(0, 35, 36),
-            chi_angles=np.arange(-90, 91, 1)
+            chi_angles=np.arange(-90, 91, 1),
+            verbose=True
         )
         plt.imshow(result[:, ::100])
         plt.show()
@@ -384,7 +386,7 @@ class TestPlot(unittest.TestCase):
         c1 = LogColumn('AI', lines=[line], rel_width=1)
         c2 = LogColumn('AVO', seismic_traces=seismic_traces, rel_width=2)
         plotter.columns = [c1, c2]
-        grid = plotter.figure()
+        grid = plotter.draw()
         show(grid)
 
     def test_chi_rotation(self):

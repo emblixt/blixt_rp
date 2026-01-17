@@ -10,7 +10,9 @@ import pint
 from bokeh.models import Column, ColumnDataSource, IntEditor
 
 from .log_curve_new import LogCurve, Depth
+from .seismic import SeismicTraces
 from .. import ureg, Q_
+from ..plotting.plot_logs_new import get_wiggles_in_depth
 from ..rp.rp_core_new import LithoFluids, LithoFluidsTable
 
 # sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
@@ -1465,10 +1467,14 @@ class ModelLayer(Layer):
 
 class ModelTable:
     """
-    Returns a bokeh DataTable populated with rows of single layers
+    Returns a bokeh DataTable populated with rows of single layers of a model
     """
     from bokeh.models import ColumnDataSource
 
+    # TODO IMPORTANT: It is the order of the layers in the input list which determines the order of the layers
+    # TODO IMPORTANT: Not the 'number' attribute of the layer - which was the intention!
+    # Maybe keep it with this limitation?
+    # TODO Make it a child of the Model() class (?)
     def __init__(self,
                  layers: list | None = None,
                  litho_fluid_cds:ColumnDataSource | None = None,
@@ -1521,15 +1527,15 @@ class ModelTable:
         previous_thickness = 0.
         previous_top = float(self.depth_to_top.to('m').magnitude)
         for _i, _layer in enumerate(self.layers):
-            # TODO The top attribute is not calculated correctly, it should iterate under 'number' first of all,
-            # But there is probably something more to
             if _i == 0:
                 _dict['top'].append(previous_top)
                 previous_thickness = float(_layer.thickness.to('m').magnitude)
             else:
                 _dict['top'].append(previous_top + previous_thickness)
-                previous_thickness = float(_layer.thickness.to('m').magnitude)
-                previous_top += previous_thickness
+                if _layer.case == self.base_case_name:  # Only add base case layers to the sum of thicknesses
+                    previous_thickness = float(_layer.thickness.to('m').magnitude)
+                    previous_top += previous_thickness
+
             for _key in self.keys:
                 if _key == 'thickness':
                     _dict[_key].append(_layer.thickness.magnitude)
@@ -1545,7 +1551,7 @@ class ModelTable:
 
     @property
     def numbers(self):
-        return list(set([int(_n) for _n in self.cds.data['number']]))
+        return sorted(list(set([int(_n) for _n in self.cds.data['number']])))
 
     @property
     def duplicate_numbers(self) -> list:
@@ -1612,6 +1618,7 @@ class ModelTable:
         previous_layers = []
         thickness = None
         for _layer in self.layers:
+            # TODO Maybe we should restrict ourselves to only layers that represent the Base case?
             if int(_layer.number) in previous_layers:
                 # Skip layers which are non-unique
                 continue
@@ -1764,7 +1771,7 @@ class ModelTable:
             _twt = np.zeros(len(md))
             for i, n in enumerate(_nrs):  # This is also the correct order, as lower numbers are at the top :-)
                 this_layer = self.get_layer(n, _case)
-                print('XXX', i, n, _case, this_layer.case)
+                # print('XXX', i, n, _case, this_layer.case)
                 if i == 0:  # First layer
                     _vp[:i_inds[i]] = this_layer.vp
                     _vs[:i_inds[i]] = this_layer.vs
@@ -1778,7 +1785,7 @@ class ModelTable:
                     _vs[i_inds[i-1]:i_inds[i]] = this_layer.vs
                     _rho[i_inds[i-1]:i_inds[i]] = this_layer.rho
 
-            _twt = np.cumsum(2.0 * resolution / _vp)
+            _twt = np.cumsum(2.0 * resolution.to('m').magnitude / _vp) + 1.0
 
             _dict[_case]['vp'] = LogCurve('vp_{}'.format(_case), Q_(_vp, 'm/s'), Depth(md), log_type='P velocity')
             _dict[_case]['vs'] = LogCurve('vs_{}'.format(_case), Q_(_vs, 'm/s'), Depth(md), log_type='S velocity')
@@ -1789,9 +1796,10 @@ class ModelTable:
 
         return _dict
 
-    def line_cds(self, resolution: pint.Quantity, mod_cds: ColumnDataSource) -> ColumnDataSource:
-        elastics = self.realize(resolution, mod_cds)
-        _dict = modify_dict(elastics)
+    # def line_cds(self, resolution: pint.Quantity, mod_cds: ColumnDataSource) -> ColumnDataSource:
+    def line_cds(self, elastics_dict: dict) -> ColumnDataSource:
+        # elastics = self.realize(resolution, mod_cds)
+        _dict = modify_dict(elastics_dict)
         return ColumnDataSource(_dict)
 
     def draw(self, cds: ColumnDataSource):
@@ -1892,17 +1900,35 @@ class LaminarModel:
     Creates an interactive laminar (1D) model together with a display of the synthetic response
     NOTE! Only works in depth domain ('Z')
     """
+
+    # TODO  Rewrite this to be a child object from ModelTable
+
     from blixt_rp.rp.rp_core_new import LithoFluids
     from blixt_rp.plotting.cross_plotter import DataSource
 
     def __init__(self,
                  litho_fluids: LithoFluids,
+                 layers: list | None = None,
                  resolution: pint.Quantity | None = None,
                  wavelet: dict | None = None,
                  depth_to_top: pint.Quantity | None = None,
+                 avo_or_eei: str | None = None,
                  **kwargs
     ):
+        """
+
+        :param litho_fluids:
+        :param layers:
+            List of TableLayer objects
+            Optional
+        :param resolution:
+        :param wavelet:
+        :param depth_to_top:
+        :param avo_or_eei:
+        :param kwargs:
+        """
         self._litho_fluids = litho_fluids
+        self.layers = layers
         self.resolution = resolution
         self.depth_to_top = depth_to_top
         self.lf_width = kwargs.pop('lf_width', 300)
@@ -1910,6 +1936,9 @@ class LaminarModel:
         self.model = None
         self.lf_table = None
         self.previous_cases = None
+        if avo_or_eei is None:
+            avo_or_eei = 'avo'
+        self.avo_or_eei = avo_or_eei
 
     def initiate_lf_table(self):
         self.lf_table = LithoFluidsTable(self._litho_fluids, width=self.lf_width, advanced=False)
@@ -1921,7 +1950,10 @@ class LaminarModel:
         return self.lf_table.draw(lf_cds)
 
     def initiate_model_table(self, lf_cds: ColumnDataSource):
-        initial_layers = [_lf.to_model_layer(_i+1) for _i, _lf in enumerate(self._litho_fluids.litho_fluids)]
+        if self.layers is None:
+            initial_layers = [_lf.to_model_layer(_i+1) for _i, _lf in enumerate(self._litho_fluids.litho_fluids)]
+        else:
+            initial_layers = self.layers
         mod_obj = ModelTable(initial_layers, lf_cds, self.depth_to_top)
         self.depth_to_top = mod_obj.depth_to_top
         self.model = mod_obj
@@ -1932,7 +1964,10 @@ class LaminarModel:
         return self.model.draw(mod_cds)
 
     def draw(self):
-        from bokeh.models import Span
+        from bokeh.models import Span, Slider
+        from bokeh.models import GlyphRenderer
+        from bokeh.models.glyphs import Image, ImageRGBA, ImageURL
+
         from blixt_rp.plotting.log_plotter import LogPlotter, LogColumn, Line, select_column, select_line
         from blixt_rp.core.core import Template
         # Create the litho fluids table
@@ -1945,81 +1980,162 @@ class LaminarModel:
         cds_m = self.model.cds
         model_table, add_row_m, delete_row_m, update_m = self.draw_model_table(cds_m)
 
-        # Initiate the elastics and draw the initial data
-        cds_lines = self.model.line_cds(self.resolution, cds_m)
-
-        def spans():
-            _tmp = []
-            for _i, _name in enumerate(cds_m.data['top']):
-                _tmp.append(Span(location=cds_m.data['top'][_i], dimension='width',
-                                 line_width=1,
-                                 line_dash='solid',
-                                 line_color='black'))
-            return _tmp
-
         # Create log plot object
-        plotter = LogPlotter(width=800, height=1000)
+        plotter = LogPlotter(width=900, height=600)
 
-        def draw_lines():
-            # NOTE This does not respond when new lines (cases) are added
-            ais_lines = []
-            vpvs_lines = []
-            for _case in self.model.cases:
+        # Create controller widgets
+        freq_slider = Slider(title='Wavelet central freq. [Hz]', start=10, end=40, step=5, value=20)
+
+        # Set up a fixed resolution in time
+        dt = Q_(1, 'millisecond')
+
+        if self.avo_or_eei == 'avo':
+            angles = np.arange(0., 40., 1)
+        else:
+            angles = np.arange(-90., 91., 1)
+
+        # Initiate the elastics and draw the initial data
+        elastics_dict = self.model.realize(self.resolution, cds_m)
+        cds_lines = self.model.line_cds(elastics_dict)
+
+        def calc_synth_cds(_vp, _vs, _rho, _twt, _dt, _angles):
+            if self.avo_or_eei == 'avo':
+                _avo_angles = _angles
+                _chi_angles = None
+            else:
+                _avo_angles = None
+                _chi_angles = _angles
+            _amp = get_wiggles_in_depth(
+                _vp, _vs, _rho, _twt.data, _dt, avo_angles=_avo_angles, chi_angles=_chi_angles, center_frequency=float(freq_slider.value),
+                verbose=False
+            )
+            return ColumnDataSource({'value': [_amp.T]})
+
+        def create_traces(_synth_cds, _depth, _title):
+            return SeismicTraces(
+                x=angles, y=_depth, traces=None, cds=_synth_cds, trace_type=self.avo_or_eei, title=_title)
+
+
+
+        # def draw_plot():
+        ais_lines = []
+        vpvs_lines = []
+        for _case in self.model.cases:
                 ais_lines.append(Line(x='ai_{}'.format(_case), y='depth', cds=cds_lines,
                                       style=Template(**{'name': 'AI {}'.format(_case)})))
                 vpvs_lines.append(Line(x='vpvs_{}'.format(_case), y='depth', cds=cds_lines,
                                        style=Template(**{'name': 'VpVs {}'.format(_case)})))
 
-            ai_column = LogColumn('AI', lines=ais_lines, rel_width=1.)
-            vpvs_column = LogColumn('VpVs', lines=vpvs_lines, rel_width=1.)
-            plotter.columns = [ai_column, vpvs_column]
+        # Create two columns to hold the AI and VpVs lines
+        ai_column = LogColumn('AI', lines=ais_lines, rel_width=0.5)
+        vpvs_column = LogColumn('VpVs', lines=vpvs_lines, rel_width=0.4)  # Make this thinner to compensate for tick marks on ai_column
+
+        # Create two columns that holds the synthetic traces for the Base case and one other case (initially
+        # a copy of the first)
+        # print('XXX', np.min(elastics_dict[self.model.base_case_name]['vp'].values), np.max(elastics_dict[self.model.base_case_name]['vp'].values))
+        synth_cds_base = calc_synth_cds(
+            elastics_dict[self.model.base_case_name]['vp'],
+            elastics_dict[self.model.base_case_name]['vs'],
+            elastics_dict[self.model.base_case_name]['rho'],
+            elastics_dict[self.model.base_case_name]['twt'],
+            dt, angles
+        )
+        synth_cds_variation = calc_synth_cds(
+            elastics_dict[self.model.base_case_name]['vp'],
+            elastics_dict[self.model.base_case_name]['vs'],
+            elastics_dict[self.model.base_case_name]['rho'],
+            elastics_dict[self.model.base_case_name]['twt'],
+            dt, angles
+        )
+        # print('XXX', np.min(synth_cds_base.data['value']), np.max(synth_cds_base.data['value']))
+        traces_base = create_traces(synth_cds_base, elastics_dict[self.model.base_case_name]['vp'].depth.values, 'Base case')
+        traces_variation = create_traces(synth_cds_variation, elastics_dict[self.model.base_case_name]['vp'].depth.values, 'Base case')
+
+        synth_base_column = LogColumn('SYNTH_BASE', seismic_traces=traces_base, rel_width=1.)
+        synth_variation_column = LogColumn('SYNTH_VARIATION', seismic_traces=traces_variation, rel_width=1.)
+
+        plotter.columns = [ai_column, vpvs_column, synth_base_column, synth_variation_column]
+        # end of draw_plot()
 
         self.previous_cases = self.model.cases
-        draw_lines()
-        grid = plotter.figure()
-
-        _spans = spans()
-        for _span in _spans:
-            for i, _child in enumerate(grid.children):
-                _child[0].add_layout(_span)
-
+        grid = plotter.draw()
 
         def update_m_function():
-            print(self.model.cases)
-            # print(self.model.numbers)
-            # print(self.model.duplicate_numbers)
+            print('XXX Update function', self.model.cases)
+            # print('XXX', self.model.numbers)
+            # print('XXX', self.model.duplicate_numbers)
 
-            # Update the ColumnDataSources
-            cds_lines.data = dict(self.model.line_cds(self.resolution, cds_m).data)
+            # Update the elastic properties based on the new model
+            _elastics_dict = self.model.realize(self.resolution, cds_m)
+
+            # Update the ColumnDataSource of the lines and the model
+            cds_lines.data = dict(self.model.line_cds(_elastics_dict).data)
             cds_m.data = dict(self.model.cds.data)
-            print(cds_m.data['top'], cds_m.data['thickness'])
+            print('Tops and thicknesses:')
+            _i = 0
+            for _z, _t in zip(cds_m.data['top'], cds_m.data['thickness']):
+                print('Layer: {}, Top: {}, Thickness: {}'.format(_i, _z, _t))
+                _i += 1
 
-            # Update the Spans
-            for _i, _span in enumerate(_spans):
-                _span.location = cds_m.data['top'][_i]
+            # Update the CDS of the synthetics for the base case
+            synth_cds_base.data = dict(calc_synth_cds(
+                _elastics_dict[self.model.base_case_name]['vp'],
+                _elastics_dict[self.model.base_case_name]['vs'],
+                _elastics_dict[self.model.base_case_name]['rho'],
+                _elastics_dict[self.model.base_case_name]['twt'],
+                dt, angles
+            ).data)
+
+            # Update the CDS of the synthetics of the other case, if it exists
+            # NOTE that we only accept one other case than the base case
+            if len(self.model.cases) > 1:
+                cases = self.model.cases
+                cases.remove(self.model.base_case_name)
+                print('Trying to update the synthetics of ', cases[0])
+                synth_cds_variation.data = dict(calc_synth_cds(
+                    _elastics_dict[cases[0]]['vp'],
+                    _elastics_dict[cases[0]]['vs'],
+                    _elastics_dict[cases[0]]['rho'],
+                    _elastics_dict[cases[0]]['twt'],
+                    dt, angles
+                ).data)
+                _p = select_column(grid, 'SYNTH_VARIATION')
+                _p.xaxis.axis_label = '{} case: {}'.format(cases[0], self.avo_or_eei)
+
+            # Update the depth range of the synthetics to match the changes in depth
+            depth_range = self.model.depth_range()
+            for _column in [select_column(grid, _col_name) for _col_name in ['SYNTH_BASE', 'SYNTH_VARIATION']]:
+                image_renderers = [
+                    r for r in _column.renderers
+                    if isinstance(r, GlyphRenderer) and isinstance(r.glyph, (Image, ImageRGBA, ImageURL))
+                ]
+                image_renderers[0].glyph.y = self.depth_to_top.to('m').magnitude
+                image_renderers[0].glyph.dh = depth_range.to('m').magnitude
 
             # Detect changes in number of cases
             case_changes = detect_change_in_cases(self.model.cases, self.previous_cases)
-            # Only handle the situation when a new case is added, for now (TODO)
             if len(case_changes['new']) > 0:
                 # get AI, and VpVs columns
                 _p_ai = select_column(grid, 'AI')
                 _p_vpvs = select_column(grid, 'VpVs')
                 for _case in case_changes['new']:
                     _y = 'ai_{}'.format(_case)
-                    print('Trying to plot the new case:', _case, _y)
+                    # print('Trying to plot the new case:', _case, _y)
                     _p_ai.line(x='ai_{}'.format(_case), y='depth', source=cds_lines,
                                **{'line_color': 'red', 'legend_label': 'AI_{}'.format(_case)})
                     _p_vpvs.line(x='vpvs_{}'.format(_case), y='depth', source=cds_lines,
                                **{'line_color': 'red', 'legend_label': 'VpVs_{}'.format(_case)})
 
+            # Only handle the situation when a new case is added, for now (TODO)
+            if len(case_changes['removed']) > 0:
+                print_info('Can not handle the situation when a case is removed', 'error', logger, 'IOError')
+
             self.previous_cases = self.model.cases
 
-        print('XXX Print TWT data')
-        print(cds_lines.data['twt_Base'])
         update_m.on_click(update_m_function)
+        update.on_click(update_m_function)
 
-        return lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid
+        return lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, freq_slider
 
 
 def modify_dict(_input):

@@ -45,11 +45,6 @@ line_dashes = {
     '-.': 'dashdot'}
 
 
-class LineSource:
-    # TODO Maybe reuse the DataSource in cross_plotter.py, But need to add some functionality to use a well as input
-    # directly
-    pass
-
 class LogPlotter:
     """
     Class for plotting multiple well logs, from one well, in different "columns", all with a common y-axis (time
@@ -76,6 +71,7 @@ class LogPlotter:
             Object containing the rules used for masks and classification
         :param tools:
         """
+        from blixt_rp.core.core import ClassificationTable
 
         if columns is None:
             columns = []
@@ -84,11 +80,12 @@ class LogPlotter:
         self._columns = columns
 
         self.cutoffs = cutoffs
-        self._cutoffs_table = None
+        self.active_cutoffs = []
 
         if tools is None:
             tools = default_tools
         self._tools = tools
+
 
     @property
     def width(self):
@@ -114,10 +111,6 @@ class LogPlotter:
     def columns(self, l: list):
         self._columns = l
 
-    @property
-    def cutoffs_table(self):
-        return self._cutoffs_table
-
     def add_column(self, _column, keep_column_width=True):
         if keep_column_width:
             old_width = self.width
@@ -138,7 +131,7 @@ class LogPlotter:
         return int(self.width / n_cols)
 
     @property
-    def line_cds(self) -> ColumnDataSource:
+    def cds(self) -> ColumnDataSource:
         """
         Returns a merged CDS for all Line objects in all columns.
         This is necessary when using the BooleanFilter possibility of a CDS on each LogColumn
@@ -151,8 +144,8 @@ class LogPlotter:
         for _col in self.columns:
             for _line in _col.lines:
                 if _line.cds is None:
-                    warn_txt = 'Line {} in column {} has no source (CDS)'.format(_line.name, _col.name)
-                    print_info(warn_txt, 'warning', logger)
+                    err_txt = 'Line {} in column {} has no source (CDS)'.format(_line.name, _col.name)
+                    print_info(err_txt, 'error', logger, 'IOError')
                     continue
                 for _key, _var in _line.cds.data.items():
                     if _i == 0:
@@ -222,15 +215,15 @@ class LogPlotter:
 
         return table.draw(cds)
 
-    def add_cutoffs(self, grid: gridplot, line_cds: ColumnDataSource, width=None):
+    def add_cutoffs_table(self, width=None):
         """
 
         :param grid:
             gridplot
-        :param line_cds:
+        :param cds:
             ColumnDataSource
             CDS of all line objects in the plot.
-            e.g. self.line_cds
+            e.g. self.cds
         :param width:
             int
         :return:
@@ -239,10 +232,15 @@ class LogPlotter:
         from blixt_rp.core.core import ClassificationTable
 
         if self.cutoffs is not None:
-            self._cutoffs_table = ClassificationTable(rules=self.cutoffs.cutoffs, width=width)
-        cds = self._cutoffs_table.cds
+            _cutoffs_table = ClassificationTable(rules=self.cutoffs.cutoffs, width=width)
+        else:
+            return [Div(text='', width=10, height=10)] * 5
+        # TODO
+        # TODO XXX Continue here!
+
+        cds = _cutoffs_table.cds
         # ct_guis consists of: table, add_row, delete_row, update, use
-        ct_guis = self._cutoffs_table.draw(cds, parameters=None, units=None)
+        ct_guis = _cutoffs_table.draw(cds, parameters=None, units=None)
 
         # TODO
         # If a column contains one or more Line objects, they will have a CDS attached to each of them.
@@ -250,14 +248,11 @@ class LogPlotter:
         # But the mask is dependent on the data in the other columns too! To make this happen, we need to create
         # a CDS which is common for all Lines in the LogPlotter
         # Create a BooleanFilter,
-        boolean_filter = BooleanFilter(booleans=line_cds.data['mask'])
+        boolean_filter = BooleanFilter(booleans=cds.data['mask'])
         #   ># Create a CDSView using the BooleanFilter
         #   >view = CDSView(filter=boolean_filter)
 
-
-
-    def figure(self, title: str | None = None) -> gridplot:
-        # TODO Maybe rename this to draw() which makes it more consistent with cross_plotter.py
+    def draw(self, title: str | None = None) -> gridplot:
         children = []
         lines = []
         _w = Span(dimension="width", line_dash="dashed", line_width=1)

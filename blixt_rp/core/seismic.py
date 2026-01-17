@@ -37,6 +37,7 @@ from blixt_utils.plotting.helpers import wiggle_plot
 import blixt_utils.plotting.crossplot as xp
 from blixt_rp.core.core import Template, CutoffRule, Cutoffs, LogTable, Header
 from blixt_rp.core.log_curve_new import read_las
+from blixt_utils.utils import print_info
 
 # global variables
 # output_file('C:\\Users\marte\Documents\plot.html')
@@ -118,7 +119,7 @@ class SeismicTraces:
                  y: np.ndarray | None = None,
                  traces: np.ndarray | None = None,
                  cds: ColumnDataSource | None = None,
-                 trace_type: Literal['avo', 'eei', 'index'] | None = None,
+                 trace_type: str | None = None,
                  title: str | None = None
                  ):
         """
@@ -148,12 +149,14 @@ class SeismicTraces:
         self._y = y
         if trace_type is None:
             trace_type = 'avo'
+        if trace_type not in ['avo', 'eei', 'index']:
+            print_info('trace_type is not recognized: {}'.format(trace_type), 'error', logger, 'IOError')
         self._trace_type = trace_type
 
         self.cds = cds
 
         if traces is None and cds is None:
-            _synts = SyntheticTraces(trace_length=test_data_length, n_traces=len(x))
+            _synts = StochasticSyntheticTraces(trace_length=test_data_length, n_traces=len(x))
             traces = _synts.get_traces(simulate_avo=self._trace_type=='avo')
             if title is None:
                 title = 'Synthetic'
@@ -188,8 +191,7 @@ class SeismicTraces:
     def title(self, value: str):
         self._title = value
 
-
-class SyntheticTraces:
+class StochasticSyntheticTraces:
     def __init__(self,
                  trace_length:int | None = None,
                  dt: float | None = None,
@@ -240,6 +242,17 @@ class SyntheticTraces:
             self.traces[i,:] = this_trace
 
         return self.traces
+
+class AvoAnalyzer:
+    """
+    Add a "Point Draw Tool" to either:
+    1. "Real" seismic section of an angle stack (with other angle stacks behind)
+    2. "AVO" section which shows the synthetic amplitude response as a function of incidence angle
+    3. "Synthetic" seismic section, which displays a 2D synthetic model
+
+
+    """
+    pass
 
 def create_seismic_figure(
         _width: int,
@@ -499,32 +512,6 @@ def avo_qc(
     xlines = [str(_x) for _x in voi.xlines]
     xline0 = int(xlines[int(len(xlines)/2)])
 
-    def _load_angle_stacks(_angle_stacks, _voi, _inline, _xline, _verbose=False):
-        _seismic_cdss = {}
-        _x = None
-        _y = None
-        _line = None
-        _suffix = None
-        for _as in _angle_stacks:
-            if _verbose:
-                print_info('Loading {}'.format(_as.title), 'info', logger)
-            zgy = read_zgy(_as.filename, _voi.i, _voi.j, _voi.k)
-            if _inline is not None:
-                _line = zgy.sel(iline=_inline)
-                _x = zgy['data'].coords['xline'].data
-                _suffix = 'Inline: {}'.format(_inline)
-            elif _xline is not None:
-                _line = zgy.sel(xline=_xline)
-                _x = zgy['data'].coords['iline'].data
-                _suffix = 'Xline: {}'.format(_xline)
-            else:
-                print_info("Either 'inline' or 'xline' must be set", 'error', logger, 'IOError')
-            # _seismic_cdss[_as.name] = ColumnDataSource(dict(value=[_line.data.T]))
-            _seismic_cdss[_as.name] = _line.data
-            _y = zgy['data'].coords['samples'].data
-        return _seismic_cdss, _x, _y, _suffix
-
-    # seismic_cdss, x, y, suffix = _load_angle_stacks(angle_stacks, voi, inline, xline, verbose)
     if line_direction == 'inline':
         seismic_cdss, x, y, suffix = _load_angle_stacks(angle_stacks, voi, inline0, None, verbose)
     else:
@@ -1070,8 +1057,80 @@ def closest(_x0: float, _x: np.ndarray):
     # return _x[_i]
     return _i
 
+def _load_angle_stacks(_angle_stacks, _voi, _inline, _xline, _verbose=False):
+    _seismic_cdss = {}
+    _x = None
+    _y = None
+    _line = None
+    _suffix = None
+    for _as in _angle_stacks:
+        if _verbose:
+            print_info('Loading {}'.format(_as.title), 'info', logger)
+        zgy = read_zgy(_as.filename, _voi.i, _voi.j, _voi.k)
+        if _inline is not None:
+            _line = zgy.sel(iline=_inline)
+            _x = zgy['data'].coords['xline'].data
+            _suffix = 'Inline: {}'.format(_inline)
+        elif _xline is not None:
+            _line = zgy.sel(xline=_xline)
+            _x = zgy['data'].coords['iline'].data
+            _suffix = 'Xline: {}'.format(_xline)
+        else:
+            print_info("Either 'inline' or 'xline' must be set", 'error', logger, 'IOError')
+        # _seismic_cdss[_as.name] = ColumnDataSource(dict(value=[_line.data.T]))
+        _seismic_cdss[_as.name] = _line.data
+        _y = zgy['data'].coords['samples'].data
+    return _seismic_cdss, _x, _y, _suffix
+
 
 class TestCases(unittest.TestCase):
+
+    def seismic_data_plot(self, _type:str) -> figure:
+        """
+        Creates a plot window with seismic data suitable for testing other functionality on
+        :param _type:
+            'seismic section',
+            'avo section',
+            'synthetic section'
+        :return:
+            Bokeh figure
+        """
+        p = figure()
+        if _type == 'seismic section':
+            near = AngleStack('near',
+                              "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-NEARSTACK_MIG-FIN_16bit.zgy",
+                              angle=10.)
+            mid = AngleStack('mid',
+                             "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-MIDSTACK_MIG-FIN_16bit.zgy",
+                             angle=18.)
+            far = AngleStack('far',
+                             "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-FARSTACK_MIG_FIN_16bit.zgy",
+                             angle=26.)
+            names = ['near', 'mid', 'far']
+            voi = VolumeOfInterest(
+                range(4800, 5200, 1),
+                range(32253, 32255, 1),
+                range(3000, 4000, 4))
+
+            xline = 32254
+            seismic_cdss, x, y, suffix = _load_angle_stacks([near, mid, far], voi, None, xline, True)
+            cds = ColumnDataSource(dict(value=[seismic_cdss[names[0]].T]))
+            min_val = np.nanmin(cds.data['value'])
+            max_val = np.nanmax(cds.data['value'])
+            _seismic_color_map = seismic_color_map(min_val=min_val, max_val=max_val)
+            p.image('value', source=cds,
+                    # TODO The dh and dw below might be wrong!
+                    color_mapper=_seismic_color_map, dh=cds.data['value'].shape[1], dw=cds.data['value'].shape[0], x=0, y=0)
+
+        elif _type == 'avo section':
+            _synts = StochasticSyntheticTraces(n_reflectors=10)
+            synts = _synts.get_traces(simulate_avo=True)
+            cds = ColumnDataSource({'value': [synts.T]})
+            _seismic_color_map = seismic_color_map(min_val=np.min(synts), max_val=np.max(synts))
+            p.image('value', source=cds,
+                    color_mapper=_seismic_color_map, dh=synts.shape[1], dw=synts.shape[0], x=0, y=0)
+
+        return p
 
     def test_interpolate(self):
         from blixt_utils.plotting.log_plotter import LogColumn, LogPlotter
@@ -1131,8 +1190,7 @@ class TestCases(unittest.TestCase):
 
 
     def test_synthetic_traces(self):
-        fig, ax = plt.subplots()
-        _synts = SyntheticTraces()
+        _synts = StochasticSyntheticTraces()
         synts = _synts.get_traces(simulate_avo=True)
         print(synts.shape)
         cds = ColumnDataSource({'value': [synts.T]})
@@ -1442,16 +1500,16 @@ class TestCases(unittest.TestCase):
 
     def test_avo_qc(self):
         near = AngleStack('near',
-                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01_NVG21PH1-EW_FINAL_KPSDM_T_NEAR_STK_16bit.zgy",
+                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-NEARSTACK_MIG-FIN_16bit.zgy",
                           angle=10.)
         mid = AngleStack('mid',
-                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01_NVG21PH1-EW_FINAL_KPSDM_T_MID_STK_16bit.zgy",
+                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-MIDSTACK_MIG-FIN_16bit.zgy",
                           angle=18.)
         far = AngleStack('far',
-                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01_NVG21PH1-EW_FINAL_KPSDM_T_FAR_STK_16bit.zgy",
+                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-FARSTACK_MIG_FIN_16bit.zgy",
                           angle=26.)
         ufar = AngleStack('ufar',
-                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01_NVG21PH1-EW_FINAL_KPSDM_T_UFAR_STK_16bit.zgy",
+                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-UFARSTACK_MIG-FIN_16bit.zgy",
                           angle=34.)
 
         voi = VolumeOfInterest(
@@ -1461,7 +1519,7 @@ class TestCases(unittest.TestCase):
 
         xline = 32254
 
-        return avo_qc([near, mid, far, ufar], voi, xline=xline, verbose=True)
+        return avo_qc([near, mid, far, ufar], voi, line_direction='xline', verbose=True)
         # return avo_qc([near, ufar], voi, xline=xline, verbose=True)
 
     def test_closest(self):
