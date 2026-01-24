@@ -434,7 +434,6 @@ class ClassificationTable:
 
         return _mask
 
-
     def table_columns(self, parameters: list, units: list):
         from bokeh.models import (SelectEditor, StringEditor, TableColumn, CheckboxEditor)
         _operators = ['<', '<=', '>', '>=', '><', '==', '!=']
@@ -455,7 +454,6 @@ class ClassificationTable:
                 _list.append('{}{}{}'.format(
                     cds.data['log'][i], cds.data['operator'][i], cds.data['limits'][i]))
         return _list
-
 
     def draw(self,
              cds: ColumnDataSource,
@@ -837,7 +835,7 @@ class Template:
 class TemplatesTable:
     def __init__(self,
                  templates: list,
-                 width:int | None = None):
+                 width: int | None = None):
         """
 
         :param templates:
@@ -859,7 +857,15 @@ class TemplatesTable:
         # for _t in self._templates:
         for _t in self.templates:
             for _key in self.keys:
-                _dict[_key].append(_t.__dict__[_key])
+                _val = _t.__dict__[_key]
+                if _val is None:
+                    if _key == 'line_color':
+                        _val = 'blue'
+                    elif _key == 'line_width':
+                        _val = 1.
+                    elif _key == 'line_style':
+                        _val = '-'
+                _dict[_key].append(_val)
 
         self._cds = ColumnDataSource(_dict)
 

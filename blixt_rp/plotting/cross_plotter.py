@@ -191,9 +191,13 @@ class DataSource:
                 if _key not in list(templates.keys()):
                     templates[_key] = None
         self._templates = templates
-        if mask is None:
-            mask = np.array(np.ones(len(data[list(data.keys())[0]])), dtype=bool)
-        self.mask = mask
+        if 'mask' in list(data.keys()):
+            _mask = data['mask']
+        elif mask is None:
+            _mask = np.array(np.ones(len(data[list(data.keys())[0]])), dtype=bool)
+        else:
+            _mask = mask
+        self.mask = _mask
 
     def keys(self):
         return self._data.keys()
@@ -1001,7 +1005,7 @@ class CrossPlotter:
             """
         ))
 
-        data_change_callback =  CustomJS(
+        data_change_callback = CustomJS(
             args=dict(source=cds, filter=boolean_filter),
             code="""
             const new_filter = source.data['mask'];

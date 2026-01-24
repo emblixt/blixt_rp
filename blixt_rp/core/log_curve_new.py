@@ -318,6 +318,7 @@ class LogCurve(object):
         self._style = style
 
     from blixt_rp.core.core import Template
+
     def __len__(self):
         return len(self.data)
 
