@@ -143,6 +143,24 @@ class LogPlotter:
         return int(self.width / n_cols)
 
     @property
+    def logs(self) -> list:
+        logs = []
+        for _column in self.columns:
+            for _line in _column.lines:
+                if _line.name not in logs:
+                    logs.append(_line.name)
+        return logs
+
+    @property
+    def units(self) -> list:
+        units = []
+        for _column in self.columns:
+            for _line in _column.lines:
+                if _line.units not in units:
+                    units.append(_line.units)
+        return units
+
+    @property
     def cds(self) -> ColumnDataSource:
         """
         Returns a merged CDS for all Line objects in all columns.
@@ -167,9 +185,11 @@ class LogPlotter:
                             _line.name, _key, _col.name, len(_var), _len)
                         print_info(warn_txt, 'warning', logger)
                         continue
-                    _dict[_key] = _var
+                    #  _dict[_key] = _var
+                    _dict[_line.name] = _var
                     _i += 1
         _dict['mask'] = np.array([True] * _len)
+        # TODO The depth parameter is missing here!
 
         return ColumnDataSource(_dict)
 
@@ -264,7 +284,9 @@ class LogPlotter:
 
         # Initialize the Cutoffs table and its controls
         table_cds = _cutoffs_table.cds
-        table, add_row, delete_row, update, use = _cutoffs_table.draw(table_cds, parameters=None, units=None)
+        table, add_row, delete_row, update, use = _cutoffs_table.draw(table_cds,
+                                                                      parameters=self.logs,
+                                                                      units=self.units)
 
         def apply_mask_function():
             if _cutoffs_table is not None:
@@ -275,6 +297,7 @@ class LogPlotter:
 
             for _key in list(common_cds.data.keys()):
                 common_cds.data[_key][_mask_ct] = np.nan
+            print('XXX: Trying to apply mask')
 
         def reset_mask_function():
             common_cds = ColumnDataSource(dict(deepcopy(self.original_cds.data)))
@@ -505,6 +528,14 @@ class Line:
             return np.nanmax(self._x)
         else:
             return np.nanmax(self.cds.data[self.x])
+
+    @property
+    def units(self) -> str:
+        units = ''
+        if self.style is not None and self.style.units is not None:
+            units = self.style.units
+        return units
+
 
     def x_range(self, from_style=False):
         _min = None
@@ -1033,6 +1064,7 @@ class TestCases(unittest.TestCase):
         c1 = LogColumn('c1', lines=[line2, line3], rel_width=2)
         lp.columns = [c2, c1]
         common_cds = lp.cds
+        print(common_cds.data.keys())
         grid = lp.draw()
         table, add_row, delete_row, update, apply_mask, reset_mask = lp.add_cutoffs_table(
             common_cds=common_cds, cutoffs=cutoffs)
