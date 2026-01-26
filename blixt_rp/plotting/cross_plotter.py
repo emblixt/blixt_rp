@@ -182,6 +182,7 @@ class DataSource:
             False means the data is masked out
         """
         from blixt_rp.core.core import Template
+        # TODO Add methods that returns all variables, and all units. These are useful when setting up a CutoffsTable
         self._name = name
         self._data = data
         if templates is None:

@@ -168,6 +168,8 @@ class LogPlotter:
         Note that it will only work if all Line objects have CDS, and that they are equal in length
         :return:
         """
+        # TODO This construct of a CDS is not helpful nor usefule. SHOULD BE REMOVED
+        # TODO Instead, the CDS should be created PRIOR to the initiation of the LogPlotter
         _dict = {}
         _i = 0
         _len = 0
