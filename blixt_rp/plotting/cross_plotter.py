@@ -182,7 +182,6 @@ class DataSource:
             False means the data is masked out
         """
         from blixt_rp.core.core import Template
-        # TODO Add methods that returns all variables, and all units. These are useful when setting up a CutoffsTable
         self._name = name
         self._data = data
         if templates is None:
@@ -202,6 +201,17 @@ class DataSource:
 
     def keys(self):
         return self._data.keys()
+
+    @property
+    def variables(self):
+        return list(self._data.keys())
+
+    @property
+    def units(self):
+        units = []
+        for _value in list(self._templates.values()):
+            if _value.units is not None:
+                units.append(_value.units)
 
     @property
     def name(self):
@@ -1075,7 +1085,7 @@ class CrossPlotter:
 class TestCases(unittest.TestCase):
     def test_data(self, size_1: int = 500, size_2: int = 800):
         from blixt_rp.core.core import Template, StratUnit, Interval, Intervals, CutoffRule, Cutoffs
-        from pint import Quantity as Q_
+        from blixt_rp import Q_
         md1 = Q_(np.linspace(1000., 2000., size_1), 'm')
         md2 = Q_(np.linspace(800., 2500., size_2), 'm')
         l1_1 = Q_(np.random.normal(10., 1., size_1), 'm')

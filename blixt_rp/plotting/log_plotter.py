@@ -4,7 +4,7 @@ import matplotlib as mpl
 
 import bokeh.plotting
 import numpy as np
-from pandas import DataFrame
+from pandas import DataFrame, cut
 import logging
 import sys, os
 from copy import deepcopy
@@ -147,8 +147,10 @@ class LogPlotter:
         logs = []
         for _column in self.columns:
             for _line in _column.lines:
-                if _line.name not in logs:
-                    logs.append(_line.name)
+                if _line.x not in logs:
+                    logs.append(_line.x)
+            if _line.y not in logs:
+                logs.append(_line.y)
         return logs
 
     @property
@@ -158,42 +160,45 @@ class LogPlotter:
             for _line in _column.lines:
                 if _line.units not in units:
                     units.append(_line.units)
+        # Also add units for the depth variables:
+        units.append('m')
+        units.append('ms')
         return units
 
-    @property
-    def cds(self) -> ColumnDataSource:
-        """
-        Returns a merged CDS for all Line objects in all columns.
-        This is necessary when using the BooleanFilter possibility of a CDS on each LogColumn
-        Note that it will only work if all Line objects have CDS, and that they are equal in length
-        :return:
-        """
-        # TODO This construct of a CDS is not helpful nor usefule. SHOULD BE REMOVED
-        # TODO Instead, the CDS should be created PRIOR to the initiation of the LogPlotter
-        _dict = {}
-        _i = 0
-        _len = 0
-        for _col in self.columns:
-            for _line in _col.lines:
-                if _line.cds is None:
-                    err_txt = 'Line {} in column {} has no source (CDS)'.format(_line.name, _col.name)
-                    print_info(err_txt, 'error', logger, 'IOError')
-                    continue
-                for _key, _var in _line.cds.data.items():
-                    if _i == 0:
-                        _len = len(_var)
-                    elif _len != len(_var):
-                        warn_txt = 'Line {}({}) in column {} with length: {} differs from previous lengths: {}'.format(
-                            _line.name, _key, _col.name, len(_var), _len)
-                        print_info(warn_txt, 'warning', logger)
-                        continue
-                    #  _dict[_key] = _var
-                    _dict[_line.name] = _var
-                    _i += 1
-        _dict['mask'] = np.array([True] * _len)
-        # TODO The depth parameter is missing here!
+    # @property
+    # def cds(self) -> ColumnDataSource:
+    #     """
+    #     Returns a merged CDS for all Line objects in all columns.
+    #     This is necessary when using the BooleanFilter possibility of a CDS on each LogColumn
+    #     Note that it will only work if all Line objects have CDS, and that they are equal in length
+    #     :return:
+    #     """
+    #     # TODO This construct of a CDS is not helpful nor useful. SHOULD BE REMOVED
+    #     # TODO Instead, the CDS should be created PRIOR to the initiation of the LogPlotter
+    #     _dict = {}
+    #     _i = 0
+    #     _len = 0
+    #     for _col in self.columns:
+    #         for _line in _col.lines:
+    #             if _line.cds is None:
+    #                 err_txt = 'Line {} in column {} has no source (CDS)'.format(_line.name, _col.name)
+    #                 print_info(err_txt, 'error', logger, 'IOError')
+    #                 continue
+    #             for _key, _var in _line.cds.data.items():
+    #                 if _i == 0:
+    #                     _len = len(_var)
+    #                 elif _len != len(_var):
+    #                     warn_txt = 'Line {}({}) in column {} with length: {} differs from previous lengths: {}'.format(
+    #                         _line.name, _key, _col.name, len(_var), _len)
+    #                     print_info(warn_txt, 'warning', logger)
+    #                     continue
+    #                 #  _dict[_key] = _var
+    #                 _dict[_line.name] = _var
+    #                 _i += 1
+    #     _dict['mask'] = np.array([True] * _len)
+    #     # TODO The depth parameter is missing here!
 
-        return ColumnDataSource(_dict)
+    #     return ColumnDataSource(_dict)
 
     def add_settings(self, grid: gridplot, width=None):
         from blixt_rp.core.core import TemplatesTable
@@ -988,31 +993,6 @@ def select_line(grid: gridplot, line_name: str) -> bokeh.models.Line | None:
     return _line
 
 
-def test_data():
-    from blixt_rp.core.seismic import SeismicTraces
-    las_file3 = os.path.join(test_file_dir, "Well F.las")
-
-    x1 = np.random.normal(0., 1., test_data_length)
-    y1 = np.linspace(500, 3500, test_data_length)
-    line1 = Line(x='x', y='y',
-                 cds=ColumnDataSource(dict(
-                     x=x1,
-                     y=y1)),
-                 style=Template(**{'name': "Temp.", 'line_color': "blue", 'line_width': 2}))
-    line2 = Line(x='x', y='y',
-                 cds=ColumnDataSource(dict(
-                    x=np.random.normal(10., 1., 500),
-                    y=np.linspace(1000., 2000., 500))),
-                 style=Template(name="D2", line_color="red", line_width=1))
-    line3 = Line(x='x', y='y',
-                 cds=ColumnDataSource(dict(
-                     x=np.random.normal(100., 1., 500),
-                     y=np.linspace(1000., 2000., 500))),
-                 style=Template(name="D3", line_color="yellow", line_width=2))
-    seismic1 = SeismicTraces()
-
-    return las_file3, line1, line2, line3, seismic1
-
 
 class TestCases(unittest.TestCase):
     def test_log_plotter1(self):
@@ -1023,15 +1003,18 @@ class TestCases(unittest.TestCase):
         self.assertTrue(lp.width == 600)
 
     def test_line(self):
-        _, line1, _, _, _ = test_data()
-        print(len(line1))
-        p1 = figure(title="Line example", x_axis_label="x", y_axis_label="y")
+        from blixt_rp.plotting import cross_plotter
+        test = cross_plotter.TestCases()
+        ds1, ds2, wis, cutoffs = test.test_data()
+        cds = ds1.cds
+        line1 = Line(x='var_one', y='md', cds=cds, style=ds1.templates['var_one'])
+        p1 = figure(title="Line example", x_axis_label="var_one", y_axis_label="md")
         p1.line(x=line1.x, y=line1.y, source=line1.cds, **line1.line_args)
         self.assertIsInstance(line1, Line)
 
-        cds2 = ColumnDataSource(dict(deepcopy(line1.cds.data)))
-        cds2.data[line1.x][line1.cds.data[line1.x] > 1.1] = np.nan
-        cds2.data[line1.y][line1.cds.data[line1.x] > 1.1] = np.nan
+        cds2 = ColumnDataSource(dict(deepcopy(cds.data)))
+        cds2.data[line1.x][line1.cds.data[line1.x] > 10.1] = np.nan
+        cds2.data[line1.y][line1.cds.data[line1.x] > 10.1] = np.nan
         p2 = figure(title="Masked line example", x_axis_label="x", y_axis_label="y")
         p2.line(x=line1.x, y=line1.y, source=cds2, **line1.line_args)
 
