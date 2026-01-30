@@ -25,7 +25,7 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', 
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from blixt_utils.utils import print_info, add_one, fix_well_name, cycle_colors, isnan
+from blixt_utils.utils import add_one, fix_well_name, cycle_colors, isnan
 from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
 
@@ -254,6 +254,7 @@ class CutoffRule:
             Name of the rule
             Useful for classifying data according to a set of rules sharing the same name
         """
+        from blixt_utils.utils import print_info
         raise_unit_error = False
         self.interval_cutoff = False
 
@@ -668,6 +669,7 @@ class Cutoffs:
         :param cutoffs:
             List of CutOffRules
         """
+        from blixt_utils.utils import print_info
         self.name = name
         if cutoffs is None:
             cutoffs = []
@@ -693,6 +695,7 @@ class Cutoffs:
         return ', '.join([str(m) for m in self.cutoffs])
 
     def append(self, new_cutoffs):
+        from blixt_utils.utils import print_info
         if isinstance(new_cutoffs, list):
             for i, co in enumerate(new_cutoffs[:]):
                 if co.param in self.cutoff_params:

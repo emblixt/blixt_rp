@@ -28,7 +28,6 @@ sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 
 # from blixt_utils.misc.templates import necessary_keys
-from blixt_utils.utils import print_info
 from blixt_rp.core.core import Template, LogTable
 from blixt_rp.core.seismic import SeismicTraces, seismic_color_map
 from blixt_rp import Q_
@@ -165,41 +164,6 @@ class LogPlotter:
         units.append('ms')
         return units
 
-    # @property
-    # def cds(self) -> ColumnDataSource:
-    #     """
-    #     Returns a merged CDS for all Line objects in all columns.
-    #     This is necessary when using the BooleanFilter possibility of a CDS on each LogColumn
-    #     Note that it will only work if all Line objects have CDS, and that they are equal in length
-    #     :return:
-    #     """
-    #     # TODO This construct of a CDS is not helpful nor useful. SHOULD BE REMOVED
-    #     # TODO Instead, the CDS should be created PRIOR to the initiation of the LogPlotter
-    #     _dict = {}
-    #     _i = 0
-    #     _len = 0
-    #     for _col in self.columns:
-    #         for _line in _col.lines:
-    #             if _line.cds is None:
-    #                 err_txt = 'Line {} in column {} has no source (CDS)'.format(_line.name, _col.name)
-    #                 print_info(err_txt, 'error', logger, 'IOError')
-    #                 continue
-    #             for _key, _var in _line.cds.data.items():
-    #                 if _i == 0:
-    #                     _len = len(_var)
-    #                 elif _len != len(_var):
-    #                     warn_txt = 'Line {}({}) in column {} with length: {} differs from previous lengths: {}'.format(
-    #                         _line.name, _key, _col.name, len(_var), _len)
-    #                     print_info(warn_txt, 'warning', logger)
-    #                     continue
-    #                 #  _dict[_key] = _var
-    #                 _dict[_line.name] = _var
-    #                 _i += 1
-    #     _dict['mask'] = np.array([True] * _len)
-    #     # TODO The depth parameter is missing here!
-
-    #     return ColumnDataSource(_dict)
-
     def add_settings(self, grid: gridplot, width=None):
         from blixt_rp.core.core import TemplatesTable
 
@@ -296,18 +260,23 @@ class LogPlotter:
                                                                       units=self.units)
 
         def apply_mask_function():
+            _data = dict(common_cds.data)
             if _cutoffs_table is not None:
                 _mask_ct = _cutoffs_table.create_mask(table_cds, common_cds, verbose=True)
                 _active_cutoffs = _cutoffs_table.active_cutoffs(table_cds)
+                print('XXX: Trying to apply mask using: ', _active_cutoffs)
             else:
                 _mask_ct = np.ones(len(common_cds.data['mask']), dtype=bool)
+                print('XXX: Trying to apply mask with all data unmasked')
 
-            for _key in list(common_cds.data.keys()):
-                common_cds.data[_key][_mask_ct] = np.nan
-            print('XXX: Trying to apply mask')
+            for _key in list(_data.keys()):
+                if _key == 'mask':
+                    continue
+                _data[_key][~_mask_ct] = np.nan
+            common_cds.data = _data
 
         def reset_mask_function():
-            common_cds = ColumnDataSource(dict(deepcopy(self.original_cds.data)))
+            common_cds.data = dict(deepcopy(self.original_cds.data))
 
         # Add buttons that applies and resets the mask
         apply_mask = Button(label='Apply masks', button_type='success')
@@ -316,6 +285,7 @@ class LogPlotter:
         reset_mask.on_click(reset_mask_function)
         # This is a test to see if reset_mask can update the plot
         # reset_mask.js_on_click(CustomJS(args=args_dict, code=self.js_code()))
+        # table_cds.js_on_change('patching', CustomJS(code="""console.log('Change in Common CDS');"""))
 
         return table, add_row, delete_row, update, apply_mask, reset_mask
 
@@ -656,6 +626,7 @@ def add_lines(_p: bokeh.plotting.figure,
     :param _column:
     :return:
     """
+    from blixt_utils.utils import print_info
     extra_axes = []
     for j, _line in enumerate(_column.lines):
         _legend_label = _line.line_args['legend_label']
@@ -666,7 +637,7 @@ def add_lines(_p: bokeh.plotting.figure,
                 _p.line(x=_line.x, y=_line.y, name=_line.name,  **_line.line_args)
             else:
                 _p.line(x=_line.x, y=_line.y, source=_line.cds, name=_line.name, **_line.line_args)
-            _p.xaxis.axis_label = _legend_label
+            _p.xaxis.axis_label = '{} [{}]'.format(_legend_label, _line.units)
             _p.x_range = Range1d(*_line.x_range(from_style=True))
             # print('XXX', _p.x_range.start, _p.x_range.end)
         else:
@@ -676,12 +647,12 @@ def add_lines(_p: bokeh.plotting.figure,
             else:
                 _p.line(x=_line.x, y=_line.y, source=_line.cds, name=_line.name, **_line.line_args, x_range_name=_legend_label)
             if _column.scale == 'log':
-                this_ax = LogAxis(axis_label=_legend_label, x_range_name=_legend_label,
+                this_ax = LogAxis(axis_label='{} [{}]'.format(_legend_label, _line.units), x_range_name=_legend_label,
                                      axis_label_text_font_size='10px',
                                      major_label_text_font_size = '10px',  # )  # ,
                                      axis_label_standoff=0)  # this only adds space between new axes and its label
             else:
-                this_ax = LinearAxis(axis_label=_legend_label, x_range_name=_legend_label,
+                this_ax = LinearAxis(axis_label='{} [{}]'.format(_legend_label, _line.units), x_range_name=_legend_label,
                                      axis_label_text_font_size='10px',
                                      major_label_text_font_size = '10px',  # )  # ,
                                      axis_label_standoff=0)  # this only adds space between new axes and its label
@@ -992,6 +963,16 @@ def select_line(grid: gridplot, line_name: str) -> bokeh.models.Line | None:
             return _line
     return _line
 
+def test_data():
+    # Builds some line objects using a common CDS
+    from blixt_rp.plotting import cross_plotter
+    test = cross_plotter.TestCases()
+    ds1, ds2, wis, cutoffs = test.test_data()
+    cds = ds1.cds
+    line1 = Line(x='var_one', y='md', cds=cds, style=ds1.templates['var_one'])
+    line2 = Line(x='var_two', y='md', cds=cds, style=ds1.templates['var_two'])
+    line3 = Line(x='var_three', y='md', cds=cds, style=ds1.templates['var_three'])
+    return cds, line1, line2, line3, wis, cutoffs
 
 
 class TestCases(unittest.TestCase):
@@ -1003,11 +984,7 @@ class TestCases(unittest.TestCase):
         self.assertTrue(lp.width == 600)
 
     def test_line(self):
-        from blixt_rp.plotting import cross_plotter
-        test = cross_plotter.TestCases()
-        ds1, ds2, wis, cutoffs = test.test_data()
-        cds = ds1.cds
-        line1 = Line(x='var_one', y='md', cds=cds, style=ds1.templates['var_one'])
+        cds, line1, line2, line3, wis, cutoffs = test_data()
         p1 = figure(title="Line example", x_axis_label="var_one", y_axis_label="md")
         p1.line(x=line1.x, y=line1.y, source=line1.cds, **line1.line_args)
         self.assertIsInstance(line1, Line)
@@ -1021,7 +998,7 @@ class TestCases(unittest.TestCase):
         show(row(p1, p2))
 
     def test_column_with_lines(self):
-        _, line1, line2, line3, _ = test_data()
+        _, line1, line2, line3, _, _ = test_data()
         c1 = LogColumn('c1', lines=[line1, line2, line3])
 
         p = create_column_figure(c1, None, None, 300, 600, True, True, True, None)
@@ -1030,7 +1007,7 @@ class TestCases(unittest.TestCase):
         self.assertTrue(True)
 
     def test_two_column_plot(self):
-        _, line1, line2, line3, _ = test_data()
+        _, line1, line2, line3, _, _ = test_data()
         lp = LogPlotter(width=800, height=1000)
         c2 = LogColumn('c2', lines=[line1, line2])
         c1 = LogColumn('c1', lines=[line1, line2, line3], rel_width=2)
@@ -1040,15 +1017,11 @@ class TestCases(unittest.TestCase):
 
     def test_cutoffs(self, unit_test=True):
         from blixt_rp.core.core import CutoffRule, Cutoffs
-        _, line1, line2, line3, _ = test_data()
-        rule1 = CutoffRule('var_one', '>', Q_(10, 'm'))
-        rule2 = CutoffRule('var_two', '<', Q_(101, 'm/s'))
-        cutoffs = Cutoffs(cutoffs=[rule1, rule2])
+        common_cds, line1, line2, line3, _, cutoffs = test_data()
         lp = LogPlotter(width=800, height=1000)
         c2 = LogColumn('c2', lines=[line2])
         c1 = LogColumn('c1', lines=[line2, line3], rel_width=2)
         lp.columns = [c2, c1]
-        common_cds = lp.cds
         print(common_cds.data.keys())
         grid = lp.draw()
         table, add_row, delete_row, update, apply_mask, reset_mask = lp.add_cutoffs_table(

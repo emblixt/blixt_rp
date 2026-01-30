@@ -183,7 +183,6 @@ class DataSource:
         """
         from blixt_rp.core.core import Template
         self._name = name
-        self._data = data
         if templates is None:
             templates = {}
         if data is not None:
@@ -195,9 +194,13 @@ class DataSource:
             _mask = data['mask']
         elif mask is None:
             _mask = np.array(np.ones(len(data[list(data.keys())[0]])), dtype=bool)
+            data['mask'] = _mask
         else:
             _mask = mask
+            data['mask'] = _mask
         self.mask = _mask
+
+        self._data = data
 
     def keys(self):
         return self._data.keys()
