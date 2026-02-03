@@ -28,13 +28,13 @@ from blixt_rp.core.core import Template, LogTable, Intervals, Cutoffs, CutoffRul
 from blixt_rp.core.well_new import Well
 from blixt_rp.core.project_new import Project
 import blixt_rp.plotting.plot_logs_new as bupp
-from blixt_rp.plotting.log_plotter import LogColumn, Line, add_lines, add_strat_table, LogPlotter, select_column
+from blixt_rp.plotting.log_plotter import LogColumn, Line, add_lines, add_strat_table, LogPlotter, select_column, select_line
 from blixt_rp.core.seismic import SeismicTraces, interpolate_along_offset
 
-output_file('C:\\Users\emb\\Documents\\plot.html')
 test_file_dir = str(os.path.dirname(__file__).replace(
     'blixt_rp\\unit_tests',
     'test_data'))
+output_file(os.path.join(test_file_dir, 'plot.html'))
 
 project_table = os.path.join(test_file_dir.replace('test_data', 'excels'), 'project_table_new.xlsx')
 project_table2 = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\\PL1221\\PL1221 project_new.xlsx"
@@ -58,10 +58,11 @@ log_table1 = LogTable({'Density': 'rhob', 'Sonic': 'dt'})
 log_table2 = LogTable({'Resistivity': 'rdep', 'Sonic': 'dt'})
 log_table3 = LogTable({'Density': 'rho_brine', 'P velocity': 'vp_brine', 'S velocity': 'vs_brine'})
 
+
 class TestPlot(unittest.TestCase):
 
     def test_log_plotter(self):
-        from blixt_rp.plotting.log_plotter import select_column, select_line
+
         log_table = LogTable({
             'P velocity': ['Vp_dry', 'Vp_Sg08'],
             'Porosity': ['PHIE'],
@@ -82,7 +83,6 @@ class TestPlot(unittest.TestCase):
         # show(grid)
 
     def test_log_plotter_with_settings(self):
-        from blixt_rp.plotting.log_plotter import select_column, select_line
         log_table = LogTable({
             'P velocity': ['Vp_dry', 'Vp_Sg08'],
             'Porosity': ['PHIE'],
@@ -115,7 +115,7 @@ class TestPlot(unittest.TestCase):
         plotter = bupp.plot_logs(well1, column_content, rel_widths=[1., 1., 1.])
         plot_cds = plotter.cds
         grid = plotter.draw()
-        cutoffs, add_row, delete_row, update, use  = plotter.draw_cutoffs_table(grid, rules=[rule1, rule2, rule3])
+        cutoffs, add_row, delete_row, update, use = plotter.draw_cutoffs_table(grid, rules=[rule1, rule2, rule3])
         show(row(grid, cutoffs))
 
     def test_plot_with_backus(self):
@@ -381,6 +381,7 @@ class TestPlot(unittest.TestCase):
             trace_type='chi')
 
         plotter = LogPlotter(width=800, height=1000)
+        # TODO This needs to be rewritten to fulfill the requirement that the CDS is mandatory
         line = Line(x=vp.values * rho.values, y=vp.depth.values, style=Template(
             **{'name': 'AI'} ))
         c1 = LogColumn('AI', lines=[line], rel_width=1)

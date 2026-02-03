@@ -183,7 +183,6 @@ class DataSource:
         """
         from blixt_rp.core.core import Template
         self._name = name
-        self._data = data
         if templates is None:
             templates = {}
         if data is not None:
@@ -191,12 +190,31 @@ class DataSource:
                 if _key not in list(templates.keys()):
                     templates[_key] = None
         self._templates = templates
-        if mask is None:
-            mask = np.array(np.ones(len(data[list(data.keys())[0]])), dtype=bool)
-        self.mask = mask
+        if 'mask' in list(data.keys()):
+            _mask = data['mask']
+        elif mask is None:
+            _mask = np.array(np.ones(len(data[list(data.keys())[0]])), dtype=bool)
+            data['mask'] = _mask
+        else:
+            _mask = mask
+            data['mask'] = _mask
+        self.mask = _mask
+
+        self._data = data
 
     def keys(self):
         return self._data.keys()
+
+    @property
+    def variables(self):
+        return list(self._data.keys())
+
+    @property
+    def units(self):
+        units = []
+        for _value in list(self._templates.values()):
+            if _value.units is not None:
+                units.append(_value.units)
 
     @property
     def name(self):
@@ -1001,7 +1019,7 @@ class CrossPlotter:
             """
         ))
 
-        data_change_callback =  CustomJS(
+        data_change_callback = CustomJS(
             args=dict(source=cds, filter=boolean_filter),
             code="""
             const new_filter = source.data['mask'];
@@ -1070,7 +1088,7 @@ class CrossPlotter:
 class TestCases(unittest.TestCase):
     def test_data(self, size_1: int = 500, size_2: int = 800):
         from blixt_rp.core.core import Template, StratUnit, Interval, Intervals, CutoffRule, Cutoffs
-        from pint import Quantity as Q_
+        from blixt_rp import Q_
         md1 = Q_(np.linspace(1000., 2000., size_1), 'm')
         md2 = Q_(np.linspace(800., 2500., size_2), 'm')
         l1_1 = Q_(np.random.normal(10., 1., size_1), 'm')

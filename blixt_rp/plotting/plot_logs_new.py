@@ -89,10 +89,14 @@ def plot_logs(well: cw.Well,
         [1., 2., 1.
     :return:
     """
-    # TODO Move the following lines to a new class (LineSource) in log_plotter.py
-    # To be able to use a cutoff on the well log data, we need to harmonize the logs to have the same
-    # length and sample rate
-    well.harmonize_logs()
+    from bokeh.models import BooleanFilter, CDSView
+
+    # TODO First create one (ONE) single source from the well, and then re-use this source in all the Lines
+    # All this is necessary if we want to be able to use cutoffs to mask out data
+    data_source = well.data_source()
+    common_cds = data_source.cds
+    boolean_filter = BooleanFilter(booleans=common_cds.data['mask'])
+    view = CDSView(filter=boolean_filter)
 
     # Check that the requested logs exists in the well
     # flat_list = [ x for xs in log_columns for x in xs ]
@@ -128,7 +132,8 @@ def plot_logs(well: cw.Well,
                 rel_width=rel_widths[_i],
                 # TODO First create one (ONE) single source from the well, and then re-use this source in all the
                 # TODO different columns, and with a CDSView too
-                lines=[well.get_log_curve(_l).get_line() for _l in _c],
+                # lines=[well.get_log_curve(_l).get_line() for _l in _c],
+                lines=[Line(x=_l, y='depth', cds=common_cds, view=view, style=data_source.templates[_l]) for _l in _c],
                 scale=scales[_i])
         )
     # for i, _c in enumerate(plot_columns):
