@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pint import Quantity as Q_
 
-from blixt_rp.rp.rp_core_new import LithoFluid, LithoFluids, LithoFluidsTable
+from blixt_rp.core.core import LithoFluid, LithoFluids, LithoFluidsTable
 
 # Add to path to avoid having to install libraries, useful in development
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
@@ -13,7 +13,7 @@ sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 from blixt_rp.core.models import (Model, Layer, ModelTable, ModelLayer, LaminarModel,
                                   plot_wiggles, build_layered_model, laminar_model_analysis,
-                                  build_saturation_wedge, detect_change_in_cases)
+                                  build_saturation_wedge, detect_change_in_cases, build_wedge)
 import blixt_utils.misc.wavelets as bumw
 
 l1 = {'vp': 3000, 'vs': 1820, 'rho': 2.6}
@@ -209,7 +209,6 @@ class TestCase(unittest.TestCase):
     def test_model_table(self, unit_test=True):
         from bokeh.io import output_file
         from bokeh.plotting import show, row, column
-        import blixt_rp.rp.rp_core_new as brrp
         excel_file = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\PL1221\\SumsAndAverages.xlsx"
         output_file('C:\\Users\\emb\\Downloads\\plot.html')
         lfs = LithoFluids()

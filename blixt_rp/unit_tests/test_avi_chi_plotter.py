@@ -11,7 +11,7 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_te
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-import blixt_rp.rp.rp_core_new as brrp
+from blixt_rp.core.core import LithoFluids, LithoFluid, LithoFluidsTable
 import blixt_rp.plotting.avo_chi_plotter as brap
 
 output_file('C:\\Users\emb\Documents\plot.html')
@@ -85,7 +85,7 @@ class SomeTests(unittest.TestCase):
         # This script is called  by the main.py script under blixt_projects/bokeh_testing
         # And can be invoked by calling:
         # C:\Users\emb\Documents\PycharmProjects\blixt_projects>C:\Users\emb\Documents\PycharmProjects\venv\Scripts\bokeh serve --show bokeh_testing
-        import blixt_rp.rp.rp_core_new as brrp
+        from blixt_rp.core.core import LithoFluid, LithoFluids, LithoFluidsTable
         import blixt_rp.plotting.avo_chi_plotter as brap
         litho_fluids_list = []
         for _name in ['shale', 'brine_sst', 'oil_sst']:

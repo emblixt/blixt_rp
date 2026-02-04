@@ -1,18 +1,19 @@
 setuptools~=70.0
 openpyxl~=3.1.0
 scipy~=1.13
+# bruges requires pkg_resources, which was deprecated in favor of importlib.resources in python 3.12
 bruges~=0.5.4
+pkg_resources
 tqdm~=4.56.0
 re~=2.2.1
 json~=2.0.9
 logging~=0.5.1.2
 pandas~=1.1.0
 pywt~=1.1.1
-blixt_utils~=0.1.0
-
 matplotlib~=3.5.2
 seaborn~=0.11.2
 xarray~=2024.5.0
 segyio~=1.9.12
+pyzgy
 pint~=0.23
-pint-xarray~=0.3
+bokeh

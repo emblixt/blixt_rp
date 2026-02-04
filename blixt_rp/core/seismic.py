@@ -41,7 +41,7 @@ from blixt_utils.utils import print_info
 
 # global variables
 # output_file('C:\\Users\marte\Documents\plot.html')
-output_file('C:\\Users\emb\\Documents\\plot.html')
+output_file(os.path.join(project_dir, 'blixt_rp\\test_data\\plot.html'))
 logger = logging.getLogger(__name__)
 clrs = list(mcolors.BASE_COLORS.keys())
 clrs.remove('w')
@@ -874,11 +874,11 @@ def avo_ig(amp, ang):
 
 
 def pickle_test_data():
-    filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\SEISMIC DATA\KPSDM-NEAR_10deg_cropped.sgy"
+    filename = "U:\\COMMON\\SAAS DEVELOPMENT\\TEST_DATA\\SEISMIC DATA\\KPSDM-NEAR_10deg_cropped.sgy"
     near, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
-    filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\SEISMIC DATA\KPSDM-MID_18deg_cropped.sgy"
+    filename = "U:\\COMMON\\SAAS DEVELOPMENT\\TEST_DATA\\SEISMIC DATA\\KPSDM-MID_18deg_cropped.sgy"
     mid, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
-    filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\SEISMIC DATA\KPSDM-FAR_26deg_cropped.sgy"
+    filename = "U:\\COMMON\\SAAS DEVELOPMENT\\TEST_DATA\\SEISMIC DATA\\KPSDM-FAR_26deg_cropped.sgy"
     far, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
 
     inline = 6550
@@ -1117,8 +1117,9 @@ def seismic_data_plot(_type:str) -> figure:
         max_val = np.nanmax(cds.data['value'])
         _seismic_color_map = seismic_color_map(min_val=min_val, max_val=max_val)
         p.image('value', source=cds,
-                # TODO The dh and dw below might be wrong!
-                color_mapper=_seismic_color_map, dh=cds.data['value'].shape[1], dw=cds.data['value'].shape[0], x=0, y=0)
+                # TODO The seismic seems upside down!
+                color_mapper=_seismic_color_map, dh=cds.data['value'][0].shape[1], dw=cds.data['value'][0].shape[0],
+                x=0, y=-1. * cds.data['value'][0].shape[1])
 
     elif _type == 'avo section':
         _synts = StochasticSyntheticTraces(n_reflectors=10)
@@ -1133,7 +1134,8 @@ def seismic_data_plot(_type:str) -> figure:
 class TestCases(unittest.TestCase):
 
     def test_seismic_data_plot(self):
-        p = seismic_data_plot('seismic section')
+        # p = seismic_data_plot('seismic section')
+        p = seismic_data_plot('avo section')
         show(p)
 
     def test_interpolate(self):
@@ -1289,11 +1291,11 @@ class TestCases(unittest.TestCase):
 
 
     def test_plot_amp_vs_offset(self):
-        filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\Test_angle_stacks\KPSDM-NEAR_10deg_cropped.sgy"
+        filename = "U:\\COMMON\\SAAS DEVELOPMENT\\TEST_DATA\\Test_angle_stacks\\KPSDM-NEAR_10deg_cropped.sgy"
         near, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
-        filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\Test_angle_stacks\KPSDM-MID_18deg_cropped.sgy"
+        filename = "U:\\COMMON\\SAAS DEVELOPMENT\\TEST_DATA\\Test_angle_stacks\\KPSDM-MID_18deg_cropped.sgy"
         mid, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
-        filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\Test_angle_stacks\KPSDM-FAR_26deg_cropped.sgy"
+        filename = "U:\\COMMON\\SAAS DEVELOPMENT\\TEST_DATA\\Test_angle_stacks\\KPSDM-FAR_26deg_cropped.sgy"
         far, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
 
         inline = 6550
@@ -1328,7 +1330,7 @@ class TestCases(unittest.TestCase):
 
 
     def test_plot_line(self):
-        filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\Test_angle_stacks\KPSDM-NEAR_10deg_cropped.sgy"
+        filename = "U:\\COMMON\\SAAS DEVELOPMENT\\TEST_DATA\\Test_angle_stacks\\KPSDM-NEAR_10deg_cropped.sgy"
         data, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
         print(header)
         uu={'add_colorbar':False,'robust':True,'interpolation':'spline16'}
@@ -1339,7 +1341,7 @@ class TestCases(unittest.TestCase):
 
     def test_amp_spectra(self):
         from blixt_rp.core.wavelets import plot_cwt
-        filename = "U:\COMMON\SAAS DEVELOPMENT\TEST_DATA\Test_angle_stacks\KPSDM-NEAR_10deg_cropped.sgy"
+        filename = "U:\\COMMON\\SAAS DEVELOPMENT\\TEST_DATA\\Test_angle_stacks\\KPSDM-NEAR_10deg_cropped.sgy"
         data, nsamples, sr, twt, ntraces, header, ilines, xlines = uio.read_segy(filename, byte_il=189, byte_xl=193)
 
         inline = 6550

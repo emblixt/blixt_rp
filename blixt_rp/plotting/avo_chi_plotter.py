@@ -26,7 +26,7 @@ sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 import blixt_rp.rp_utils.avo_monte_carlo as havo
-import blixt_rp.rp.rp_core_new as brrp
+from blixt_rp.core.core import LithoFluid, LithoFluids
 import blixt_rp.rp.rp_core as rp
 
 tools = [
@@ -52,7 +52,7 @@ def create_litho_fluids_table(
     """
     Adds the different litho fluids listed in _litho_fluids to a table which can be further used in the AVO modelling
     :param _litho_fluids:
-        List of litho fluids brrp.LithoFluid
+        List of litho fluids LithoFluid
     :param _width:
     :return:
     """
@@ -254,10 +254,10 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
     if sums_average_file is None:
         litho_fluids_list = []
         for _name in ['shale', 'brine_sst', 'oil_sst', 'gas_sst']:
-            rt = brrp.LithoFluid(default=_name)
+            rt = LithoFluid(default=_name)
             litho_fluids_list.append(rt)
     else:
-        lfs = brrp.LithoFluids()
+        lfs = LithoFluids()
         lfs.from_excel(sums_average_file, avg_type)
         litho_fluids_list = lfs.litho_fluids
 
@@ -269,8 +269,8 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
     h = figure(width=600, height=200, tools=[PanTool(), WheelZoomTool()])
     h.toolbar.logo = None
     lf_table = create_litho_fluids_table(litho_fluids_list, 800)
-    # TODO Try using the new LithoFluidsTable object in rp_core_new.py instead
-    # my_lfs =  brrp.LithoFluidsTable(lfs)
+    # TODO Try using the new LithoFluidsTable object in core.py instead
+    # my_lfs =  LithoFluidsTable(lfs)
     # my_source = my_lfs.source
     # lf_table, add_row, delete_row, update_table = my_lfs.draw(my_source)
     # TODO It doesn't interact well with the other objects. Needs to be checked

@@ -7,7 +7,7 @@ from .. import ureg, Q_
 import pint
 
 from blixt_rp.core.models import Model, Layer
-from blixt_rp.rp.rp_core_new import LithoFluid
+from blixt_rp.core.core import LithoFluid
 import blixt_utils.utils as uu
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot

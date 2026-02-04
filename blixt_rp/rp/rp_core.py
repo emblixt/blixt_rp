@@ -55,7 +55,7 @@ def step(x_1, x_2, along_wiggle=False):
     of variable x.
     E.G. Delta X / X_avg according to eq. 4.6 in Avseth et. al 2011
 
-    For the 'along_wiggle' case we calculate the difference in acoustic impedence along  one track without any layer,
+    For the 'along_wiggle' case we calculate the difference in acoustic impedance along  one track without any layer,
     and the '_2' input variables are not used
     """
     if along_wiggle and isinstance(x_1, np.ndarray):

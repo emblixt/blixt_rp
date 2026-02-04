@@ -13,7 +13,7 @@ from .log_curve_new import LogCurve, Depth
 from .seismic import SeismicTraces
 from .. import ureg, Q_
 from ..plotting.plot_logs_new import get_wiggles_in_depth
-from ..rp.rp_core_new import LithoFluids, LithoFluidsTable
+from .core import LithoFluid, LithoFluids, LithoFluidsTable
 
 # sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
 # Instead of sys.path.append load all PyCharm projects in PyCharm, and they gets added to the sys.path automatically
@@ -30,8 +30,6 @@ import blixt_utils.io.io as uio
 from blixt_utils.utils import print_info
 
 logger = logging.getLogger(__name__)
-
-# TODO JUST A TEST TO SEE IF GIT IS WORKING IN CEGAL CETEGRA
 
 text_style = {'fontsize': 'x-small', 'bbox': {'facecolor': 'w', 'alpha': 0.5}}
 
@@ -1058,7 +1056,14 @@ def build_layered_model(depth_to_target, overburden_thickness, target_thickness,
     )
 
 
-def build_wedge(depth_to_wedge, from_thickness, to_thickness, n_traces, overburden, target, underburden, domain='TWT'):
+def build_wedge(
+        depth_to_wedge: pint.Quantity,
+        from_thickness: pint.Quantity,
+        to_thickness: pint.Quantity,
+        n_traces: int,
+        overburden: LithoFluid,
+        target: LithoFluid,
+        underburden: LithoFluid):
     """
     Returns a simple wedge model with constant elastic properties in the three layers of the model
 
@@ -1073,13 +1078,13 @@ def build_wedge(depth_to_wedge, from_thickness, to_thickness, n_traces, overburd
         int
         Number of traces
     :param overburden:
-        dict
+        LithoFluid
         with keys: 'vp', 'vs', and 'rho'
     :param target:
-        dict
+        LithoFluid
         with keys: 'vp', 'vs', and 'rho'
     :param underburden:
-        dict
+        LithoFluid
         with keys: 'vp', 'vs', and 'rho'
 
     """
@@ -1103,15 +1108,14 @@ def build_wedge(depth_to_wedge, from_thickness, to_thickness, n_traces, overburd
     def top(i):
         return top_thickness
 
-    top_layer = Layer(thickness=top, **overburden, domain=domain)
-    wedge_layer = Layer(thickness=wedge, **target, target=True, domain=domain)
-    base_layer = Layer(thickness=reverse_wedge, **underburden, domain=domain)
+    top_layer = Layer(thickness=top, overburden)
+    wedge_layer = Layer(thickness=wedge, target, target=True)
+    base_layer = Layer(thickness=reverse_wedge, underburden)
 
     return Model(
         depth_to_top=depth_to_wedge - top_thickness,
         layers=[top_layer, wedge_layer, base_layer],
-        trace_index_range=np.arange(n_traces),
-        domain=domain
+        trace_index_range=np.arange(n_traces)
     )
 
 
@@ -1346,7 +1350,7 @@ def laminar_model_analysis(
 
 
 class ModelLayer(Layer):
-    from blixt_rp.rp.rp_core_new import LithoFluid
+    from blixt_rp.core.core import LithoFluid
     """
     Class to hold one layer of a seismic model
     It has some overlap with the Layer class in blixt_rp.core.models.py, but is tuned towards using bokeh interactive
@@ -1810,7 +1814,7 @@ class ModelTable:
         :return:
         """
         from bokeh.models import DataTable, Button
-        from blixt_rp.rp.rp_core_new import LithoFluid
+        from blixt_rp.core.core import LithoFluid
 
         def add_row_function():
             new_data = dict(cds.data)
@@ -1903,7 +1907,7 @@ class LaminarModel:
 
     # TODO  Rewrite this to be a child object from ModelTable
 
-    from blixt_rp.rp.rp_core_new import LithoFluids
+    from blixt_rp.core.core import LithoFluids
     from blixt_rp.plotting.cross_plotter import DataSource
 
     def __init__(self,

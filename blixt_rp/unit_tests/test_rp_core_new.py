@@ -8,7 +8,7 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_te
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-import blixt_rp.rp.rp_core_new as brrp
+from blixt_rp.core.core import LithoFluid, LithoFluids, LithoFluidsTable
 
 excel_file = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\PL1221\\SumsAndAverages.xlsx"
 
