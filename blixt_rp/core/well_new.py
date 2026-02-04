@@ -569,8 +569,11 @@ class Well(object):
         _dict = {}
         if harmonize:
             self.harmonize_logs(down_sample=down_sample)
+        _log = None
         for _log in self.logs:
             _dict[_log.name] = _log.data  # Keep the units!
+        # Extract depth from the last log
+        _dict['depth'] = _log.depth.depth
 
         if cutoffs is not None:
             masks = []

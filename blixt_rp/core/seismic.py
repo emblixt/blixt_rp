@@ -1083,54 +1083,58 @@ def _load_angle_stacks(_angle_stacks, _voi, _inline, _xline, _verbose=False):
     return _seismic_cdss, _x, _y, _suffix
 
 
+def seismic_data_plot(_type:str) -> figure:
+    """
+    Creates a plot window with seismic data suitable for testing other functionality on
+    :param _type:
+        'seismic section',
+        'avo section',
+        'synthetic section'
+    :return:
+        Bokeh figure
+    """
+    p = figure()
+    if _type == 'seismic section':
+        near = AngleStack('near',
+                          "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-NEARSTACK_MIG-FIN_16bit.zgy",
+                          angle=10.)
+        mid = AngleStack('mid',
+                         "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-MIDSTACK_MIG-FIN_16bit.zgy",
+                         angle=18.)
+        far = AngleStack('far',
+                         "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-FARSTACK_MIG_FIN_16bit.zgy",
+                         angle=26.)
+        names = ['near', 'mid', 'far']
+        voi = VolumeOfInterest(
+            range(4800, 5200, 1),
+            range(32253, 32255, 1),
+            range(3000, 4000, 4))
+
+        xline = 32254
+        seismic_cdss, x, y, suffix = _load_angle_stacks([near, mid, far], voi, None, xline, True)
+        cds = ColumnDataSource(dict(value=[seismic_cdss[names[0]].T]))
+        min_val = np.nanmin(cds.data['value'])
+        max_val = np.nanmax(cds.data['value'])
+        _seismic_color_map = seismic_color_map(min_val=min_val, max_val=max_val)
+        p.image('value', source=cds,
+                # TODO The dh and dw below might be wrong!
+                color_mapper=_seismic_color_map, dh=cds.data['value'].shape[1], dw=cds.data['value'].shape[0], x=0, y=0)
+
+    elif _type == 'avo section':
+        _synts = StochasticSyntheticTraces(n_reflectors=10)
+        synts = _synts.get_traces(simulate_avo=True)
+        cds = ColumnDataSource({'value': [synts.T]})
+        _seismic_color_map = seismic_color_map(min_val=np.min(synts), max_val=np.max(synts))
+        p.image('value', source=cds,
+                color_mapper=_seismic_color_map, dh=synts.shape[1], dw=synts.shape[0], x=0, y=0)
+
+    return p
+
 class TestCases(unittest.TestCase):
 
-    def seismic_data_plot(self, _type:str) -> figure:
-        """
-        Creates a plot window with seismic data suitable for testing other functionality on
-        :param _type:
-            'seismic section',
-            'avo section',
-            'synthetic section'
-        :return:
-            Bokeh figure
-        """
-        p = figure()
-        if _type == 'seismic section':
-            near = AngleStack('near',
-                              "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-NEARSTACK_MIG-FIN_16bit.zgy",
-                              angle=10.)
-            mid = AngleStack('mid',
-                             "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-MIDSTACK_MIG-FIN_16bit.zgy",
-                             angle=18.)
-            far = AngleStack('far',
-                             "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-FARSTACK_MIG_FIN_16bit.zgy",
-                             angle=26.)
-            names = ['near', 'mid', 'far']
-            voi = VolumeOfInterest(
-                range(4800, 5200, 1),
-                range(32253, 32255, 1),
-                range(3000, 4000, 4))
-
-            xline = 32254
-            seismic_cdss, x, y, suffix = _load_angle_stacks([near, mid, far], voi, None, xline, True)
-            cds = ColumnDataSource(dict(value=[seismic_cdss[names[0]].T]))
-            min_val = np.nanmin(cds.data['value'])
-            max_val = np.nanmax(cds.data['value'])
-            _seismic_color_map = seismic_color_map(min_val=min_val, max_val=max_val)
-            p.image('value', source=cds,
-                    # TODO The dh and dw below might be wrong!
-                    color_mapper=_seismic_color_map, dh=cds.data['value'].shape[1], dw=cds.data['value'].shape[0], x=0, y=0)
-
-        elif _type == 'avo section':
-            _synts = StochasticSyntheticTraces(n_reflectors=10)
-            synts = _synts.get_traces(simulate_avo=True)
-            cds = ColumnDataSource({'value': [synts.T]})
-            _seismic_color_map = seismic_color_map(min_val=np.min(synts), max_val=np.max(synts))
-            p.image('value', source=cds,
-                    color_mapper=_seismic_color_map, dh=synts.shape[1], dw=synts.shape[0], x=0, y=0)
-
-        return p
+    def test_seismic_data_plot(self):
+        p = seismic_data_plot('seismic section')
+        show(p)
 
     def test_interpolate(self):
         from blixt_utils.plotting.log_plotter import LogColumn, LogPlotter

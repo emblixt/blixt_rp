@@ -221,12 +221,14 @@ class LogPlotter:
         source_callback = CustomJS(args=dict(source=cds, grid=grid, styles=line_dashes), code=code)
         cds.js_on_change('patching', source_callback)
 
+        # returns a settings table
         return table.draw(cds)
 
     def add_cutoffs_table(
-            self, common_cds: ColumnDataSource,
+            self,
+            common_cds: ColumnDataSource,
             cutoffs: Cutoffs | None = None,
-            width=None):
+            width: int | None = None):
         """
 
         :param common_cds:
@@ -529,6 +531,86 @@ class Line:
             _max = self.max
         return _min, _max
 
+class WellPlotter(LogPlotter):
+    """
+    Class for plotting well logs from one well
+    """
+    from blixt_rp.core.well_new import Well
+    from blixt_rp.core.core import Cutoffs
+    def __init__(self,
+                 well: Well,
+                 column_content: list,
+                 buffer: float | None = None,
+                 width: int | None = None,
+                 height: int | None = None,
+                 scales: list | None = None,
+                 rel_widths: list | None = None
+                 ):
+        """
+        Attempts to plot logs side by side, or together, in different "columns", utilizing the interactive plotting
+        possibilities in bokeh
+        :param well:
+            well object, new format from well_new.py
+        :param column_content:
+            list
+            List  of lists that contain the names of the logs to plot in each column
+            E.G.
+                [['rhob', 'neu'], ['vp', 'vs']]
+        :param buffer:
+            float
+            distance in meters
+            Log is plotted from top of working interval - buffer to base of working interval + buffer
+            Default is 50 m
+        :param width:
+        :param height:
+        :param scales:
+            list of strings determining the x scale of each column
+            ['log', 'linear'
+        :param rel_widths:
+            list of floats determining the relative width of each column
+            [1., 2., 1.
+        :return:
+        """
+        from blixt_utils.utils import print_info
+
+        # This is necessary if we want to be able to use cutoffs to mask out data
+        self.data_source = well.data_source()
+        self.cds = self.data_source.cds
+
+        # Check that the requested logs exists in the well
+        for _col in column_content:
+            # Iterate over a copy of the list by slicing!
+            for _log in _col[:]:
+                if _log not in well.get_log_names:
+                    print_info('Log {} does not exist in {}'.format(_log, well.name), 'warning', logger)
+                    # flat_list.remove(_log)
+                    _col.remove(_log)
+        if scales is None:
+            scales = ['linear'] * len(column_content)
+        if rel_widths is None:
+            rel_widths = [1.] * len(column_content)
+        if buffer is None:
+            buffer = 50.
+        if width is None:
+            width = 800.
+        if height is None:
+            height = 1000.
+
+        # Gather data that should be plotted in each of the columns
+        plot_columns = []
+        for _i, _c in enumerate(column_content):
+            plot_columns.append(
+                LogColumn(
+                    'column_{}'.format(str(_i)),
+                    rel_width=rel_widths[_i],
+                    # lines=[well.get_log_curve(_l).get_line() for _l in _c],
+                    lines=[Line(x=_l, y='depth', cds=self.cds, style=self.data_source.templates[_l]) for _l in _c],
+                    scale=scales[_i])
+            )
+        super().__init__(width=width, height=height, columns=plot_columns, tools=None)
+
+    def add_cutoffs_table(self, cutoffs: Cutoffs | None = None, width: int | None = None):
+        return super().add_cutoffs_table(self.cds, cutoffs, width)
 
 def create_column_figure(_column: LogColumn,
                          _w: Span | None,
@@ -974,6 +1056,23 @@ def test_data():
     line3 = Line(x='var_three', y='md', cds=cds, style=ds1.templates['var_three'])
     return cds, line1, line2, line3, wis, cutoffs
 
+def test_well_data():
+    from blixt_rp.core.well_new import Well
+    from blixt_rp.core.core import LogTable, CutoffRule, Cutoffs
+    project_table = os.path.join(test_file_dir.replace('test_data', 'excels'), 'project_table_new.xlsx')
+    las_file3 = os.path.join(test_file_dir, "Well F.las")
+    log_table = LogTable({
+        'P velocity': ['Vp_dry', 'Vp_Sg08'],
+        'Porosity': ['PHIE'],
+        'Volume': ['VSH']
+    })
+    rule1 = CutoffRule('vp_dry', '>', Q_(3000, 'm/s'))
+    rule2 = CutoffRule('phie', '<', Q_(0.1, ''))
+    rule3 = CutoffRule('vsh', '>', Q_(0.4, ''))
+    well = Well()
+    well.read_las(las_file3, log_table=log_table, template_file=project_table)
+    return well, Cutoffs([rule1, rule2, rule3])
+
 
 class TestCases(unittest.TestCase):
     def test_log_plotter1(self):
@@ -1016,7 +1115,6 @@ class TestCases(unittest.TestCase):
         self.assertTrue(True)
 
     def test_cutoffs(self, unit_test=True):
-        from blixt_rp.core.core import CutoffRule, Cutoffs
         common_cds, line1, line2, line3, _, cutoffs = test_data()
         lp = LogPlotter(width=800, height=1000)
         c2 = LogColumn('c2', lines=[line2])
@@ -1039,7 +1137,7 @@ class TestCases(unittest.TestCase):
             return grid, table, add_row, delete_row, update, apply_mask, reset_mask
 
     def test_add_settings(self):
-        _, line1, line2, line3, _ = test_data()
+        _, line1, line2, line3, _, _ = test_data()
         lp = LogPlotter(width=800, height=1000)
         c2 = LogColumn('c2', lines=[line1, line2])
         c1 = LogColumn('c1', lines=[line1, line2, line3], rel_width=2)
@@ -1078,4 +1176,38 @@ class TestCases(unittest.TestCase):
         )
         show(column(p, data_table))
         self.assertTrue(True)
+
+    def test_well_plotter(self):
+        well, cutoffs = test_well_data()
+        column_content = [['vsh'], ['phie'], ['vp_dry', 'vp_sg08']]
+        well_plot = WellPlotter(well, column_content)
+        show(well_plot.draw())
+
+    def test_well_plotter_with_cutoffs(self, unit_test=True):
+        well, cutoffs = test_well_data()
+        column_content = [['vsh'], ['phie'], ['vp_dry', 'vp_sg08']]
+        well_plot = WellPlotter(well, column_content)
+        table, add_row, delete_row, update, apply_mask, reset_mask = well_plot.add_cutoffs_table(cutoffs)
+        grid = well_plot.draw()
+        if unit_test:
+            show(
+                row(
+                    grid, column(
+                        table,
+                        row(add_row, delete_row, update, apply_mask, reset_mask)
+                    )
+                )
+            )
+        else:
+            return grid, table, add_row, delete_row, update, apply_mask, reset_mask
+
+    def test_well_plotter_with_settings(self):
+        well, cutoffs = test_well_data()
+        column_content = [['vsh'], ['phie'], ['vp_dry', 'vp_sg08']]
+        well_plot = WellPlotter(well, column_content)
+        grid = well_plot.draw()
+        settings_table = well_plot.add_settings(grid)
+        show(row(grid, settings_table))
+
+
 

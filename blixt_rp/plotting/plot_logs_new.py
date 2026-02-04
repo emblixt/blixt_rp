@@ -91,16 +91,13 @@ def plot_logs(well: cw.Well,
     """
     from bokeh.models import BooleanFilter, CDSView
 
-    # TODO First create one (ONE) single source from the well, and then re-use this source in all the Lines
-    # All this is necessary if we want to be able to use cutoffs to mask out data
+    # This is necessary if we want to be able to use cutoffs to mask out data
     data_source = well.data_source()
     common_cds = data_source.cds
-    boolean_filter = BooleanFilter(booleans=common_cds.data['mask'])
-    view = CDSView(filter=boolean_filter)
+    print_info('Please consider using the WellPlotter class instead, which will replace this function',
+               'warning', logger)
 
     # Check that the requested logs exists in the well
-    # flat_list = [ x for xs in log_columns for x in xs ]
-    # for _log in flat_list[:]:
     for _col in log_columns:
         # Iterate over a copy of the list by slicing!
         for _log in _col[:]:
@@ -130,10 +127,8 @@ def plot_logs(well: cw.Well,
             LogColumn(
                 'column_{}'.format(str(_i)),
                 rel_width=rel_widths[_i],
-                # TODO First create one (ONE) single source from the well, and then re-use this source in all the
-                # TODO different columns, and with a CDSView too
                 # lines=[well.get_log_curve(_l).get_line() for _l in _c],
-                lines=[Line(x=_l, y='depth', cds=common_cds, view=view, style=data_source.templates[_l]) for _l in _c],
+                lines=[Line(x=_l, y='depth', cds=common_cds, style=data_source.templates[_l]) for _l in _c],
                 scale=scales[_i])
         )
     # for i, _c in enumerate(plot_columns):

@@ -61,7 +61,7 @@ log_table3 = LogTable({'Density': 'rho_brine', 'P velocity': 'vp_brine', 'S velo
 
 class TestPlot(unittest.TestCase):
 
-    def test_log_plotter(self):
+    def test_plot_logs(self):
 
         log_table = LogTable({
             'P velocity': ['Vp_dry', 'Vp_Sg08'],
@@ -80,9 +80,9 @@ class TestPlot(unittest.TestCase):
         print(_p_none)
         _line_vp_dry = select_line(grid, 'vp_dry')
         print(_line_vp_dry)
-        # show(grid)
+        show(grid)
 
-    def test_log_plotter_with_settings(self):
+    def test_plot_logs_with_settings(self):
         log_table = LogTable({
             'P velocity': ['Vp_dry', 'Vp_Sg08'],
             'Porosity': ['PHIE'],
@@ -94,11 +94,10 @@ class TestPlot(unittest.TestCase):
         column_content = [['vsh'], ['phie'], ['vp_dry', 'vp_sg08']]
         plotter = bupp.plot_logs(well1, column_content, rel_widths=[1., 1., 1.])
         grid = plotter.draw()
-        print(plotter.cds.data.keys())
         settings = plotter.add_settings(grid)
         show(row(grid, settings))
 
-    def test_log_plotter_with_cutoffs(self):
+    def test_plot_logs_with_cutoffs(self, unit_test=True):
         rule1 = CutoffRule('vp_dry', '>', Q_(3000, 'm/s'))
         rule2 = CutoffRule('phie', '<', Q_(0.1, ''))
         rule3 = CutoffRule('vsh', '>', Q_(0.4, ''))
@@ -113,10 +112,17 @@ class TestPlot(unittest.TestCase):
         print(well1.name)
         column_content = [['vsh'], ['phie'], ['vp_dry', 'vp_sg08']]
         plotter = bupp.plot_logs(well1, column_content, rel_widths=[1., 1., 1.])
-        plot_cds = plotter.cds
         grid = plotter.draw()
-        cutoffs, add_row, delete_row, update, use = plotter.draw_cutoffs_table(grid, rules=[rule1, rule2, rule3])
-        show(row(grid, cutoffs))
+        table, add_row, delete_row, update, apply_mask, reset_mask = plotter.add_cutoffs_table(grid, rules=[rule1, rule2, rule3])
+        if unit_test:
+            show(
+                row(
+                    grid, column(
+                        table,
+                        row(add_row, delete_row, update, apply_mask, reset_mask)
+                    )
+                )
+            )
 
     def test_plot_with_backus(self):
         log_table = LogTable({
