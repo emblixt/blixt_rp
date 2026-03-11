@@ -163,6 +163,7 @@ class CutoffTests(unittest.TestCase):
         # Raise an NotImplementedError because we don't support multi log LogTables yet
         self.assertRaises(NotImplementedError, cutoffs.use_log_table, LogTable(log_table_multi))
 
+
 class LogTableTests(unittest.TestCase):
     def test_lt_init(self):
         lt = LogTable( log_table)
@@ -225,7 +226,6 @@ class LogTableTests(unittest.TestCase):
         print(lt2)
 
 
-
 class TemplateTestCase(unittest.TestCase):
 
     def test_from_scratch(self):
@@ -285,6 +285,7 @@ class TemplateTestCase(unittest.TestCase):
         print(tmpl_cds.data)
         table = tmpl_table.draw(tmpl_cds)
         show(table)
+
 
 class IntervalTests(unittest.TestCase):
 
@@ -442,3 +443,21 @@ class HeaderTestCase(unittest.TestCase):
         print(h.orig_filename, h.creation_date, h.modification_date)
         print(h)
         print(list(h.keys()))
+
+
+class LithoFluidTests(unittest.TestCase):
+    def test_2d_lf(self):
+        from blixt_rp.core.core import LithoFluid
+        def vp(_i):
+            return Q_(3000. +  5. * _i, 'm/s')
+        def vs(_i):
+            return Q_(1500. +  5. * _i, 'm/s')
+        def rho(_i):
+            return Q_(2.5 +  0.1 * _i, 'grams/cm^3')
+
+        lf = LithoFluid(vp=vp, vs=vs, rho=rho,
+                        vp_std_dev=1., vs_std_dev=1., rho_std_dev=0.01,
+                        vp_vs_cc=0.9, vp_rho_cc=0.9, vs_rho_cc=0.9)
+        print(lf.vp(10))
+        print(lf.to_sums_dict(10))
+        self.assertEqual(3050., lf.vp(10).magnitude)

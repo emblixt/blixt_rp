@@ -11,35 +11,98 @@ from blixt_rp.core.core import LithoFluid, LithoFluids, LithoFluidsTable
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from blixt_rp.core.models import (Model, Layer, ModelTable, ModelLayer, LaminarModel,
+from blixt_rp.core.models import (Model, Layer, ModelTable, LaminarModel,
                                   plot_wiggles, build_layered_model, laminar_model_analysis,
                                   build_saturation_wedge, detect_change_in_cases, build_wedge)
+from blixt_rp.core.core import LithoFluid
 import blixt_utils.misc.wavelets as bumw
+from blixt_rp import Q_
 
-l1 = {'vp': 3000, 'vs': 1820, 'rho': 2.6}
-l2 = {'vp': 2900, 'vs': 1620, 'rho': 2.2}
-
+# l1 = {'vp': 3000, 'vs': 1820, 'rho': 2.6}
+# l2 = {'vp': 2900, 'vs': 1620, 'rho': 2.2}
+l1 = LithoFluid(default='shale')
+l2 = LithoFluid(default='brine_sst')
+layer1 = Layer('Top', 'Base', thickness=Q_(50., 'm'), litho_fluid=l1)
+layer2 = Layer('Reservoir', 'Base', thickness=Q_(20., 'm'), litho_fluid=l2)
+layer3 = Layer('Reservoir', 'Oil', thickness=Q_(20., 'm'), litho_fluid=LithoFluid(default='oil_sst'))
+layer4 = Layer('Reservoir', 'Gas', thickness=Q_(20., 'm'), litho_fluid=LithoFluid(default='oil_sst'))
+layer5 = Layer('Basement', 'Base', thickness=Q_(50., 'm'), litho_fluid=l1)
+layer6 = Layer('Basement', 'Oil', thickness=Q_(50., 'm'), litho_fluid=l1)
 
 class TestCase(unittest.TestCase):
 
+    def test_1d(self):
+        m = Model(depth_to_top=Q_(2000, 'm'), layers=[layer1, layer2, layer3, layer4, layer5])
+        # print(m.layer_names)
+        # print(m.case_names)
+        print(m.index_of('Reservoir', 'Base'))
+        print(m.index_of('Reservoir', 'Oil'))
+        print(m.index_of('Basement', 'Oil'))
+
+        print(m.target_layers)
+        print(m.base_case_layers)
+        print(m.base_target_combos)
+
+    def test_combos(self):
+        m = Model(depth_to_top=Q_(2000, 'm'), layers=[layer1, layer2, layer3, layer4, layer5, layer6])
+        print(m.base_target_combos)
+
+    def test_failing_models(self):
+        # # Model with one layer being repeated
+        # m = Model(depth_to_top=Q_(2000, 'm'), layers=[layer1, layer1, layer1])
+        # print(m.base_target_combos)
+
+        # # Model with layers that have no name or case
+        # layer0 = Layer(thickness=Q_(50., 'm'), litho_fluid=l1)
+        # m = Model(depth_to_top=Q_(2000, 'm'), layers=[layer0, layer0, layer0])
+        # print(m.base_target_combos)
+
+        # Model with layers that have no name but different cases
+        layer_1 = Layer(case='Base', thickness=Q_(50., 'm'), litho_fluid=l1)
+        layer_2 = Layer(case='Oil', thickness=Q_(50., 'm'), litho_fluid=l1)
+        m = Model(depth_to_top=Q_(2000, 'm'), layers=[layer_1, layer_2])
+        # print(m.layer_names)
+        print(m.base_target_combos)
+
+    def test_depth_range(self):
+        m = Model(depth_to_top=Q_(2000, 'm'), layers=[layer1, layer2, layer3, layer4, layer5])
+        print(m.total_thickness())
+        self.assertTrue(m.total_thickness().magnitude == 120.)
+
+    def test_depth_array(self):
+        m = Model(depth_to_top=Q_(2000, 'm'), layers=[layer1, layer2, layer3, layer4, layer5])
+        print(m.depth_array(Q_(10., 'm')))
+
+    def test_interface_indexes(self):
+        m = Model(depth_to_top=Q_(2000, 'm'), layers=[layer1, layer2, layer3, layer5])
+        res = Q_(10., 'm')
+        print(m.interface_indexes(res))
+        print(m.depth_array(res)[m.interface_indexes(res)])
+        test = m.depth_array(res)[m.interface_indexes(res)] == Q_([2050., 2070.], 'm')
+        print(test)
+        self.assertTrue(test.all())
+
     def test_1d_twt(self):
-        first_layer = Layer(thickness=0.1, **l1)
-        second_layer = Layer(thickness=0.04, **l2, target=True)
-        m = Model(depth_to_top=2.0, layers=[first_layer, second_layer])
+        first_layer = Layer(thickness=Q_(0.1, 's'), litho_fluid=l1)
+        second_layer = Layer(thickness=Q_(0.04, 's'), litho_fluid=l2)
+        m = Model(depth_to_top=Q_(2.0, 's'), layers=[first_layer, second_layer])
         m.append(first_layer)
         m.plot()
+        plt.show()
 
     def test_1d_z(self):
-        first_layer = Layer(thickness=150, **l1, domain='Z')
-        second_layer = Layer(thickness=40, **l2, target=True, domain='Z')
-        m = Model(depth_to_top=3000., layers=[first_layer, second_layer])
+        first_layer = Layer(thickness=Q_(150, 'm'), litho_fluid=l1)
+        second_layer = Layer(thickness=Q_(40, 'm'), litho_fluid=l2)
+        m = Model(depth_to_top=Q_(3000., 'm'), layers=[first_layer, second_layer])
         m.append(first_layer)
         m.plot()
+        plt.show()
 
     def test_wedge(self):
-        m = build_wedge(2.0, 0.02, 0.1, 51, l1, l2, l1)
+        m = build_wedge(Q_(2.0, 's'), Q_(0.02, 's'), Q_(0.1, 's'), 51, l1, l2, l1)
         # m = build_wedge(3000., 10.0, 40., 51, l1, l2, l1, domain='Z')
         m.plot()
+        plt.show()
 
     def test_plot(self):
         first_layer = Layer(thickness=0.1, **l1)
@@ -96,8 +159,29 @@ class TestCase(unittest.TestCase):
         fig, ax = plt.subplots()
         ax.plot(twt, vp / 1000., twt, li)
 
+    def test_quasi2d_layer(self):
+        from blixt_rp.core.core import LithoFluid
+        def vp(_i):
+            return Q_(3000. +  5. * _i, 'm/s')
+        def vs(_i):
+            return Q_(1500. +  5. * _i, 'm/s')
+        def rho(_i):
+            return Q_(2.5 +  0.1 * _i, 'grams/cm^3')
+        def thickness_m(_i):
+            return Q_(30. + 2 * _i, 'm')
+        def thickness_twt(_i):
+            return Q_(40. + 2 * _i, 'milliseconds')
+
+        lf = LithoFluid(vp=vp, vs=vs, rho=rho,
+                        vp_std_dev=1., vs_std_dev=1., rho_std_dev=0.01,
+                        vp_vs_cc=0.9, vp_rho_cc=0.9, vs_rho_cc=0.9)
+
+        l_m = Layer(thickness=thickness_m, litho_fluid=lf)
+        l_twt = Layer(thickness=thickness_twt, litho_fluid=lf)
+
     def test_quasi2d(self):
         import blixt_utils.misc.wavelets as bumw
+        from blixt_rp.core.core import LithoFluid
         from blixt_rp.rp.rp_core import constantcement, v_p, v_s
         n_samplings = 51
 
@@ -108,10 +192,10 @@ class TestCase(unittest.TestCase):
         # for a wedge model to work, we need to counterweight the changing thickness of one layer with an extra layer
         # so that the total height of the model is kept constant
         def wedge(i):
-            return 0.1 - 0.1 / 50 * i
+            return Q_(50. - i, 'm')
 
         def reverse_wedge(i):
-            return 0.06 + 0.1 / 50 * i
+            return Q_(25. + i, 'm')
 
         def vp(i):
             # phi = np.linspace(0.1, 0.4, n_samplings)
@@ -144,24 +228,24 @@ class TestCase(unittest.TestCase):
                 return 2.3
 
         # wedge model
-        # first_layer = Layer(thickness=0.06, vp=2800., vs=1350, rho=2.46)
-        # second_layer = Layer(thickness=wedge, vp=3100, vs=1800, rho=2.3, target=True)
-        # third_layer = Layer(thickness=reverse_wedge, vp=2800, vs=1350, rho=2.46, target=False)
+        first_layer = Layer(thickness=Q_(50., 'm'), litho_fluid=LithoFluid(vp=2800., vs=1350, rho=2.46))
+        second_layer = Layer(thickness=wedge, litho_fluid=LithoFluid(vp=3100, vs=1800, rho=2.3))
+        third_layer = Layer(thickness=reverse_wedge, litho_fluid=LithoFluid(vp=2800, vs=1350, rho=2.46))
 
-        # gas lens model
-        first_layer = Layer(thickness=Q_(0.05, 's'), vp=Q_(3400., 'm/s'), vs=Q_(1820., 'm/s'), rho=Q_(2.6, 'gram/cm^3'))
-        second_layer = Layer(thickness=Q_(0.03, 's'), vp=Q_(vp, 'm/s'), vs=Q_(vs, 'm/s'), rho=Q_(rho, 'gram/cm^3'), target=True)
-        third_layer = Layer(thickness=Q_(0.05, 's'), vp=Q_(3400., 'm/s'), vs=Q_(1820., 'm/s'), rho=Q_(2.6, 'gram/cm^3'))
+        # # gas lens model
+        # first_layer = Layer(thickness=Q_(0.05, 's'), vp=Q_(3400., 'm/s'), vs=Q_(1820., 'm/s'), rho=Q_(2.6, 'gram/cm^3'))
+        # second_layer = Layer(thickness=Q_(0.03, 's'), vp=Q_(vp, 'm/s'), vs=Q_(vs, 'm/s'), rho=Q_(rho, 'gram/cm^3'), target=True)
+        # third_layer = Layer(thickness=Q_(0.05, 's'), vp=Q_(3400., 'm/s'), vs=Q_(1820., 'm/s'), rho=Q_(2.6, 'gram/cm^3'))
 
-        m = Model(depth_to_top=1.94, layers=[first_layer, second_layer, third_layer],
+        m = Model(model_type='quasi 2D', depth_to_top=Q_(2000., 'm'), layers=[first_layer, second_layer, third_layer],
                   trace_index_range=np.arange(n_samplings))
-        # m.plot()
+        m.plot()
 
-        wavelet = bumw.ricker(0.096, 0.001, 25)
+        # wavelet = bumw.ricker(0.096, 0.001, 25)
 
-        plot_wiggles(m, 0.001, wavelet, angle=0., eei=True, scaling=80., extract_avo_at=[(8, 1.99), (24, 1.99)])
-        plot_wiggles(m, 0.001, wavelet, angle=15., eei=True, scaling=80., extract_avo_at=[(8, 1.99), (24, 1.99)])
-        plot_wiggles(m, 0.001, wavelet, angle=-90., eei=True, scaling=80., extract_avo_at=[(8, 1.99), (24, 1.99)])
+        # plot_wiggles(m, 0.001, wavelet, angle=0., eei=True, scaling=80., extract_avo_at=[(8, 1.99), (24, 1.99)])
+        # plot_wiggles(m, 0.001, wavelet, angle=15., eei=True, scaling=80., extract_avo_at=[(8, 1.99), (24, 1.99)])
+        # plot_wiggles(m, 0.001, wavelet, angle=-90., eei=True, scaling=80., extract_avo_at=[(8, 1.99), (24, 1.99)])
 
     def test_layered_model(self):
         wavelet = bumw.ricker(0.096, 0.001, 25)
@@ -206,45 +290,65 @@ class TestCase(unittest.TestCase):
         wedge_ax.legend(loc='upper left')
         plt.show()
 
-    def test_model_table(self, unit_test=True):
+    def test_model_table(self, unit_test=True, only_verbatim=True):
         from bokeh.io import output_file
         from bokeh.plotting import show, row, column
-        excel_file = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\PL1221\\SumsAndAverages.xlsx"
-        output_file('C:\\Users\\emb\\Downloads\\plot.html')
-        lfs = LithoFluids()
-        lfs.from_excel(excel_file)
-        lfs.litho_fluids = lfs.litho_fluids[:3]
+
+        # When creating output to Bokeh server, we need to set only_verbatim False
+        if not unit_test:
+            only_verbatim = False
+
+        output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
+        lfs = LithoFluids(
+            [LithoFluid(default='shale'), LithoFluid(default='brine_sst'), LithoFluid(default='oil_sst')]
+        )
         table_lf = LithoFluidsTable(lfs, width=300, advanced=False)
         cds_lf = table_lf.cds
         lf_table, add_row, delete_row, update = table_lf.draw(cds_lf)
 
-        layers = [_lf.to_model_layer(_i+1) for _i, _lf in enumerate(lfs.litho_fluids)]
+        # layers = [_lf.to_model_layer(_name) for _name, _lf in zip(['Top', 'Middle', 'Bottom'], lfs.litho_fluids)]
+        layers = [
+            LithoFluid(default='shale').to_model_layer('Top',thickness=Q_(50., 'm')),
+            LithoFluid(default='brine_sst').to_model_layer('Reservoir',thickness=Q_(25., 'm')),
+            LithoFluid(default='oil_sst').to_model_layer('Reservoir', case='Oil',thickness=Q_(25., 'm')),
+            LithoFluid(default='shale').to_model_layer('Bottom',thickness=Q_(50., 'm')),
+            LithoFluid(default='shale').to_model_layer('Basement',thickness=Q_(50., 'm'))
+        ]
         # layers = []
-        table_model = ModelTable(layers, cds_lf)
+        model = Model(layers=layers)
+        table_model = ModelTable(model, cds_lf)
         cds_model = table_model.cds
         model_table, add_row_m, delete_row_m, update_m = table_model.draw(cds_model)
 
-        if unit_test:
-            show(
-                row(
-                    column(model_table, row(add_row_m, delete_row_m, update_m)),
-                    column(lf_table, row(add_row, delete_row, update))
-                )
-            )
-            return None
+        if only_verbatim:
+            for _key in list(cds_model.data.keys()):
+                if _key == 'top' or _key == 'thickness':
+                    print(_key)
+                    print(cds_model.data[_key])
+            realized_cases = table_model.realize(Q_(5.0, 'm'))
+            # for _key in list(realized_cases.keys()):
+            #     print(_key)
+            #     print(realized_cases[_key]['vp'].values)
         else:
-            return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update
+            if unit_test:
+                show(
+                    row(
+                        column(model_table, row(add_row_m, delete_row_m, update_m)),
+                        column(lf_table, row(add_row, delete_row, update))
+                    )
+                )
+                return None
+            else:
+                return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update
+        return None
 
     def test_laminar_model(self, unit_test=True):
         from bokeh.io import output_file
         from bokeh.plotting import show, row, column
-        output_file('C:\\Users\\emb\\Downloads\\plot.html')
-
-        # Create litho fluids
-        lfs = LithoFluids([LithoFluid(name=_x, default=_x) for _x in ['shale', 'brine_sst', 'oil_sst', 'shale']])
+        output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
 
         # Create the laminar model
-        lm = LaminarModel(lfs, resolution=Q_(0.1, 'm'), avo_or_eei='eei')
+        lm = LaminarModel(resolution=Q_(0.1, 'm'), avo_or_eei='avo')
 
         lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, freq_slider = lm.draw()
 

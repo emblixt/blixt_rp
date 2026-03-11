@@ -7,7 +7,7 @@ from copy import deepcopy
 
 import numpy as np
 
-from .. import ureg, Q_
+from .. import Q_
 import pint
 import pandas as pd
 import logging
@@ -19,6 +19,7 @@ from bokeh.models import (DataTable, PanTool, BoxZoomTool, WheelZoomTool, ResetT
 from bokeh.plotting import figure, show
 from bokeh.plotting import column, row
 from datetime import datetime
+import matplotlib as mpl
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
@@ -1672,12 +1673,18 @@ class LithoFluid:
     """
     Class containing the elastic properties, and the statistics describing it, for one single "litho fluid"
     (an element that describes a specific lithology with a specific fluid content)
+
+    Vp, Vs and Rho can be given as functions to serve as input to a quasi 2D seismic model.
+    They are then functions of an integer input "i" that parameterizes the elastic properties in the "lateral"
+    direction
     """
+    import matplotlib as mpl
+    from typing import Callable
     def __init__(self,
                  name: str | None = None,
-                 vp: float | pint.Quantity | None = None,
-                 vs: float | pint.Quantity | None = None,
-                 rho: float | pint.Quantity | None = None,
+                 vp: float | pint.Quantity | Callable[[int], Q_] | None = None,
+                 vs: float | pint.Quantity | Callable[[int], Q_] | None = None,
+                 rho: float | pint.Quantity | Callable[[int], Q_] | None = None,
                  vp_std_dev: float | pint.Quantity | None = None,
                  vs_std_dev: float | pint.Quantity | None = None,
                  rho_std_dev: float | pint.Quantity | None = None,
@@ -1686,6 +1693,25 @@ class LithoFluid:
                  vs_rho_cc: float | pint.Quantity | None = None,
                  default: str | None = None
                  ):
+        """
+
+        :param name:
+        :param vp:
+            The sonic speed, pressure velocity, of the lithofluid
+            It can be given as a function (FunctionType) which is useful when using a LithoFluid as input to a
+            quasi 2D model to describe a velocity change in the lateral direction (Vp is parameterized by an index)
+            E.G.
+                vp(_i) = pint.Quantity(3000. + _i *5), 'm/s')
+        :param vs:
+        :param rho:
+        :param vp_std_dev:
+        :param vs_std_dev:
+        :param rho_std_dev:
+        :param vp_vs_cc:
+        :param vp_rho_cc:
+        :param vs_rho_cc:
+        :param default:
+        """
         self.name = name
         # Avoid integer input
         vp = float(vp) if isinstance(vp, int) else vp
@@ -1757,20 +1783,34 @@ class LithoFluid:
                 raise IOError('default must be either "shale", "brine_sst", "oil_sst" or "gas_sst", not {}'.format(default))
 
 
-    def to_sums_dict(self) -> dict:
+    def to_sums_dict(self, index: int | None = None) -> dict:
         """
         Returns a dictionary which is compatible with the RokDoc "sums and average" file format
         :return:
         """
-        return_dict = {'VpMean': self.vp.to('m/s').magnitude,
-                       'VsMean': self.vs.to('m/s').magnitude,
-                       'RhoMean': self.rho.to('g/cm**3').magnitude,
-                       'VpStdDev': self.vp_std_dev.to('m/s').magnitude,
-                       'VsStdDev': self.vs_std_dev.to('m/s').magnitude,
-                       'RhoStdDev': self.rho_std_dev.to('g/cm**3').magnitude,
-                       'VpVsCorrCoef': self.vp_vs_cc.magnitude,
-                       'VpRhoCorrCoef': self.vp_rho_cc.magnitude,
-                       'VsRhoCorrCoef': self.vs_rho_cc.magnitude}
+        from typing import Callable
+        if isinstance(self.vp, Callable):
+            if index is None:
+                index = 0
+            return_dict = {'VpMean': self.vp(index).to('m/s').magnitude,
+                           'VsMean': self.vs(index).to('m/s').magnitude,
+                           'RhoMean': self.rho(index).to('g/cm**3').magnitude,
+                           'VpStdDev': self.vp_std_dev.to('m/s').magnitude,
+                           'VsStdDev': self.vs_std_dev.to('m/s').magnitude,
+                           'RhoStdDev': self.rho_std_dev.to('g/cm**3').magnitude,
+                           'VpVsCorrCoef': self.vp_vs_cc.magnitude,
+                           'VpRhoCorrCoef': self.vp_rho_cc.magnitude,
+                           'VsRhoCorrCoef': self.vs_rho_cc.magnitude}
+        else:
+            return_dict = {'VpMean': self.vp.to('m/s').magnitude,
+                           'VsMean': self.vs.to('m/s').magnitude,
+                           'RhoMean': self.rho.to('g/cm**3').magnitude,
+                           'VpStdDev': self.vp_std_dev.to('m/s').magnitude,
+                           'VsStdDev': self.vs_std_dev.to('m/s').magnitude,
+                           'RhoStdDev': self.rho_std_dev.to('g/cm**3').magnitude,
+                           'VpVsCorrCoef': self.vp_vs_cc.magnitude,
+                           'VpRhoCorrCoef': self.vp_rho_cc.magnitude,
+                           'VsRhoCorrCoef': self.vs_rho_cc.magnitude}
         return return_dict
 
 
@@ -1786,6 +1826,7 @@ class LithoFluid:
         :param avg_type:
         :return:
         """
+        from blixt_utils.io.io import read_sums_and_averages
         postfix = ''
         if avg_type is None:
             avg_type = 'mean'
@@ -1798,7 +1839,7 @@ class LithoFluid:
         else:
             raise IOError('avg_type can be either "mean", "median" or "mode", not {}'.format(avg_type))
 
-        all_data = bui.read_sums_and_averages(excel_file)
+        all_data = read_sums_and_averages(excel_file)
 
         self.name = name
         self.vp = Q_(all_data[name]['Vp'+postfix], 'm/s')
@@ -1857,14 +1898,16 @@ class LithoFluid:
         uhelp.confidence_ellipse(x_data, y_data, ax, n_std=2.0, edgecolor='k', linestyle='--')
 
     def to_model_layer(self,
-                       number,
+                       name: str | None = None,
                        case: str | None = None,
                        color: str | None = None,
                        thickness: float | pint.Quantity = Q_(25., 'm')):
-        from blixt_rp.core.models import ModelLayer
+        from blixt_rp.core.models import Layer
+        if name is None:
+            name = self.name
         if isinstance(thickness, float):
             thickness = Q_(thickness, 'm')
-        return ModelLayer(number, case, color, thickness, self)
+        return Layer(name, case, color, thickness, self)
 
 
 class LithoFluids:
@@ -1899,6 +1942,7 @@ class LithoFluids:
         :param avg_type:
         :return:
         """
+        from blixt_utils.io.io import read_sums_and_averages
         postfix = ''
         if avg_type is None:
             avg_type = 'mean'
@@ -1911,7 +1955,7 @@ class LithoFluids:
         else:
             raise IOError('avg_type can be either "mean", "median" or "mode", not {}'.format(avg_type))
 
-        all_data = bui.read_sums_and_averages(excel_file)
+        all_data = read_sums_and_averages(excel_file)
 
         all_litho_fluids = []
         for _name in list(all_data.keys()):
@@ -1986,7 +2030,7 @@ class LithoFluidsTable:
         return _litho_fluid_names
 
     def table_columns(self):
-        from bokeh.models import (SelectEditor, StringEditor, TableColumn, CheckboxEditor)
+        from bokeh.models import (NumberEditor, NumberFormatter, StringEditor, TableColumn, StringFormatter)
         column_names = [_s.capitalize().replace('_', ' ') for _s in self.keys]
         table_columns = []
         for i, column_key in enumerate(self.keys):
@@ -2010,7 +2054,7 @@ class LithoFluidsTable:
 
     def draw(self,
              cds: ColumnDataSource):
-        from bokeh.models import DataTable, Button, CheckboxGroup
+        from bokeh.models import DataTable, Button, Div
 
         def add_row_function():
             new_data = dict(cds.data)
@@ -2065,6 +2109,13 @@ class LithoFluidsTable:
 
             cds.data = new_data
 
+        title = Div(text =
+                    """
+                    <div style="font-size:12px; font-weight:600; margin-bottom:0px; text-align:center">
+                        Litho-fluids
+                    </div>
+               """)
+
         dt = DataTable(
             source=cds,
             columns=self.table_columns(),
@@ -2084,7 +2135,7 @@ class LithoFluidsTable:
         update_table = Button(label='Update', button_type='success')
         update_table.on_click(update_table_function)
 
-        return dt, add_row, delete_row, update_table
+        return column(title, dt, sizing_mode='stretch_width'), add_row, delete_row, update_table
 
 
 def cutoffs_string(cutoffs_list):
