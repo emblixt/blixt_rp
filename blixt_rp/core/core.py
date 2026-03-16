@@ -1712,7 +1712,14 @@ class LithoFluid:
         :param vs_rho_cc:
         :param default:
         """
+        from typing import Callable
+
         self.name = name
+        if isinstance(vp, Callable) or isinstance(vs, Callable) or isinstance(rho, Callable):
+            self.type = 'quasi 2D'
+        else:
+            self.type = '1D'
+
         # Avoid integer input
         vp = float(vp) if isinstance(vp, int) else vp
         vs = float(vs) if isinstance(vs, int) else vs
@@ -1723,16 +1730,16 @@ class LithoFluid:
 
 
 
-        # Give default units if not specified
-        self.vp = Q_(vp, 'm/s') if isinstance(vp, float) else (None if vp is None else vp)
-        self.vs = Q_(vs, 'm/s') if isinstance(vs, float) else (None if vs is None else vs)
-        self.rho = Q_(rho, 'g/cm**3') if isinstance(rho, float) else (None if rho is None else rho)
-        self.vp_std_dev = Q_(vp_std_dev, 'm/s') if isinstance(vp_std_dev, float) else (None if vp_std_dev is None else vp_std_dev)
-        self.vs_std_dev = Q_(vs_std_dev, 'm/s') if isinstance(vs_std_dev, float) else (None if vs_std_dev is None else vs_std_dev)
-        self.rho_std_dev= Q_(rho_std_dev, 'g/cm**3') if isinstance(rho_std_dev, float) else (None if rho_std_dev is None else rho_std_dev)
-        self.vp_vs_cc = Q_(vp_vs_cc) if isinstance(vp_vs_cc, float) else (None if vp_vs_cc is None else vp_vs_cc)
-        self.vp_rho_cc = Q_(vp_rho_cc) if isinstance(vp_rho_cc, float) else (None if vp_rho_cc is None else vp_rho_cc)
-        self.vs_rho_cc = Q_(vs_rho_cc) if isinstance(vs_rho_cc, float) else (None if vs_rho_cc is None else vs_rho_cc)
+        # Give default units and values (of shale) if not specified
+        self.vp = Q_(vp, 'm/s') if isinstance(vp, float) else (Q_(3445, 'm/s') if vp is None else vp)
+        self.vs = Q_(vs, 'm/s') if isinstance(vs, float) else (Q_(1767, 'm/s') if vs is None else vs)
+        self.rho = Q_(rho, 'g/cm**3') if isinstance(rho, float) else (Q_(2.6, 'g/cm**3') if rho is None else rho)
+        self.vp_std_dev = Q_(vp_std_dev, 'm/s') if isinstance(vp_std_dev, float) else (Q_(208, 'm/s') if vp_std_dev is None else vp_std_dev)
+        self.vs_std_dev = Q_(vs_std_dev, 'm/s') if isinstance(vs_std_dev, float) else (Q_(171, 'm/s') if vs_std_dev is None else vs_std_dev)
+        self.rho_std_dev= Q_(rho_std_dev, 'g/cm**3') if isinstance(rho_std_dev, float) else (Q_(0.036123123, 'g/cm**3') if rho_std_dev is None else rho_std_dev)
+        self.vp_vs_cc = Q_(vp_vs_cc) if isinstance(vp_vs_cc, float) else (Q_(0.89) if vp_vs_cc is None else vp_vs_cc)
+        self.vp_rho_cc = Q_(vp_rho_cc) if isinstance(vp_rho_cc, float) else (Q_(0.08) if vp_rho_cc is None else vp_rho_cc)
+        self.vs_rho_cc = Q_(vs_rho_cc) if isinstance(vs_rho_cc, float) else (Q_(-0.07) if vs_rho_cc is None else vs_rho_cc)
 
         if default is not None:
             if default == 'shale':
@@ -1865,7 +1872,10 @@ class LithoFluid:
         :return:
 
         """
+        import matplotlib.pyplot as plt
         import blixt_rp.rp_utils.avo_monte_carlo as havo
+        from blixt_utils.plotting import helpers as uhelp
+        from blixt_utils.plotting import crossplot as xp
         if label is None:
             label = self.name
         if color is None:
@@ -1931,6 +1941,9 @@ class LithoFluids:
 
     def __add__(self, other: LithoFluid):
         self._litho_fluids.append(other)
+
+    def __len__(self):
+        return len(self.litho_fluids)
 
     def from_excel(self,
                    excel_file: str,
@@ -2008,16 +2021,21 @@ class LithoFluidsTable:
         else:
             self.keys = ['name', 'vp', 'vs', 'rho']
         self.advanced = advanced
+        self.extract_index = 0
 
     @property
     def cds(self) -> ColumnDataSource:
+        from typing import Callable
         _dict = {_x:[] for _x in self.keys}
         for _litho_fluid in self.litho_fluids.litho_fluids:
             for _key in self.keys:
                 if _key == 'name':
                     _dict['name'].append(_litho_fluid.name)
                 else:
-                    _dict[_key].append(_litho_fluid.__dict__[_key].magnitude)
+                    if isinstance(_litho_fluid.__dict__[_key], Callable):
+                        _dict[_key].append(_litho_fluid.__dict__[_key](self.extract_index).magnitude)
+                    else:
+                        _dict[_key].append(_litho_fluid.__dict__[_key].magnitude)
         return ColumnDataSource(_dict)
 
     @property
@@ -2031,6 +2049,14 @@ class LithoFluidsTable:
 
     def table_columns(self):
         from bokeh.models import (NumberEditor, NumberFormatter, StringEditor, TableColumn, StringFormatter)
+
+        # HTML template to mark cells with functions. Uses the color_flag field
+        template = """
+            <div style="<%= color_flag %>">
+                <%= value %>
+            </div>
+        """
+
         column_names = [_s.capitalize().replace('_', ' ') for _s in self.keys]
         table_columns = []
         for i, column_key in enumerate(self.keys):
@@ -2078,31 +2104,35 @@ class LithoFluidsTable:
             cds.data = new_data
 
         def update_table_function():
+            from typing import Callable
             new_data = dict(cds.data)
             _litho_fluids = []
             for _i in range(len(new_data['name'])):
                 # print(' - Iteration: {} of {}'.format( _i, len(new_data['name'])))
+                _dict = {}
                 if self.advanced:
-                    this_litho_fluid = LithoFluid(
-                        name=new_data['name'][_i],
-                        vp=Q_(new_data['vp'][_i], 'm/s'),
-                        vs=Q_(new_data['vs'][_i], 'm/s'),
-                        rho=Q_(new_data['rho'][_i], 'gram / cm^3'),
-                        vp_std_dev=Q_(new_data['vp_std_dev'][_i], 'm/s'),
-                        vs_std_dev=Q_(new_data['vs_std_dev'][_i], 'm/s'),
-                        rho_std_dev=Q_(new_data['rho_std_dev'][_i], 'gram / cm^3'),
-                        vp_vs_cc=Q_(new_data['vp_vs_cc'][_i], ''),
-                        vp_rho_cc=Q_(new_data['vp_rho_cc'][_i], ''),
-                        vs_rho_cc=Q_(new_data['vs_rho_cc'][_i], '')
-                    )
+                    keys = ['vp', 'vs', 'rho', 'vp_std_dev', 'vs_std_dev', 'rho_std_dev', 'vp_vs_cc', 'vs_rho_cc']
+                    units = ['m/s', 'm/s', 'gram/cm^3', 'm/s', 'm/s', 'gram/cm^3', '', '', '']
                 else:
-                    this_litho_fluid = LithoFluid(
-                        name=new_data['name'][_i],
-                        vp=Q_(new_data['vp'][_i], 'm/s'),
-                        vs=Q_(new_data['vs'][_i], 'm/s'),
-                        rho=Q_(new_data['rho'][_i], 'gram / cm^3')
-                    )
+                    keys = ['vp', 'vs', 'rho']
+                    units = ['m/s', 'm/s', 'gram/cm^3']
+                if _i < len(self.litho_fluids): # Within the number of original LFs in self.litho_fluids
+                    # Check if there are any parameters that are functions
+                    for _key, _unit in zip(keys, units):
+                        old_param = self.litho_fluids.litho_fluids[_i].__dict__[_key]
+                        if isinstance(old_param, Callable):
+                            # When it is a function, don't update the litho-fluid
+                            print('Litho-fluid parameter {} on row {} is a function. No update'.format(
+                                _key, _i))
+                            _dict[_key] = old_param
+                            new_data[_key][_i] = old_param(self.extract_index).magnitude
+                        else:
+                            # When the old_param is a constant, replace it with the value extracted from the table
+                            _dict[_key] = Q_(new_data[_key][_i], _unit)
+                else:  # Outside the boundary of the original set of lithofluids
+                    _dict = {_key: Q_(new_data[_key][_i], _unit) for _key, _unit in zip(keys, units)}
 
+                this_litho_fluid = LithoFluid(name=new_data['name'][_i], **_dict)
                 _litho_fluids.append(this_litho_fluid)
 
             self.litho_fluids.litho_fluids = _litho_fluids

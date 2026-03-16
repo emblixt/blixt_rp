@@ -1290,12 +1290,20 @@ def get_wiggles_in_depth(
                         along_wiggle=True)
 
     # Convolve the reflectivity with the wavelet
-    amp_t = np.zeros((m, len(vp_t)))
-    for _i, _x in enumerate(angles):
-        amp_t[_i, :] = bumw.convolve_with_refl(
+    if m > 1:
+        amp_t = np.zeros((m, len(vp_t)))
+        for _i, _x in enumerate(angles):
+            amp_t[_i, :] = bumw.convolve_with_refl(
+                wavelet['wavelet'],
+                refl_func(_x),
+                verbose=False)
+    else:
+        amp_t = np.zeros(len(vp_t))
+        amp_t[:] = bumw.convolve_with_refl(
             wavelet['wavelet'],
-            refl_func(_x),
+            refl_func(angles),
             verbose=False)
+
 
     # Convert back to depth domain
     amp = _to_depth(

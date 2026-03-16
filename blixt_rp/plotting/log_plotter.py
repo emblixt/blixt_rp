@@ -769,7 +769,7 @@ def add_seismic_traces(_p: bokeh.plotting.figure,
             #          x=0, y=0)
             _p.image('value', source=trace_cds, color_mapper=_seismic_color_map,
                      dh=np.max(_seismic.y) - np.min(_seismic.y),
-                     dw=np.max(_seismic.x) - np.min(_seismic.x),
+                     dw=np.max(_seismic.x) - np.min(_seismic.x) + 1.,
                      x=np.min(_seismic.x),
                      y=np.min(_seismic.y)
                      )

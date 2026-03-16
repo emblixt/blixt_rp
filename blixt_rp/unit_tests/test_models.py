@@ -11,7 +11,7 @@ from blixt_rp.core.core import LithoFluid, LithoFluids, LithoFluidsTable
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from blixt_rp.core.models import (Model, Layer, ModelTable, LaminarModel,
+from blixt_rp.core.models import (Model, Layer, ModelTable, LaminarModel, WedgeModel,
                                   plot_wiggles, build_layered_model, laminar_model_analysis,
                                   build_saturation_wedge, detect_change_in_cases, build_wedge)
 from blixt_rp.core.core import LithoFluid
@@ -83,12 +83,14 @@ class TestCase(unittest.TestCase):
         self.assertTrue(test.all())
 
     def test_1d_twt(self):
-        first_layer = Layer(thickness=Q_(0.1, 's'), litho_fluid=l1)
-        second_layer = Layer(thickness=Q_(0.04, 's'), litho_fluid=l2)
+        first_layer = Layer(name='A', thickness=Q_(0.1, 's'), litho_fluid=l1)
+        second_layer = Layer(name='B', thickness=Q_(0.04, 's'), litho_fluid=l2)
+        third_layer = Layer(name='C', thickness=Q_(0.04, 's'), litho_fluid=l2)
         m = Model(depth_to_top=Q_(2.0, 's'), layers=[first_layer, second_layer])
-        m.append(first_layer)
-        m.plot()
-        plt.show()
+        m.append(third_layer)
+        print(m.layer_names)
+        # m.plot()
+        # plt.show()
 
     def test_1d_z(self):
         first_layer = Layer(thickness=Q_(150, 'm'), litho_fluid=l1)
@@ -98,7 +100,7 @@ class TestCase(unittest.TestCase):
         m.plot()
         plt.show()
 
-    def test_wedge(self):
+    def test_wedge_old(self):
         m = build_wedge(Q_(2.0, 's'), Q_(0.02, 's'), Q_(0.1, 's'), 51, l1, l2, l1)
         # m = build_wedge(3000., 10.0, 40., 51, l1, l2, l1, domain='Z')
         m.plot()
@@ -159,7 +161,7 @@ class TestCase(unittest.TestCase):
         fig, ax = plt.subplots()
         ax.plot(twt, vp / 1000., twt, li)
 
-    def test_quasi2d_layer(self):
+    def test_quasi2d_layer(self, unit_test=True):
         from blixt_rp.core.core import LithoFluid
         def vp(_i):
             return Q_(3000. +  5. * _i, 'm/s')
@@ -179,11 +181,16 @@ class TestCase(unittest.TestCase):
         l_m = Layer(thickness=thickness_m, litho_fluid=lf)
         l_twt = Layer(thickness=thickness_twt, litho_fluid=lf)
 
-    def test_quasi2d(self):
+    def test_quasi2d(self, unit_test=True):
+        from bokeh.io import output_file
+        from bokeh.plotting import show, row, column
         import blixt_utils.misc.wavelets as bumw
-        from blixt_rp.core.core import LithoFluid
+        from blixt_rp.core.core import LithoFluid, LithoFluids, LithoFluidsTable
         from blixt_rp.rp.rp_core import constantcement, v_p, v_s
-        n_samplings = 51
+
+        output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
+
+        n_samplings = 11
 
         # TODO
         # At the moment, quasi2d models will likely fail when combining a varying thickness with NTG separate from 1
@@ -206,9 +213,9 @@ class TestCase(unittest.TestCase):
 
             # gas lens (gas in the center, brine on the flanks):
             if (i > 17) and (i < 34):
-                return 3600.
+                return Q_(3600., 'm/s')
             else:
-                return 3730.
+                return Q_(3730., 'm/s')
 
         def vs(i):
             # phi = np.linspace(0.1, 0.4, n_samplings)
@@ -216,36 +223,60 @@ class TestCase(unittest.TestCase):
             # return 1000. * v_s(k_eff[i], 2.3)
             # gas lens:
             if (i > 17) and (i < 34):
-                return 2120.
+                return Q_(2120., 'm/s')
             else:
-                return 2070.
+                return Q_(2070., 'm/s')
 
         def rho(i):
             # gas lens:
             if (i > 17) and (i < 34):
-                return 2.2
+                return Q_(2.2, 'grams/cm^3')
             else:
-                return 2.3
+                return Q_(2.3, 'grams/cm^3')
+
+        # Litho-fluids
+        lfs = LithoFluids([
+            LithoFluid(default='shale'),
+            LithoFluid(name='Quasi 2D', vp=vp, vs=1800, rho=2.3),
+            LithoFluid(name='Basement', vp=2800, vs=1350, rho=2.46)
+        ])
+        table_lf = LithoFluidsTable(lfs, width=300, advanced=False)
+        cds_lf = table_lf.cds
+        lf_table, add_row, delete_row, update = table_lf.draw(cds_lf)
 
         # wedge model
-        first_layer = Layer(thickness=Q_(50., 'm'), litho_fluid=LithoFluid(vp=2800., vs=1350, rho=2.46))
-        second_layer = Layer(thickness=wedge, litho_fluid=LithoFluid(vp=3100, vs=1800, rho=2.3))
-        third_layer = Layer(thickness=reverse_wedge, litho_fluid=LithoFluid(vp=2800, vs=1350, rho=2.46))
+        first_layer = Layer(name='First', thickness=Q_(50., 'm'), litho_fluid=lfs.litho_fluids[0])
+        second_layer = Layer(name='Second', thickness=wedge, litho_fluid=lfs.litho_fluids[1])
+        third_layer = Layer(name='Third', thickness=reverse_wedge, litho_fluid=lfs.litho_fluids[2])
 
         # # gas lens model
         # first_layer = Layer(thickness=Q_(0.05, 's'), vp=Q_(3400., 'm/s'), vs=Q_(1820., 'm/s'), rho=Q_(2.6, 'gram/cm^3'))
         # second_layer = Layer(thickness=Q_(0.03, 's'), vp=Q_(vp, 'm/s'), vs=Q_(vs, 'm/s'), rho=Q_(rho, 'gram/cm^3'), target=True)
         # third_layer = Layer(thickness=Q_(0.05, 's'), vp=Q_(3400., 'm/s'), vs=Q_(1820., 'm/s'), rho=Q_(2.6, 'gram/cm^3'))
 
-        m = Model(model_type='quasi 2D', depth_to_top=Q_(2000., 'm'), layers=[first_layer, second_layer, third_layer],
+        m = Model(depth_to_top=Q_(2000., 'm'), layers=[first_layer, second_layer, third_layer],
                   trace_index_range=np.arange(n_samplings))
-        m.plot()
+        # m.plot()
+        table_model = ModelTable(m, cds_lf)
+        cds_model = table_model.cds
+        model_table, add_row_m, delete_row_m, update_m = table_model.draw(cds_model)
 
         # wavelet = bumw.ricker(0.096, 0.001, 25)
 
         # plot_wiggles(m, 0.001, wavelet, angle=0., eei=True, scaling=80., extract_avo_at=[(8, 1.99), (24, 1.99)])
         # plot_wiggles(m, 0.001, wavelet, angle=15., eei=True, scaling=80., extract_avo_at=[(8, 1.99), (24, 1.99)])
         # plot_wiggles(m, 0.001, wavelet, angle=-90., eei=True, scaling=80., extract_avo_at=[(8, 1.99), (24, 1.99)])
+
+        if unit_test:
+            show(
+                row(
+                    column(model_table, row(add_row_m, delete_row_m, update_m)),
+                    column(lf_table, row(add_row, delete_row, update))
+                )
+            )
+            return None
+        else:
+            return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update
 
     def test_layered_model(self):
         wavelet = bumw.ricker(0.096, 0.001, 25)
@@ -350,10 +381,59 @@ class TestCase(unittest.TestCase):
         # Create the laminar model
         lm = LaminarModel(resolution=Q_(0.1, 'm'), avo_or_eei='avo')
 
-        lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, freq_slider = lm.draw()
+        lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls = lm.draw()
 
         if unit_test:
-            show(column(grid, freq_slider,
+            show(column(grid, controls,
+                        row(
+                            column(model_table, row(add_row_m, delete_row_m, update_m)),
+                            column(lf_table, row(add_row, delete_row, update))
+                        ))
+                 )
+            return None
+        else:
+            return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid, controls
+
+    def test_laminar_q2d_model(self, unit_test=True):
+        from bokeh.io import output_file
+        from bokeh.plotting import show, row, column
+        output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
+
+        def vp(_i):
+            return Q_(3000. +  5. * _i, 'm/s')
+        def vs(_i):
+            return Q_(1500. +  5. * _i, 'm/s')
+        def rho(_i):
+            return Q_(2.5 +  0.1 * _i, 'grams/cm^3')
+        def wedge(i):
+            return Q_(50. - i, 'm')
+        def reverse_wedge(i):
+            return Q_(25. + i, 'm')
+
+        # Litho-fluids
+        lfs = LithoFluids([
+            LithoFluid(default='shale'),
+            LithoFluid(default='oil_sst'),
+            LithoFluid(name='Quasi 2D', vp=vp, vs=vs, rho=rho),
+            LithoFluid(name='Basement', vp=2800, vs=1350, rho=2.46)
+        ])
+
+        # wedge model
+        first_layer = Layer(name='First', thickness=Q_(50., 'm'), litho_fluid=lfs.litho_fluids[0])
+        second_layer = Layer(name='Second', thickness=wedge, litho_fluid=lfs.litho_fluids[2])
+        second_layer_oil = Layer(name='Second', case='Oil', thickness=wedge, litho_fluid=lfs.litho_fluids[1])
+        third_layer = Layer(name='Third', thickness=reverse_wedge, litho_fluid=lfs.litho_fluids[3])
+        layers = [first_layer, second_layer, second_layer_oil, third_layer]
+        model = Model(layers=layers, trace_index_range=np.arange(11))
+
+        # Create the laminar model
+        lm = LaminarModel(model=model, litho_fluids=lfs, resolution=Q_(0.1, 'm'), avo_or_eei='avo')
+
+        # lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls = lm.draw()
+        lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls = lm.draw_2d()
+
+        if unit_test:
+            show(column(grid, controls,
                 row(
                     column(model_table, row(add_row_m, delete_row_m, update_m)),
                     column(lf_table, row(add_row, delete_row, update))
@@ -361,7 +441,25 @@ class TestCase(unittest.TestCase):
             )
             return None
         else:
-            return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid, freq_slider
+            return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid, controls
+
+    def test_wedge(self, unit_test=True):
+        from bokeh.io import output_file
+        from bokeh.plotting import show, row, column
+        output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
+        wm = WedgeModel(n_traces=11)
+        lf_table, lf_controls, model_table, model_controls, grid, controls = wm.draw()
+
+        if unit_test:
+            show(column(grid, controls,
+                        row(
+                            column(model_table, model_controls),
+                            column(lf_table, lf_controls)
+                        ))
+                 )
+            return None
+        else:
+            return model_table, model_controls, lf_table, lf_controls, grid, controls
 
     def test_catch_change_in_cases(self):
         prev_cases = [[1, 2], [1,2,3], [1,2], [1,4]]

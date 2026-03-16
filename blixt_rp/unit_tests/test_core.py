@@ -461,3 +461,56 @@ class LithoFluidTests(unittest.TestCase):
         print(lf.vp(10))
         print(lf.to_sums_dict(10))
         self.assertEqual(3050., lf.vp(10).magnitude)
+
+    def test_plot(self):
+        from blixt_rp.core.core import LithoFluid
+        lf = LithoFluid()
+        lf.plot()
+        plt.show()
+        self.assertTrue(True)
+
+    def test_table(self, unit_test=True):
+        from bokeh.io import output_file
+        from bokeh.plotting import show, row, column
+        from blixt_rp.core.core import LithoFluid, LithoFluids, LithoFluidsTable
+        output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
+
+        lfs = LithoFluids(litho_fluids=[LithoFluid(default='shale'), LithoFluid(default='brine_sst')])
+
+        lft = LithoFluidsTable(lfs)
+
+        cds = lft.cds
+        dt, add_row, delete_row, update_table = lft.draw(cds)
+        self.assertTrue(True)
+        if unit_test:
+            show(column(
+                dt,
+                row(add_row, delete_row, update_table)
+            ))
+            return None
+        else:
+            return dt, add_row, delete_row, update_table
+
+    def test_quasi_2D_table(self, unit_test=True):
+        from bokeh.io import output_file
+        from bokeh.plotting import show, row, column
+        from blixt_rp.core.core import LithoFluid, LithoFluids, LithoFluidsTable
+        output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
+
+        def vp(_i):
+            return Q_(3000. +  5. * _i, 'm/s')
+        lf1 = LithoFluid(name='Quasi 2D', vp=vp)
+        lfs = LithoFluids(litho_fluids=[LithoFluid(default='shale'), lf1, LithoFluid(default='brine_sst')])
+        lft = LithoFluidsTable(lfs)
+
+        cds = lft.cds
+        dt, add_row, delete_row, update_table = lft.draw(cds)
+        self.assertTrue(True)
+        if unit_test:
+            show(column(
+                dt,
+                row(add_row, delete_row, update_table)
+            ))
+            return None
+        else:
+            return dt, add_row, delete_row, update_table
