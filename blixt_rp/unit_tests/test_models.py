@@ -430,7 +430,8 @@ class TestCase(unittest.TestCase):
         lm = LaminarModel(model=model, litho_fluids=lfs, resolution=Q_(0.1, 'm'), avo_or_eei='avo')
 
         # lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls = lm.draw()
-        lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls = lm.draw_2d()
+        (lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls,
+         synth_2d_cds) = lm.draw_2d()
 
         if unit_test:
             show(column(grid, controls,
@@ -447,7 +448,7 @@ class TestCase(unittest.TestCase):
         from bokeh.io import output_file
         from bokeh.plotting import show, row, column
         output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
-        wm = WedgeModel(n_traces=11)
+        wm = WedgeModel(n_traces=51)
         lf_table, lf_controls, model_table, model_controls, grid, controls = wm.draw()
 
         if unit_test:
@@ -467,3 +468,18 @@ class TestCase(unittest.TestCase):
         for new_case, prev_case in zip(new_cases, prev_cases):
             _dict = detect_change_in_cases(new_case, prev_case)
             print('New:', _dict['new'], ', Removed: ', _dict['removed'])
+
+    def test_horizon_cds(self):
+        def wedge(i):
+            return Q_(50. - i, 'm')
+        def reverse_wedge(i):
+            return Q_(25. + i, 'm')
+        first_layer = Layer(name='First', thickness=Q_(50., 'm'), litho_fluid=LithoFluid(default='shale'))
+        second_layer = Layer(name='Second', thickness=wedge, litho_fluid=LithoFluid(default='brine_sst'))
+        second_layer_oil = Layer(name='Second', case='Oil', thickness=wedge, litho_fluid=LithoFluid(default='oil_sst'))
+        third_layer = Layer(name='Third', thickness=reverse_wedge, litho_fluid=LithoFluid(default='shale'))
+        layers = [first_layer, second_layer, second_layer_oil, third_layer]
+        model = Model(layers=layers, trace_index_range=np.arange(11))
+        cds = model.horizons_cds()
+        for _key in list(cds.data.keys()):
+            print(_key, cds.data[_key])

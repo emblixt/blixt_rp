@@ -227,6 +227,7 @@ class StochasticSyntheticTraces:
 
     def get_traces(self, simulate_avo=False) -> np.ndarray:
         idx_refl = self.rng.integers(100, self.trace_length, self.n_reflectors)
+        print('Depth index of reflectors in the synthetic traces: ', idx_refl)
         refl = np.zeros(self.trace_length)
         refl[idx_refl] = 2 * self.rng.random(self.n_reflectors) - 1
 
@@ -1131,6 +1132,104 @@ def seismic_data_plot(_type:str) -> figure:
 
     return p
 
+def picks_from_seismic_cds(seismic_cds: ColumnDataSource, feature: str, depth_index: int | list | None = None):
+    """
+    Extract amplitudes and depth indexes of selected features from the input seismic CDS
+    :param seismic_cds:
+            ColumnDataSource({'value': [traces.T]})
+            where traces is a np.ndarray of size MxN, contains M number of seismic traces, each of length N
+    :param feature:
+        What seismic feature to pick:
+            - 'extract' : Extract seismic amplitude at given depth index
+            - 'global_max' :
+            - 'global_min' :
+            - 'nearest_max' :
+            - 'nearest_min' :
+            - 'nearest_max_above' :
+            - 'nearest_min_above' :
+            - 'nearest_max_below' :
+            - 'nearest_min_below' :
+    :param depth_index:
+        Either a list of length M (one for each trace) depth indexes, or None
+    :return:
+        list of amplitudes, list of depth indexes from where the amplitudes are taken from
+    """
+    from scipy.signal import argrelextrema
+
+    # TODO CLEAN UP, NOT SURE IF depth_index are just indexes or actually depth values!
+    #
+
+    data = seismic_cds.data['value'][0]
+    if depth_index is None:
+        if feature not in ['global_max', 'global_min']:
+            print_info('Depth indexes are needed to extract amplitudes', 'error', logger, 'IOError')
+    else:
+        if isinstance(depth_index, int):
+            depth_index = [depth_index] * data.shape[1]
+        if len(depth_index) != data.shape[1]:
+            print_info('Depth indexes size must match number of traces', 'error', logger, 'IOError')
+
+    amps = []
+    amp_inds = []
+
+    if feature == 'global_max':
+        for i in range(data.shape[1]):
+            amps.append(np.nanmax(data[:, i]))
+            amp_inds.append(np.nanargmax(data[:,i]))
+    elif feature == 'global_min':
+        for i in range(data.shape[1]):
+            amps.append(np.nanmin(data[:, i]))
+            amp_inds.append(np.nanargmin(data[:,i]))
+    elif feature == 'extract':
+        for i in range(data.shape[1]):
+            amps.append(data[depth_index[i], i])
+            amp_inds = depth_index
+    elif feature in ['nearest_max', 'nearest_max_above', 'nearest_max_below']:
+        for i in range(data.shape[1]):
+            max_idx = argrelextrema(data[:, i], np.greater)[0]
+            if feature == 'nearest_max':
+                idx = closest(depth_index[i], np.array(max_idx))
+                amps.append(data[max_idx[idx], i])
+                amp_inds.append(max_idx[idx])
+            if feature == 'nearest_max_above':
+                filtered_idx = [x for x in max_idx if x <= depth_index[i]]
+                if len(filtered_idx) < 1:
+                    continue
+                idx = closest(depth_index[i], np.array(filtered_idx))
+                amps.append(data[filtered_idx[idx], i])
+                amp_inds.append(filtered_idx[idx])
+            if feature == 'nearest_max_below':
+                filtered_idx = [x for x in max_idx if x >= depth_index[i]]
+                if len(filtered_idx) < 1:
+                    continue
+                idx = closest(depth_index[i], np.array(filtered_idx))
+                amps.append(data[filtered_idx[idx], i])
+                amp_inds.append(filtered_idx[idx])
+    elif feature in ['nearest_min', 'nearest_min_above', 'nearest_min_below']:
+        for i in range(data.shape[1]):
+            min_idx = argrelextrema(data[:, i], np.less)[0]
+            if feature == 'nearest_min':
+                idx = closest(depth_index[i], np.array(min_idx))
+                amps.append(data[min_idx[idx], i])
+                amp_inds.append(min_idx[idx])
+            if feature == 'nearest_min_above':
+                filtered_idx = [x for x in min_idx if x <= depth_index[i]]
+                if len(filtered_idx) < 1:
+                    continue
+                idx = closest(depth_index[i], np.array(filtered_idx))
+                amps.append(data[filtered_idx[idx], i])
+                amp_inds.append(filtered_idx[idx])
+            if feature == 'nearest_min_below':
+                filtered_idx = [x for x in min_idx if x >= depth_index[i]]
+                if len(filtered_idx) < 1:
+                    continue
+                idx = closest(depth_index[i], np.array(filtered_idx))
+                amps.append(data[filtered_idx[idx], i])
+                amp_inds.append(filtered_idx[idx])
+
+    return amps, amp_inds
+
+
 class TestCases(unittest.TestCase):
 
     def test_seismic_data_plot(self):
@@ -1531,5 +1630,37 @@ class TestCases(unittest.TestCase):
     def test_closest(self):
         x = np.random.normal(10,2, 20)
         x = np.array([int(_x*10) for _x in x])
-        print(np.sort(x))
+        # print(np.sort(x))
+        print(x)
         print(closest(90.45, x))
+
+    def test_picks(self):
+        _synts = StochasticSyntheticTraces(trace_length=500)
+        synts = _synts.get_traces(simulate_avo=True)
+        cds = ColumnDataSource({'value': [synts.T]})
+        _seismic_color_map = seismic_color_map(min_val=np.min(synts), max_val=np.max(synts))
+        (m, n) = cds.data['value'][0].shape
+        print(synts.shape, m, n )
+
+        p = figure()
+        p.image('value', source=cds,
+                color_mapper=_seismic_color_map, dh=synts.shape[1], dw=synts.shape[0], x=0, y=0)
+
+        markers = ['asterisk', 'circle', 'cross', 'dash', 'dot', 'square']
+        colors = ['black', 'white', 'orange', 'green', 'yellow', 'brown']
+        for i, feature in enumerate(['nearest_min']):
+        # for i, feature in enumerate(['nearest_min', 'nearest_min_above', 'nearest_min_below']):
+        # for i, feature in enumerate(['extract', 'global_max', 'global_min', 'nearest_max', 'nearest_max_above', 'nearest_max_below']):
+        # for i, feature in enumerate(['extract', 'global_max', 'global_min', 'nearest_max']):
+            if feature in ['global_max', 'global_min']:
+                indxs = None
+            else:
+                indxs = 250
+
+            amps, inds = picks_from_seismic_cds(cds, feature, indxs)
+            print(feature, [('{:.2f}'.format(_a), str(_i)) for _a, _i in zip(amps, inds)])
+
+            p.scatter(x=np.arange(n)[::2], y=inds[::2], marker=markers[i], line_color=colors[i],
+                      fill_color=colors[i], size=7)
+
+        show(p)

@@ -948,7 +948,7 @@ class Model:
         """
         _list = []
         for _i, _l in enumerate(self.layers):
-            if _l.case == global_base_case_name:
+            if _l.case.lower() == global_base_case_name.lower():
                 _list.append(_i)
         return _list
 
@@ -981,7 +981,7 @@ class Model:
                 continue
             for _case in self.case_names:
                 _j = None
-                if _case == global_base_case_name:
+                if _case.lower() == global_base_case_name.lower():
                     continue
                 _j = self.index_of(_name, _case)
                 if _j is not None:
@@ -1066,11 +1066,8 @@ class Model:
         for _i, _j in enumerate(self.base_case_layers):
             interface_depth += previous_thickness
             if _i > 0:
-                _list.append(
-                    int(
-                        np.argmin(np.sqrt( (depths - interface_depth)**2 ))
-                    )
-                )
+                _x = int( np.argmin(np.sqrt( (depths - interface_depth)**2 )) )
+                _list.append(_x)
 
             if isinstance(self.layers[_j].thickness, Callable):
                 _thickness = self.layers[_j].thickness(index)
@@ -1080,6 +1077,50 @@ class Model:
             previous_thickness = _thickness
 
         return _list
+
+    def horizons_cds(self, resolution: pint.Quantity | None = None) -> ColumnDataSource:
+        """
+        Returns ColumnDataSource (cds) with the top depths of each layer in the model
+
+        :param resolution:
+            pint.Quantity or None
+            If a resolution is given, it also calculates the depth index for the top of each layer
+
+        :return:
+        """
+        _dict = {'Top {}'.format(self.layers[_i].name): [] for _i in self.base_case_layers}
+        if resolution is not None:
+            depths = self.depth_array(resolution)
+            for _layer_i in self.base_case_layers:
+                _dict['Top {} index'.format(self.layers[_layer_i].name)] = []
+        else:
+            depths = None
+
+        if self.trace_index_range is None:
+            trace_indexes = [0]
+        else:
+            trace_indexes = self.trace_index_range
+
+        _dict['x'] = trace_indexes
+
+        for trace_idx in self.trace_index_range:
+            previous_thickness = 0.
+            interface_depth = self.depth_to_top
+            for _i, _j in enumerate(self.base_case_layers):
+                top_name = 'Top {}'.format(self.layers[_j].name)
+                top_index_name = 'Top {} index'.format(self.layers[_j].name)
+                interface_depth += previous_thickness
+                _dict[top_name].append(interface_depth.to('m').magnitude)
+                if depths is not None:
+                    _dict[top_index_name].append(int(np.argmin(np.sqrt( (depths - interface_depth)**2 ))))
+                if isinstance(self.layers[_j].thickness, Callable):
+                    _thickness = self.layers[_j].thickness(trace_idx)
+                else:
+                    _thickness = self.layers[_j].thickness
+                previous_thickness = _thickness
+
+        return ColumnDataSource(_dict)
+
 
     def append(self, layer):
         if not isinstance(layer, Layer):
@@ -1277,7 +1318,7 @@ class ModelTable:
                 _dict['top'].append(previous_top)
                 previous_thickness = this_thickness
             else:
-                if _layer.case == global_base_case_name:  # Only add base case layers to the sum of thicknesses
+                if _layer.case.lower() == global_base_case_name.lower():  # Only add base case layers to the sum of thicknesses
                     _dict['top'].append(previous_top + previous_thickness)
                     previous_top += previous_thickness
                     previous_thickness = this_thickness
@@ -1419,6 +1460,15 @@ class ModelTable:
 
     # def line_cds(self, resolution: pint.Quantity, mod_cds: ColumnDataSource) -> ColumnDataSource:
     def line_cds(self, elastics_dict: dict) -> ColumnDataSource:
+        """
+        Calculates the lines that represent the elastic properties of the model
+
+        :param elastics_dict:
+            dict
+            A realization of the model table (at a given trace index)
+            See
+        :return:
+        """
         # elastics = self.realize(resolution, mod_cds)
         _dict = modify_dict(elastics_dict)
         return ColumnDataSource(_dict)
@@ -1531,7 +1581,6 @@ class ModelTable:
                 layers=layers,
                 trace_index_range=self.model.trace_index_range
             )
-            # TODO Need to detect which parameters that are functions, and avoid updating those
             cds.data = new_data
 
         title_txt = '<div style="font-size:12px; font-weight:600; margin-bottom:0px; text-align:center">\n'
@@ -2003,7 +2052,7 @@ class LaminarModel:
         case_selector.on_change("value", update_case_function)
 
         return (lf_table, add_row, delete_row, update, _model_table, add_row_m, delete_row_m, update_m, grid,
-                row(trace_selector, case_selector, freq_slider))
+                row(trace_selector, case_selector, freq_slider), synth_2d_cds)
 
 
 class WedgeModel(LaminarModel):
@@ -2015,8 +2064,8 @@ class WedgeModel(LaminarModel):
                  litho_fluids: LithoFluids | None = None,
                  resolution: pint.Quantity | None = None,
                  depth_to_wedge: pint.Quantity | None = None,
-                 from_thickness: pint.Quantity | None = None,
-                 to_thickness: pint.Quantity | None = None,
+                 min_thickness: pint.Quantity | None = None,
+                 max_thickness: pint.Quantity | None = None,
                  n_traces: int | None = None,
                  **kwargs
                  ):
@@ -2031,8 +2080,8 @@ class WedgeModel(LaminarModel):
                 and 1 for the variant of the wedge
         :param resolution:
         :param depth_to_wedge:
-        :param from_thickness:
-        :param to_thickness:
+        :param min_thickness:
+        :param max_thickness:
         :param n_traces:
         :param kwargs:
         """
@@ -2045,32 +2094,22 @@ class WedgeModel(LaminarModel):
             resolution = Q_(0.1, 'm')
         if depth_to_wedge is None:
             depth_to_wedge = Q_(3000., 'm')
-        if from_thickness is None:
-            from_thickness = Q_(0.1, 'm')
-        if to_thickness is None:
-            to_thickness = Q_(50., 'm')
+        if min_thickness is None:
+            min_thickness = Q_(0.1, 'm')
+        if max_thickness is None:
+            max_thickness = Q_(50., 'm')
         if n_traces is None:
             n_traces = 51
 
-        if from_thickness > to_thickness:
-            top_thickness = 1.0 * from_thickness
+        top_thickness = 1.0 * max_thickness
 
-            def wedge(i):
-                return from_thickness - (from_thickness - to_thickness) * i / (n_traces - 1)
+        wedge_thickness = np.linspace(min_thickness.to('m').magnitude, max_thickness.to('m').magnitude, n_traces)
 
-            def reverse_wedge(i):
-                return top_thickness + (from_thickness - to_thickness) * i / (n_traces - 1)
-        else:
-            top_thickness = 1.0 * to_thickness
+        def wedge(i):
+            return min_thickness + (max_thickness - min_thickness) * i / (n_traces - 1)
 
-            def wedge(i):
-                return from_thickness + (to_thickness - from_thickness) * i / (n_traces - 1)
-
-            def reverse_wedge(i):
-                return top_thickness + (to_thickness - from_thickness) - (to_thickness - from_thickness) * i / (n_traces - 1)
-
-        print('Wedge thickness: ', [wedge(_i) for _i in np.arange(n_traces)])
-        print('Reverse wedge thickness: ', [reverse_wedge(_i) for _i in np.arange(n_traces)])
+        def reverse_wedge(i):
+            return top_thickness + (max_thickness - min_thickness) - (max_thickness - min_thickness) * i / (n_traces - 1)
 
         layer1 = Layer(name='Top', thickness=top_thickness, litho_fluid=litho_fluids.litho_fluids[0])
         layer2 = Layer(name='Wedge', thickness=wedge, litho_fluid=litho_fluids.litho_fluids[1])
@@ -2087,7 +2126,54 @@ class WedgeModel(LaminarModel):
 
     def draw(self):
         from bokeh.plotting import column, row
-        lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls = self.draw_2d()
+        from bokeh.models import Select
+
+        from blixt_rp.core.seismic import picks_from_seismic_cds
+
+        picks = ['global_max', 'global_min', 'extract',
+                 'nearest_max', 'nearest_max_above', 'nearest_max_below',
+                 'nearest_min', 'nearest_min_above', 'nearest_min_below']
+
+        horizons_cds = self.model.horizons_cds(resolution=self.resolution)
+        (lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls,
+         synth_2d_cds) = self.draw_2d()
+
+        for h_name in ['Top Top', 'Top Wedge', 'Top Bottom']:
+            grid.children[2][0].scatter(x='x', y=h_name, marker='dash', source=horizons_cds, size=10)
+
+        top_picker = Select(
+            title='Pick top wedge:',
+            value='nearest_min',
+            options=picks
+        )
+        base_picker = Select(
+           title='Pick base wedge:',
+            value='nearest_max',
+            options=picks
+        )
+
+        depth = self.model.depth_array(self.resolution)
+
+        top_amps, top_depths_indxs = picks_from_seismic_cds(synth_2d_cds, top_picker.value, horizons_cds.data['Top Wedge index'])
+        base_amps, base_depths_indxs = picks_from_seismic_cds(synth_2d_cds, base_picker.value, horizons_cds.data['Top Bottom index'])
+
+        horizons_cds.data['Top pick'] = [depth[_i] for _i in top_depths_indxs]
+        horizons_cds.data['Base pick'] = [depth[_i] for _i in base_depths_indxs]
+
+        def top_picker_function(attr, old, new):
+            _top_amps, _top_depths_indxs = picks_from_seismic_cds(synth_2d_cds, new, horizons_cds.data['Top Wedge index'])
+            horizons_cds.data['Top pick'] = [depth[_i] for _i in _top_depths_indxs]
+
+        def base_picker_function(attr, old, new):
+            _base_amps, _base_depths_indxs = picks_from_seismic_cds(synth_2d_cds, new, horizons_cds.data['Top Bottom index'])
+            horizons_cds.data['Base pick'] = [depth[_i] for _i in _base_depths_indxs]
+
+        grid.children[2][0].scatter(x='x', y='Top pick', marker='circle', source=horizons_cds, size=7)
+        grid.children[2][0].scatter(x='x', y='Base pick', marker='square', source=horizons_cds, size=7)
+
+        top_picker.on_change('value', top_picker_function)
+        base_picker.on_change('value', base_picker_function)
+
         return lf_table, row(add_row, delete_row, update), model_table, row(update_m), grid, controls
 
 def build_layered_model(depth_to_target, overburden_thickness, target_thickness,
