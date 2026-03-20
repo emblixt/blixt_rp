@@ -2103,7 +2103,7 @@ class WedgeModel(LaminarModel):
 
         top_thickness = 1.0 * max_thickness
 
-        wedge_thickness = np.linspace(min_thickness.to('m').magnitude, max_thickness.to('m').magnitude, n_traces)
+        self.wedge_thickness = np.linspace(min_thickness.to('m').magnitude, max_thickness.to('m').magnitude, n_traces)
 
         def wedge(i):
             return min_thickness + (max_thickness - min_thickness) * i / (n_traces - 1)
@@ -2125,18 +2125,24 @@ class WedgeModel(LaminarModel):
         )
 
     def draw(self):
-        from bokeh.plotting import column, row
-        from bokeh.models import Select
+        from bokeh.plotting import column, row, figure
+        from bokeh.models import Select, HoverTool, Range1d, CrosshairTool, Span
+        from bokeh.layouts import gridplot
 
         from blixt_rp.core.seismic import picks_from_seismic_cds
+        from blixt_rp.plotting.log_plotter import default_tools
 
+        # Create the default Quasi 2D widgets
+        (lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls,
+         synth_2d_cds) = self.draw_2d()
+
+        # Create the widgets for plotting the Top / Base wedge seismic picks, which we calculate the
+        # apparent thickness from
         picks = ['global_max', 'global_min', 'extract',
                  'nearest_max', 'nearest_max_above', 'nearest_max_below',
                  'nearest_min', 'nearest_min_above', 'nearest_min_below']
 
         horizons_cds = self.model.horizons_cds(resolution=self.resolution)
-        (lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls,
-         synth_2d_cds) = self.draw_2d()
 
         for h_name in ['Top Top', 'Top Wedge', 'Top Bottom']:
             grid.children[2][0].scatter(x='x', y=h_name, marker='dash', source=horizons_cds, size=10)
@@ -2152,29 +2158,109 @@ class WedgeModel(LaminarModel):
             options=picks
         )
 
-        depth = self.model.depth_array(self.resolution)
+        depth = self.model.depth_array(self.resolution).to('m').magnitude
 
         top_amps, top_depths_indxs = picks_from_seismic_cds(synth_2d_cds, top_picker.value, horizons_cds.data['Top Wedge index'])
         base_amps, base_depths_indxs = picks_from_seismic_cds(synth_2d_cds, base_picker.value, horizons_cds.data['Top Bottom index'])
 
+        horizons_cds.data['Thickness'] = self.wedge_thickness
         horizons_cds.data['Top pick'] = [depth[_i] for _i in top_depths_indxs]
+        horizons_cds.data['Top amp'] = np.absolute(top_amps)
         horizons_cds.data['Base pick'] = [depth[_i] for _i in base_depths_indxs]
+        horizons_cds.data['Base amp'] = np.absolute(base_amps)
+        horizons_cds.data['Apparent thickness'] = [_b - _t for _b, _t in zip(
+            horizons_cds.data['Base pick'], horizons_cds.data['Top pick'])]
+
+        min_amp = 1E6
+        max_amp = 1E-6
+        for amps in [horizons_cds.data['Top amp'], horizons_cds.data['Base amp']]:
+            if np.max(amps) > max_amp:
+                max_amp = np.max(amps)
+            if np.min(amps) < min_amp:
+                min_amp = np.min(amps)
+
+
+
+        def do_top_pick():
+            _top_amps, _top_depths_indxs = picks_from_seismic_cds(synth_2d_cds, top_picker.value, horizons_cds.data['Top Wedge index'])
+            horizons_cds.data['Top pick'] = [depth[_i] for _i in _top_depths_indxs]
+            horizons_cds.data['Top amp'] = np.absolute(_top_amps)
+            horizons_cds.data['Apparent thickness'] = [_b - _t for _b, _t in zip(
+                horizons_cds.data['Base pick'], horizons_cds.data['Top pick'])]
+
+        def do_base_pick():
+            _base_amps, _base_depths_indxs = picks_from_seismic_cds(synth_2d_cds, base_picker.value, horizons_cds.data['Top Bottom index'])
+            horizons_cds.data['Base pick'] = [depth[_i] for _i in _base_depths_indxs]
+            horizons_cds.data['Base amp'] = np.absolute(_base_amps)
+            horizons_cds.data['Apparent thickness'] = [_b - _t for _b, _t in zip(
+                horizons_cds.data['Base pick'], horizons_cds.data['Top pick'])]
 
         def top_picker_function(attr, old, new):
-            _top_amps, _top_depths_indxs = picks_from_seismic_cds(synth_2d_cds, new, horizons_cds.data['Top Wedge index'])
-            horizons_cds.data['Top pick'] = [depth[_i] for _i in _top_depths_indxs]
+            do_top_pick()
 
         def base_picker_function(attr, old, new):
-            _base_amps, _base_depths_indxs = picks_from_seismic_cds(synth_2d_cds, new, horizons_cds.data['Top Bottom index'])
-            horizons_cds.data['Base pick'] = [depth[_i] for _i in _base_depths_indxs]
+            do_base_pick()
 
+        # Draw the picks
         grid.children[2][0].scatter(x='x', y='Top pick', marker='circle', source=horizons_cds, size=7)
         grid.children[2][0].scatter(x='x', y='Base pick', marker='square', source=horizons_cds, size=7)
 
         top_picker.on_change('value', top_picker_function)
         base_picker.on_change('value', base_picker_function)
+        update_m.on_click(do_top_pick)
+        update_m.on_click(do_base_pick)
 
-        return lf_table, row(add_row, delete_row, update), model_table, row(update_m), grid, controls
+        # Create new figures to which we can add the new apparent thickness plots
+        # First extract the width of the columns in the original gridplot
+        _last_width = 0  # Width of the last column which plots the wedge synthetics
+        _total_width = 0
+        for _child in grid.children:
+            _last_width = _child[0].width
+            _total_width += _last_width
+        _height = 300
+        p_scatter = figure(width=_total_width - _last_width, height=_height, tools=default_tools)
+        p_lines = figure(width=_last_width, height=_height, tools=default_tools)
+
+        p_scatter.scatter(x='Apparent thickness', y='Top amp', source=horizons_cds)
+        p_lines.line(
+            x='Thickness', y='Apparent thickness', source=horizons_cds, legend_label='Apparent thickness',
+            line_color='black', line_width=2.0
+        )
+        p_lines.extra_y_ranges['Amplitude'] = Range1d(min_amp, max_amp)
+        # p_lines.line(x='Thickness', y='Top amp', source=horizons_cds, name='|Top ampl|')
+        # p_lines.line(x='Thickness', y='Base amp', source=horizons_cds, name='|Base ampl|')
+        p_lines.line(
+            x='Thickness', y='Top amp', source=horizons_cds, legend_label='|Top ampl|', y_range_name='Amplitude',
+            line_color='red', line_width=2.0
+        )
+        p_lines.line(
+            x='Thickness', y='Base amp', source=horizons_cds, legend_label='|Base ampl|', y_range_name='Amplitude',
+            line_color='blue'
+        )
+
+        # Style the new plots
+        _w = Span(dimension="width", line_dash="dashed", line_width=1)
+        _h = Span(dimension="height", line_dash="dashed", line_width=1)
+        for _p in [p_scatter, p_lines]:
+            _p.toolbar.logo = None
+            _p.add_tools(CrosshairTool(overlay=(_w, _h)))
+            hover = _p.select(dict(type=HoverTool))
+            hover.tooltips = [("(x,y)", "($x, $y)")]
+            _p.xaxis.visible = True
+            _p.yaxis.visible = False
+        p_scatter.yaxis.visible = True
+        p_scatter.xaxis.axis_label = 'Apparent thickness [m]'
+        p_scatter.yaxis.axis_label = '|Top ampl|'
+        p_lines.legend.click_policy = 'hide'
+        p_lines.legend.location = 'bottom_right'
+        p_lines.legend.label_text_font_size = '8pt'
+        p_lines.xaxis.axis_label = 'Wedge thickness [m]'
+
+        new_grid = gridplot([[p_scatter, p_lines]], toolbar_location='right', merge_tools=True)
+
+
+        return (lf_table, row(add_row, delete_row, update), model_table, row(update_m), grid,
+                row(controls, top_picker, base_picker), new_grid)
 
 def build_layered_model(depth_to_target, overburden_thickness, target_thickness,
                         overburden, target, underburden, domain='TWT') -> Model:

@@ -449,10 +449,10 @@ class TestCase(unittest.TestCase):
         from bokeh.plotting import show, row, column
         output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
         wm = WedgeModel(n_traces=51)
-        lf_table, lf_controls, model_table, model_controls, grid, controls = wm.draw()
+        lf_table, lf_controls, model_table, model_controls, grid, controls, new_grid = wm.draw()
 
         if unit_test:
-            show(column(grid, controls,
+            show(column(grid, controls, new_grid,
                         row(
                             column(model_table, model_controls),
                             column(lf_table, lf_controls)
@@ -460,7 +460,7 @@ class TestCase(unittest.TestCase):
                  )
             return None
         else:
-            return model_table, model_controls, lf_table, lf_controls, grid, controls
+            return model_table, model_controls, lf_table, lf_controls, grid, controls, new_grid
 
     def test_catch_change_in_cases(self):
         prev_cases = [[1, 2], [1,2,3], [1,2], [1,4]]

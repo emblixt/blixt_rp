@@ -669,7 +669,7 @@ def create_column_figure(_column: LogColumn,
                 title=_title)  # , active_inspect=None)
     # style the plot
     _p.toolbar.logo = None
-    _p.add_tools(CrosshairTool(overlay=[_w, _h]))
+    _p.add_tools(CrosshairTool(overlay=(_w, _h)))
     hover = _p.select(dict(type=HoverTool))
     hover.tooltips = [("(x,y)", "($x, $y)"), ("Value", "@value")]
 
