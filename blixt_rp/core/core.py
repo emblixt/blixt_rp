@@ -26,7 +26,7 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', 
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from blixt_utils.utils import add_one, fix_well_name, cycle_colors, isnan
+from blixt_utils.utils import add_one, fix_well_name, cycle_colors, isnan, print_info
 from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
 
@@ -1944,6 +1944,13 @@ class LithoFluids:
 
     def __len__(self):
         return len(self.litho_fluids)
+
+    def __getitem__(self, item):
+        for _lf in self.litho_fluids:
+            if _lf.name.lower() == item.lower():
+                return _lf
+        print_info('No litho fluid named {} is found'.format(item), 'warning', logger)
+        return None
 
     def from_excel(self,
                    excel_file: str,

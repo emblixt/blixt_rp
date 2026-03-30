@@ -381,10 +381,10 @@ class TestCase(unittest.TestCase):
         # Create the laminar model
         lm = LaminarModel(resolution=Q_(0.1, 'm'), avo_or_eei='avo')
 
-        lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls = lm.draw()
+        title, lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls = lm.draw()
 
         if unit_test:
-            show(column(grid, controls,
+            show(column(column(title, grid, sizing_mode='stretch_width'), controls,
                         row(
                             column(model_table, row(add_row_m, delete_row_m, update_m)),
                             column(lf_table, row(add_row, delete_row, update))

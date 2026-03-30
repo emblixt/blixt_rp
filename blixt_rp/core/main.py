@@ -1,5 +1,6 @@
 # This can be invoked by calling:
 # C:\Users\emb\Documents\PycharmProjects\blixt_rp\blixt_rp>C:\Users\emb\Documents\PycharmProjects\venv\Scripts\bokeh serve --show core
+# C:\Users\marten.blixt\PycharmProjects\blixt_rp\blixt_rp>C:\Users\marten.blixt\PycharmProjects\blixt_rp\.p310\Scripts\bokeh serve --show core
 
 import sys
 import os

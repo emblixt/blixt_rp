@@ -754,7 +754,8 @@ class Model:
     def __init__(self,
                  depth_to_top: pint.Quantity | None = None,
                  layers: list | None = None,
-                 trace_index_range=None):
+                 trace_index_range=None,
+                 name: str | None = None):
         """
         :param model_type:
             str
@@ -777,10 +778,15 @@ class Model:
                 layer3 (name = 'Reservoir', case='Oil'),
                 layer4 (name = 'Bottom', case='Base')
             ]
+            NOTE that the "case='Base'" is optional. If no case name is given, it is by default set to 'Base'
+
         :param trace_index_range:
             list like object of integers
             used when some layers are quasi 2D layers, to parameterize the "lateral" variation
             eg. np.arange(10)
+        :param name:
+            str
+            Optional string which we can use to add a title to the model
         """
 
         # set the required parameters
@@ -814,6 +820,8 @@ class Model:
             self.trace_index_range = None
         else:
             self.trace_index_range = trace_index_range
+
+        self.name = name
 
         self.table_keys = ['name', 'case', 'color', 'thickness', 'litho_fluid']
         self.trace_index = 0
@@ -1646,7 +1654,7 @@ class LaminarModel:
                 LithoFluid(default='oil_sst').to_model_layer('Reservoir', case='Oil',thickness=Q_(25., 'm')),
                 LithoFluid(default='shale').to_model_layer('Bottom',thickness=Q_(50., 'm'))
             ]
-            model = Model(layers=layers)
+            model = Model(layers=layers, name='Default model')
         self.model = model
         self.model_table = None
 
@@ -1686,7 +1694,7 @@ class LaminarModel:
         return self.model_table.draw(mod_cds)
 
     def draw(self):
-        from bokeh.models import Span, Slider
+        from bokeh.models import Span, Slider, Div
         from bokeh.models import GlyphRenderer
         from bokeh.models.glyphs import Image, ImageRGBA, ImageURL
 
@@ -1856,10 +1864,17 @@ class LaminarModel:
         update_m.on_click(update_m_function)
         # update.on_click(update_m_function)  # When using this the model table returns to its previous state when "Update" is clicked
 
-        return lf_table, add_row, delete_row, update, _model_table, add_row_m, delete_row_m, update_m, grid, freq_slider
+        if self.model.name is None:
+            title = Div(text="<div></div")
+        else:
+            title_txt = '<div style="font-size:12px; font-weight:600; margin-bottom:0px; text-align:center">\n'
+            title_txt += '{}\n </div>'.format(self.model.name)
+            title = Div(text=title_txt)
+
+        return title, lf_table, add_row, delete_row, update, _model_table, add_row_m, delete_row_m, update_m, grid, freq_slider
 
     def draw_2d(self):
-        from bokeh.models import Span, Slider, Select
+        from bokeh.models import Span, Slider, Select, Div
         from bokeh.models import GlyphRenderer
         from bokeh.models.glyphs import Image, ImageRGBA, ImageURL
         from bokeh.plotting import row
@@ -2051,7 +2066,14 @@ class LaminarModel:
         trace_selector.on_change("value", update_trace_function)
         case_selector.on_change("value", update_case_function)
 
-        return (lf_table, add_row, delete_row, update, _model_table, add_row_m, delete_row_m, update_m, grid,
+        if self.model.name is None:
+            title = Div(text="<div></div")
+        else:
+            title_txt = '<div style="font-size:12px; font-weight:600; margin-bottom:0px; text-align:center">\n'
+            title_txt += '{}\n </div>'.format(self.model.name)
+            title = Div(text=title_txt)
+
+        return (title, lf_table, add_row, delete_row, update, _model_table, add_row_m, delete_row_m, update_m, grid,
                 row(trace_selector, case_selector, freq_slider), synth_2d_cds)
 
 
@@ -2258,7 +2280,6 @@ class WedgeModel(LaminarModel):
 
         new_grid = gridplot([[p_scatter, p_lines]], toolbar_location='right', merge_tools=True)
 
-
         return (lf_table, row(add_row, delete_row, update), model_table, row(update_m), grid,
                 row(controls, top_picker, base_picker), new_grid)
 
@@ -2287,8 +2308,7 @@ def build_layered_model(depth_to_target, overburden_thickness, target_thickness,
     base_layer = Layer(thickness=overburden_thickness, **underburden, domain=domain)
     return Model(
         depth_to_top=depth_to_target - overburden_thickness,
-        layers=[top_layer, target_layer, base_layer],
-        domain=domain
+        layers=[top_layer, target_layer, base_layer]
     )
 
 

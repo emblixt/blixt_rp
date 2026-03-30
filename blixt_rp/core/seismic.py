@@ -247,13 +247,91 @@ class StochasticSyntheticTraces:
 class AvoAnalyzer:
     """
     Add a "Point Draw Tool" to either:
-    1. "Real" seismic section of an angle stack (with other angle stacks behind)
-    2. "AVO" section which shows the synthetic amplitude response as a function of incidence angle
-    3. "Synthetic" seismic section, which displays a 2D synthetic model
+    1. "Real" seismic section of an angle stack (with other angle stacks behind) (section_type = 1)
+    2. "AVO" section which shows the synthetic amplitude response as a function of incidence angle (section_type = 2)
+    3. "Synthetic" seismic section, which displays a 2D synthetic model (section_type = 3)
 
+    Take inspiration from avo_qc() in this script, and create_mc_avo_plot() in avo_chi_plotter.py
+
+    Maybe create a new class AvoCurves that can hold the Offset vs. Amplitude data?
 
     """
-    pass
+    # TODO Generalize the function add_i_g_points() to support different inputs (1,2,3) and use it as inspiration
+    #  for this Class
+    def __init__(self,
+                 p: figure,
+                 ):
+        """
+        Class designed to allow the user to add a point to a seismic section, and to get information about the
+        AVO behaviour in that point
+
+        :param p:
+            Bokeh.plotting.figure
+            Figure that holds the seismic section
+        """
+        self.figure = p
+
+    @property
+    def point_cds(self) -> ColumnDataSource:
+        """
+        Sets up the ColumnDataSource for the points we will add to the seismic section for which we will calculate
+        the AVO behaviour
+
+        :param x_limits:
+            Tuple with x_0 and x_max of the seismic section in data units
+        :param y_limits:
+            Tuple with y_0 and y_max of the seismic section in data units
+        :return:
+            ColumnDataSource
+        """
+        x0, y0, dw, dh = get_coords_of_seismic_figure(self.figure)
+        _dx = dw / 4.
+        _dy = dh / 4.
+        xs = [x0 + (_i + 1) * _dx for _i in range(2)]
+        ys = [y0 + (_i + 1) * _dy for _i in range(2)]
+        _dict = dict(
+            x=xs, y=ys, color=['red', 'blue'], i=[0., 0.], g=[0., 0.], q=[None, None], name=[None, None]
+        )
+
+        return ColumnDataSource(_dict)
+
+    def add_point_tool(self,
+                       cds: ColumnDataSource):
+        """
+
+        :return:
+        """
+        _renderer = self.figure.scatter(x='x', y='y', fill_color='color', source=cds, line_color='black', size=10)
+        draw_tool = PointDrawTool(renderers=[_renderer], empty_value='black')
+        self.figure.add_tools(draw_tool)
+        self.figure.toolbar.active_tap = draw_tool
+
+    def add_points_table(self,
+                         cds: ColumnDataSource):
+        """
+
+        :return:
+        """
+        formatter = NumberFormatter(format='0.0')
+        template = """
+                <div style="background:<%= 
+                    (function color_from_val(){
+                        return(color)
+                        }()) %>; 
+                    color: white"> 
+                <%= value %>
+                </div>
+            """
+        color_formatter = HTMLTemplateFormatter(template=template)
+        columns = [TableColumn(field="x", title="X", formatter=formatter),
+                    TableColumn(field="y", title="Y", formatter=formatter),
+                    TableColumn(field='color', title='Color', formatter=color_formatter),
+                    TableColumn(field='i', title='I', formatter=formatter),
+                    TableColumn(field='g', title='G', formatter=formatter),
+                    TableColumn(field='q', title='Qual.', formatter=NumberFormatter(format='0.00')),
+                    ]
+        table = DataTable(source=cds, columns=columns, editable=True, height=200)
+        return table
 
 def create_seismic_figure(
         _width: int,
@@ -453,7 +531,7 @@ def add_seismic_to_figure(
         _x: np.array,
         _y: np.array,
         title: str | None = None
-) -> NumericInput():
+) -> NumericInput:
     """
     Adds the given seismic cds data to the figure and return a numeric input that controls the
     range of the color bar
@@ -1229,8 +1307,66 @@ def picks_from_seismic_cds(seismic_cds: ColumnDataSource, feature: str, depth_in
 
     return amps, amp_inds
 
+def get_coords_of_seismic_figure(p: figure):
+    """
+    A "seismic" figure, as created by "add_seismic_to_figure()" is assumed to only contain one glyph
+    :param p:
+    :return:
+        x0, y0, dw, dh
+        The data coordinates of the location (x0, y0) and data width (dw) and data height (dh) of the seismic figure
+    """
+    from bokeh.models import GlyphRenderer
+    glyph_renderers = [r for r in p.renderers if isinstance(r, GlyphRenderer)]
+    glyphs = [r.glyph for r in glyph_renderers]
+    # srcs = [r.data_source for r in glyph_renderers]
+    glyph = glyphs[0]
+    return glyph.x, glyph.y, glyph.dw, glyph.dh
+
 
 class TestCases(unittest.TestCase):
+
+    def test_data_for_avo_analyzer(self, section_type: int | None = None):
+        # Determine if input is of either section type 1, 2 or 3
+        if section_type is None:
+            section_type = np.random.randint(1, 3+1)
+        if section_type == 1:
+            near = AngleStack('near',
+                              "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-NEARSTACK_MIG-FIN_16bit.zgy",
+                              angle=10.)
+            mid = AngleStack('mid',
+                             "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-MIDSTACK_MIG-FIN_16bit.zgy",
+                             angle=18.)
+            far = AngleStack('far',
+                             "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-FARSTACK_MIG_FIN_16bit.zgy",
+                             angle=26.)
+            ufar = AngleStack('ufar',
+                              "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-UFARSTACK_MIG-FIN_16bit.zgy",
+                              angle=34.)
+            angle_stacks = [near, mid, far, ufar]
+
+            voi = VolumeOfInterest(
+                range(4640, 5243, 1),
+                range(32253, 32255, 1),
+                range(2616, 5108, 4) )
+
+            line_n = 32254
+            line_direction = 'xline'  # or 'inline'
+            seismic_cds = None
+        elif section_type == 2:
+            _synts = StochasticSyntheticTraces()
+            synts = _synts.get_traces(simulate_avo=True)
+            seismic_cds = ColumnDataSource({'value': [synts.T]})
+        else:
+            from blixt_rp.core.models import WedgeModel
+            wm = WedgeModel(n_traces=51)
+            (title, lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls,
+             seismic_cds) = wm.draw_2d()
+
+        p = create_seismic_figure(600, 400)
+        c_amp = add_seismic_to_figure(p, seismic_cds, np.arange(40), np.arange(5000))
+        return p, seismic_cds, c_amp
+
+
 
     def test_seismic_data_plot(self):
         # p = seismic_data_plot('seismic section')
@@ -1238,7 +1374,7 @@ class TestCases(unittest.TestCase):
         show(p)
 
     def test_interpolate(self):
-        from blixt_utils.plotting.log_plotter import LogColumn, LogPlotter
+        from blixt_rp.plotting.log_plotter import LogColumn, LogPlotter
         las_file = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\\Tampen\\Wells\\34_3_3S_seismic.las"
         # las_file = "G:\\My Drive\\Work - Current and Recent\\GeoMind\\Clients\\AkerBP\\PL932 Kaldafjell AVO feasibility\\Wells\\34_3_3S_seismic.las"
         t = Template(**{'name': 'Seismic', 'units': 'dimensionless', 'line_color': 'b'})
@@ -1534,7 +1670,7 @@ class TestCases(unittest.TestCase):
         crossline_slice = zgy.sel(xline=22488)
 
     def test_create_traces_from_zgy(self):
-        import blixt_utils.plotting.log_plotter as bupp
+        import blixt_rp.plotting.log_plotter as bupp
         f = "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01_NVG21PH1-EW_FINAL_KPSDM_T_FAR_STK_16bit.zgy"
         xline_ranges = range(32253, 32255, 1)
         inline_ranges = range(4640, 5243, 1)
@@ -1664,3 +1800,12 @@ class TestCases(unittest.TestCase):
                       fill_color=colors[i], size=7)
 
         show(p)
+
+    def test_avo_analyzer(self):
+        p, seismic_cds, c_amp = self.test_data_for_avo_analyzer(2)
+        analyze_avo = AvoAnalyzer(p)
+        points_cds = analyze_avo.point_cds
+        analyze_avo.add_point_tool(points_cds)
+        points_table = analyze_avo.add_points_table(points_cds)
+
+        show(column(p, points_table))

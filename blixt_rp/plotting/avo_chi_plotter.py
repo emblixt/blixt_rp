@@ -251,6 +251,9 @@ def create_mc_avo_plot(sums_average_file: str | None = None,
     multiple half-space models (interfaces)
     :return:
     """
+    # TODO
+    # Do a complete re-write of this function utilizing a 2 layer LaminarModel instead.
+    # And after AvoAnalyzer is ready, use that functionality to plot the AVO curves
     if sums_average_file is None:
         litho_fluids_list = []
         for _name in ['shale', 'brine_sst', 'oil_sst', 'gas_sst']:
