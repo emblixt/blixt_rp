@@ -23,7 +23,7 @@ from bokeh.io import output_file
 from bokeh.models import ColumnDataSource, LinearColorMapper, DataTable, TableColumn, PointDrawTool, CheckboxEditor, \
     LassoSelectTool
 from bokeh.models import Span, CrosshairTool, HoverTool, LassoSelectTool, ColorBar, NumericInput, CustomJS, Select
-from bokeh.models import NumberFormatter, Button, HTMLTemplateFormatter
+from bokeh.models import NumberFormatter, Button, HTMLTemplateFormatter, StringEditor
 from bokeh.events import SelectionGeometry
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
@@ -49,6 +49,8 @@ cclrs = cycle(clrs)  # "infinite" loop of the base colors
 test_data_length = 1000
 
 selected_cells = []
+
+section_types = ['real', 'avo', 'synthetic']
 
 class VolumeOfInterest:
     """
@@ -218,6 +220,7 @@ class StochasticSyntheticTraces:
         self.seed = seed
         self.n_reflectors = n_reflectors
         self.rng = np.random.default_rng(self.seed)
+        self.idx_refl = None
 
         self.w_length = 0.082  # Ricker wavelength in seconds
         self.f0 = 25.  # Hz
@@ -228,6 +231,8 @@ class StochasticSyntheticTraces:
     def get_traces(self, simulate_avo=False) -> np.ndarray:
         idx_refl = self.rng.integers(100, self.trace_length, self.n_reflectors)
         print('Depth index of reflectors in the synthetic traces: ', idx_refl)
+        # self.idx_refl = self.trace_length - idx_refl  # Because we plot the data "upside down"
+        self.idx_refl = idx_refl
         refl = np.zeros(self.trace_length)
         refl[idx_refl] = 2 * self.rng.random(self.n_reflectors) - 1
 
@@ -243,6 +248,117 @@ class StochasticSyntheticTraces:
             self.traces[i,:] = this_trace
 
         return self.traces
+
+class AvoAmplitudes:
+    """
+    Class for handling seismic amplitudes vs incident angle, or EEI vs. Chi angle
+    """
+    def __init__(self):
+        from copy import copy
+        empty_dict = dict(
+            use=[],
+            name=[],  # should match the names in point_cds from AvoAnalyzer
+            color=[],
+            angle=[],
+            sin2theta=[],
+            amplitude=[],
+            chi_angle=[],
+            eei_amplitude=[]
+        )
+        self.emtpy_dict = empty_dict
+        self._cds_dict = copy(empty_dict)
+
+
+    @property
+    def cds(self) -> ColumnDataSource:
+        """
+        Column data source that can hold the avo and eei amplitudes at different angles with the following structure
+        name:   use:    angle:   amplitude: ...
+        Point1  True    15       -10
+        Point1  True    25       -20
+        Point1  True    35       -40
+        Point2  True    15       100
+        ...
+
+        """
+        return ColumnDataSource(self._cds_dict)
+
+    def calc_amplitudes(self,
+                            points_cds: ColumnDataSource,
+                            section_type: str,
+                            inc_angle_range: list | None = None,
+                            seismic_cds: ColumnDataSource | None = None) -> dict:
+        """
+        Calculates the Avo amplitudes from various seismic input sections (see "section_types") at the
+        specified locations (point_cds) and returns and stores the values in self._cds_dict
+
+        You can update the cds by simply calling:
+        > cds.data = self.calc_amplitudes(...)
+        after the points_cds or seismic_cds has changed
+
+        :param points_cds:
+            ColumnDataSource
+            Must follow the standard from AvoAnalyzer.cds
+
+        :param section_type:
+            str
+            String describing the seismic input
+            One of the elements in section_types
+
+        :param inc_angle_range:
+            list
+            Optional
+            List of min and max of the incident angle in degrees.
+            if 'avo': inc_angle_range is needed
+
+        :param seismic_cds:
+            ColumnDataSource
+            Optional
+            Needed to calculate the AVO amplitudes, depending on what section_type is set to.
+            If 'avo': seismic_cds is needed
+
+        :return:
+            dict
+            follows the structure of self._cds_dict
+        """
+        from copy import copy
+        _dict = copy(self.emtpy_dict)
+
+        if section_type not in section_types:
+            section_type = 'avo'
+
+        # Iterate over all points in points_cds
+        for _point_no in range(len(points_cds.data['name'])):
+            # Iterate over all incident angles
+            if section_type == 'real':
+                pass
+            elif section_type == 'avo':
+                row_length = seismic_cds.data['value'][0].shape[1]  # Remember that the data in seismic_cds is transposed
+                inc_angles = np.linspace(inc_angle_range[0], inc_angle_range[1], row_length, endpoint=True)
+                # print('XXX', seismic_cds.data['value'][0].shape)
+                # Iterate over the AVO incident angle.
+                for i in range(row_length):
+                    _dict['use'].append(True)
+                    _dict['name'].append(points_cds.data['name'][_point_no])
+                    _dict['color'].append(points_cds.data['color'][_point_no])
+                    _dict['angle'].append(inc_angles[i])
+                    _dict['sin2theta'].append(np.nan)
+                    _dict['amplitude'].append(seismic_cds.data['value'][0][points_cds.data['j'][_point_no], i])
+                    _dict['chi_angle'].append(np.nan)
+                    _dict['eei_amplitude'].append(np.nan)
+            elif section_type == 'synthetic':
+                pass
+
+
+        self._cds_dict = _dict
+        return _dict
+
+    def draw(self, avo_cds) -> figure:
+        p = figure(width=600, height=300, tools= "pan,wheel_zoom,box_zoom,reset")
+        p.scatter(x='angle', y='amplitude',
+                  source=avo_cds, fill_color='color',
+                  legend_group='name', line_color='black', size=10)
+        return p
 
 class AvoAnalyzer:
     """
@@ -260,6 +376,8 @@ class AvoAnalyzer:
     #  for this Class
     def __init__(self,
                  p: figure,
+                 section_type: str,
+                 extraction_points: list | None = None
                  ):
         """
         Class designed to allow the user to add a point to a seismic section, and to get information about the
@@ -268,43 +386,138 @@ class AvoAnalyzer:
         :param p:
             Bokeh.plotting.figure
             Figure that holds the seismic section
+        :param section_type:
+            str
+            'real': Seismic is "real" data provided as one seismic section per angle stack
+            'avo': Seismic is provided as a section of amplitudes values per depth and incident angle pair
+            'synthetic': Seismic is provided as an elastic model in 1 or 2D
+        :param extraction_points:
+            list
+            Optional
+            List of lists or two-tuples with the x, y data coordinates of where the AVO data should be
+            extracted. If None, it automatically selects two points
+            E.G. [[20, 3450], [20, 4675]]
         """
         self.figure = p
+        if section_type not in section_types:
+            section_type = 'avo'
+        self.section_type = section_type
+        self.extraction_points = extraction_points
+        # Data coordinates of seismic image
+        x0, y0, dw, dh = get_coords_of_seismic_figure(self.figure)
+        self.x0 = x0
+        self.y0 = y0
+        self.dw = dw
+        self.dh = dh
+        # Size of seismic array
+        n_cols, n_rows = get_size_of_seismic_figure(self.figure)
+        self.n_cols = n_cols
+        self.n_rows = n_rows
+
+        print('From AvoAnalyzer:')
+        print('x0: {}, y0: {}, dw: {}, dh: {}'.format(x0, y0, dw, dh))
+        print('Number of columns: {}, Number of rows: {}'.format(n_cols, n_rows))
 
     @property
-    def point_cds(self) -> ColumnDataSource:
+    def cds(self) -> ColumnDataSource:
         """
         Sets up the ColumnDataSource for the points we will add to the seismic section for which we will calculate
         the AVO behaviour
 
-        :param x_limits:
-            Tuple with x_0 and x_max of the seismic section in data units
-        :param y_limits:
-            Tuple with y_0 and y_max of the seismic section in data units
         :return:
             ColumnDataSource
         """
-        x0, y0, dw, dh = get_coords_of_seismic_figure(self.figure)
-        _dx = dw / 4.
-        _dy = dh / 4.
-        xs = [x0 + (_i + 1) * _dx for _i in range(2)]
-        ys = [y0 + (_i + 1) * _dy for _i in range(2)]
-        _dict = dict(
-            x=xs, y=ys, color=['red', 'blue'], i=[0., 0.], g=[0., 0.], q=[None, None], name=[None, None]
-        )
+        if self.extraction_points is not None:
+            if len(self.extraction_points) > 4:
+                raise NotImplementedError('Not capable of handling more than four extraction points')
+            xs = [_point[0] for _point in self.extraction_points]
+            ys = [_point[1] for _point in self.extraction_points]
+        else:
+            _dx = self.dw / 4.
+            _dy = self.dh / 4.
+            xs = [self.x0 + (_i + 1) * _dx for _i in range(2)]
+            ys = [self.y0 + (_i + 1) * _dy for _i in range(2)]
+        i_indxs = [np.argmin((np.linspace(self.x0, self.x0 + self.dw, self.n_cols) - _xs)**2) for _xs in xs]
+        j_indxs = [np.argmin((np.linspace(self.y0, self.y0 + self.dh, self.n_rows) - _ys)**2) for _ys in ys]
+        # print(self.n_cols*(xs[0] - self.x0)/self.dw, np.argmin( (np.linspace(self.x0, self.x0 + self.dw, self.n_cols) - xs[0])**2 ))
+        # print(self.n_rows*(ys[0] - self.y0)/self.dh, np.argmin( (np.linspace(self.y0, self.y0 + self.dh, self.n_rows) - ys[0])**2 ))
+        names = ['One', 'Two', 'Three', 'Four']
+        colors = ['red', 'blue', 'green', 'yellow']
+
+        _dict = dict(name=[], x=[], y=[], i=[], j=[], color=[],
+                     # The Intercept calculated by linear fitting to the offset data, and through the analytical calculation
+                     # when we have a elastic model
+                     intercept=[], intercept_anal=[],
+                     # The Gradient calculated by linear fitting to the offset data, and through the analytical calculation
+                     # when we have a elastic model
+                     gradient=[], gradient_anal=[],
+                     quality=[])
+        for _i in range(len(xs)):
+            _dict['name'].append(names[_i])
+            _dict['x'].append(xs[_i])
+            _dict['y'].append(ys[_i])
+            _dict['i'].append(i_indxs[_i])
+            _dict['j'].append(j_indxs[_i])
+            _dict['color'].append(colors[_i])
+            _dict['intercept'].append(0.)
+            _dict['intercept_anal'].append(0.)
+            _dict['gradient'].append(0.)
+            _dict['gradient_anal'].append(0.)
+            _dict['quality'].append(None)
 
         return ColumnDataSource(_dict)
 
+    def inc_angle_range(self) -> list:
+        """
+        Range (from min to max) of the incident angle in degrees
+        :return:
+            list
+        """
+        if self.section_type == 'avo':
+            return [self.x0, self.x0 + self.dw]
+        else:
+            return []
     def add_point_tool(self,
                        cds: ColumnDataSource):
         """
+        Adds a PointDrawTool to the given figure.
+        Adds the data coordinates and array indexes of the points to the input ColumnDataSource
 
+        :param cds:
+            ColumnDataSource
+            The source of the points drawn or added to the current figure
         :return:
         """
         _renderer = self.figure.scatter(x='x', y='y', fill_color='color', source=cds, line_color='black', size=10)
         draw_tool = PointDrawTool(renderers=[_renderer], empty_value='black')
         self.figure.add_tools(draw_tool)
         self.figure.toolbar.active_tap = draw_tool
+
+        callback = CustomJS(args=dict(points=cds, ncols=self.n_cols, nrows=self.n_rows,
+                                      x0=self.x0, y0=self.y0, dw=self.dw, dh=self.dh),
+                            code="""
+                const xs = points.data.x;
+                const ys = points.data.y;
+                let indices = [];
+                for (let i = 0; i < xs.length; i++) {
+                    const x = xs[i];
+                    const y = ys[i];
+                    // Convert data coords → array indices
+                    let col = Math.floor(ncols*(x-x0)/dw);       
+                    points.data['i'][i] = col;
+                    let row = Math.floor(nrows*(y-y0)/dh);
+                    points.data['j'][i] = row;
+                    //row = nrows - 1 - row;         // flip y-axis (NumPy indexing)
+
+                    indices.push([col, row]);
+                }
+
+                console.log("Array indices:", indices);
+                points.change.emit()
+                console.log(points.data['i'])
+                """)
+        cds.js_on_change('data', callback)
+
 
     def add_points_table(self,
                          cds: ColumnDataSource):
@@ -323,13 +536,23 @@ class AvoAnalyzer:
                 </div>
             """
         color_formatter = HTMLTemplateFormatter(template=template)
-        columns = [TableColumn(field="x", title="X", formatter=formatter),
-                    TableColumn(field="y", title="Y", formatter=formatter),
-                    TableColumn(field='color', title='Color', formatter=color_formatter),
-                    TableColumn(field='i', title='I', formatter=formatter),
-                    TableColumn(field='g', title='G', formatter=formatter),
-                    TableColumn(field='q', title='Qual.', formatter=NumberFormatter(format='0.00')),
-                    ]
+        columns = [
+            TableColumn(field="name", title="Name", editor=StringEditor()),
+            TableColumn(field="x", title="X", formatter=formatter),
+            TableColumn(field="y", title="Y", formatter=formatter),
+            TableColumn(field='color', title='Color', formatter=color_formatter)
+        ]
+        i_column =    TableColumn(field='intercept', title='I', formatter=formatter)
+        i_anal_column =    TableColumn(field='intercept_anal', title='I*', formatter=formatter)
+        g_column =    TableColumn(field='gradient', title='G', formatter=formatter)
+        g_anal_column =    TableColumn(field='gradient_anal', title='G*', formatter=formatter)
+        q_column =    TableColumn(field='quality', title='Qual.', formatter=NumberFormatter(format='0.00'))
+
+        if self.section_type in section_types:
+            [columns.append(_c) for _c in [i_column, g_column, q_column]]
+        if self.section_type in ['synthetic']:
+            [columns.append(_c) for _c in [i_anal_column, g_anal_column]]
+
         table = DataTable(source=cds, columns=columns, editable=True, height=200)
         return table
 
@@ -941,7 +1164,7 @@ def avo_ig(amp, ang):
     https://github.com/waynegm/OpendTect-External-Attributes/blob/master/Python_3/Jupyter/AVO_IG.ipynb
 
     """
-    ang_rad = np.sin(np.radians(ang))**2
+    ang_rad = np.sin(np.radians(ang))**2  # converts incident angle to sin2theta
     m, resid, rank, singval= np.linalg.lstsq(np.c_[ang_rad,np.ones_like(ang_rad)], amp, rcond=None)
     # using only 2 angle stacks residuals  are not computed
     # https://docs.scipy.org/doc/numpy-1.13.0/reference/generated/numpy.linalg.lstsq.html
@@ -1322,14 +1545,34 @@ def get_coords_of_seismic_figure(p: figure):
     glyph = glyphs[0]
     return glyph.x, glyph.y, glyph.dw, glyph.dh
 
+def get_size_of_seismic_figure(p: figure):
+    """
+    A "seismic" figure, as created by "add_seismic_to_figure()" is assumed to only contain one glyph
+    :param p:
+    :return:
+        x0, y0, dw, dh
+        The data coordinates of the location (x0, y0) and data width (dw) and data height (dh) of the seismic figure
+    """
+    from bokeh.models import GlyphRenderer
+    glyph_renderers = [r for r in p.renderers if isinstance(r, GlyphRenderer)]
+    # glyphs = [r.glyph for r in glyph_renderers]
+    srcs = [r.data_source for r in glyph_renderers]
+    test = srcs[0]
+    test = test.data['value']
+    return test[0].T.shape
+
+
 
 class TestCases(unittest.TestCase):
 
-    def test_data_for_avo_analyzer(self, section_type: int | None = None):
-        # Determine if input is of either section type 1, 2 or 3
+    def test_data_for_avo_analyzer(self, section_type: str | None = None):
+        # Determine if input is of either section type 'real', 'avo' or 'synthetic'
         if section_type is None:
-            section_type = np.random.randint(1, 3+1)
-        if section_type == 1:
+            section_type = 'avo'
+
+        idx_refl = None
+        refl_points = []
+        if section_type == 'real':
             near = AngleStack('near',
                               "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-NEARSTACK_MIG-FIN_16bit.zgy",
                               angle=10.)
@@ -1352,9 +1595,10 @@ class TestCases(unittest.TestCase):
             line_n = 32254
             line_direction = 'xline'  # or 'inline'
             seismic_cds = None
-        elif section_type == 2:
+        elif section_type == 'avo':
             _synts = StochasticSyntheticTraces()
             synts = _synts.get_traces(simulate_avo=True)
+            idx_refl = _synts.idx_refl
             seismic_cds = ColumnDataSource({'value': [synts.T]})
         else:
             from blixt_rp.core.models import WedgeModel
@@ -1364,7 +1608,13 @@ class TestCases(unittest.TestCase):
 
         p = create_seismic_figure(600, 400)
         c_amp = add_seismic_to_figure(p, seismic_cds, np.arange(40), np.arange(5000))
-        return p, seismic_cds, c_amp
+        if idx_refl is not None:
+            depth = np.linspace(0., 5000., seismic_cds.data['value'][0].shape[0])
+            for _j in idx_refl:
+                print('XXX, idx_refl: {}, in depth: {}, and in inverted depth {}'.format(_j, depth[_j], 5000. - depth[_j]))
+                refl_points.append([20., depth[_j]])
+
+        return p, seismic_cds, c_amp, refl_points
 
 
 
@@ -1802,10 +2052,31 @@ class TestCases(unittest.TestCase):
         show(p)
 
     def test_avo_analyzer(self):
-        p, seismic_cds, c_amp = self.test_data_for_avo_analyzer(2)
-        analyze_avo = AvoAnalyzer(p)
-        points_cds = analyze_avo.point_cds
+        section_type = 'avo'
+        p, seismic_cds, c_amp, refl_points = self.test_data_for_avo_analyzer(section_type)
+
+        if refl_points is not None:
+            print('Reflection points:', refl_points)
+            analyze_avo = AvoAnalyzer(p, section_type, refl_points)
+        else:
+            analyze_avo = AvoAnalyzer(p, section_type)
+        points_cds = analyze_avo.cds
         analyze_avo.add_point_tool(points_cds)
         points_table = analyze_avo.add_points_table(points_cds)
 
-        show(column(p, points_table))
+        avo_amplitudes = AvoAmplitudes()
+        _avo_dict = avo_amplitudes.calc_amplitudes(
+            points_cds,
+            section_type,
+            analyze_avo.inc_angle_range(),
+            seismic_cds)
+        avo_cds = avo_amplitudes.cds
+        # You can update the avo_cds by calling: avo_cds.data = avo_amplitudes.calc_amplitudes()
+        print(_avo_dict['name'])
+        print(_avo_dict['angle'])
+        print(_avo_dict['amplitude'])
+
+        avo_p = avo_amplitudes.draw(avo_cds)
+
+
+        show(column(p, points_table, avo_p))
