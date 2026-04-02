@@ -16,6 +16,8 @@ from copy import deepcopy, copy
 import inspect
 
 import pint
+from bokeh.models.plots import GridPlot
+from bokeh.models import Tool
 from scipy.optimize import least_squares
 
 from bokeh.plotting import show, figure, column, row
@@ -377,7 +379,8 @@ class AvoAnalyzer:
     def __init__(self,
                  p: figure,
                  section_type: str,
-                 extraction_points: list | None = None
+                 extraction_points: list | None = None,
+                 column_name: str | None = 'SYNTH_2D'
                  ):
         """
         Class designed to allow the user to add a point to a seismic section, and to get information about the
@@ -397,8 +400,30 @@ class AvoAnalyzer:
             List of lists or two-tuples with the x, y data coordinates of where the AVO data should be
             extracted. If None, it automatically selects two points
             E.G. [[20, 3450], [20, 4675]]
+        :param column_name:
+            str
+            When the figure p is delivered as a gridplot (from LogPlotter), we need to know the name of the
+            column the seismic is drawn. See e.g. the LaminarModel class in models.py
         """
-        self.figure = p
+        from bokeh.models.plots import GridPlot
+        from bokeh.plotting._figure import figure as _figure
+        from blixt_rp.plotting.log_plotter import select_column
+
+        # We need to take into account that p sometimes is a bokeh figure, and sometimes a gridplot (synthetic)
+        # If p is a gridplot: XXX <class 'bokeh.models.plots.GridPlot'>
+        # If p is a bokeh figure: XXX <class 'bokeh.plotting._figure.figure'>
+        # print('XXX', type(p), isinstance(p, GridPlot), isinstance(p, _figure))
+
+        if isinstance(p, _figure):
+            self.figure = p
+            self.grid = p
+        elif isinstance(p, GridPlot):
+            self.figure = select_column(p, column_name)
+            self.grid = p
+        else:
+            raise IOError('Seismic section must be provided as a bokeh figure or gridplot')
+
+
         if section_type not in section_types:
             section_type = 'avo'
         self.section_type = section_type
@@ -488,10 +513,28 @@ class AvoAnalyzer:
             The source of the points drawn or added to the current figure
         :return:
         """
+        from blixt_rp.plotting.log_plotter import add_tool_to_layout
+
         _renderer = self.figure.scatter(x='x', y='y', fill_color='color', source=cds, line_color='black', size=10)
         draw_tool = PointDrawTool(renderers=[_renderer], empty_value='black')
-        self.figure.add_tools(draw_tool)
-        self.figure.toolbar.active_tap = draw_tool
+        # TODO This doesn't add the tool to the grid
+        # Because in Bokeh the toolbar is detached from the figures, and does not wait for future changes
+        print('XXX is draw_tool a tool?', isinstance(draw_tool, Tool))
+        print('XXX is draw_tool a point draw tool?', isinstance(draw_tool, PointDrawTool))
+        add_tool_to_layout(self.grid, draw_tool)
+        # TODO We either have to break the layout into its individual and then rebuild it,
+        # TODO Or, avoid using merge_tools = True in LogPlotter, and instead display only one single toolbar
+        # That can be updated manually
+
+        # if isinstance(self.grid, GridPlot):
+        #     for child in self.grid.children:
+        #         for item in child:
+        #             if hasattr(item, 'tools'):
+        #                 item.add_tools(draw_tool)
+        #                 item.toolbar.active_tap = draw_tool
+        # else:
+        #     self.figure.add_tools(draw_tool)
+        #     self.figure.toolbar.active_tap = draw_tool
 
         callback = CustomJS(args=dict(points=cds, ncols=self.n_cols, nrows=self.n_rows,
                                       x0=self.x0, y0=self.y0, dw=self.dw, dh=self.dh),
@@ -1566,6 +1609,7 @@ def get_size_of_seismic_figure(p: figure):
 class TestCases(unittest.TestCase):
 
     def test_data_for_avo_analyzer(self, section_type: str | None = None):
+        from blixt_rp.plotting.log_plotter import select_column
         # Determine if input is of either section type 'real', 'avo' or 'synthetic'
         if section_type is None:
             section_type = 'avo'
@@ -1595,24 +1639,30 @@ class TestCases(unittest.TestCase):
             line_n = 32254
             line_direction = 'xline'  # or 'inline'
             seismic_cds = None
+            p = None
+            c_amp = None
+
         elif section_type == 'avo':
             _synts = StochasticSyntheticTraces()
             synts = _synts.get_traces(simulate_avo=True)
             idx_refl = _synts.idx_refl
             seismic_cds = ColumnDataSource({'value': [synts.T]})
+            p = create_seismic_figure(600, 400)
+            c_amp = add_seismic_to_figure(p, seismic_cds, np.arange(40), np.arange(5000))
+            if idx_refl is not None:
+                depth = np.linspace(0., 5000., seismic_cds.data['value'][0].shape[0])
+                for _j in idx_refl:
+                    print('XXX, idx_refl: {}, in depth: {}, and in inverted depth {}'.format(_j, depth[_j], 5000. - depth[_j]))
+                    refl_points.append([20., depth[_j]])
         else:
             from blixt_rp.core.models import WedgeModel
             wm = WedgeModel(n_traces=51)
             (title, lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls,
              seismic_cds) = wm.draw_2d()
-
-        p = create_seismic_figure(600, 400)
-        c_amp = add_seismic_to_figure(p, seismic_cds, np.arange(40), np.arange(5000))
-        if idx_refl is not None:
-            depth = np.linspace(0., 5000., seismic_cds.data['value'][0].shape[0])
-            for _j in idx_refl:
-                print('XXX, idx_refl: {}, in depth: {}, and in inverted depth {}'.format(_j, depth[_j], 5000. - depth[_j]))
-                refl_points.append([20., depth[_j]])
+            # p = select_column(grid, 'SYNTH_2D')
+            p = grid
+            c_amp = None
+            refl_points = None
 
         return p, seismic_cds, c_amp, refl_points
 
@@ -2052,7 +2102,8 @@ class TestCases(unittest.TestCase):
         show(p)
 
     def test_avo_analyzer(self):
-        section_type = 'avo'
+        # section_type = 'avo'
+        section_type = 'synthetic'
         p, seismic_cds, c_amp, refl_points = self.test_data_for_avo_analyzer(section_type)
 
         if refl_points is not None:

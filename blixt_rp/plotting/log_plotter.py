@@ -4,6 +4,7 @@ import matplotlib as mpl
 
 import bokeh.plotting
 import numpy as np
+from bokeh.models.tools import PointDrawTool
 from pandas import DataFrame, cut
 import logging
 import sys, os
@@ -17,9 +18,13 @@ from bokeh.models import (Slider, ColorPicker, Range1d, LinearAxis, LogAxis,  Sp
                           CustomJS, CustomJSTransform, LinearColorMapper, CDSView, BooleanFilter)
 from bokeh.models import PanTool,WheelZoomTool, ResetTool, SaveTool, CrosshairTool, HoverTool, ColorBar, LogColorMapper
 from bokeh.models import (DataTable, NumberEditor, SelectEditor, StringEditor, StringFormatter,
-                          IntEditor, TableColumn, CheckboxEditor, Rect, HTMLTemplateFormatter)
+                          IntEditor, TableColumn, CheckboxEditor, Rect, HTMLTemplateFormatter, Tool)
 from bokeh.layouts import gridplot
 from bokeh.transform import transform
+
+from bokeh.models import BoxSelectTool, GridBox, GridPlot, Row, Column
+from bokeh.models.layouts import LayoutDOM
+
 from bokeh.io import output_file
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
@@ -313,6 +318,69 @@ class LogPlotter:
 
         return gridplot([[_child for _child in children]],
                         toolbar_location='right', merge_tools=True)
+
+"""
+Below is a suggestion from CoPilot on how to make the draw() function avoid using merge_tools=True and 
+allows the toolbar to be modified later:
+
+def draw(self, title: str | None = None):
+    children = []
+    lines = []
+
+    _w = Span(dimension="width", line_dash="dashed", line_width=1)
+    _h = Span(dimension="height", line_dash="dashed", line_width=1)
+
+    # --- 1. Create all column figures ---
+    for i, _column in enumerate(self.columns):
+        _p = create_column_figure(
+            _column, _w, _h, self.column_height,
+            _y_range_flipped = (i == 0),
+            _x_axis_visible = (len(_column) > 0),
+            _y_axis_visible = (i == 0),
+            _tools = self._tools,
+            _title = title
+        )
+        _p.name = _column.name
+        children.append(_p)
+
+    # --- 2. Link the y-ranges ---
+    for i, child in enumerate(children):
+        if i > 0:
+            child.y_range = children[0].y_range
+
+    # ---------------------------------------------------------------
+    # ✅ 3. Select ONE master figure whose toolbar will be visible
+    # ---------------------------------------------------------------
+    master_fig = children[0]
+    master_fig.toolbar_location = "right"
+
+    # ---------------------------------------------------------------
+    # ✅ 4. Hide the toolbars of all other figures
+    #    (they still have tools — they just don't show a toolbar UI)
+    # ---------------------------------------------------------------
+    for fig in children[1:]:
+        fig.toolbar_location = None
+
+    # ---------------------------------------------------------------
+    # ✅ 5. Build a grid where only the master toolbar is visible
+    #    All figures are still independent and responsive to tools.
+    # ---------------------------------------------------------------
+    # A gridplot still works fine, but we avoid merge_tools=True
+    grid = gridplot(
+        [[fig for fig in children]],
+        toolbar_location=None,   # <- gridplot shouldn't create a toolbar
+        merge_tools=False        # <- dynamic updates WILL now work
+    )
+
+    # ---------------------------------------------------------------
+    # ✅ 6. Combine the grid and master toolbar explicitly
+    # ---------------------------------------------------------------
+    from bokeh.layouts import row
+
+    final_layout = row(master_fig.toolbar, grid)
+
+    return final_layout
+"""
 
 
 class LogColumn:
@@ -1072,6 +1140,58 @@ def test_well_data():
     well = Well()
     well.read_las(las_file3, log_table=log_table, template_file=project_table)
     return well, Cutoffs([rule1, rule2, rule3])
+
+def find_figures(obj):
+    """Recursively find all Figure objects in a Bokeh layout."""
+
+    figures = []
+
+    if isinstance(obj, figure):
+        figures.append(obj)
+
+    elif isinstance(obj, GridPlot):
+        # GridBox.children is a list of (child, row, col) tuples
+        for child, _, _ in obj.children:
+            figures.extend(find_figures(child))
+
+    elif isinstance(obj, GridBox):
+        # GridBox.children is a list of (child, row, col) tuples
+        for child, _, _ in obj.children:
+            figures.extend(find_figures(child))
+
+    elif isinstance(obj, (Row, Column)):
+        for child in obj.children:
+            figures.extend(find_figures(child))
+
+    # Other layout types can be added if needed
+
+    return figures
+
+
+def add_tool_to_layout(layout, tool):
+    """
+    Add tool to all figures in any nested layout.
+
+    Useful for adding a tool to a gridplot, because merge_tools only works if the tools are added
+    to all children of a gridplot
+    However, it doesn't work! Because (from CoPilot):
+        But after the gridplot is built:
+            the merged toolbar is detached from the figures
+            it does not watch for future changes
+            assigning a new toolbar is not supported
+            LayoutDOM objects don’t allow re-rendering toolbars in-place
+
+        This is confirmed in Bokeh issues such as:
+            “Merged toolbar does not update after modifying tools”
+            “GridPlot toolbar is static after creation”
+    """
+    print('XXX layout: ', type(layout))
+    figs = find_figures(layout)
+    for f in figs:
+        f.add_tools(tool)
+        print('XXX figure: ', type(f), f.toolbar.tools)
+        if isinstance(tool, PointDrawTool):
+            f.toolbar.active_tap = tool
 
 
 class TestCases(unittest.TestCase):
