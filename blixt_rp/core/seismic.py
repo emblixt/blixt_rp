@@ -33,6 +33,7 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', 
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
+from blixt_rp import Q_
 import blixt_utils.misc.curve_fitting as mycf
 import blixt_utils.io.io as uio
 from blixt_utils.plotting.helpers import wiggle_plot
@@ -255,12 +256,14 @@ class AvoAmplitudes:
     """
     Class for handling seismic amplitudes vs incident angle, or EEI vs. Chi angle
     """
+    from blixt_rp.core.models import LaminarModel, WedgeModel
     def __init__(self):
         from copy import copy
         empty_dict = dict(
             use=[],
             name=[],  # should match the names in point_cds from AvoAnalyzer
             color=[],
+            marker=[],  # Use circle for base case, and other for the other cases
             angle=[],
             sin2theta=[],
             amplitude=[],
@@ -289,7 +292,9 @@ class AvoAmplitudes:
                             points_cds: ColumnDataSource,
                             section_type: str,
                             inc_angle_range: list | None = None,
-                            seismic_cds: ColumnDataSource | None = None) -> dict:
+                            seismic_cds: ColumnDataSource | None = None,
+                            model: LaminarModel | WedgeModel | None = None
+                        ) -> dict:
         """
         Calculates the Avo amplitudes from various seismic input sections (see "section_types") at the
         specified locations (point_cds) and returns and stores the values in self._cds_dict
@@ -300,6 +305,7 @@ class AvoAmplitudes:
 
         :param points_cds:
             ColumnDataSource
+            The points from where to extract the AVO amplitudes
             Must follow the standard from AvoAnalyzer.cds
 
         :param section_type:
@@ -319,38 +325,95 @@ class AvoAmplitudes:
             Needed to calculate the AVO amplitudes, depending on what section_type is set to.
             If 'avo': seismic_cds is needed
 
+        :param model:
+            One of the model types in models.py.
+            Used to calculate the synthetic AVO / Chi response of the seismic section
+
+            if 'avo': it is optional (not yet implemented)
+            if 'synthetic' it is mandatory
+
         :return:
             dict
             follows the structure of self._cds_dict
         """
         from copy import copy
+        from blixt_rp.core.models import calc_synth_cds, global_base_case_name
+        # create markers for the different cases, but save the 'circle' for the base case
+        markers = ['star', 'diamond', 'hex', 'inverted_triangle', 'plus', 'square', 'triangle']
         _dict = copy(self.emtpy_dict)
 
         if section_type not in section_types:
             section_type = 'avo'
 
-        # Iterate over all points in points_cds
+        #
+        # Iterate over all points in points_cds and calculate the AVO response in each point
+        #
         for _point_no in range(len(points_cds.data['name'])):
-            # Iterate over all incident angles
             if section_type == 'real':
                 pass
             elif section_type == 'avo':
-                row_length = seismic_cds.data['value'][0].shape[1]  # Remember that the data in seismic_cds is transposed
-                inc_angles = np.linspace(inc_angle_range[0], inc_angle_range[1], row_length, endpoint=True)
-                # print('XXX', seismic_cds.data['value'][0].shape)
+                # Extract the incident angles from the seismic section
+                n_angles = seismic_cds.data['value'][0].shape[1]  # Remember that the data in seismic_cds is transposed
+                inc_angles = np.linspace(inc_angle_range[0], inc_angle_range[1], n_angles, endpoint=True)
+
                 # Iterate over the AVO incident angle.
-                for i in range(row_length):
+                for i in range(n_angles):
                     _dict['use'].append(True)
                     _dict['name'].append(points_cds.data['name'][_point_no])
                     _dict['color'].append(points_cds.data['color'][_point_no])
+                    _dict['marker'].append('circle')
                     _dict['angle'].append(inc_angles[i])
                     _dict['sin2theta'].append(np.nan)
                     _dict['amplitude'].append(seismic_cds.data['value'][0][points_cds.data['j'][_point_no], i])
                     _dict['chi_angle'].append(np.nan)
                     _dict['eei_amplitude'].append(np.nan)
             elif section_type == 'synthetic':
-                pass
+                n_angles = 20
+                # TODO Take the incident or chi angle range from the model or something?
+                inc_angles = np.linspace(0., 40., n_angles, endpoint=True)
+                # We need to have the elastics from the model (and the trace index and depth from where to extract
 
+                # the amplitude), the cases, the frequency and dt.
+                # Then we use calc_synth_cds from models.py
+
+                # Extract the trace index from the current point
+                trace_index = int(points_cds.data['x'][_point_no])
+
+                # Realize the model at the current trace index to get the elastics of the model
+                elastics_dict = model.model_table.realize(model.resolution, trace_index)
+
+                # Extract the depth index by matching the point depth with the depth of the realized model
+                depth_index = np.argmin(
+                    (elastics_dict['Base']['vp'].depth.magnitude - points_cds.data['y'][_point_no])**2)
+                print('Depth index: ', depth_index)
+
+                # Iterate over all incident angles
+                for i in range(n_angles):
+
+                    # Iterate over all cases
+                    for _n, _case in enumerate(model.model.case_names):
+                        # Create markers for the different cases
+                        if _case.lower() == global_base_case_name.lower():
+                            _marker = 'circle'
+                        else:
+                            _marker = markers[_n]
+                        synths = calc_synth_cds(
+                            elastics_dict[_case]['vp'],
+                            elastics_dict[_case]['vs'],
+                            elastics_dict[_case]['rho'],
+                            elastics_dict[_case]['twt'],
+                            model.dt, inc_angles[i], model.avo_or_eei, model.freq
+                        )
+                        _dict['use'].append(True)
+                        _dict['name'].append('{} {}'.format(points_cds.data['name'][_point_no], _case))
+                        _dict['color'].append(points_cds.data['color'][_point_no])
+                        _dict['marker'].append(_marker)
+                        _dict['angle'].append(inc_angles[i])
+                        _dict['sin2theta'].append(np.nan)
+                        _dict['amplitude'].append(synths.data['value'][0][depth_index])
+                        _dict['chi_angle'].append(np.nan)
+                        _dict['eei_amplitude'].append(np.nan)
+                print('XXX')
 
         self._cds_dict = _dict
         return _dict
@@ -358,7 +421,7 @@ class AvoAmplitudes:
     def draw(self, avo_cds) -> figure:
         p = figure(width=600, height=300, tools= "pan,wheel_zoom,box_zoom,reset")
         p.scatter(x='angle', y='amplitude',
-                  source=avo_cds, fill_color='color',
+                  source=avo_cds, fill_color='color', marker='marker',
                   legend_group='name', line_color='black', size=10)
         return p
 
@@ -371,16 +434,14 @@ class AvoAnalyzer:
 
     Take inspiration from avo_qc() in this script, and create_mc_avo_plot() in avo_chi_plotter.py
 
-    Maybe create a new class AvoCurves that can hold the Offset vs. Amplitude data?
-
     """
-    # TODO Generalize the function add_i_g_points() to support different inputs (1,2,3) and use it as inspiration
-    #  for this Class
+    from blixt_rp.core.models import LaminarModel, WedgeModel
     def __init__(self,
                  p: figure,
                  section_type: str,
                  extraction_points: list | None = None,
-                 column_name: str | None = 'SYNTH_2D'
+                 column_name: str | None = 'SYNTH_2D',
+                 model: LaminarModel | WedgeModel | None = None
                  ):
         """
         Class designed to allow the user to add a point to a seismic section, and to get information about the
@@ -404,8 +465,17 @@ class AvoAnalyzer:
             str
             When the figure p is delivered as a gridplot (from LogPlotter), we need to know the name of the
             column the seismic is drawn. See e.g. the LaminarModel class in models.py
+
+        :param model:
+            One of the model types in models.py.
+            Used to calculate the synthetic AVO / Chi response of the seismic section
+
+            if section_type == 'avo': it is optional (not yet implemented)
+            if section_type == 'synthetic': it is mandatory
+
         """
         from bokeh.models.plots import GridPlot
+        from bokeh.plotting import Row
         from bokeh.plotting._figure import figure as _figure
         from blixt_rp.plotting.log_plotter import select_column
 
@@ -414,9 +484,22 @@ class AvoAnalyzer:
         # If p is a bokeh figure: XXX <class 'bokeh.plotting._figure.figure'>
         # print('XXX', type(p), isinstance(p, GridPlot), isinstance(p, _figure))
 
+        #
+        # Determine how the seismic "figure" is given
+        #
+        self.toolbar = None
+        # As a simple bokeh figure
         if isinstance(p, _figure):
             self.figure = p
             self.grid = p
+
+        # As a bokeh Row (see the method 'draw_ext_toolbar' in LogPlotter)
+        elif isinstance(p, Row):
+            self.figure = select_column(p.children[0], column_name)
+            self.grid = p.children[0]
+            self.toolbar = p.children[1]
+
+        # Or as a grid plot
         elif isinstance(p, GridPlot):
             self.figure = select_column(p, column_name)
             self.grid = p
@@ -424,6 +507,10 @@ class AvoAnalyzer:
             raise IOError('Seismic section must be provided as a bokeh figure or gridplot')
 
 
+        #
+        # Determine the seismic section type, and extract the data and array coordinates of the
+        # seismic data
+        #
         if section_type not in section_types:
             section_type = 'avo'
         self.section_type = section_type
@@ -517,14 +604,7 @@ class AvoAnalyzer:
 
         _renderer = self.figure.scatter(x='x', y='y', fill_color='color', source=cds, line_color='black', size=10)
         draw_tool = PointDrawTool(renderers=[_renderer], empty_value='black')
-        # TODO This doesn't add the tool to the grid
-        # Because in Bokeh the toolbar is detached from the figures, and does not wait for future changes
-        print('XXX is draw_tool a tool?', isinstance(draw_tool, Tool))
-        print('XXX is draw_tool a point draw tool?', isinstance(draw_tool, PointDrawTool))
         add_tool_to_layout(self.grid, draw_tool)
-        # TODO We either have to break the layout into its individual and then rebuild it,
-        # TODO Or, avoid using merge_tools = True in LogPlotter, and instead display only one single toolbar
-        # That can be updated manually
 
         # if isinstance(self.grid, GridPlot):
         #     for child in self.grid.children:
@@ -598,6 +678,38 @@ class AvoAnalyzer:
 
         table = DataTable(source=cds, columns=columns, editable=True, height=200)
         return table
+
+    def draw(self, points_cds, seismic_cds, model):
+        """
+        Creates the bokeh user interfaces used to analyze the AVO / Chi behaviour
+
+        :return:
+        """
+        #
+        # Use the extraction points, and let the user control them using the PointDrawTool
+        #
+        self.add_point_tool(points_cds)
+        points_table = self.add_points_table(points_cds)
+
+        #
+        # Calculate the AVO / Chi amplitudes in the above given points
+        #
+        avo_amplitudes = AvoAmplitudes()
+        _avo_dict = avo_amplitudes.calc_amplitudes(
+            points_cds,
+            self.section_type,
+            self.inc_angle_range(),
+            seismic_cds,
+            model
+        )
+        # You can update the avo_cds by calling: avo_cds.data = avo_amplitudes.calc_amplitudes()
+        avo_cds = avo_amplitudes.cds
+
+        #
+        # return the table, plot of AVO amplitudes and the AVO cds
+        avo_figure = avo_amplitudes.draw(avo_cds)
+        return points_table, avo_figure, avo_cds
+
 
 def create_seismic_figure(
         _width: int,
@@ -1613,6 +1725,7 @@ class TestCases(unittest.TestCase):
         # Determine if input is of either section type 'real', 'avo' or 'synthetic'
         if section_type is None:
             section_type = 'avo'
+        model = None
 
         idx_refl = None
         refl_points = []
@@ -1643,6 +1756,7 @@ class TestCases(unittest.TestCase):
             c_amp = None
 
         elif section_type == 'avo':
+            # TODO Add a test with a synthetic AVO response (e.g. 1D LaminarModel)
             _synts = StochasticSyntheticTraces()
             synts = _synts.get_traces(simulate_avo=True)
             idx_refl = _synts.idx_refl
@@ -1656,15 +1770,15 @@ class TestCases(unittest.TestCase):
                     refl_points.append([20., depth[_j]])
         else:
             from blixt_rp.core.models import WedgeModel
-            wm = WedgeModel(n_traces=51)
+            model = WedgeModel(n_traces=51)
             (title, lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls,
-             seismic_cds) = wm.draw_2d()
+             seismic_cds) = model.draw_2d()
             # p = select_column(grid, 'SYNTH_2D')
             p = grid
             c_amp = None
             refl_points = None
 
-        return p, seismic_cds, c_amp, refl_points
+        return p, seismic_cds, c_amp, refl_points, model
 
 
 
@@ -2104,30 +2218,11 @@ class TestCases(unittest.TestCase):
     def test_avo_analyzer(self):
         # section_type = 'avo'
         section_type = 'synthetic'
-        p, seismic_cds, c_amp, refl_points = self.test_data_for_avo_analyzer(section_type)
+        p, seismic_cds, c_amp, refl_points, model = self.test_data_for_avo_analyzer(section_type)
 
-        if refl_points is not None:
-            print('Reflection points:', refl_points)
-            analyze_avo = AvoAnalyzer(p, section_type, refl_points)
-        else:
-            analyze_avo = AvoAnalyzer(p, section_type)
+        analyze_avo = AvoAnalyzer(p, section_type, refl_points, model=model)
         points_cds = analyze_avo.cds
-        analyze_avo.add_point_tool(points_cds)
-        points_table = analyze_avo.add_points_table(points_cds)
-
-        avo_amplitudes = AvoAmplitudes()
-        _avo_dict = avo_amplitudes.calc_amplitudes(
-            points_cds,
-            section_type,
-            analyze_avo.inc_angle_range(),
-            seismic_cds)
-        avo_cds = avo_amplitudes.cds
-        # You can update the avo_cds by calling: avo_cds.data = avo_amplitudes.calc_amplitudes()
-        print(_avo_dict['name'])
-        print(_avo_dict['angle'])
-        print(_avo_dict['amplitude'])
-
-        avo_p = avo_amplitudes.draw(avo_cds)
+        points_table, avo_figure, avo_cds = analyze_avo.draw(points_cds, seismic_cds, model)
 
 
-        show(column(p, points_table, avo_p))
+        show(column(p, points_table, avo_figure))

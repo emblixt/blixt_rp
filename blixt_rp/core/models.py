@@ -14,7 +14,6 @@ from scipy.stats import theilslopes
 from typing import Callable
 
 from .log_curve_new import LogCurve, Depth
-from .seismic import SeismicTraces
 from .. import Q_
 from ..plotting.plot_logs_new import get_wiggles_in_depth
 from .core import LithoFluid, LithoFluidsTable, LithoFluids
@@ -1642,9 +1641,16 @@ class LaminarModel:
         :param model:
         :param litho_fluids:
         :param resolution:
+            pint Quantity
+            Depth resolution (in depth, not time) of the realized model
         :param wavelet:
         :param avo_or_eei:
         :param kwargs:
+            dt:
+                pint Quantity, resolution in time used when calculating the synthetic seismic response (needs to be in
+                time)
+            freq:
+                Wavelet central frequency in Hz, which is used when calculating the synthetic response
         """
 
         if model is None:
@@ -1666,6 +1672,8 @@ class LaminarModel:
             ])
         self._litho_fluids = litho_fluids
         self.resolution = resolution
+        self.dt = kwargs.pop('dt', Q_(1., 'millisecond'))
+        self.freq = kwargs.pop('freq', 20.)
         self.lf_width = kwargs.pop('lf_width', 300)
         self.model_width = kwargs.pop('model_width', None)
         self.lf_table = None
@@ -1694,7 +1702,7 @@ class LaminarModel:
         return self.model_table.draw(mod_cds)
 
     def draw(self):
-        from bokeh.models import Span, Slider, Div
+        from bokeh.models import Span, Slider, Div, CustomJS
         from bokeh.models import GlyphRenderer
         from bokeh.models.glyphs import Image, ImageRGBA, ImageURL
 
@@ -1714,10 +1722,16 @@ class LaminarModel:
         plotter = LogPlotter(width=900, height=600)
 
         # Create controller widgets
-        freq_slider = Slider(title='Wavelet central freq. [Hz]', start=10, end=40, step=5, value=20)
+        freq_slider = Slider(title='Wavelet central freq. [Hz]', start=10, end=40, step=5, value=self.freq)
+
+        def freq_slider_change(attr, old, new):
+            self.freq = new
+
+        # Update the self.freq attribute depending on the frequency slider.
+        freq_slider.on_change('value', freq_slider_change)
 
         # Set up a fixed resolution in time
-        dt = Q_(1, 'millisecond')
+        dt = self.dt
 
         if self.avo_or_eei == 'avo':
             angles = np.arange(0., 40., 1)
@@ -1906,7 +1920,7 @@ class LaminarModel:
         freq_slider = Slider(title='Wavelet central freq. [Hz]', start=10, end=40, step=5, value=20)
 
         # Set up a fixed resolution in time
-        dt = Q_(1, 'millisecond')
+        dt = self.dt
 
         if self.avo_or_eei == 'avo':
             angles = np.arange(0., 40., 1)
@@ -1991,7 +2005,7 @@ class LaminarModel:
         # end of draw_plot()
 
         self.previous_cases = self.model.case_names
-        grid = plotter.draw()
+        grid = plotter.draw_ext_toolbar()
 
         # Add vertical line indicating where the 1D model is extracted
         v_line = Span(
@@ -2073,7 +2087,8 @@ class LaminarModel:
             title_txt += '{}\n </div>'.format(self.model.name)
             title = Div(text=title_txt)
 
-        return (title, lf_table, add_row, delete_row, update, _model_table, add_row_m, delete_row_m, update_m, grid,
+        return (title, lf_table, add_row, delete_row, update, _model_table,
+                add_row_m, delete_row_m, update_m, grid,
                 row(trace_selector, case_selector, freq_slider), synth_2d_cds)
 
 
@@ -2155,8 +2170,9 @@ class WedgeModel(LaminarModel):
         from blixt_rp.plotting.log_plotter import default_tools
 
         # Create the default Quasi 2D widgets
-        (lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls,
-         synth_2d_cds) = self.draw_2d()
+        (title, lf_table, add_row, delete_row, update, model_table,
+         add_row_m, delete_row_m, update_m, grid,
+         controls, synth_2d_cds) = self.draw_2d()
 
         # Create the widgets for plotting the Top / Base wedge seismic picks, which we calculate the
         # apparent thickness from
@@ -2666,6 +2682,7 @@ def calc_synth_cds(_vp, _vs, _rho, _twt, _dt, _angles, avo_or_eei, freq):
 
 
 def create_traces(_synth_cds, _depth, _title, angles, avo_or_eei):
+    from blixt_rp.core.seismic import SeismicTraces
     return SeismicTraces(
         x=angles, y=_depth, traces=None, cds=_synth_cds, trace_type=avo_or_eei, title=_title)
 

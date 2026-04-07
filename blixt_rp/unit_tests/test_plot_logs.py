@@ -73,13 +73,13 @@ class TestPlot(unittest.TestCase):
         print(well1.name)
         column_content = [['vsh'], ['phie'], ['vp_dry', 'vp_sg08']]
         plotter = bupp.plot_logs(well1, column_content, rel_widths=[1., 1., 1.])
-        grid = plotter.draw()
-        _p_one = select_column(grid, 'column_1')
-        print(_p_one)
-        _p_none = select_column(grid, 'XXX')
-        print(_p_none)
-        _line_vp_dry = select_line(grid, 'vp_dry')
-        print(_line_vp_dry)
+        grid = plotter.draw_ext_toolbar()
+        # _p_one = select_column(grid, 'column_1')
+        # print(_p_one)
+        # _p_none = select_column(grid, 'XXX')
+        # print(_p_none)
+        # _line_vp_dry = select_line(grid, 'vp_dry')
+        # print(_line_vp_dry)
         show(grid)
 
     def test_plot_logs_with_settings(self):

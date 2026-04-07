@@ -1,6 +1,7 @@
 # This can be invoked by calling:
 # C:\Users\emb\Documents\PycharmProjects\blixt_rp\blixt_rp>C:\Users\emb\Documents\PycharmProjects\venv\Scripts\bokeh serve --show unit_tests
 # C:\Users\marten.blixt\PycharmProjects\blixt_rp\blixt_rp>C:\Users\marten.blixt\PycharmProjects\blixt_rp\.p310\Scripts\bokeh serve --show unit_tests
+# T:\Python\EMB\blixt_rp\blixt_rp>T:\Python\EMB\blixt_rp\.p310\Scripts\bokeh serve --show unit_tests
 import sys
 import os
 from bokeh.plotting import column, figure, show, curdoc, row

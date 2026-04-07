@@ -34,7 +34,6 @@ sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 
 # from blixt_utils.misc.templates import necessary_keys
 from blixt_rp.core.core import Template, LogTable
-from blixt_rp.core.seismic import SeismicTraces, seismic_color_map
 from blixt_rp import Q_
 
 logger = logging.getLogger(__name__)
@@ -319,74 +318,77 @@ class LogPlotter:
         return gridplot([[_child for _child in children]],
                         toolbar_location='right', merge_tools=True)
 
-"""
-Below is a suggestion from CoPilot on how to make the draw() function avoid using merge_tools=True and 
-allows the toolbar to be modified later:
+    def draw_ext_toolbar(self, title: str | None = None):
+        """
+        Below is a suggestion from CoPilot on how to make the draw() function avoid using merge_tools=True and
+        allows the toolbar to be modified later:
+        """
 
-def draw(self, title: str | None = None):
-    children = []
-    lines = []
+        children = []
+        lines = []
 
-    _w = Span(dimension="width", line_dash="dashed", line_width=1)
-    _h = Span(dimension="height", line_dash="dashed", line_width=1)
+        _w = Span(dimension="width", line_dash="dashed", line_width=1)
+        _h = Span(dimension="height", line_dash="dashed", line_width=1)
 
-    # --- 1. Create all column figures ---
-    for i, _column in enumerate(self.columns):
-        _p = create_column_figure(
-            _column, _w, _h, self.column_height,
-            _y_range_flipped = (i == 0),
-            _x_axis_visible = (len(_column) > 0),
-            _y_axis_visible = (i == 0),
-            _tools = self._tools,
-            _title = title
+        # --- 1. Create all column figures ---
+        for i, _column in enumerate(self.columns):
+            _p = create_column_figure(
+                _column, _w, _h, self.column_width, self.height,
+                _y_range_flipped = i==0,
+                _x_axis_visible = len(_column) > 0,
+                _y_axis_visible = i==0,
+                _tools = self._tools,
+                _title = title
+            )
+            _p.name = _column.name
+            children.append(_p)
+
+        # --- 2. Link the y-ranges ---
+        for i, child in enumerate(children):
+            if i > 0:
+                child.y_range = children[0].y_range
+
+        # ---------------------------------------------------------------
+        # ✅ 3. Select ONE master figure whose toolbar will be visible
+        # ---------------------------------------------------------------
+        master_fig = children[-1]
+        master_fig.toolbar_location = "right"
+
+        # ---------------------------------------------------------------
+        # ✅ 4. Hide the toolbars of all other figures
+        #    (they still have tools — they just don't show a toolbar UI)
+        # ---------------------------------------------------------------
+        # for fig in children[:-1]:
+        for fig in children:
+            fig.toolbar_location = None
+
+        # ---------------------------------------------------------------
+        # ✅ 5. Build a grid where only the master toolbar is visible
+        #    All figures are still independent and responsive to tools.
+        # ---------------------------------------------------------------
+        # A gridplot still works fine, but we avoid merge_tools=True
+        grid = gridplot(
+            [[fig for fig in children]],
+            toolbar_location=None,   # <- gridplot shouldn't create a toolbar
+            merge_tools=False        # <- dynamic updates WILL now work
         )
-        _p.name = _column.name
-        children.append(_p)
 
-    # --- 2. Link the y-ranges ---
-    for i, child in enumerate(children):
-        if i > 0:
-            child.y_range = children[0].y_range
+        # ---------------------------------------------------------------
+        # ✅ 6. Combine the grid and master toolbar explicitly
+        # ---------------------------------------------------------------
+        from bokeh.layouts import row
+        from bokeh.plotting import Row
 
-    # ---------------------------------------------------------------
-    # ✅ 3. Select ONE master figure whose toolbar will be visible
-    # ---------------------------------------------------------------
-    master_fig = children[0]
-    master_fig.toolbar_location = "right"
+        final_layout = row(grid, master_fig.toolbar)
 
-    # ---------------------------------------------------------------
-    # ✅ 4. Hide the toolbars of all other figures
-    #    (they still have tools — they just don't show a toolbar UI)
-    # ---------------------------------------------------------------
-    for fig in children[1:]:
-        fig.toolbar_location = None
-
-    # ---------------------------------------------------------------
-    # ✅ 5. Build a grid where only the master toolbar is visible
-    #    All figures are still independent and responsive to tools.
-    # ---------------------------------------------------------------
-    # A gridplot still works fine, but we avoid merge_tools=True
-    grid = gridplot(
-        [[fig for fig in children]],
-        toolbar_location=None,   # <- gridplot shouldn't create a toolbar
-        merge_tools=False        # <- dynamic updates WILL now work
-    )
-
-    # ---------------------------------------------------------------
-    # ✅ 6. Combine the grid and master toolbar explicitly
-    # ---------------------------------------------------------------
-    from bokeh.layouts import row
-
-    final_layout = row(master_fig.toolbar, grid)
-
-    return final_layout
-"""
+        return final_layout
 
 
 class LogColumn:
     """
     A class that can contain multiple well logs (lines) in the same "column"
     """
+    from blixt_rp.core.seismic import SeismicTraces
 
     def __init__(self,
                  name: str,
@@ -819,6 +821,7 @@ def add_seismic_traces(_p: bokeh.plotting.figure,
     :param _column:
     :return:
     """
+    from blixt_rp.core.seismic import seismic_color_map
     trace_cds = None
     _seismic_color_map = None
     if _column.seismic_traces is not None:
@@ -1185,11 +1188,9 @@ def add_tool_to_layout(layout, tool):
             “Merged toolbar does not update after modifying tools”
             “GridPlot toolbar is static after creation”
     """
-    print('XXX layout: ', type(layout))
     figs = find_figures(layout)
     for f in figs:
         f.add_tools(tool)
-        print('XXX figure: ', type(f), f.toolbar.tools)
         if isinstance(tool, PointDrawTool):
             f.toolbar.active_tap = tool
 
