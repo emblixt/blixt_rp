@@ -53,10 +53,15 @@ elif test == 'models__test_laminar_model':
 elif test == 'models__test_wedge':
     import test_models
     test = test_models.TestCase()
-    model_table, model_controls, lf_table, lf_controls, grid, controls, new_grid = test.test_wedge(unit_test=False)
-    curdoc().add_root(column(
-        grid, controls, new_grid,
+    model_table, model_controls, lf_table, lf_controls, grid, controls, new_grid, points_table, avo_figure = test.test_wedge(unit_test=False)
+    curdoc().add_root(
         row(
-            column(model_table, model_controls),
-            column(lf_table, lf_controls)
-    )))
+            column(grid, controls, new_grid,
+                row(
+                    column(model_table, model_controls),
+                    column(lf_table, lf_controls)
+                )
+            ),
+            column(points_table, avo_figure)
+        )
+    )

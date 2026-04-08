@@ -1,5 +1,3 @@
-from collections.abc import Callable
-
 import matplotlib.pyplot as plt
 import matplotlib.lines as m_lines
 import numpy as np
@@ -1812,7 +1810,8 @@ class LaminarModel:
         # end of draw_plot()
 
         self.previous_cases = self.model.case_names
-        grid = plotter.draw()
+        # grid = plotter.draw()
+        grid = plotter.draw_ext_toolbar()
 
         def update_m_function():
             # Update the elastic properties based on the new model
@@ -2316,7 +2315,7 @@ class WedgeModel(LaminarModel):
         new_grid = gridplot([[p_scatter, p_lines]], toolbar_location='right', merge_tools=True)
 
         return (lf_table, row(add_row, delete_row, update), model_table, row(update_m), grid,
-                row(controls, top_picker, base_picker), new_grid)
+                row(controls, top_picker, base_picker), new_grid, synth_2d_cds)
 
 def build_layered_model(depth_to_target, overburden_thickness, target_thickness,
                         overburden, target, underburden, domain='TWT') -> Model:

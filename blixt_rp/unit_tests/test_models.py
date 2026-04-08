@@ -6,6 +6,7 @@ import numpy as np
 from bokeh.io import output_file
 
 from blixt_rp.core.core import LithoFluid, LithoFluids, LithoFluidsTable
+from blixt_rp.core.seismic import AvoAnalyzer
 
 # Add to path to avoid having to install libraries, useful in development
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
@@ -439,18 +440,23 @@ class TestCase(unittest.TestCase):
     def test_wedge(self, unit_test=True):
         from bokeh.plotting import show, row, column
         wm = WedgeModel(n_traces=51)
-        lf_table, lf_controls, model_table, model_controls, grid, controls, new_grid = wm.draw()
+        lf_table, lf_controls, model_table, model_controls, grid, controls, new_grid, synth_2d_cds = wm.draw()
 
+        # Test adding some extraction points
+        analyze_avo = AvoAnalyzer(grid, 'line section', None, model=wm)
+        points_cds = analyze_avo.cds
+        points_table, avo_figure, avo_cds = analyze_avo.draw(points_cds, synth_2d_cds)
         if unit_test:
-            show(column(grid, controls, new_grid,
+            show(row(column(grid, controls, new_grid,
                         row(
                             column(model_table, model_controls),
                             column(lf_table, lf_controls)
-                        ))
+                        )),
+                 column(points_table, avo_figure))
                  )
             return None
         else:
-            return model_table, model_controls, lf_table, lf_controls, grid, controls, new_grid
+            return model_table, model_controls, lf_table, lf_controls, grid, controls, new_grid, points_table, avo_figure
 
     def test_catch_change_in_cases(self):
         prev_cases = [[1, 2], [1,2,3], [1,2], [1,4]]

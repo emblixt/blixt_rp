@@ -119,6 +119,15 @@ class SeismicTraces:
     Each trace must have the same depth/time dimension
 
     """
+    # TODO
+    # TODO Suggested major re-write
+    # Rename this to something like "SeismicSection", and make StochasticSyntheticTraces and
+    # AvoAmplitudes methods of this class.
+    # Add more attributes, e.g. "incident_angle", "chi_angle" which can be used for near, mid and far-stacks
+    # and so on.
+    # Also add a model as a non-mandatory attribute. so that the seismic section can be calculated from
+    # this model
+    # Also, make the output seismic sections from models.py of this type
     def __init__(self,
                  x: np.ndarray | None = None,
                  y: np.ndarray | None = None,
@@ -254,7 +263,8 @@ class StochasticSyntheticTraces:
 
 class AvoAmplitudes:
     """
-    Class for handling seismic amplitudes vs incident angle, or EEI vs. Chi angle
+    Class for handling seismic amplitudes vs incident angle, or EEI vs. Chi angle for specific
+    points in a seismic section
     """
     # from blixt_rp.core.models import LaminarModel, WedgeModel
     def __init__(self):
@@ -349,12 +359,7 @@ class AvoAmplitudes:
             if section_type == 'line section' and model is None:
                 pass
 
-            elif section_type == 'line section' and model is not None:
-                # We need to have the elastics from the model (and the trace index and depth from where to extract
-
-                # the amplitude), the cases, the frequency and dt.
-                # Then we use calc_synth_cds from models.py
-
+            elif section_type in ['line section', 'avo section'] and model is not None:
                 # Extract the trace index from the current point
                 trace_index = int(points_cds.data['x'][_point_no])
 
@@ -392,7 +397,6 @@ class AvoAmplitudes:
                         _dict['amplitude'].append(synths.data['value'][0][depth_index])
                         _dict['chi_angle'].append(np.nan)
                         _dict['eei_amplitude'].append(np.nan)
-                print('XXX')
 
             elif section_type == 'avo section' and model is None:
                 # Extract the incident angles from the seismic section
@@ -411,8 +415,8 @@ class AvoAmplitudes:
                     _dict['chi_angle'].append(np.nan)
                     _dict['eei_amplitude'].append(np.nan)
 
-            elif section_type == 'avo section' and model is not None:
-                pass
+            # elif section_type == 'avo section' and model is not None:
+            #     pass
 
         self._cds_dict = _dict
         return _dict
@@ -495,6 +499,8 @@ class AvoAnalyzer:
         # As a bokeh Row (see the method 'draw_ext_toolbar' in LogPlotter)
         elif isinstance(p, Row):
             self.figure = select_column(p.children[0], column_name)
+            if self.figure is None:
+                self.figure = select_column(p.children[0], 'SYNTH_VARIATION')
             self.grid = p.children[0]
             self.toolbar = p.children[1]
 
@@ -1733,7 +1739,7 @@ class TestCases(unittest.TestCase):
         model = None
 
         idx_refl = None
-        refl_points = []
+        refl_points = None
         if section_type == 'line section' and not synthetic:
             near = AngleStack('near',
                               "R:\\3D\\UTM31\\Acquired Data\\CGG22M01-NVG21PH1\\CGG22M01-NVG21PH1-NSRE-FINAL-KPSDM-T-NEARSTACK_MIG-FIN_16bit.zgy",
@@ -1770,7 +1776,7 @@ class TestCases(unittest.TestCase):
             refl_points = None
 
         elif section_type == 'avo section' and not synthetic:
-            # TODO Add a test with a synthetic AVO response (e.g. 1D LaminarModel)
+            refl_points = []
             _synts = StochasticSyntheticTraces()
             synts = _synts.get_traces(simulate_avo=True)
             idx_refl = _synts.idx_refl
@@ -2236,11 +2242,11 @@ class TestCases(unittest.TestCase):
         section_type = 'avo section'
         synthetic = True
         p, seismic_cds, c_amp, refl_points, model = self.test_data_for_avo_analyzer(section_type, synthetic)
-        show(p)
 
-        # analyze_avo = AvoAnalyzer(p, section_type, refl_points, model=model)
-        # points_cds = analyze_avo.cds
-        # points_table, avo_figure, avo_cds = analyze_avo.draw(points_cds, seismic_cds)
+        analyze_avo = AvoAnalyzer(p, section_type, refl_points, model=model)
+        points_cds = analyze_avo.cds
+        points_table, avo_figure, avo_cds = analyze_avo.draw(points_cds, seismic_cds)
 
 
-        # show(column(p, points_table, avo_figure))
+        show(column(p, points_table, avo_figure))
+
