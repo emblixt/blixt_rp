@@ -3,13 +3,14 @@ import os
 import sys
 import matplotlib.pyplot as plt
 import numpy as np
-from pint import Quantity as Q_
+from bokeh.io import output_file
 
 from blixt_rp.core.core import LithoFluid, LithoFluids, LithoFluidsTable
 
 # Add to path to avoid having to install libraries, useful in development
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_tests', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
+output_file(os.path.join(project_dir, 'blixt_rp', 'test_data','plot.html'))
 
 from blixt_rp.core.models import (Model, Layer, ModelTable, LaminarModel, WedgeModel,
                                   plot_wiggles, build_layered_model, laminar_model_analysis,
@@ -182,13 +183,10 @@ class TestCase(unittest.TestCase):
         l_twt = Layer(thickness=thickness_twt, litho_fluid=lf)
 
     def test_quasi2d(self, unit_test=True):
-        from bokeh.io import output_file
         from bokeh.plotting import show, row, column
         import blixt_utils.misc.wavelets as bumw
         from blixt_rp.core.core import LithoFluid, LithoFluids, LithoFluidsTable
         from blixt_rp.rp.rp_core import constantcement, v_p, v_s
-
-        output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
 
         n_samplings = 11
 
@@ -322,14 +320,12 @@ class TestCase(unittest.TestCase):
         plt.show()
 
     def test_model_table(self, unit_test=True, only_verbatim=True):
-        from bokeh.io import output_file
         from bokeh.plotting import show, row, column
 
         # When creating output to Bokeh server, we need to set only_verbatim False
         if not unit_test:
             only_verbatim = False
 
-        output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
         lfs = LithoFluids(
             [LithoFluid(default='shale'), LithoFluid(default='brine_sst'), LithoFluid(default='oil_sst')]
         )
@@ -374,9 +370,7 @@ class TestCase(unittest.TestCase):
         return None
 
     def test_laminar_model(self, unit_test=True):
-        from bokeh.io import output_file
         from bokeh.plotting import show, row, column
-        output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
 
         # Create the laminar model
         lm = LaminarModel(resolution=Q_(0.1, 'm'), avo_or_eei='avo')
@@ -395,9 +389,7 @@ class TestCase(unittest.TestCase):
             return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid, controls
 
     def test_laminar_q2d_model(self, unit_test=True):
-        from bokeh.io import output_file
         from bokeh.plotting import show, row, column
-        output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
 
         def vp(_i):
             return Q_(3000. +  5. * _i, 'm/s')
@@ -430,7 +422,7 @@ class TestCase(unittest.TestCase):
         lm = LaminarModel(model=model, litho_fluids=lfs, resolution=Q_(0.1, 'm'), avo_or_eei='avo')
 
         # lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls = lm.draw()
-        (lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls,
+        (title, lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls,
          synth_2d_cds) = lm.draw_2d()
 
         if unit_test:
@@ -445,9 +437,7 @@ class TestCase(unittest.TestCase):
             return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid, controls
 
     def test_wedge(self, unit_test=True):
-        from bokeh.io import output_file
         from bokeh.plotting import show, row, column
-        output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
         wm = WedgeModel(n_traces=51)
         lf_table, lf_controls, model_table, model_controls, grid, controls, new_grid = wm.draw()
 

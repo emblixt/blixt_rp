@@ -14,7 +14,6 @@ from scipy.stats import theilslopes
 from typing import Callable
 
 from .log_curve_new import LogCurve, Depth
-from .. import Q_
 from ..plotting.plot_logs_new import get_wiggles_in_depth
 from .core import LithoFluid, LithoFluidsTable, LithoFluids
 
@@ -30,6 +29,7 @@ from blixt_utils.plotting.crossplot import cnames
 import blixt_rp.rp.rp_core as rp
 import blixt_utils.misc.wavelets as bumw
 from blixt_utils.utils import print_info
+from blixt_rp import Q_
 
 logger = logging.getLogger(__name__)
 
@@ -522,7 +522,7 @@ class Layer:
                  name: str | None = None,
                  case: str | None = None,
                  color: str | None  = '#D9D9D9',
-                 thickness: pint.Quantity | Callable[[int], Q_] |  None = None,
+                 thickness: Q_ | Callable[[int], Q_] |  None = None,
                  litho_fluid: LithoFluid | None = None,
                  ntg=None,
                  **kwargs
@@ -650,7 +650,7 @@ class Layer:
     #     self.domain = check_domain(new_thickness)
     #     self._thickness = new_thickness
 
-    def realize_layer(self, resolution: pint.Quantity, voigt_reuss_hill=False, index=0):
+    def realize_layer(self, resolution: Q_, voigt_reuss_hill=False, index=0):
         """
         Realize the current layer by returning arrays of the elastic properties with the given resolution
 
@@ -751,7 +751,7 @@ class Model:
     """
 
     def __init__(self,
-                 depth_to_top: pint.Quantity | None = None,
+                 depth_to_top: Q_ | None = None,
                  layers: list | None = None,
                  trace_index_range=None,
                  name: str | None = None):
@@ -1011,7 +1011,7 @@ class Model:
                 return _layer
         return base_case_layer
 
-    def total_thickness(self) -> pint.Quantity | None:
+    def total_thickness(self) -> Q_ | None:
         """
         Returns the total thickness of the model.
         NOTE. Only sums up the thickness of base case layers
@@ -1033,7 +1033,7 @@ class Model:
 
         return total_thickness
 
-    def depth_array(self, resolution: pint.Quantity) -> pint.Quantity:
+    def depth_array(self, resolution: Q_) -> Q_:
         """
         Returns a pint.Quantity array with length similar to the total thickness of the model (sum layer thicknesses)
         with a sampling matching the desired resolution
@@ -1052,7 +1052,7 @@ class Model:
             self.total_thickness().units)
         return depth
 
-    def interface_indexes(self, resolution: pint.Quantity, index: int | None = None) -> list:
+    def interface_indexes(self, resolution: Q_, index: int | None = None) -> list:
         """
         Returns a list of indexes, one for each interface (except top and bottom) for the given resolution
         :param resolution:
@@ -1085,7 +1085,7 @@ class Model:
 
         return _list
 
-    def horizons_cds(self, resolution: pint.Quantity | None = None) -> ColumnDataSource:
+    def horizons_cds(self, resolution: Q_ | None = None) -> ColumnDataSource:
         """
         Returns ColumnDataSource (cds) with the top depths of each layer in the model
 
@@ -1391,7 +1391,7 @@ class ModelTable:
             )
         return table_columns
 
-    def realize(self, resolution: pint.Quantity, index: int | None = None) -> dict:
+    def realize(self, resolution: Q_, index: int | None = None) -> dict:
         """
         "Realizes" the model according to the given resolution.
 
@@ -1465,7 +1465,7 @@ class ModelTable:
 
         return _dict
 
-    # def line_cds(self, resolution: pint.Quantity, mod_cds: ColumnDataSource) -> ColumnDataSource:
+    # def line_cds(self, resolution: Q_, mod_cds: ColumnDataSource) -> ColumnDataSource:
     def line_cds(self, elastics_dict: dict) -> ColumnDataSource:
         """
         Calculates the lines that represent the elastic properties of the model
@@ -1631,7 +1631,7 @@ class LaminarModel:
     def __init__(self,
                  model: Model | None = None,
                  litho_fluids: LithoFluids | None = None,
-                 resolution: pint.Quantity | None = None,
+                 resolution: Q_ | None = None,
                  wavelet: dict | None = None,
                  avo_or_eei: str | None = None,
                  **kwargs
@@ -1671,6 +1671,8 @@ class LaminarModel:
                 LithoFluid(default='oil_sst')
             ])
         self._litho_fluids = litho_fluids
+        if resolution is None:
+            resolution = Q_(0.1, 'm')
         self.resolution = resolution
         self.dt = kwargs.pop('dt', Q_(1., 'millisecond'))
         self.freq = kwargs.pop('freq', 20.)
@@ -1681,6 +1683,10 @@ class LaminarModel:
         if avo_or_eei is None:
             avo_or_eei = 'avo'
         self.avo_or_eei = avo_or_eei
+        if self.avo_or_eei == 'avo':
+            self.angles = np.arange(0., 40., 2)
+        else:
+            self.angles = np.arange(-90., 91., 5)
         self.active_2d_case = global_base_case_name
 
     def initiate_lf_table(self):
@@ -1733,11 +1739,6 @@ class LaminarModel:
         # Set up a fixed resolution in time
         dt = self.dt
 
-        if self.avo_or_eei == 'avo':
-            angles = np.arange(0., 40., 1)
-        else:
-            angles = np.arange(-90., 91., 1)
-
         # Initiate the elastics and draw the initial data
         elastics_dict = self.model_table.realize(self.resolution)
         cds_lines = self.model_table.line_cds(elastics_dict)
@@ -1785,24 +1786,24 @@ class LaminarModel:
             elastics_dict[global_base_case_name]['vs'],
             elastics_dict[global_base_case_name]['rho'],
             elastics_dict[global_base_case_name]['twt'],
-            dt, angles, self.avo_or_eei, freq_slider.value
+            dt, self.angles, self.avo_or_eei, freq_slider.value
         )
         synth_cds_variation = calc_synth_cds(
             elastics_dict[global_base_case_name]['vp'],
             elastics_dict[global_base_case_name]['vs'],
             elastics_dict[global_base_case_name]['rho'],
             elastics_dict[global_base_case_name]['twt'],
-            dt, angles, self.avo_or_eei, freq_slider.value
+            dt, self.angles, self.avo_or_eei, freq_slider.value
         )
         # print('XXX', np.min(synth_cds_base.data['value']), np.max(synth_cds_base.data['value']))
         traces_base = create_traces(
             synth_cds_base,
             elastics_dict[global_base_case_name]['vp'].depth.values,
-            'Base case', angles, self.avo_or_eei)
+            'Base case', self.angles, self.avo_or_eei)
         traces_variation = create_traces(
             synth_cds_variation,
             elastics_dict[global_base_case_name]['vp'].depth.values,
-            'Base case', angles, self.avo_or_eei)
+            'Base case', self.angles, self.avo_or_eei)
 
         synth_base_column = LogColumn('SYNTH_BASE', seismic_traces=traces_base, rel_width=1.)
         synth_variation_column = LogColumn('SYNTH_VARIATION', seismic_traces=traces_variation, rel_width=1.)
@@ -1827,7 +1828,7 @@ class LaminarModel:
                 _elastics_dict[global_base_case_name]['vs'],
                 _elastics_dict[global_base_case_name]['rho'],
                 _elastics_dict[global_base_case_name]['twt'],
-                dt, angles, self.avo_or_eei, freq_slider.value
+                dt, self.angles, self.avo_or_eei, freq_slider.value
             ).data)
 
             # Update the CDS of the synthetics of the other case, if it exists
@@ -1841,7 +1842,7 @@ class LaminarModel:
                     _elastics_dict[cases[0]]['vs'],
                     _elastics_dict[cases[0]]['rho'],
                     _elastics_dict[cases[0]]['twt'],
-                    dt, angles, self.avo_or_eei, freq_slider.value
+                    dt, self.angles, self.avo_or_eei, freq_slider.value
                 ).data)
                 _p = select_column(grid, 'SYNTH_VARIATION')
                 _p.xaxis.axis_label = '{} case: {}'.format(cases[0], self.avo_or_eei)
@@ -1885,7 +1886,7 @@ class LaminarModel:
             title_txt += '{}\n </div>'.format(self.model.name)
             title = Div(text=title_txt)
 
-        return title, lf_table, add_row, delete_row, update, _model_table, add_row_m, delete_row_m, update_m, grid, freq_slider
+        return title, lf_table, add_row, delete_row, update, _model_table, add_row_m, delete_row_m, update_m, grid, freq_slider, synth_cds_base
 
     def draw_2d(self):
         from bokeh.models import Span, Slider, Select, Div
@@ -1895,6 +1896,7 @@ class LaminarModel:
 
         from blixt_rp.plotting.log_plotter import LogPlotter, LogColumn, Line, select_column, select_line
         from blixt_rp.core.core import Template
+
         # Create the litho fluids table
         self.initiate_lf_table()
         cds_lf = self.lf_table.cds
@@ -1917,15 +1919,16 @@ class LaminarModel:
             title='Case',
             value=self.active_2d_case,
             options=self.model.case_names)
-        freq_slider = Slider(title='Wavelet central freq. [Hz]', start=10, end=40, step=5, value=20)
+        freq_slider = Slider(title='Wavelet central freq. [Hz]', start=10, end=40, step=5, value=self.freq)
+
+        def freq_slider_change(attr, old, new):
+            self.freq = new
+
+        # Update the self.freq attribute depending on the frequency slider.
+        freq_slider.on_change('value', freq_slider_change)
 
         # Set up a fixed resolution in time
         dt = self.dt
-
-        if self.avo_or_eei == 'avo':
-            angles = np.arange(0., 40., 1)
-        else:
-            angles = np.arange(-90., 91., 1)
 
         def draw_lines():
             # Initiate the elastics and draw the initial data
@@ -2099,10 +2102,10 @@ class WedgeModel(LaminarModel):
     """
     def __init__(self,
                  litho_fluids: LithoFluids | None = None,
-                 resolution: pint.Quantity | None = None,
-                 depth_to_wedge: pint.Quantity | None = None,
-                 min_thickness: pint.Quantity | None = None,
-                 max_thickness: pint.Quantity | None = None,
+                 resolution: Q_ | None = None,
+                 depth_to_wedge: Q_ | None = None,
+                 min_thickness: Q_ | None = None,
+                 max_thickness: Q_ | None = None,
                  n_traces: int | None = None,
                  **kwargs
                  ):
@@ -2122,7 +2125,10 @@ class WedgeModel(LaminarModel):
         :param n_traces:
         :param kwargs:
         """
+
+        #
         # Set up default values:
+        #
         if litho_fluids is None:
             litho_fluids = LithoFluids(
                 [LithoFluid(default='shale'), LithoFluid(default='brine_sst'), LithoFluid(default='oil_sst')]
@@ -2182,8 +2188,12 @@ class WedgeModel(LaminarModel):
 
         horizons_cds = self.model.horizons_cds(resolution=self.resolution)
 
+        # Draw the outline of the wedge
         for h_name in ['Top Top', 'Top Wedge', 'Top Bottom']:
-            grid.children[2][0].scatter(x='x', y=h_name, marker='dash', source=horizons_cds, size=10)
+            # grid.children[2][0].scatter(x='x', y=h_name, marker='dash', source=horizons_cds, size=10)
+            # Now that draw_2d() is using the new draw_ext_toolbar() method of LogPlotter, we need to change this
+            # a little
+            grid.children[0].children[2][0].scatter(x='x', y=h_name, marker='dash', source=horizons_cds, size=10)
 
         top_picker = Select(
             title='Pick top wedge:',
@@ -2239,9 +2249,15 @@ class WedgeModel(LaminarModel):
         def base_picker_function(attr, old, new):
             do_base_pick()
 
+        #
         # Draw the picks
-        grid.children[2][0].scatter(x='x', y='Top pick', marker='circle', source=horizons_cds, size=7)
-        grid.children[2][0].scatter(x='x', y='Base pick', marker='square', source=horizons_cds, size=7)
+        #
+        # grid.children[2][0].scatter(x='x', y='Top pick', marker='circle', source=horizons_cds, size=7)
+        # grid.children[2][0].scatter(x='x', y='Base pick', marker='square', source=horizons_cds, size=7)
+        # Now that draw_2d() is using the new draw_ext_toolbar() method of LogPlotter, we need to change this
+        # a little
+        grid.children[0].children[2][0].scatter(x='x', y='Top pick', marker='circle', source=horizons_cds, size=7)
+        grid.children[0].children[2][0].scatter(x='x', y='Base pick', marker='square', source=horizons_cds, size=7)
 
         top_picker.on_change('value', top_picker_function)
         base_picker.on_change('value', base_picker_function)
@@ -2252,7 +2268,10 @@ class WedgeModel(LaminarModel):
         # First extract the width of the columns in the original gridplot
         _last_width = 0  # Width of the last column which plots the wedge synthetics
         _total_width = 0
-        for _child in grid.children:
+        # Now that draw_2d() is using the new draw_ext_toolbar() method of LogPlotter, we need to change this
+        # a little
+        # for _child in grid.children:
+        for _child in grid.children[0].children:
             _last_width = _child[0].width
             _total_width += _last_width
         _height = 300
@@ -2329,9 +2348,9 @@ def build_layered_model(depth_to_target, overburden_thickness, target_thickness,
 
 
 def build_wedge(
-        depth_to_wedge: pint.Quantity,
-        from_thickness: pint.Quantity,
-        to_thickness: pint.Quantity,
+        depth_to_wedge: Q_,
+        from_thickness: Q_,
+        to_thickness: Q_,
         n_traces: int,
         overburden: LithoFluid,
         target: LithoFluid,

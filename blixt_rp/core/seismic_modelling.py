@@ -12,7 +12,6 @@ import blixt_utils.utils as uu
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.plotting.helpers import axis_plot, axis_log_plot, annotate_plot, header_plot, wiggle_plot
 import blixt_rp.rp.rp_core as rp
-import blixt_rp.plotting.plot_layered_model as model_plot
 from bruges.filters import ricker
 
 logger = logging.getLogger(__name__)
