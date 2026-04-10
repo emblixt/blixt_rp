@@ -1,7 +1,7 @@
 # This can be invoked by calling:
 # C:\Users\emb\Documents\PycharmProjects\blixt_rp\blixt_rp>C:\Users\emb\Documents\PycharmProjects\venv\Scripts\bokeh serve --show unit_tests
 # C:\Users\marten.blixt\PycharmProjects\blixt_rp\blixt_rp>C:\Users\marten.blixt\PycharmProjects\blixt_rp\.p310\Scripts\bokeh serve --show unit_tests
-# T:\Python\EMB\blixt_rp\blixt_rp>T:\Python\EMB\blixt_rp\.p310\Scripts\bokeh serve --show unit_tests
+# T:\Python\EMB\blixt_rp\blixt_rp> T:\Python\EMB\blixt_rp\.p310\Scripts\python.exe -m bokeh serve --show unit_tests
 import sys
 import os
 from bokeh.plotting import column, figure, show, curdoc, row
@@ -53,7 +53,7 @@ elif test == 'models__test_laminar_model':
 elif test == 'models__test_wedge':
     import test_models
     test = test_models.TestCase()
-    model_table, model_controls, lf_table, lf_controls, grid, controls, new_grid, points_table, avo_figure = test.test_wedge(unit_test=False)
+    model_table, model_controls, lf_table, lf_controls, grid, controls, new_grid, points_table, update_avo, avo_figure = test.test_wedge(unit_test=False)
     curdoc().add_root(
         row(
             column(grid, controls, new_grid,
@@ -62,6 +62,6 @@ elif test == 'models__test_wedge':
                     column(lf_table, lf_controls)
                 )
             ),
-            column(points_table, avo_figure)
+            column(points_table, update_avo, avo_figure)
         )
     )

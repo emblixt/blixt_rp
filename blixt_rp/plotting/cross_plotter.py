@@ -874,7 +874,7 @@ class CrossPlotter:
             _out[_key] = ['constant', 'constant']
         return _out
 
-    def fig(self):
+    def fig(self) -> figure:
         xplot = figure(width=self.width, height=self.height, tools=self._tools)
         xplot.toolbar.active_inspect = None
         xplot.toolbar.logo = None

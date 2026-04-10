@@ -266,9 +266,8 @@ class AvoAmplitudes:
     Class for handling seismic amplitudes vs incident angle, or EEI vs. Chi angle for specific
     points in a seismic section
     """
-    # from blixt_rp.core.models import LaminarModel, WedgeModel
     def __init__(self):
-        from copy import copy
+        from copy import deepcopy
         empty_dict = dict(
             use=[],
             name=[],  # should match the names in point_cds from AvoAnalyzer
@@ -280,8 +279,8 @@ class AvoAmplitudes:
             chi_angle=[],
             eei_amplitude=[]
         )
-        self.emtpy_dict = empty_dict
-        self._cds_dict = copy(empty_dict)
+        self.emtpy_dict = deepcopy(empty_dict)
+        self._cds_dict = deepcopy(empty_dict)
 
 
     @property
@@ -342,11 +341,11 @@ class AvoAmplitudes:
             dict
             follows the structure of self._cds_dict
         """
-        from copy import copy
-        from blixt_rp.core.models import calc_synth_cds, global_base_case_name
+        from copy import deepcopy
+        from blixt_rp.core.models import calc_synth_cds
         # create markers for the different cases, but save the 'circle' for the base case
         markers = ['star', 'diamond', 'hex', 'inverted_triangle', 'plus', 'square', 'triangle']
-        _dict = copy(self.emtpy_dict)
+        _dict = deepcopy(self.emtpy_dict)
 
         if section_type not in section_types:
             section_type = 'avo section'
@@ -377,7 +376,7 @@ class AvoAmplitudes:
                     # Iterate over all cases
                     for _n, _case in enumerate(model.model.case_names):
                         # Create markers for the different cases
-                        if _case.lower() == global_base_case_name.lower():
+                        if _case.lower() == model.model.base_case_name.lower():
                             _marker = 'circle'
                         else:
                             _marker = markers[_n]
@@ -393,7 +392,7 @@ class AvoAmplitudes:
                         _dict['color'].append(points_cds.data['color'][_point_no])
                         _dict['marker'].append(_marker)
                         _dict['angle'].append(inc_angle)
-                        _dict['sin2theta'].append(np.nan)
+                        _dict['sin2theta'].append((np.sin(inc_angle * np.pi / 180.)) ** 2)
                         _dict['amplitude'].append(synths.data['value'][0][depth_index])
                         _dict['chi_angle'].append(np.nan)
                         _dict['eei_amplitude'].append(np.nan)
@@ -421,13 +420,47 @@ class AvoAmplitudes:
         self._cds_dict = _dict
         return _dict
 
-    def draw(self, avo_cds) -> figure:
+
+    def calc_i_g(self, points_cds, avo_cds, model=None):
+        # Use the calculated avo response to calculate the Intercept and Gradient
+
+        # Iterate over all points
+        for i, point_name in enumerate(points_cds.data['name']):
+
+            # "Iterate" only over the base case for now
+            for _case in [model.model.base_case_name]:
+
+                # Only work on the data for the given point and case
+                _filtered_dict = filter_dict(avo_cds.data, 'name', '{} {}'.format(point_name, _case), '==')
+
+                # Calculate Intercept and gradient for this point, case pair
+                _int, _grad, _qual = avo_ig(np.array(_filtered_dict['amplitude']), np.array(_filtered_dict['angle']))
+
+                print('XXX', _int, _grad, _qual[0])
+                # Insert the results in points_cds
+                points_cds.data['intercept'][i] = _int
+                points_cds.data['gradient'][i] = _grad
+                points_cds.data['quality'][i] = _qual[0]
+
+    def draw(self, points_cds, avo_cds, model):
+        # Create update button
+        update_button = Button(label='Calc. AVO', button_type="success")
+
+        def on_click():
+            print('TEST')
+            self.calc_i_g(points_cds, avo_cds, model=model)
+
+        update_button.on_click(on_click)
+
+        # Create figure
         p = figure(width=600, height=300, tools= "pan,wheel_zoom,box_zoom,reset")
         p.toolbar.logo = None
         p.scatter(x='angle', y='amplitude',
                   source=avo_cds, fill_color='color', marker='marker',
                   legend_group='name', line_color='black', size=10)
-        return p
+        p.xaxis.axis_label = 'Incident angle [deg]'
+        p.yaxis.axis_label = 'Amplitude'
+        return p, update_button
 
 class AvoAnalyzer:
     """
@@ -659,7 +692,11 @@ class AvoAnalyzer:
 
         :return:
         """
+
+        from bokeh.models import Div
+
         formatter = NumberFormatter(format='0.0')
+        formatter_2 = NumberFormatter(format='0.00')
         template = """
                 <div style="background:<%= 
                     (function color_from_val(){
@@ -676,19 +713,26 @@ class AvoAnalyzer:
             TableColumn(field="y", title="Y", formatter=formatter),
             TableColumn(field='color', title='Color', formatter=color_formatter)
         ]
-        i_column =    TableColumn(field='intercept', title='I', formatter=formatter)
+        i_column =    TableColumn(field='intercept', title='I', formatter=formatter_2)
         i_anal_column =    TableColumn(field='intercept_anal', title='I*', formatter=formatter)
-        g_column =    TableColumn(field='gradient', title='G', formatter=formatter)
+        g_column =    TableColumn(field='gradient', title='G', formatter=formatter_2)
         g_anal_column =    TableColumn(field='gradient_anal', title='G*', formatter=formatter)
-        q_column =    TableColumn(field='quality', title='Qual.', formatter=NumberFormatter(format='0.00'))
+        q_column =    TableColumn(field='quality', title='Qual.', formatter=formatter_2)
 
         if self.section_type in section_types:
             [columns.append(_c) for _c in [i_column, g_column, q_column]]
         if self.model is not None:
             [columns.append(_c) for _c in [i_anal_column, g_anal_column]]
 
+        title = Div(text =
+                    """
+                    <div style="font-size:12px; font-weight:600; margin-bottom:0px; text-align:center">
+                        Points of AVO extraction:
+                    </div>
+               """)
+
         table = DataTable(source=cds, columns=columns, editable=True, height=200)
-        return table
+        return column(title, table, sizing_mode='stretch_width')
 
     def draw(self, points_cds, seismic_cds):
         """
@@ -717,9 +761,37 @@ class AvoAnalyzer:
         avo_cds = avo_amplitudes.cds
 
         #
-        # return the table, plot of AVO amplitudes and the AVO cds
-        avo_figure = avo_amplitudes.draw(avo_cds)
-        return points_table, avo_figure, avo_cds
+        # Create the AVO plot, and an update button
+        #
+        avo_figure, update_avo = avo_amplitudes.draw(points_cds, avo_cds, self.model)
+
+        #
+        # Catch button click
+        #
+        def update_amplitudes_callback():
+            print('AVO extraction points are changed')
+
+            # First remove all previous amplitude calculation, because 'calc_amplitudes' is appending!
+            avo_cds.data = avo_amplitudes.emtpy_dict
+
+            # Then calculate for the modified points
+            avo_cds.data = avo_amplitudes.calc_amplitudes(
+                points_cds,
+                self.section_type,
+                self.inc_angle_range(),
+                seismic_cds,
+                self.model
+            )
+
+            # Try to force points_cds to be updated:
+            points_cds.data = dict(points_cds.data)
+
+        update_avo.on_click(update_amplitudes_callback)
+
+        #
+        # return the  results
+        #
+        return points_table, update_avo, avo_figure, avo_cds
 
 
 def create_seismic_figure(
@@ -1727,6 +1799,40 @@ def get_size_of_seismic_figure(p: figure):
     test = test.data['value']
     return test[0].T.shape
 
+def filter_dict(_dict, _key, _value, _operator):
+    """
+    Returns a filtered version of the input dictionary that fulfills the requirement that
+        _dict[_key] _operator _value
+    E.G.
+        _dict['name']  == 'My name'
+    :param _dict:
+    :param _key:
+    :param _value:
+    :param _operator:
+    :return:
+    """
+    import operator
+
+    _ops = {
+        "==": operator.eq,
+        "!=": operator.ne,
+        "<": operator.lt,
+        "<=": operator.le,
+        ">": operator.gt,
+        ">=": operator.ge,
+    }
+
+    # def filter_dict(data, key, op, value):
+    compare = _ops[_operator]
+
+    mask = [compare(x, _value) for x in _dict[_key]]
+
+    return {
+        k: [v for v, keep in zip(vals, mask) if keep]
+        for k, vals in _dict.items()
+    }
+
+
 
 
 class TestCases(unittest.TestCase):
@@ -2245,8 +2351,8 @@ class TestCases(unittest.TestCase):
 
         analyze_avo = AvoAnalyzer(p, section_type, refl_points, model=model)
         points_cds = analyze_avo.cds
-        points_table, avo_figure, avo_cds = analyze_avo.draw(points_cds, seismic_cds)
+        points_table, update_avo, avo_figure, avo_cds = analyze_avo.draw(points_cds, seismic_cds)
 
 
-        show(column(p, points_table, avo_figure))
+        show(column(p, points_table, update_avo, avo_figure))
 

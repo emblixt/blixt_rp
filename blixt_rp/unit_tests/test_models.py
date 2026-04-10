@@ -445,18 +445,18 @@ class TestCase(unittest.TestCase):
         # Test adding some extraction points
         analyze_avo = AvoAnalyzer(grid, 'line section', None, model=wm)
         points_cds = analyze_avo.cds
-        points_table, avo_figure, avo_cds = analyze_avo.draw(points_cds, synth_2d_cds)
+        points_table, update_avo, avo_figure, avo_cds = analyze_avo.draw(points_cds, synth_2d_cds)
         if unit_test:
             show(row(column(grid, controls, new_grid,
                         row(
                             column(model_table, model_controls),
                             column(lf_table, lf_controls)
                         )),
-                 column(points_table, avo_figure))
+                 column(points_table, update_avo, avo_figure))
                  )
             return None
         else:
-            return model_table, model_controls, lf_table, lf_controls, grid, controls, new_grid, points_table, avo_figure
+            return model_table, model_controls, lf_table, lf_controls, grid, controls, new_grid, points_table, update_avo, avo_figure
 
     def test_catch_change_in_cases(self):
         prev_cases = [[1, 2], [1,2,3], [1,2], [1,4]]

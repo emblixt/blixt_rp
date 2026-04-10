@@ -12,6 +12,7 @@ from scipy.stats import theilslopes
 from typing import Callable
 
 from .log_curve_new import LogCurve, Depth
+from ..plotting.log_plotter import add_color_amp
 from ..plotting.plot_logs_new import get_wiggles_in_depth
 from .core import LithoFluid, LithoFluidsTable, LithoFluids
 
@@ -819,6 +820,7 @@ class Model:
             self.trace_index_range = trace_index_range
 
         self.name = name
+        self.base_case_name = global_base_case_name
 
         self.table_keys = ['name', 'case', 'color', 'thickness', 'litho_fluid']
         self.trace_index = 0
@@ -2004,7 +2006,6 @@ class LaminarModel:
         synth_2d_column = LogColumn('SYNTH_2D', seismic_traces=traces_base, rel_width=1.4)
 
         plotter.columns = [ai_column, vpvs_column, synth_2d_column]
-        # end of draw_plot()
 
         self.previous_cases = self.model.case_names
         grid = plotter.draw_ext_toolbar()
@@ -2017,6 +2018,9 @@ class LaminarModel:
         )
         _p = select_column(grid, 'SYNTH_2D')
         _p.add_layout(v_line)
+
+        # Add a modifier to the seismic colorbar
+        color_amp_factor = add_color_amp(_p)
 
         def update_m_function():
             # Update the elastic properties based on the new model
@@ -2091,7 +2095,7 @@ class LaminarModel:
 
         return (title, lf_table, add_row, delete_row, update, _model_table,
                 add_row_m, delete_row_m, update_m, grid,
-                row(trace_selector, case_selector, freq_slider), synth_2d_cds)
+                row(trace_selector, case_selector, freq_slider, color_amp_factor), synth_2d_cds)
 
 
 class WedgeModel(LaminarModel):
@@ -2280,7 +2284,7 @@ class WedgeModel(LaminarModel):
         p_scatter.scatter(x='Apparent thickness', y='Top amp', source=horizons_cds)
         p_lines.line(
             x='Thickness', y='Apparent thickness', source=horizons_cds, legend_label='Apparent thickness',
-            line_color='black', line_width=2.0
+            line_color='black', line_width=2.0, line_dash='dashed'
         )
         p_lines.extra_y_ranges['Amplitude'] = Range1d(min_amp, max_amp)
         # p_lines.line(x='Thickness', y='Top amp', source=horizons_cds, name='|Top ampl|')
