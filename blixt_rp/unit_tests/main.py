@@ -15,8 +15,8 @@ sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 # test = 'core__test_litho_fluid_table'
 # test = 'models__test_model_table'
-# test = 'models__test_laminar_model'
-test = 'models__test_wedge'
+test = 'models__test_laminar_model'
+# test = 'models__test_wedge'
 
 
 if test == 'core__test_litho_fluid_table':
@@ -53,7 +53,8 @@ elif test == 'models__test_laminar_model':
 elif test == 'models__test_wedge':
     import test_models
     test = test_models.TestCase()
-    model_table, model_controls, lf_table, lf_controls, grid, controls, new_grid, points_table, update_avo, avo_figure = test.test_wedge(unit_test=False)
+    (model_table, model_controls, lf_table, lf_controls, grid, controls, new_grid, points_table, update_avo, avo_figure,
+     ixg_figure, eei_figure, chi_input) = test.test_wedge(unit_test=False)
     curdoc().add_root(
         row(
             column(grid, controls, new_grid,
@@ -62,6 +63,6 @@ elif test == 'models__test_wedge':
                     column(lf_table, lf_controls)
                 )
             ),
-            column(points_table, update_avo, avo_figure)
+            column(points_table, row(update_avo, chi_input), avo_figure, ixg_figure, eei_figure)
         )
     )

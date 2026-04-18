@@ -36,6 +36,9 @@ text_style = {'fontsize': 'x-small', 'bbox': {'facecolor': 'w', 'alpha': 0.5}}
 
 global_base_case_name = 'Base'
 
+min_amp = 1E6
+max_amp = 1E-6
+
 def plot_quasi_2d(model, ax=None, **kwargs):
     show = False
     new_ax = False
@@ -1275,7 +1278,6 @@ class ModelTable:
 
     def __init__(self,
                  model: Model,
-                 litho_fluid_cds:ColumnDataSource | None = None,
                  width: int | None = None,
                  height: int | None = None,
                  title: str | None = 'Model layers'):
@@ -1283,14 +1285,10 @@ class ModelTable:
 
         :param model:
             Model object
-        :param litho_fluid_cds:
-            ColumnDataSource of the LithoFluidsTable that contains all the different LithoFluids we can use to
-            populate the model
         :param width:
         :param height:
         """
         self.model = model
-        self.litho_fluid_cds = litho_fluid_cds
         if width is None:
             width = 700
         self.width = width
@@ -1302,13 +1300,6 @@ class ModelTable:
             title += ', Top at {}'.format(model.depth_to_top)
         self.title = title
         self.trace_index = 0
-
-    @property
-    def input_litho_fluids(self):
-        if self.litho_fluid_cds is not None:
-            return self.litho_fluid_cds.data['name']
-        else:
-            return []
 
     @property
     def cds(self):
@@ -1350,7 +1341,12 @@ class ModelTable:
                     _dict[_key].append(_layer.__dict__[_key])
         return ColumnDataSource(_dict)
 
-    def table_columns(self):
+    def table_columns(self, litho_fluids_cds:ColumnDataSource):
+        """
+        :param litho_fluids_cds:
+            ColumnDataSource of the LithoFluidsTable that contains all the different LithoFluids we can use to
+            populate the model
+        """
         from bokeh.models import (SelectEditor, StringEditor, TableColumn, HTMLTemplateFormatter)
         from bokeh.models import ColumnDataSource, StringFormatter, IntEditor, NumberEditor, NumberFormatter
         colored_cell_template = """
@@ -1366,10 +1362,15 @@ class ModelTable:
 
         column_names = [_s.capitalize().replace('_', ' ') for _s in self.keys]
         table_columns = []
+
+        # Create the name selection editor separatel, so that we can updated it later
+        name_selector = SelectEditor(options=litho_fluids_cds.data['name'])
+
+        #Now create the table columns
         for i, column_key in enumerate(self.keys):
             if column_key == 'litho_fluid':
-                # _editor = SelectEditor(options=self.input_litho_fluids)
-                _editor = StringEditor(completions=self.input_litho_fluids)
+                _editor = name_selector
+                # _editor = StringEditor(completions=litho_fluids_cds.data['name'])
                 _formatter = StringFormatter(font_style='bold')
             elif column_key == 'thickness':
                 _editor = NumberEditor()
@@ -1389,6 +1390,13 @@ class ModelTable:
 
                 )
             )
+
+        # Try to modify the options of litho-fluid names if the litho_fluids_cds is changed
+        def update_name_options(attr, old, new):
+            name_selector.options = litho_fluids_cds.data['name']
+
+        litho_fluids_cds.on_change('data', update_name_options)
+
         return table_columns
 
     def realize(self, resolution: Q_, index: int | None = None) -> dict:
@@ -1480,11 +1488,14 @@ class ModelTable:
         _dict = modify_dict(elastics_dict)
         return ColumnDataSource(_dict)
 
-    def draw(self, cds: ColumnDataSource):
+    def draw(self, cds: ColumnDataSource, litho_fluids_cds: ColumnDataSource):
         """
         Returns a table that is used for defining a model
         :param cds:
             ColumnDataSource of the initial model, with N layers
+        :param litho_fluids_cds:
+            ColumnDataSource of the LithoFluidsTable that contains all the different LithoFluids we can use to
+            populate the model
         :return:
         """
         from bokeh.models import DataTable, Button, Div
@@ -1527,7 +1538,7 @@ class ModelTable:
                 this_lf = new_data['litho_fluid'][_i]
                 litho_fluid_i = 0
                 try:
-                    litho_fluid_i = [_x.lower() for _x in self.litho_fluid_cds.data['name']].index(this_lf.lower())
+                    litho_fluid_i = [_x.lower() for _x in litho_fluids_cds.data['name']].index(this_lf.lower())
                 except ValueError as e:
                     warn_txt = 'Litho fluid {} is not found in LithoFluidTable. Using first'.format(this_lf)
                     print_info(warn_txt, 'warning', logger)
@@ -1549,22 +1560,22 @@ class ModelTable:
                         print('Model Vp is a function in row {}'.format(_i))
                         _vp = orig_layer.vp
                     else:
-                        _vp = self.litho_fluid_cds.data['vp'][litho_fluid_i]
+                        _vp = litho_fluids_cds.data['vp'][litho_fluid_i]
                     if isinstance(orig_layer.vs, Callable):
                         print('Model Vs is a function in row {}'.format(_i))
                         _vs = orig_layer.vs
                     else:
-                        _vs = self.litho_fluid_cds.data['vs'][litho_fluid_i]
+                        _vs = litho_fluids_cds.data['vs'][litho_fluid_i]
                     if isinstance(orig_layer.rho, Callable):
                         print('Model Rho is a function in row {}'.format(_i))
                         _rho = orig_layer.rho
                     else:
-                       _rho = self.litho_fluid_cds.data['rho'][litho_fluid_i]
+                       _rho = litho_fluids_cds.data['rho'][litho_fluid_i]
                 else:
                     _thickness =  Q_(new_data['thickness'][_i], 'm')
-                    _vp = self.litho_fluid_cds.data['vp'][litho_fluid_i]
-                    _vs = self.litho_fluid_cds.data['vs'][litho_fluid_i]
-                    _rho = self.litho_fluid_cds.data['rho'][litho_fluid_i]
+                    _vp = litho_fluids_cds.data['vp'][litho_fluid_i]
+                    _vs = litho_fluids_cds.data['vs'][litho_fluid_i]
+                    _rho = litho_fluids_cds.data['rho'][litho_fluid_i]
 
                 if _thickness is None:
                         _thickness = Q_(10., 'm')
@@ -1576,7 +1587,7 @@ class ModelTable:
                     thickness=_thickness,
                     litho_fluid=LithoFluid(
                         # TODO Unsure if the name of the lithofluid will update correctly
-                        name=self.litho_fluid_cds.data['name'][litho_fluid_i],
+                        name=litho_fluids_cds.data['name'][litho_fluid_i],
                         vp=_vp,
                         vs=_vs,
                         rho=_rho
@@ -1597,7 +1608,7 @@ class ModelTable:
 
         table = DataTable(
             source=cds,
-            columns=self.table_columns(),
+            columns=self.table_columns(litho_fluids_cds),
             editable=True,
             width=self.width,
             height=self.height,
@@ -1698,14 +1709,15 @@ class LaminarModel:
         # lf_obj = LithoFluidsTable(self._litho_fluids, width=self.lf_width)
         return self.lf_table.draw(lf_cds)
 
-    def initiate_model_table(self, lf_cds: ColumnDataSource):
-        mod_table = ModelTable(self.model, lf_cds, width=self.model_width)
+    # def initiate_model_table(self, lf_cds: ColumnDataSource):
+    def initiate_model_table(self):
+        mod_table = ModelTable(self.model, width=self.model_width)
         self.model_table = mod_table
 
-    def draw_model_table(self, mod_cds: ColumnDataSource):
+    def draw_model_table(self, mod_cds: ColumnDataSource, lf_cds:ColumnDataSource):
         # Returns the ModelTable with control buttons
         # Returns: model_table, model_add_row, model_delete_row, model_update
-        return self.model_table.draw(mod_cds)
+        return self.model_table.draw(mod_cds, lf_cds)
 
     def draw(self):
         from bokeh.models import Span, Slider, Div, CustomJS
@@ -1720,9 +1732,9 @@ class LaminarModel:
         lf_table, add_row, delete_row, update = self.draw_lf_table(cds_lf)
 
         # Create the models table
-        self.initiate_model_table(cds_lf)
+        self.initiate_model_table()
         cds_m = self.model_table.cds
-        _model_table, add_row_m, delete_row_m, update_m = self.draw_model_table(cds_m)
+        _model_table, add_row_m, delete_row_m, update_m = self.draw_model_table(cds_m, cds_lf)
 
         # Create log plot object
         plotter = LogPlotter(width=900, height=600)
@@ -1904,9 +1916,9 @@ class LaminarModel:
         lf_table, add_row, delete_row, update = self.draw_lf_table(cds_lf)
 
         # Create the models table
-        self.initiate_model_table(cds_lf)
+        self.initiate_model_table()
         cds_m = self.model_table.cds
-        _model_table, add_row_m, delete_row_m, update_m = self.draw_model_table(cds_m)
+        _model_table, add_row_m, delete_row_m, update_m = self.draw_model_table(cds_m, cds_lf)
 
         # Create log plot object
         plotter = LogPlotter(width=1100, height=600)
@@ -2105,8 +2117,9 @@ class WedgeModel(LaminarModel):
     """
     def __init__(self,
                  litho_fluids: LithoFluids | None = None,
+                 top_layers: list | None = None,
                  resolution: Q_ | None = None,
-                 depth_to_wedge: Q_ | None = None,
+                 depth_to_top: Q_ | None = None,
                  min_thickness: Q_ | None = None,
                  max_thickness: Q_ | None = None,
                  n_traces: int | None = None,
@@ -2121,8 +2134,13 @@ class WedgeModel(LaminarModel):
                 1 for the top and base
                 1 for the wedge
                 and 1 for the variant of the wedge
+        : param top_layers:
+            list
+            Optional
+            List of model layers (of type Layer) that builds a more complex overburden than the default
+            "Top" layer.
         :param resolution:
-        :param depth_to_wedge:
+        :param depth_to_top:
         :param min_thickness:
         :param max_thickness:
         :param n_traces:
@@ -2138,8 +2156,8 @@ class WedgeModel(LaminarModel):
             )
         if resolution is None:
             resolution = Q_(0.1, 'm')
-        if depth_to_wedge is None:
-            depth_to_wedge = Q_(3000., 'm')
+        if depth_to_top is None:
+            depth_to_top = Q_(3000., 'm')
         if min_thickness is None:
             min_thickness = Q_(0.1, 'm')
         if max_thickness is None:
@@ -2157,13 +2175,20 @@ class WedgeModel(LaminarModel):
         def reverse_wedge(i):
             return top_thickness + (max_thickness - min_thickness) - (max_thickness - min_thickness) * i / (n_traces - 1)
 
+        #
+        # Create the layers that define the model
+        #
         layer1 = Layer(name='Top', thickness=top_thickness, litho_fluid=litho_fluids.litho_fluids[0])
         layer2 = Layer(name='Wedge', thickness=wedge, litho_fluid=litho_fluids.litho_fluids[1])
         layer2_variant = Layer(name='Wedge', case='Oil', thickness=wedge, litho_fluid=litho_fluids.litho_fluids[2])
         layer3 = Layer(name='Bottom', thickness=reverse_wedge, litho_fluid=litho_fluids.litho_fluids[0])
+        if top_layers is not None:
+            layers = top_layers + [layer2, layer2_variant, layer3]
+        else:
+            layers = [layer1, layer2, layer2_variant, layer3]
 
-        model = Model(layers=[layer1, layer2, layer2_variant, layer3],
-                      depth_to_top=depth_to_wedge,
+        model = Model(layers=layers,
+                      depth_to_top=depth_to_top,
                       trace_index_range=np.arange(n_traces)
                       )
         super().__init__(
@@ -2178,6 +2203,9 @@ class WedgeModel(LaminarModel):
         from blixt_rp.core.seismic import picks_from_seismic_cds
         from blixt_rp.plotting.log_plotter import default_tools
 
+        global max_amp
+        global min_amp
+
         # Create the default Quasi 2D widgets
         (title, lf_table, add_row, delete_row, update, model_table,
          add_row_m, delete_row_m, update_m, grid,
@@ -2187,25 +2215,22 @@ class WedgeModel(LaminarModel):
         # apparent thickness from
         picks = ['global_max', 'global_min', 'extract',
                  'nearest_max', 'nearest_max_above', 'nearest_max_below',
-                 'nearest_min', 'nearest_min_above', 'nearest_min_below']
+                 'nearest_min', 'nearest_min_above', 'nearest_min_below', 'none']
 
         horizons_cds = self.model.horizons_cds(resolution=self.resolution)
 
         # Draw the outline of the wedge
         for h_name in ['Top Top', 'Top Wedge', 'Top Bottom']:
-            # grid.children[2][0].scatter(x='x', y=h_name, marker='dash', source=horizons_cds, size=10)
-            # Now that draw_2d() is using the new draw_ext_toolbar() method of LogPlotter, we need to change this
-            # a little
             grid.children[0].children[2][0].scatter(x='x', y=h_name, marker='dash', source=horizons_cds, size=10)
 
         top_picker = Select(
             title='Pick top wedge:',
-            value='nearest_min',
+            value='none',
             options=picks
         )
         base_picker = Select(
            title='Pick base wedge:',
-            value='nearest_max',
+            value='none',
             options=picks
         )
 
@@ -2222,14 +2247,18 @@ class WedgeModel(LaminarModel):
         horizons_cds.data['Apparent thickness'] = [_b - _t for _b, _t in zip(
             horizons_cds.data['Base pick'], horizons_cds.data['Top pick'])]
 
-        min_amp = 1E6
-        max_amp = 1E-6
-        for amps in [horizons_cds.data['Top amp'], horizons_cds.data['Base amp']]:
-            if np.max(amps) > max_amp:
-                max_amp = np.max(amps)
-            if np.min(amps) < min_amp:
-                min_amp = np.min(amps)
+        def find_extreme_amps():
+            global max_amp
+            global min_amp
+            # for amps in [horizons_cds.data['Top amp'], horizons_cds.data['Base amp']]:
+            #     if np.max(amps) > max_amp:
+            #         max_amp = np.max(amps)
+            #     if np.min(amps) < min_amp:
+            #         min_amp = np.min(amps)
+            max_amp = np.max(synth_2d_cds.data['value'][0])
+            min_amp = np.min(synth_2d_cds.data['value'][0])
 
+        find_extreme_amps()
 
 
         def do_top_pick():
@@ -2255,10 +2284,6 @@ class WedgeModel(LaminarModel):
         #
         # Draw the picks
         #
-        # grid.children[2][0].scatter(x='x', y='Top pick', marker='circle', source=horizons_cds, size=7)
-        # grid.children[2][0].scatter(x='x', y='Base pick', marker='square', source=horizons_cds, size=7)
-        # Now that draw_2d() is using the new draw_ext_toolbar() method of LogPlotter, we need to change this
-        # a little
         grid.children[0].children[2][0].scatter(x='x', y='Top pick', marker='circle', source=horizons_cds, size=7)
         grid.children[0].children[2][0].scatter(x='x', y='Base pick', marker='square', source=horizons_cds, size=7)
 
@@ -2286,9 +2311,8 @@ class WedgeModel(LaminarModel):
             x='Thickness', y='Apparent thickness', source=horizons_cds, legend_label='Apparent thickness',
             line_color='black', line_width=2.0, line_dash='dashed'
         )
+        print('XXX Range1d range: ', min_amp, max_amp)
         p_lines.extra_y_ranges['Amplitude'] = Range1d(min_amp, max_amp)
-        # p_lines.line(x='Thickness', y='Top amp', source=horizons_cds, name='|Top ampl|')
-        # p_lines.line(x='Thickness', y='Base amp', source=horizons_cds, name='|Base ampl|')
         p_lines.line(
             x='Thickness', y='Top amp', source=horizons_cds, legend_label='|Top ampl|', y_range_name='Amplitude',
             line_color='red', line_width=2.0

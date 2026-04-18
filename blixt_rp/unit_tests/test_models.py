@@ -376,7 +376,8 @@ class TestCase(unittest.TestCase):
         # Create the laminar model
         lm = LaminarModel(resolution=Q_(0.1, 'm'), avo_or_eei='avo')
 
-        title, lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls = lm.draw()
+        (title, lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid,
+         controls, seismic_cds) = lm.draw()
 
         if unit_test:
             show(column(column(title, grid, sizing_mode='stretch_width'), controls,
@@ -445,18 +446,19 @@ class TestCase(unittest.TestCase):
         # Test adding some extraction points
         analyze_avo = AvoAnalyzer(grid, 'line section', None, model=wm)
         points_cds = analyze_avo.cds
-        points_table, update_avo, avo_figure, avo_cds = analyze_avo.draw(points_cds, synth_2d_cds)
+        points_table, update_avo, avo_figure, ixg_figure, eei_figure, chi_input, avo_cds = analyze_avo.draw(points_cds, synth_2d_cds)
         if unit_test:
             show(row(column(grid, controls, new_grid,
                         row(
                             column(model_table, model_controls),
                             column(lf_table, lf_controls)
                         )),
-                 column(points_table, update_avo, avo_figure))
+                 column(points_table, row(update_avo, chi_input), avo_figure, ixg_figure, eei_figure))
                  )
             return None
         else:
-            return model_table, model_controls, lf_table, lf_controls, grid, controls, new_grid, points_table, update_avo, avo_figure
+            return (model_table, model_controls, lf_table, lf_controls, grid, controls, new_grid, points_table,
+                    update_avo, avo_figure, ixg_figure, eei_figure, chi_input)
 
     def test_catch_change_in_cases(self):
         prev_cases = [[1, 2], [1,2,3], [1,2], [1,4]]

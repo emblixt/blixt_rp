@@ -7,7 +7,6 @@ import numpy as np
 from openpyxl.styles.builtins import title
 from pandas import DataFrame
 from typing import Literal
-from IPython.core.magics.code import extract_code_ranges
 from bokeh.plotting import figure, show
 from bokeh.layouts import row, column, Spacer
 from bokeh.models import (Slider, ColorPicker, Line, LinearAxis, Span, Legend, ColumnDataSource, Text,
@@ -93,8 +92,10 @@ def create_litho_fluids_table(
                 _content_dict[_key].append(litho_fluid.__dict__[_key].to('g/cm**3').magnitude)
             elif _key in ['vp_vs_cc', 'vp_rho_cc', 'vs_rho_cc']:
                 _content_dict[_key].append(litho_fluid.__dict__[_key].magnitude)
+            elif _key in ['type']:
+                pass
             else:
-                raise IOError('key: {}, is unknown and is likely handled correctly')
+                raise IOError('key: {}, is unknown and is likely handled correctly'.format(_key))
 
 
     source = ColumnDataSource(_content_dict)

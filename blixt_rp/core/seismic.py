@@ -28,6 +28,7 @@ from bokeh.models import Span, CrosshairTool, HoverTool, LassoSelectTool, ColorB
 from bokeh.models import NumberFormatter, Button, HTMLTemplateFormatter, StringEditor
 from bokeh.events import SelectionGeometry
 
+
 # To test blixt_rp and blixt_utils libraries directly, without installation:
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
@@ -421,14 +422,16 @@ class AvoAmplitudes:
         return _dict
 
 
-    def calc_i_g(self, points_cds, avo_cds, model=None):
+    def calc_i_g(self, points_cds, avo_cds, model=None, chi=None):
         # Use the calculated avo response to calculate the Intercept and Gradient
+
+        # "Iterate" only over the base case and maximum one other case (else the table will get very wide)
+        cases = get_first_case_names(model.model)
 
         # Iterate over all points
         for i, point_name in enumerate(points_cds.data['name']):
-
-            # "Iterate" only over the base case for now
-            for _case in [model.model.base_case_name]:
+            # Iterate over the first two cases
+            for _case in cases:
 
                 # Only work on the data for the given point and case
                 _filtered_dict = filter_dict(avo_cds.data, 'name', '{} {}'.format(point_name, _case), '==')
@@ -436,31 +439,88 @@ class AvoAmplitudes:
                 # Calculate Intercept and gradient for this point, case pair
                 _int, _grad, _qual = avo_ig(np.array(_filtered_dict['amplitude']), np.array(_filtered_dict['angle']))
 
-                print('XXX', _int, _grad, _qual[0])
+                print('For point {}, case {}, the intercept is {:.3f} and gradient is {:.3f}'.format(
+                    point_name, _case, _int, _grad))
+
                 # Insert the results in points_cds
-                points_cds.data['intercept'][i] = _int
-                points_cds.data['gradient'][i] = _grad
-                points_cds.data['quality'][i] = _qual[0]
+                if _case == model.model.base_case_name:
+                    points_cds.data['intercept'][i] = _int
+                    points_cds.data['gradient'][i] = _grad
+                    points_cds.data['quality'][i] = _qual[0]
+                    if chi is not None:
+                        points_cds.data['eei'][i] = calc_eei(_int, _grad, chi)
+                        points_cds.data['chi'][i] = chi
+
+                else:
+                    points_cds.data['intercept_var'][i] = _int
+                    points_cds.data['gradient_var'][i] = _grad
+                    if chi is not None:
+                        points_cds.data['eei_var'][i] = calc_eei(_int, _grad, chi)
 
     def draw(self, points_cds, avo_cds, model):
         # Create update button
         update_button = Button(label='Calc. AVO', button_type="success")
 
+        # Create selector for selecting the Chi angle projection
+        chi_input = NumericInput(value=26, low=-90, high=90, title="Chi angle:",
+                                 description='Chi angle between -90 and 90 deg')
+
         def on_click():
-            print('TEST')
-            self.calc_i_g(points_cds, avo_cds, model=model)
+            print('Calculating Intercept and Gradient')
+            self.calc_i_g(points_cds, avo_cds, model=model, chi=chi_input.value)
 
         update_button.on_click(on_click)
 
-        # Create figure
-        p = figure(width=600, height=300, tools= "pan,wheel_zoom,box_zoom,reset")
-        p.toolbar.logo = None
-        p.scatter(x='angle', y='amplitude',
+        # Create AVO plot
+        p_avo = figure(width=600, height=300, tools= "pan,wheel_zoom,box_zoom,reset")
+        p_avo.toolbar.logo = None
+        p_avo.scatter(x='angle', y='amplitude',
                   source=avo_cds, fill_color='color', marker='marker',
                   legend_group='name', line_color='black', size=10)
-        p.xaxis.axis_label = 'Incident angle [deg]'
-        p.yaxis.axis_label = 'Amplitude'
-        return p, update_button
+        p_avo.xaxis.axis_label = 'Incident angle [deg]'
+        p_avo.yaxis.axis_label = 'Amplitude'
+
+        # Create Intercept vs. Gradient plot
+        p_ixg = figure(width=600, height=600, tools= "pan,wheel_zoom,box_zoom,reset")
+        p_ixg.toolbar.logo = None
+        # Modify CDS to contain the (first two) case names
+        cases = get_first_case_names(model.model)
+        points_cds.data['base_name'] = ['{} {}'.format(_n, cases[0]) for _n in points_cds.data['name']]
+        points_cds.data['variant_name'] = ['{} {}'.format(_n, cases[1]) for _n in points_cds.data['name']]
+        p_ixg.scatter(x='intercept', y='gradient', source=points_cds, legend_group='base_name', size=10, color='color',
+                      marker='circle', line_color='black')
+        p_ixg.scatter(x='intercept_var', y='gradient_var', source=points_cds, legend_group='variant_name', size=14,
+                      color='color', marker='star', line_color='black')
+        p_ixg.xaxis.axis_label = 'Intercept'
+        p_ixg.yaxis.axis_label = 'Gradient'
+
+        # Draw a line that shows the Chi line
+        # y_range = np.max([np.abs(np.min(points_cds.data['intercept'])), np.abs(np.max(points_cds.data['intercept']))])
+        y_range = np.max([np.abs(p_ixg.y_range.start), np.abs(p_ixg.y_range.end)])
+        _x, _y = return_chi_line( y_range, chi_input.value)
+        line_data = dict( x=_x, y=_y )
+        chi_line_source = ColumnDataSource(line_data)
+        p_ixg.line( x='x', y='y', source=chi_line_source)
+        def update_chi_line(attr, old, new):
+            # y_range = np.max([np.abs(np.min(points_cds.data['intercept'])), np.abs(np.max(points_cds.data['intercept']))])
+            y_range = np.max([np.abs(p_ixg.y_range.start), np.abs(p_ixg.y_range.end)])
+            _x, _y = return_chi_line( y_range, chi_input.value)
+            line_data = dict( x=_x, y=_y )
+            chi_line_source.data = line_data
+
+        points_cds.on_change('data', update_chi_line)
+        chi_input.on_change('value', update_chi_line)
+
+        # Create EEI "histogram" plot
+        p_eei = figure(width=600, height=100, tools= "pan,wheel_zoom,reset")
+        p_eei.toolbar.logo = None
+        p_eei.scatter(x='eei', y=0., source=points_cds, size=10, color='color',
+                      marker='circle', line_color='black')
+        p_eei.scatter(x='eei_var', y=0., source=points_cds, size=14,
+                      color='color', marker='star', line_color='black')
+        p_eei.xaxis.axis_label = 'EEI, Chi={}'.format(chi_input.value)
+
+        return p_avo, update_button, p_ixg, p_eei, chi_input
 
 class AvoAnalyzer:
     """
@@ -600,13 +660,11 @@ class AvoAnalyzer:
         colors = ['red', 'blue', 'green', 'yellow']
 
         _dict = dict(name=[], x=[], y=[], i=[], j=[], color=[],
-                     # The Intercept calculated by linear fitting to the offset data, and through the analytical calculation
-                     # when we have a elastic model
-                     intercept=[], intercept_anal=[],
-                     # The Gradient calculated by linear fitting to the offset data, and through the analytical calculation
-                     # when we have a elastic model
-                     gradient=[], gradient_anal=[],
-                     quality=[])
+                     # The Intercept & Gradient calculated by linear fitting to the offset data of the Base case, and the first
+                     # "non-Base" case
+                     intercept=[], intercept_var=[],
+                     gradient=[], gradient_var=[],
+                     quality=[], eei=[], eei_var=[], chi=[])
         for _i in range(len(xs)):
             _dict['name'].append(names[_i])
             _dict['x'].append(xs[_i])
@@ -615,10 +673,13 @@ class AvoAnalyzer:
             _dict['j'].append(j_indxs[_i])
             _dict['color'].append(colors[_i])
             _dict['intercept'].append(0.)
-            _dict['intercept_anal'].append(0.)
+            _dict['intercept_var'].append(0.)
             _dict['gradient'].append(0.)
-            _dict['gradient_anal'].append(0.)
-            _dict['quality'].append(None)
+            _dict['gradient_var'].append(0.)
+            _dict['quality'].append(None),
+            _dict['eei'].append(0.)
+            _dict['eei_var'].append(0.)
+            _dict['chi'].append(0.)
 
         return ColumnDataSource(_dict)
 
@@ -714,15 +775,15 @@ class AvoAnalyzer:
             TableColumn(field='color', title='Color', formatter=color_formatter)
         ]
         i_column =    TableColumn(field='intercept', title='I', formatter=formatter_2)
-        i_anal_column =    TableColumn(field='intercept_anal', title='I*', formatter=formatter)
+        i_var_column =    TableColumn(field='intercept_var', title='I*', formatter=formatter_2)
         g_column =    TableColumn(field='gradient', title='G', formatter=formatter_2)
-        g_anal_column =    TableColumn(field='gradient_anal', title='G*', formatter=formatter)
+        g_var_column =    TableColumn(field='gradient_var', title='G*', formatter=formatter_2)
         q_column =    TableColumn(field='quality', title='Qual.', formatter=formatter_2)
 
         if self.section_type in section_types:
             [columns.append(_c) for _c in [i_column, g_column, q_column]]
         if self.model is not None:
-            [columns.append(_c) for _c in [i_anal_column, g_anal_column]]
+            [columns.append(_c) for _c in [i_var_column, g_var_column]]
 
         title = Div(text =
                     """
@@ -763,7 +824,7 @@ class AvoAnalyzer:
         #
         # Create the AVO plot, and an update button
         #
-        avo_figure, update_avo = avo_amplitudes.draw(points_cds, avo_cds, self.model)
+        avo_figure, update_avo, ixg_figure, eei_figure, chi_input = avo_amplitudes.draw(points_cds, avo_cds, self.model)
 
         #
         # Catch button click
@@ -783,6 +844,7 @@ class AvoAnalyzer:
                 self.model
             )
 
+
             # Try to force points_cds to be updated:
             points_cds.data = dict(points_cds.data)
 
@@ -791,7 +853,7 @@ class AvoAnalyzer:
         #
         # return the  results
         #
-        return points_table, update_avo, avo_figure, avo_cds
+        return points_table, update_avo, avo_figure, ixg_figure, eei_figure, chi_input, avo_cds
 
 
 def create_seismic_figure(
@@ -1593,7 +1655,10 @@ def add_i_g_point(_p, _x, _y, _angle_stack_names):
 def closest(_x0: float, _x: np.ndarray):
     if type(_x0) != float:
         _x0 = float(_x0)
-    _i = np.argmin((_x - _x0)**2)
+    try:
+        _i = np.argmin((_x - _x0)**2)
+    except ValueError:
+        _i = 0
     # return _x[_i]
     return _i
 
@@ -1688,6 +1753,7 @@ def picks_from_seismic_cds(seismic_cds: ColumnDataSource, feature: str, depth_in
             - 'nearest_min_above' :
             - 'nearest_max_below' :
             - 'nearest_min_below' :
+            - 'none': Do nothing
     :param depth_index:
         Either a list of length M (one for each trace) depth indexes, or None
     :return:
@@ -1695,10 +1761,12 @@ def picks_from_seismic_cds(seismic_cds: ColumnDataSource, feature: str, depth_in
     """
     from scipy.signal import argrelextrema
 
-    # TODO CLEAN UP, NOT SURE IF depth_index are just indexes or actually depth values!
-    #
 
     data = seismic_cds.data['value'][0]
+
+    if feature == 'none':
+        depth_index = np.ones(shape=data.shape[1])
+
     if depth_index is None:
         if feature not in ['global_max', 'global_min']:
             print_info('Depth indexes are needed to extract amplitudes', 'error', logger, 'IOError')
@@ -1708,64 +1776,80 @@ def picks_from_seismic_cds(seismic_cds: ColumnDataSource, feature: str, depth_in
         if len(depth_index) != data.shape[1]:
             print_info('Depth indexes size must match number of traces', 'error', logger, 'IOError')
 
-    amps = []
-    amp_inds = []
+    # Our result should have a 'value' for each seismic trace that seismic_cds contains, so we begin by setting it to
+    # zero
+    amps = [0.] * data.shape[1]
+    amp_inds = [0] * data.shape[1]
 
     if feature == 'global_max':
         for i in range(data.shape[1]):
-            amps.append(np.nanmax(data[:, i]))
-            amp_inds.append(np.nanargmax(data[:,i]))
+            amps[i] = np.nanmax(data[:, i])
+            amp_inds[i] = np.nanargmax(data[:,i])
     elif feature == 'global_min':
         for i in range(data.shape[1]):
-            amps.append(np.nanmin(data[:, i]))
-            amp_inds.append(np.nanargmin(data[:,i]))
+            amps[i] = np.nanmin(data[:, i])
+            amp_inds[i] = np.nanargmin(data[:,i])
     elif feature == 'extract':
         for i in range(data.shape[1]):
-            amps.append(data[depth_index[i], i])
+            amps[i] = data[depth_index[i], i]
             amp_inds = depth_index
     elif feature in ['nearest_max', 'nearest_max_above', 'nearest_max_below']:
         for i in range(data.shape[1]):
             max_idx = argrelextrema(data[:, i], np.greater)[0]
-            if feature == 'nearest_max':
+            # When no maximum is found, add zeros
+            if len(max_idx) < 1:
+                continue
+                # amps.append(0.)
+                # amp_inds.append(0)
+            elif feature == 'nearest_max':
                 idx = closest(depth_index[i], np.array(max_idx))
-                amps.append(data[max_idx[idx], i])
-                amp_inds.append(max_idx[idx])
-            if feature == 'nearest_max_above':
+                amps[i] = data[max_idx[idx], i]
+                amp_inds[i] = max_idx[idx]
+            elif feature == 'nearest_max_above':
                 filtered_idx = [x for x in max_idx if x <= depth_index[i]]
                 if len(filtered_idx) < 1:
                     continue
                 idx = closest(depth_index[i], np.array(filtered_idx))
-                amps.append(data[filtered_idx[idx], i])
-                amp_inds.append(filtered_idx[idx])
-            if feature == 'nearest_max_below':
+                amps[i] = data[filtered_idx[idx], i]
+                amp_inds[i] = filtered_idx[idx]
+            elif feature == 'nearest_max_below':
                 filtered_idx = [x for x in max_idx if x >= depth_index[i]]
                 if len(filtered_idx) < 1:
                     continue
                 idx = closest(depth_index[i], np.array(filtered_idx))
-                amps.append(data[filtered_idx[idx], i])
-                amp_inds.append(filtered_idx[idx])
-    elif feature in ['nearest_min', 'nearest_min_above', 'nearest_min_below']:
+                amps[i] = data[filtered_idx[idx], i]
+                amp_inds[i] = filtered_idx[idx]
+    elif feature in ['nearest_min', 'nearest_min_above', 'nearest_min_below', 'none']:
         for i in range(data.shape[1]):
             min_idx = argrelextrema(data[:, i], np.less)[0]
-            if feature == 'nearest_min':
+            # When no maximum is found, add zeros
+            if len(min_idx) < 1:
+                continue
+                # amps.append(0.)
+                # amp_inds.append(0)
+            elif feature == 'nearest_min':
                 idx = closest(depth_index[i], np.array(min_idx))
-                amps.append(data[min_idx[idx], i])
-                amp_inds.append(min_idx[idx])
-            if feature == 'nearest_min_above':
+                amps[i] = data[min_idx[idx], i]
+                amp_inds[i] = min_idx[idx]
+            elif feature == 'nearest_min_above':
                 filtered_idx = [x for x in min_idx if x <= depth_index[i]]
                 if len(filtered_idx) < 1:
                     continue
                 idx = closest(depth_index[i], np.array(filtered_idx))
-                amps.append(data[filtered_idx[idx], i])
-                amp_inds.append(filtered_idx[idx])
-            if feature == 'nearest_min_below':
+                amps[i] = data[filtered_idx[idx], i]
+                amp_inds[i] = filtered_idx[idx]
+            elif feature == 'nearest_min_below':
                 filtered_idx = [x for x in min_idx if x >= depth_index[i]]
                 if len(filtered_idx) < 1:
                     continue
                 idx = closest(depth_index[i], np.array(filtered_idx))
-                amps.append(data[filtered_idx[idx], i])
-                amp_inds.append(filtered_idx[idx])
+                amps[i] = data[filtered_idx[idx], i]
+                amp_inds[i] = filtered_idx[idx]
+            elif feature == 'none':
+                amps[i] = 0.
+                amp_inds[i] = 0
 
+    print('XXX From "picks_from_seismic_cds: Feature: {}, Amp. max: {:.2f}, Amp.min: {:.2f}'.format(feature, max(amps), min(amps)))
     return amps, amp_inds
 
 def get_coords_of_seismic_figure(p: figure):
@@ -1832,6 +1916,35 @@ def filter_dict(_dict, _key, _value, _operator):
         for k, vals in _dict.items()
     }
 
+def return_chi_line(y_half_range, chi):
+    """
+    Returns the end points of a line that goes through the
+    origo from -y_half_range to +y_half_range
+
+    :param y_half_range:
+    :param chi:
+        float
+        Chi angle in deg
+    :return:
+    """
+    _xl = [-1.1 * y_half_range * np.tan(np.pi * chi / 180.), 1.1 * y_half_range * np.tan(np.pi * chi / 180.)]
+    _yl = [1.1 * y_half_range, -1.1 * y_half_range]
+    return _xl, _yl
+
+def calc_eei(_intercept, _gradient, chi_angle):
+    return _intercept * np.cos(chi_angle * np.pi / 180.) + _gradient * np.sin(chi_angle * np.pi / 180.)
+
+def get_first_case_names(model):
+    # Return only the base case and maximum one other case name (else the table will get very wide)
+    # Check first that there is another case than the base case
+    cases =[model.base_case_name]
+    if len(model.case_names) > 1:
+        i = 0
+        for _case in model.case_names:
+            if _case != model.base_case_name and i < 2:
+                cases.append(_case)
+                i += 1
+    return cases
 
 
 
@@ -2351,8 +2464,7 @@ class TestCases(unittest.TestCase):
 
         analyze_avo = AvoAnalyzer(p, section_type, refl_points, model=model)
         points_cds = analyze_avo.cds
-        points_table, update_avo, avo_figure, avo_cds = analyze_avo.draw(points_cds, seismic_cds)
+        points_table, update_avo, avo_figure, ixg_figure, eei_figure, chi_input, avo_cds = analyze_avo.draw(points_cds, seismic_cds)
 
 
         show(column(p, points_table, update_avo, avo_figure))
-

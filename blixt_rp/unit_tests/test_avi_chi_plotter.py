@@ -14,7 +14,7 @@ sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 from blixt_rp.core.core import LithoFluids, LithoFluid, LithoFluidsTable
 import blixt_rp.plotting.avo_chi_plotter as brap
 
-output_file('C:\\Users\emb\Documents\plot.html')
+output_file(os.path.join(project_dir, 'blixt_rp\\test_data\\plot.html'))
 excel_file = "C:\\Users\\emb\\OneDrive - Petrolia NOCO AS\\Technical work\PL1221\\SumsAndAverages.xlsx"
 
 class SomeTests(unittest.TestCase):
@@ -105,6 +105,6 @@ class SomeTests(unittest.TestCase):
         return interface_table, lf_table, button
 
     def test_create_mc_avo_plot(self):
-        h, p, p2, it, lt, b, c, n = brap.create_mc_avo_plot()
-        # show(column([h, row(p, p2), row(it, c), lt]))  #, sizing_mode='stretch_height'))
+        h, p, p2, it, lt, b, c, n, std = brap.create_mc_avo_plot()
+        show(column([h, row(p, p2), row(it, c), lt]))  #, sizing_mode='stretch_height'))
         self.assertTrue(True)

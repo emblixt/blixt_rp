@@ -1860,13 +1860,13 @@ class LithoFluid:
         self.vs_rho_cc= Q_(all_data[name]['VsRhoCorrCoef'])
 
     def plot(self,
-             ax: mpl.axes._axes.Axes | None = None,
+             ax = None,
              label: str | None = None,
              color: str | None = None):
         """
         Plot this litho fluid in a AI vs Vp/Vs plot with its statistics
         :param ax:
-            matplot
+            matplotlib axes
         :param label:
         :param color:
         :return:
