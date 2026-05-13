@@ -469,7 +469,7 @@ class CrossPlotter:
     def all_variables(self):
         _all = []
         for _source in self._data_sources.values():
-            _all += list(_source.keys())
+            _all += [_x for _x in list(_source.keys()) if _x != 'mask']
         return list(set(_all))
 
     @property
@@ -482,15 +482,22 @@ class CrossPlotter:
 
     @property
     def common_variables(self):
-        return list(set.intersection(
+        _list =  list(set.intersection(
             *[set(list(_s.keys())) for _s in self._data_sources.values()]
         ))
+        if 'mask' in _list:
+            _list.remove('mask')
+        return _list
 
     @property
     def common_units(self):
         _units = []
         _params = []
         for _param in self.common_variables:
+            # The 'parameter' mask is typically not specified in the templates
+            if _param == 'mask':
+                _units.append('')
+                continue
             _units.append(
                 self.templates[_param].units
             )
@@ -894,21 +901,11 @@ class CrossPlotter:
         marker_menu.disabled = True
         legend_menu.disabled = True
 
-        # print('XXX:')
-        # for _key, _val in self.min_and_max().items():
-        #     print(' ', _key, _val)
 
         # Determine x and y variable
         x_var = x_menu.value
         y_var = y_menu.value
         size_var = size_menu.value
-
-        # x_y_source_dict = self.x_y_source(
-        #     dict(self.source.data),
-        #     x=x_var,
-        #     y=y_var,
-        #     size=size_var)
-        # x_y_source = ColumnDataSource(x_y_source_dict)
 
         # Draw the classification / cutoffs table
         ct_cds = None
@@ -922,7 +919,7 @@ class CrossPlotter:
         # Draw the working intervals table
         wis_cds = None
         if self.interval_table is not None:
-            wis_cds = self.interval_table.cdcds
+            wis_cds = self.interval_table.cds
             wis_guis = self.interval_table.draw(wis_cds, verbose=verbose)
             # wis_guis = wis_table, apply
         else:
@@ -956,23 +953,13 @@ class CrossPlotter:
             self.xplot.legend.location = 'top_right'
             # self.xplot.legend.label_text_font_size = '8pt'
 
-        # # Test templates:
-        # # print(list(self.templates.keys()))
-        # _templates = {_key: _val.dict() for _key, _val in self.templates.items()}
-        # # for _var in [x_var, y_var]:
-        # for _var in list(self.templates.keys()):
-        #     # print(list(_templates.keys()))
-        #     print(_var, list(_templates[_var].keys()))
-        #     print(_var, list(_templates[_var][_var].keys()))
-        #     # print(_var, _templates[_var]['min'], _templates[_var]['max'])
-
         # arrange call backs
         args_dict = dict(x_drop=x_menu,
                          y_drop=y_menu,
                          s_drop=size_menu,
                          x_range=self.xplot.x_range,
                          y_range=self.xplot.y_range,
-                         templates={_key: _val.dict()[_key] for _key, _val in self.templates.items()},
+                         templates={_key: _val.dict()[_key] for _key, _val in self.templates.items() if _val is not None},
                          # data_keys=[_key for _key in list(sources.keys())],
                          # data_sources=[_val for _val in list(sources.values())],
                          # orig_data_sources=[_val.source for _val in list(self._data_sources.values())],
@@ -1149,19 +1136,17 @@ class TestCases(unittest.TestCase):
         # for _key, _item in _d.items():
         #     print(_key, _item[:5], _item[-5:], len(_item))
         # xp.show_plot('C:\\Users\marte\Downloads\plot.html')
-        xp.show_plot(d, 'C:\\Users\\emb\\Downloads\\plot.html')
+        xp.show_plot(d, os.path.join(project_dir, 'blixt_rp\\results_folder\\plot.html'))
 
     def test_from_well(self):
         from blixt_rp.core.project_new import Project
         from blixt_rp.core.core import LogTable, Intervals
 
-        # project_table = "C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
-        project_table = "C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+        project_table = os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx')
 
         project = Project(
             name='testing',
-            # working_dir='C:\\Users\\marte\\PycharmProjects\\blixt_rp',
-            working_dir='C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp',
+            working_dir= os.path.join(project_dir, 'blixt_rp'),
             project_table=project_table
         )
         log_table = LogTable({'Density': 'rho_dry', 'P velocity': 'vp_dry', 'S velocity': 'vs_dry',
@@ -1176,7 +1161,7 @@ class TestCases(unittest.TestCase):
             {w.name: w.data_source() for w in project.wells}
         )
         cds = xp.cds
-        xp.show_plot(cds, 'C:\\Users\\emb\\Downloads\\plot.html')
+        xp.show_plot(cds, os.path.join(project_dir, 'blixt_rp\\results_folder\\plot.html'))
 
     def test_data_classification(self):
         ds1, ds2, wis, cutoffs = self.test_data()

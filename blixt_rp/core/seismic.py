@@ -298,6 +298,110 @@ class AvoAmplitudes:
         """
         return ColumnDataSource(self._cds_dict)
 
+    def calc_eei(self,
+                        points_cds: ColumnDataSource,
+                        section_type: str,
+                        model = None
+                        ) -> dict:
+        """
+        Calculates the EEI amplitudes for Chi values from -90 to 90 from various seismic input sections (see "section_types") at the
+        specified locations (point_cds) and returns the values
+
+        You can update the cds by simply calling:
+        > cds.data = self.calc_eei(...)
+        after the points_cds or seismic_cds has changed
+
+        :param points_cds:
+            ColumnDataSource
+            The points from where to extract the AVO amplitudes
+            Must follow the standard from AvoAnalyzer.cds
+
+        :param section_type:
+            str
+            String describing the seismic input
+            One of the elements in section_types
+
+        :param seismic_cds:
+            ColumnDataSource
+            Optional
+            Needed to calculate the AVO amplitudes, depending on what section_type is set to.
+
+        :param model:
+            One of the model types in models.py.
+            TODO Maybe we should restrict ourselves to LaminarModel and WedgeModel only
+            Used to calculate the synthetic AVO / Chi response of the seismic section
+
+        :return:
+            dict
+        """
+        from blixt_rp.core.models import calc_synth_cds
+
+        # We can only do this if a model is provided
+        if model is None:
+            print_info('A model is necessary for calculating EEI', 'error', logger, raiser='IOError')
+
+        # Initiate dictionary with empty containers for all cases
+        chi_angles = np.linspace(-90, 90, 91)
+        _dict = dict(chi=chi_angles)
+        for _p in points_cds.data['name']:
+            for _n, _case in enumerate(model.model.case_names):
+                _key = '{}_{}_eei'.format(_case, _p)
+                _dict[_key] = []
+                # Diff in EEI between base case and perturbations
+                if _case.lower() != model.model.base_case_name.lower():
+                    _k = 'delta_{}_{}_{}'.format(model.model.base_case_name, _case, _p)
+                    _dict[_k] = []
+
+        if section_type not in section_types:
+            section_type = 'avo section'
+
+        #
+        # Iterate over all points in points_cds and calculate the AVO response in each point
+        #
+        for _point_no, _p in enumerate(points_cds.data['name']):
+
+            if section_type in ['line section', 'avo section'] and model is not None:
+                # Extract the trace index from the current point
+                trace_index = int(points_cds.data['x'][_point_no])
+
+                # Realize the model at the current trace index to get the elastics of the model
+                elastics_dict = model.model_table.realize(model.resolution, trace_index)
+
+                # Extract the depth index by matching the point depth with the depth of the realized model
+                depth_index = np.argmin(
+                    (elastics_dict['Base']['vp'].depth.magnitude - points_cds.data['y'][_point_no])**2)
+
+                # Iterate over all chi angles
+                for chi_angle in chi_angles:
+
+                    # Iterate over all cases
+                    for _n, _case in enumerate(model.model.case_names):
+                        _key = '{}_{}_eei'.format(_case, _p)
+                        synths = calc_synth_cds(
+                            elastics_dict[_case]['vp'],
+                            elastics_dict[_case]['vs'],
+                            elastics_dict[_case]['rho'],
+                            elastics_dict[_case]['twt'],
+                            model.dt, chi_angle, 'eei', model.freq
+                        )
+                        _dict[_key].append(synths.data['value'][0][depth_index])
+
+        # Calculate the differences between the different cases
+        for _p in points_cds.data['name']:
+            for _n, _case in enumerate(model.model.case_names):
+                if _case.lower() != model.model.base_case_name.lower():
+                    _k = 'delta_{}_{}_{}'.format(model.model.base_case_name, _case, _p)
+                    # _dict[_k] = list(
+                    #     np.array(_dict['{}_{}_eei'.format(model.model.base_case_name, _p)]) -
+                    #     np.array(_dict['{}_{}_eei'.format(_case, _p)])
+                    # )
+                    _dict[_k] = [
+                        _dict['{}_{}_eei'.format(model.model.base_case_name, _p)][_i] -
+                        _dict['{}_{}_eei'.format(_case, _p)][_i] for _i in range(len(_dict['chi']))
+                    ]
+
+        return _dict
+
     def calc_amplitudes(self,
                             points_cds: ColumnDataSource,
                             section_type: str,
@@ -457,13 +561,19 @@ class AvoAmplitudes:
                     if chi is not None:
                         points_cds.data['eei_var'][i] = calc_eei(_int, _grad, chi)
 
-    def draw(self, points_cds, avo_cds, model):
+    def draw(self, points_cds, avo_cds, eei_cds, model):
         # Create update button
         update_button = Button(label='Calc. AVO', button_type="success")
 
         # Create selector for selecting the Chi angle projection
         chi_input = NumericInput(value=26, low=-90, high=90, title="Chi angle:",
                                  description='Chi angle between -90 and 90 deg')
+        # Create a vertical line for the Chi value above
+        v_line = Span(
+            location=chi_input.value,
+            dimension='height',
+            line_dash='dashed'
+        )
 
         def on_click():
             print('Calculating Intercept and Gradient')
@@ -483,6 +593,12 @@ class AvoAmplitudes:
         # Create Intercept vs. Gradient plot
         p_ixg = figure(width=600, height=600, tools= "pan,wheel_zoom,box_zoom,reset")
         p_ixg.toolbar.logo = None
+
+        # Create EEI plot
+        p_eei = figure(width=600, height=100, tools= "pan,wheel_zoom,reset")
+        p_eei.toolbar.logo = None
+        p_eei.add_layout(v_line)
+
         # Modify CDS to contain the (first two) case names
         cases = get_first_case_names(model.model)
         points_cds.data['base_name'] = ['{} {}'.format(_n, cases[0]) for _n in points_cds.data['name']]
@@ -494,7 +610,7 @@ class AvoAmplitudes:
         p_ixg.xaxis.axis_label = 'Intercept'
         p_ixg.yaxis.axis_label = 'Gradient'
 
-        # Draw a line that shows the Chi line
+        # Draw a line that shows the Chi line in the IxG plot
         # y_range = np.max([np.abs(np.min(points_cds.data['intercept'])), np.abs(np.max(points_cds.data['intercept']))])
         y_range = np.max([np.abs(p_ixg.y_range.start), np.abs(p_ixg.y_range.end)])
         _x, _y = return_chi_line( y_range, chi_input.value)
@@ -507,18 +623,24 @@ class AvoAmplitudes:
             _x, _y = return_chi_line( y_range, chi_input.value)
             line_data = dict( x=_x, y=_y )
             chi_line_source.data = line_data
+            v_line.location = chi_input.value
 
         points_cds.on_change('data', update_chi_line)
         chi_input.on_change('value', update_chi_line)
 
-        # Create EEI "histogram" plot
-        p_eei = figure(width=600, height=100, tools= "pan,wheel_zoom,reset")
-        p_eei.toolbar.logo = None
-        p_eei.scatter(x='eei', y=0., source=points_cds, size=10, color='color',
-                      marker='circle', line_color='black')
-        p_eei.scatter(x='eei_var', y=0., source=points_cds, size=14,
-                      color='color', marker='star', line_color='black')
-        p_eei.xaxis.axis_label = 'EEI, Chi={}'.format(chi_input.value)
+        # Draw EEI as a function of Chi angle
+        # p_eei.scatter(x='eei', y=0., source=points_cds, size=10, color='color',
+        #               marker='circle', line_color='black')
+        # p_eei.scatter(x='eei_var', y=0., source=points_cds, size=14,
+        #               color='color', marker='star', line_color='black')
+        # p_eei.xaxis.axis_label = 'EEI, Chi={}'.format(chi_input.value)
+        for _i, _p in enumerate(points_cds.data['name']):
+            for _n, _case in enumerate(model.model.case_names):
+                if _case.lower() != model.model.base_case_name.lower():
+                    _k = 'delta_{}_{}_{}'.format(model.model.base_case_name, _case, _p)
+                    p_eei.line(x='chi', y=_k, color=points_cds.data['color'][_i], source=eei_cds)
+        p_eei.xaxis.axis_label = 'Chi angle'
+        p_eei.yaxis.axis_label = 'Delta EEI'
 
         return p_avo, update_button, p_ixg, p_eei, chi_input
 
@@ -656,6 +778,7 @@ class AvoAnalyzer:
         j_indxs = [np.argmin((np.linspace(self.y0, self.y0 + self.dh, self.n_rows) - _ys)**2) for _ys in ys]
         # print(self.n_cols*(xs[0] - self.x0)/self.dw, np.argmin( (np.linspace(self.x0, self.x0 + self.dw, self.n_cols) - xs[0])**2 ))
         # print(self.n_rows*(ys[0] - self.y0)/self.dh, np.argmin( (np.linspace(self.y0, self.y0 + self.dh, self.n_rows) - ys[0])**2 ))
+        # TODO At present, the AvoAnalyzer cant handle name changes of the points
         names = ['One', 'Two', 'Three', 'Four']
         colors = ['red', 'blue', 'green', 'yellow']
 
@@ -818,19 +941,23 @@ class AvoAnalyzer:
             seismic_cds,
             self.model
         )
+
+        _eei_dict = avo_amplitudes.calc_eei(points_cds, self.section_type, model=self.model)
+        eei_cds = ColumnDataSource(_eei_dict)
+
         # You can update the avo_cds by calling: avo_cds.data = avo_amplitudes.calc_amplitudes()
         avo_cds = avo_amplitudes.cds
 
         #
         # Create the AVO plot, and an update button
         #
-        avo_figure, update_avo, ixg_figure, eei_figure, chi_input = avo_amplitudes.draw(points_cds, avo_cds, self.model)
+        # avo_figure, update_avo, ixg_figure, eei_figure, chi_input = avo_amplitudes.draw(points_cds, avo_cds, self.model)
+        avo_figure, update_avo, ixg_figure, eei_figure, chi_input = avo_amplitudes.draw(points_cds, avo_cds, eei_cds, self.model)
 
         #
         # Catch button click
         #
         def update_amplitudes_callback():
-            print('AVO extraction points are changed')
 
             # First remove all previous amplitude calculation, because 'calc_amplitudes' is appending!
             avo_cds.data = avo_amplitudes.emtpy_dict
@@ -844,11 +971,14 @@ class AvoAnalyzer:
                 self.model
             )
 
-
             # Try to force points_cds to be updated:
             points_cds.data = dict(points_cds.data)
 
+        def update_eei_callback(attr, old, new):
+            eei_cds.data = avo_amplitudes.calc_eei(points_cds, self.section_type, model=self.model)
+
         update_avo.on_click(update_amplitudes_callback)
+        points_cds.on_change('data', update_eei_callback)
 
         #
         # return the  results

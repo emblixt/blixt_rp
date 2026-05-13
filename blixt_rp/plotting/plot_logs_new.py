@@ -969,7 +969,8 @@ def plot_trends(x_name: str, wells: list, log_table: LogTable, wis:Intervals, wi
                 de_trend_loc: float | None = None, de_trend_scale: float | None = None,
                 skip: list | None = None, **kwargs):
     """
-    Plots the depth trends (TVD) and performs an optional de-trending for each individual log within the given working interval, for all wells
+    Plots the depth trends (TVD) and performs an optional de-trending for each individual log within
+    the given working interval, for all wells
 
     :param x_name:
         name of the log which represents the independent variable (typically TVD_ML (below mudline) for depth trends)

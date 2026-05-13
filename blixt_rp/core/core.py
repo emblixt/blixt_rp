@@ -630,6 +630,13 @@ class ClassificationTable:
         #             len(orig_data['legend_group']), list(set(list(orig_data['legend_group'])))))
         #         data_cds.data = orig_data
 
+        title = Div(text =
+                    """
+                    <div style="font-size:12px; font-weight:600; margin-bottom:0px; text-align:center">
+                        Classifications
+                    </div>
+               """)
+
         dt = DataTable(
             source=cds,
             columns=self.table_columns(parameters, units),
@@ -656,7 +663,7 @@ class ClassificationTable:
         # if (color_menu is not None) and (data_cds is not None):
         #     color_menu.on_change('value', use_color_classification)
 
-        return dt, add_row, delete_row, update_table, use_cutoffs
+        return column(title, dt, sizing_mode='stretch_width'), add_row, delete_row, update_table, use_cutoffs
 
 
 class Cutoffs:
@@ -1589,6 +1596,13 @@ class WorkingIntervalsTable:
         use_wis = Div(text='', width=10, height=10)
 
 
+        title = Div(text =
+                    """
+                    <div style="font-size:12px; font-weight:600; margin-bottom:0px; text-align:center">
+                        Working intervals
+                    </div>
+               """)
+
         dt = DataTable(
             source=cds,
             columns=self.table_columns(),
@@ -1599,7 +1613,7 @@ class WorkingIntervalsTable:
             index_header='index'
         )
 
-        return dt, use_wis
+        return column(title, dt, sizing_mode='stretch_width'), use_wis
 
 
 class Header(AttribDict):

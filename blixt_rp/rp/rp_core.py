@@ -10,15 +10,19 @@ import logging
 # from dataclasses import dataclass
 from copy import deepcopy
 import sys
+import os
 
 import bruges.rockphysics.rockphysicsmodels as brr
 
 import blixt_rp.rp_utils.definitions as ud
 from blixt_rp.core.param import Param
 
-sys.path.append('C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_utils')
+project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\rp', ''))
+sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 from blixt_utils.utils import log_table_in_smallcaps as small_log_table
 from blixt_utils.utils import print_info
+
+from blixt_rp import Q_
 
 logger = logging.getLogger(__name__)
 
@@ -667,7 +671,7 @@ def vrh_bounds(f, m):
         raise IOError('Input lists must be of equal length')
 
     # Test if input volumetric fractions are constants or arrays
-    if isinstance(f[0], float):  # testing the list of floats
+    if isinstance(f[0], float) or isinstance(f[0], Q_):  # testing the list of floats
         if abs(sum(f) - 1.0) > 0.02:
             raise IOError('Sum of volume fractions must equal one 1')
     else:  # testing the list of arrays

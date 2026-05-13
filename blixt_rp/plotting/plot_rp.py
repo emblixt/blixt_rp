@@ -387,7 +387,7 @@ def plot_rpt(t, rpt, constants, rpt_keywords, sizes, colors, fig=None, ax=None, 
     :param colors
         str or np.array
         determines the colors of the markers
-        in np.array it must be same size as x
+        if np.array it must be same size as x
     :return
         all_x, all_y
         lists of len(constants) ndarray's of x and y data that can be used to
@@ -597,7 +597,7 @@ def test():
     fig, ax = plt.subplots()
 
     # Only Well_F should be active in well
-    wp = Project(project_table=__file__.replace('blixt_rp\plotting\plot_rp.py', 'excels\project_table.xlsx'))
+    wp = Project(project_table=__file__.replace('blixt_rp\\plotting\\plot_rp.py', 'excels\\project_table.xlsx'))
     log_table = {'P velocity': 'vp_dry', 'S velocity': 'vs_dry', 'Density': 'rho_dry', 'Porosity': 'phie',
                     'Volume': 'vcl'}
     wis = uio.project_working_intervals(wp.project_table)
@@ -645,10 +645,10 @@ def test():
     # Annotate rpt
     dx = 0; dy = 0.0
     plt.text(
-        xx[-1][-1] + dx, yy[-1][-1] + dy, '$\phi={:.02f}$'.format(phi[-1]),
+        xx[-1][-1] + dx, yy[-1][-1] + dy, '$\\phi={:.02f}$'.format(phi[-1]),
         **opt1)
     plt.text(
-        xx[-1][0] + dx, yy[-1][0] + dy, '$\phi={:.02f}$'.format(phi[0]),
+        xx[-1][0] + dx, yy[-1][0] + dy, '$\\phi={:.02f}$'.format(phi[0]),
         **opt1)
     for i, _sw in enumerate(sw):
         plt.text(

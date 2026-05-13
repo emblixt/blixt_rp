@@ -5,6 +5,9 @@ ohmm = [resistivity] = ohm * meter = Ωm
 fract = 1 * dimensionless
 ## unitless = 1 * dimensionless
 micro- = 1e-6 = µ-
+fraction =  [] = frac
+percent = 1e-2 fraction = pct
+ppm = 1e-6 fraction
 
 @alias degC = degc
 @alias ohm = Ohm

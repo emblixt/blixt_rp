@@ -1098,6 +1098,7 @@ class Model:
 
         :return:
         """
+        print('XXX', [self.layers[_i].name for _i in self.base_case_layers])
         _dict = {'Top {}'.format(self.layers[_i].name): [] for _i in self.base_case_layers}
         if resolution is not None:
             depths = self.depth_array(resolution)
@@ -1662,6 +1663,9 @@ class LaminarModel:
                 time)
             freq:
                 Wavelet central frequency in Hz, which is used when calculating the synthetic response
+            table_height:
+                int
+                Height of the table showing the layers
         """
 
         if model is None:
@@ -1689,6 +1693,7 @@ class LaminarModel:
         self.freq = kwargs.pop('freq', 20.)
         self.lf_width = kwargs.pop('lf_width', 300)
         self.model_width = kwargs.pop('model_width', None)
+        self.table_height = kwargs.pop('table_height', None)
         self.lf_table = None
         self.previous_cases = None
         if avo_or_eei is None:
@@ -1711,7 +1716,7 @@ class LaminarModel:
 
     # def initiate_model_table(self, lf_cds: ColumnDataSource):
     def initiate_model_table(self):
-        mod_table = ModelTable(self.model, width=self.model_width)
+        mod_table = ModelTable(self.model, width=self.model_width, height=self.table_height)
         self.model_table = mod_table
 
     def draw_model_table(self, mod_cds: ColumnDataSource, lf_cds:ColumnDataSource):
@@ -1899,7 +1904,9 @@ class LaminarModel:
             title_txt += '{}\n </div>'.format(self.model.name)
             title = Div(text=title_txt)
 
-        return title, lf_table, add_row, delete_row, update, _model_table, add_row_m, delete_row_m, update_m, grid, freq_slider, synth_cds_base
+        return (title, lf_table, add_row, delete_row, update,
+                _model_table, add_row_m, delete_row_m, update_m,
+                grid, freq_slider, synth_cds_base)
 
     def draw_2d(self):
         from bokeh.models import Span, Slider, Select, Div
@@ -2180,7 +2187,7 @@ class WedgeModel(LaminarModel):
         #
         layer1 = Layer(name='Top', thickness=top_thickness, litho_fluid=litho_fluids.litho_fluids[0])
         layer2 = Layer(name='Wedge', thickness=wedge, litho_fluid=litho_fluids.litho_fluids[1])
-        layer2_variant = Layer(name='Wedge', case='Oil', thickness=wedge, litho_fluid=litho_fluids.litho_fluids[2])
+        layer2_variant = Layer(name='Wedge', case='Perturb', thickness=wedge, litho_fluid=litho_fluids.litho_fluids[2])
         layer3 = Layer(name='Bottom', thickness=reverse_wedge, litho_fluid=litho_fluids.litho_fluids[0])
         if top_layers is not None:
             layers = top_layers + [layer2, layer2_variant, layer3]

@@ -307,6 +307,8 @@ class Project(object):
             if w.logs is not None:
                 self.add_well(w, if_well_exists=if_well_exists, if_log_exists=if_log_exists)
 
+        self.load_all_templates()
+
     def load_all_templates(self):
         from blixt_rp.core.core import Template, templates_from_table
         _templates = {}

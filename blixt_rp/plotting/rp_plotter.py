@@ -1,6 +1,6 @@
 """
-Plots a single parameter (e.g. Vp) from multiple wells, from specific intervals (or whole well) using cut offs or not
-and calculates the trend vs.TVD for that parameter
+Plots log data from multiple wells, from specific intervals (or whole well) using cut offs or not
+using standard modulus or other parameters used in rock physics (e.g. bulk & shear modulus, poisson ratio, vp/vs ratio
 """
 from bokeh.models import (Slider, ColorPicker, Range1d, LinearAxis, LogAxis, Span, Legend, ColumnDataSource, Text,
                           CustomJS, CustomJSTransform, LinearColorMapper, CheckboxEditor, Select)
@@ -14,8 +14,6 @@ import unittest
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
-from scripts.regsetup import description
-from win32com.client.gencache import versionRedirectMap
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\plotting', ''))
@@ -32,16 +30,18 @@ from blixt_rp.plotting.cross_plotter import CrossPlotter
 logger = logging.getLogger(__name__)
 
 
-class TrendPlotter(CrossPlotter):
+class RockPhysicsPlotter(CrossPlotter):
     """
-    Class for handling the (depth) trend plots
+    Class for handling the rock physics plot
 
     Intended use
     > data_sources = ...  # See cross_plotter.py DataSource for explanation
     > working_intervals = ...
     > cutoffs = ...
-    > dt_plot = DepthTrendPlotter(data_sources, working_intervals, cutoffs)
+    > rp_plot = RockPhysicsPlotter(data_sources, working_intervals, cutoffs)
     >
+
+    NOTE the data_sources must have
     """
     def __init__(self,
                  data_sources: dict,
@@ -87,75 +87,6 @@ class TrendPlotter(CrossPlotter):
 
         super().__init__(data_sources, x, y, working_intervals, cutoffs, width, height, tools)
 
-    def calc_trend(self,
-                   x_param: str,
-                   y_param: str,
-                   cds: ColumnDataSource,
-                   verbose: bool = False):
-        """
-        :param x_param:
-            str
-            Name of the x parameter (independent variable)
-        :param y_param:
-            str
-            Name of the y parameter (dependent variable)
-        :param cds:
-        :param p:
-            bokeh.plotting figure
-        :param verbose:
-        :return:
-        """
-        from blixt_utils.misc.curve_fitting import (residuals, linear_function, depth_trend, exp_function,
-                                                    calculate_depth_trend)
-        target_function = linear_function
-
-        result = calculate_depth_trend(
-            cds.data[y_param],
-            cds.data[x_param],
-            target_function,
-            [1., 1.],
-            mask = cds.data['mask'],
-            verbose=verbose,
-            xlabel=y_param,
-            ylabel=x_param
-        )
-        # Create a line_cds of the fitted trend curve
-        m_m = self.min_and_max()
-        x = np.linspace(m_m[self.x][0], m_m[self.x][1], 100)
-        _dict = dict(x = np.linspace(m_m[self.x][0], m_m[self.x][1], 100),
-                     y = target_function(x, *result[0].x), # Index zero, 0, because we only calculate one trend, discrete_intervals = False
-                     label=['{} trend in {}, {}'.format(
-                         y_param,
-                         ', '.join(self.active_intervals),
-                         ', '.join(self.active_cutoffs))]*100
-                     )
-
-        return ColumnDataSource(_dict), result[0]
-
-    def plot_trend(self,
-                   p: figure,
-                   line_cds: ColumnDataSource):
-        """
-        Draws the line given by the line_cds (keys x and y) in the figur p
-        
-        :param p: 
-        :param line_cds:
-        :param line_renderer
-        :return: 
-        """
-        # Clear previous line
-        p.renderers = [r for r in p.renderers if r.glyph.__class__.__name__ != 'Line']
-
-        line_renderer = p.line(
-            x='x',
-            y='y',
-            legend_label=line_cds.data['label'][0],
-            line_width=2,
-            source=line_cds
-        )
-
-        # Clear the legend from the previous legend
-        p.legend.items = [item for item in p.legend.items if line_renderer in item.renderers]
 
     def draw(self, cds: ColumnDataSource, set_all_intervals_active: bool = False, verbose: bool = False):
         from bokeh.models import Button, Tooltip

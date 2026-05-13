@@ -30,6 +30,19 @@ class UnitsTestCase(unittest.TestCase):
         l2 = Q_(1, 'FT')
         print(l1, l2)
 
+        pct1 = Q_(50., 'pct')
+        print(pct1.magnitude, pct1.to('dimensionless'))
+        print('Convert 0.1 to percent: ', Q_(0.1, '').to('percent'))
+
+        rho = Q_(10., 'G/cc')
+        print(rho)
+
+        a = Q_(10., '')
+        b = Q_(5., 'frac')
+        print(a.to('dimensionless'))
+        print(b.to('dimensionless'))
+        print(a/b)
+
         self.assertIsInstance(r4, pint.Quantity)
 
     def test_units(self):
