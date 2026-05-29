@@ -35,8 +35,9 @@ logger = logging.getLogger(__name__)
 
 class LogTable(dict):
     def __init__(self,
-                 # name: str | None = None,
-                 log_table: dict | None = None):
+                 log_table: dict | None = None,
+                 name: str | None = None
+    ):
         """
                 log_table = {
                    'P velocity': 'vp',
@@ -56,7 +57,7 @@ class LogTable(dict):
             dict
         """
         self.multi_log = False
-        # self.name = name
+        self.name = name
         if log_table is not None and len(log_table) > 0:
             # Make sure log names are in lowercase letters
             for _key, _val in log_table.items():
@@ -484,7 +485,6 @@ class ClassificationTable:
         """
         from bokeh.models import DataTable, Button, CheckboxGroup, Div
         from blixt_rp.core.core import CutoffRule
-        from pint import Quantity as Q_
         import blixt_utils.misc.masks as masks
 
         orig_data = None
@@ -658,12 +658,12 @@ class ClassificationTable:
 
         # use_cutoffs = CheckboxGroup(labels=['Use cutoffs'], active=[])
         # use_cutoffs.on_change('active', use_cutoffs_callback)
-        use_cutoffs = Div(text='', width=10, height=10)
+        # use_cutoffs = Div(text='', width=10, height=10)
 
         # if (color_menu is not None) and (data_cds is not None):
         #     color_menu.on_change('value', use_color_classification)
 
-        return column(title, dt, sizing_mode='stretch_width'), add_row, delete_row, update_table, use_cutoffs
+        return column(title, dt, sizing_mode='stretch_width'), add_row, delete_row, update_table  #, use_cutoffs
 
 
 class Cutoffs:
@@ -1593,7 +1593,7 @@ class WorkingIntervalsTable:
         #     use_wis.on_change('active', use_wis_callback)
         # else:
         #     use_wis = Div(text='', width=10, height=10)
-        use_wis = Div(text='', width=10, height=10)
+        # use_wis = Div(text='', width=10, height=10)
 
 
         title = Div(text =
@@ -1613,7 +1613,7 @@ class WorkingIntervalsTable:
             index_header='index'
         )
 
-        return column(title, dt, sizing_mode='stretch_width'), use_wis
+        return column(title, dt, sizing_mode='stretch_width')  # , use_wis
 
 
 class Header(AttribDict):

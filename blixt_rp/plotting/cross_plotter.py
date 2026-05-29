@@ -55,6 +55,7 @@ def add_x_y_to_cds(
                color: str | None = None,
                marker: str | None = None,
                legend_group: str | None = None,
+               opacity: float | str | None = None,
                mask: np.ndarray | None = None
                ) -> dict:
     """
@@ -76,6 +77,7 @@ def add_x_y_to_cds(
     :param color:
     :param marker:
     :param legend_group:
+    :param opacity:
     :param mask:
 
     :return:
@@ -135,6 +137,13 @@ def add_x_y_to_cds(
         _dict['legend_group'] = [legend_group] * _n
     else:
         _dict['legend_group'] = cds_dict['legend_group']
+
+    if opacity is not None and opacity in _vars:
+        _dict['opacity'] = cds_dict[opacity]
+    elif opacity is not None:
+        _dict['opacity'] = [opacity] * _n
+    else:
+        _dict['opacity'] = cds_dict['opacity']
 
     if mask is not None:
         _dict['mask'] = mask
@@ -202,6 +211,9 @@ class DataSource:
 
         self._data = data
 
+    def __len__(self):
+        return len(self.data[self.variables[0]])
+
     def keys(self):
         return self._data.keys()
 
@@ -212,9 +224,14 @@ class DataSource:
     @property
     def units(self):
         units = []
-        for _value in list(self._templates.values()):
-            if _value.units is not None:
+        for _key, _value in self._templates.items():
+            if _key not in self.variables:
+                continue
+            # TODO Maybe we should remove '_value is not None', all our data should have units?
+            # TODO No, the 'mask' column has no units
+            if _value is not None and _value.units is not None:
                 units.append(_value.units)
+        return units
 
     @property
     def name(self):
@@ -358,6 +375,100 @@ class DataSource:
 
     #     return _dict
 
+class DataSourceStyle:
+    from bokeh.models import DataTable
+    def __init__(self,
+                 data_sources: dict,
+                 width: int | None = None,
+                 height: int | None = None):
+        """
+        Provides a bokeh table that can be used to control the style of how the different DataSources are plotted
+
+        :param data_sources:
+            dictionary of DataSource's
+            Same as in CrossPlotter
+        :param width:
+        :param height:
+        """
+        if width is None:
+            width = 600
+        self.width = width
+        if height is None:
+            height = 200
+        self.height = height
+        self.keys = ['name', 'color', 'marker', 'size', 'opacity', 'order']
+        self.names = list(data_sources.keys())
+
+        # fill the original cds with default values
+        _dict = {_key: [] for _key in self.keys}
+        for _i, _name in enumerate(self.names):
+            _dict['name'].append(_name)
+            _dict['color'].append(cnames[_i])
+            _dict['marker'].append(markers[_i])
+            _dict['size'].append(5.)
+            _dict['opacity'].append(1.)
+            _dict['order'].append(_i)
+        self._cds = ColumnDataSource(_dict)
+
+    @property
+    def cds(self) -> ColumnDataSource:
+       return self._cds
+
+    def table_columns(self):
+        from bokeh.models import (SelectEditor, StringEditor, TableColumn, IntEditor, HTMLTemplateFormatter)
+        colored_cell_template = """
+                <div style="background:<%= 
+                    (function color_from_val(){
+                        return(color)
+                        }()) %>; 
+                    color: white"> 
+                <%= value %>
+                </div>
+            """
+        formatter = HTMLTemplateFormatter(template=colored_cell_template)
+
+        table_columns = [
+            TableColumn(field='name', title='Name', editor=SelectEditor(options=self.names)),
+            TableColumn(field='color', title='Color', editor=StringEditor(), formatter=formatter),
+            TableColumn(field='marker', title='Marker', editor=SelectEditor(options=markers)),
+            TableColumn(field='size', title='Size', editor=SelectEditor(options=['1', '5', '10', '15', '20', '30', 'Size'])),
+            TableColumn(field='opacity', title='Opacity', editor=SelectEditor(options=['0.2', '0.4', '0.6', '0.8', '1.0']))
+            # TableColumn(field='order', title='Order', editor=IntEditor(step=1))
+        ]
+        return table_columns
+
+    def draw(self,
+             cds: ColumnDataSource):
+        """
+        Returns a table
+
+        :param cds:
+            ColumnDataSource
+            Source for style used for plotting data
+        :return:
+        """
+        from bokeh.models import DataTable, Div
+        from bokeh.plotting import column
+
+        title = Div(text =
+                    """
+                    <div style="font-size:12px; font-weight:600; margin-bottom:0px; text-align:center">
+                        Data source styles
+                    </div>
+               """)
+
+        dt = DataTable(
+            source=cds,
+            columns=self.table_columns(),
+            editable=True,
+            width=self.width,
+            height=self.height,
+            index_position=-1,
+            index_header='index'
+        )
+
+        return column(title, dt, sizing_mode='stretch_width')
+
 
 class CrossPlotter:
     """
@@ -477,6 +588,9 @@ class CrossPlotter:
         _all = {}
         for _source in self._data_sources.values():
             for _key, _val in _source.templates.items():
+                # Avoid incomplete templates
+                if list(_val.dict().keys())[0] is None:
+                    continue
                 _all[_key] = _val
         return _all
 
@@ -526,6 +640,7 @@ class CrossPlotter:
                 _dict['color'] = np.array([cnames[_i]] * _len)
                 _dict['marker'] = np.array([markers[_i]] * _len)
                 _dict['size'] = np.array([5.] * _len)
+                _dict['opacity'] = np.array([1.] * _len)
                 _dict['mask'] = np.array([True] * _len)
             else:
                 _dict['source_name'] = np.append(_dict['source_name'], np.array([_key] * _len))
@@ -533,6 +648,7 @@ class CrossPlotter:
                 _dict['color'] = np.append(_dict['color'], np.array([cnames[_i]] * _len))
                 _dict['marker'] = np.append(_dict['marker'], np.array([markers[_i]] * _len))
                 _dict['size'] = np.append(_dict['size'], np.array([5.] * _len))
+                _dict['opacity'] = np.append(_dict['opacity'], np.array([1.] * _len))
                 _dict['mask'] = np.append(_dict['mask'], np.array([True] * _len))
             _i += 1
 
@@ -881,6 +997,103 @@ class CrossPlotter:
             _out[_key] = ['constant', 'constant']
         return _out
 
+    def add_data_source_style(self, cds: ColumnDataSource):
+        code = """
+            const x_data = x_source.data;
+            const style_data = style_source.data;
+            var orig_order = orig_order;
+            const cols = Object.keys(style_data);
+            const nrows = style_data[cols[0]].length;
+            const groups = x_data['legend_group'];
+            // const indices = Array.from(Array(groups.length).keys());
+            const size_string = "Size";
+            
+            console.log('Trying to update style in plot')
+            
+            // Update the colors, markers and sizes based on the style table
+            // Iterate over all lines in the settings table
+            for (let i = 0; i < nrows; i++) {
+                //console.log(style_data['name'][i], style_data['color'][i], style_data['marker'][i], style_data['size'][i]) 
+                // iterate over all points in the x-plot
+                for (let j = 0; j < groups.length; j++) {
+                    if (x_data['legend_group'][j] === style_data['name'][i]) {
+                        x_data['color'][j] = style_data['color'][i];
+                        x_data['marker'][j] = style_data['marker'][i];
+                        if (String(style_data['size'][i]) !== size_string) {
+                            x_data['size'][j] = style_data['size'][i];
+                        }
+                        x_data['opacity'][j] = style_data['opacity'][i];
+                    }
+                }
+            }
+            
+            //  // Look for changes in the order, and re order the data
+            //  let changed = false;
+            //  for (let i = 0; i < nrows; i++) {
+            //      if (orig_order[i] !== style_data['order'][i]) {
+            //          console.log('Order has been changed')
+            //          changed = true;
+            //          orig_order[i] = style_data['order'][i];
+            //      }
+            //  }
+            //  if (changed) {
+            //          console.log('Change in order has been detected')
+            //          indices.sort((a, b) => style_data['order'][a] - style_data['order'][b]);
+            //          const new_data = {};
+            //          for (const key in x_data) {
+            //              new_data[key] = indices.map(i => x_data[key][i]);
+            //          }
+            //          x_source.data = new_data;
+            //  }
+            x_source.change.emit()
+            
+        """
+        # TODO
+        # The above 'order' function works, but Bokeh draws everything in one 'vectorized call', making the
+        # order meaningless
+        # A suggested solution by CoPilot is to split the data into different renderers, and then control
+        # each of them individually:
+        """
+        # Create one renderer per group
+        renderers = {}
+
+        for group in df['group'].unique():
+            view = ColumnDataSource(df[df['group'] == group])
+
+            r = p.scatter(
+                x='x',
+                y='y',
+                source=view,
+                size='size',
+                color='color',
+                marker='marker',
+                legend_label=group
+            )
+
+            renderers[group] = r
+            
+        # Then, the JS call back:
+        const renderers = renderer_dict;
+        const selected = group_select.value;
+
+        // Move selected renderer to end (top layer)
+        const all_renderers = Object.values(renderers);
+
+        // Remove selected
+        const others = all_renderers.filter(r => r !== renderers[selected]);
+
+        // Rebuild order
+        p.renderers = [...others, renderers[selected]];
+        ``
+        """
+        style_table = DataSourceStyle(self._data_sources)
+        style_cds = style_table.cds
+        orig_order = style_cds.data['order']
+        source_callback = CustomJS(args=dict(x_source=cds, style_source=style_cds, orig_order=orig_order), code=code)
+        style_cds.js_on_change('patching', source_callback)
+
+        return style_table.draw(style_cds)
+
     def fig(self) -> figure:
         xplot = figure(width=self.width, height=self.height, tools=self._tools)
         xplot.toolbar.active_inspect = None
@@ -890,7 +1103,7 @@ class CrossPlotter:
     def draw(self, cds: ColumnDataSource, set_all_intervals_active: bool = False, verbose: bool = False):
         from bokeh.models import CDSView, BooleanFilter, Button, Div
         import blixt_utils.misc.masks as masks
-        from pint import Quantity as Q_
+        from blixt_rp import Q_
 
         self.xplot = self.fig()
 
@@ -914,7 +1127,7 @@ class CrossPlotter:
             ct_guis = self.cutoffs_table.draw(ct_cds, self.common_variables, self.common_units, verbose=verbose)
             # ct_guis = table, add_row, delete_row, update, use
         else:
-            ct_guis = [Div(text='', width=10, height=10)]*5
+            ct_guis = [Div(text='', width=10, height=10)]*4
 
         # Draw the working intervals table
         wis_cds = None
@@ -923,7 +1136,7 @@ class CrossPlotter:
             wis_guis = self.interval_table.draw(wis_cds, verbose=verbose)
             # wis_guis = wis_table, apply
         else:
-            wis_guis = [Div(text='', width=10, height=10)]*2
+            wis_guis = [Div(text='', width=10, height=10)]
 
         # Create a BooleanFilter using the 'mask' column
         boolean_filter = BooleanFilter(booleans=cds.data['mask'])
@@ -932,16 +1145,20 @@ class CrossPlotter:
         view = CDSView(filter=boolean_filter)
 
         self.xplot.scatter(x='x', y='y', source=cds, view=view, fill_color='color', marker='marker',
-                      legend_group='legend_group', size='size', fill_alpha=0.5, line_color=None)
+                      legend_group='legend_group', size='size', fill_alpha='opacity', line_color=None)
 
         # Axes
         for _var, _axis in zip([x_var, y_var], [self.xplot.xaxis, self.xplot.yaxis]):
             # _axis.axis_label_text_font_size = '10px'
             # _axis.major_label_text_font_size = '10px'
             _axis.axis_label_standoff = 0
+            if _var not in list(self.templates.keys()):
+                continue
             _axis.axis_label = '{} [{}]'.format(
                 self.templates[_var].name, self.templates[_var].units)
         for _var, _range in zip([x_var, y_var], [self.xplot.x_range, self.xplot.y_range]):
+            if _var not in list(self.templates.keys()):
+                continue
             if self.templates[_var].min is not None:
                 _range.start = self.templates[_var].min
             if self.templates[_var].max is not None:
@@ -953,7 +1170,21 @@ class CrossPlotter:
             self.xplot.legend.location = 'top_right'
             # self.xplot.legend.label_text_font_size = '8pt'
 
-        # arrange call backs
+        #
+        # Arrange call backs
+        #
+
+        # # Try to remove incomplete templates
+        # incomplete = []
+        # for _key, _val in self.templates.items():
+        #     if _val is not None and list(_val.dict().keys())[0] is None:
+        #         print(_key, type(_val), len(list(_val.dict().keys())), list(_val.dict().keys()))
+        #         incomplete.append(_key)
+
+        # for _key in incomplete:
+        #             self.templates.__delitem__(_key)
+        # print(self.templates.keys())
+
         args_dict = dict(x_drop=x_menu,
                          y_drop=y_menu,
                          s_drop=size_menu,
@@ -1061,7 +1292,6 @@ class CrossPlotter:
 
         cds.js_on_change('data', data_change_callback)
 
-
         return self.xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis
 
     def show_plot(self, cds, out_file):
@@ -1069,7 +1299,16 @@ class CrossPlotter:
         from bokeh.io import output_file
         output_file(out_file)
         xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = self.draw(cds)
-        show(column(xplot, row(x_menu, y_menu, size_menu, color_menu, reset_mask)))
+        style_table = self.add_data_source_style(cds)
+        show(
+            row(
+                column(
+                    xplot,
+                    row(x_menu, y_menu, size_menu, color_menu, reset_mask)
+                ),
+                column(style_table)
+            )
+        )
 
 
 class TestCases(unittest.TestCase):
@@ -1138,6 +1377,17 @@ class TestCases(unittest.TestCase):
         # xp.show_plot('C:\\Users\marte\Downloads\plot.html')
         xp.show_plot(d, os.path.join(project_dir, 'blixt_rp\\results_folder\\plot.html'))
 
+    def test_from_las(self):
+        from blixt_rp.core.well_new import Well
+        las_fileA = os.path.join(project_dir, "blixt_rp\\test_data\\Well A.las")
+        w = Well()
+        w.read_las(las_fileA, True)
+        xp = CrossPlotter(
+            {w.name: w.data_source()}
+        )
+        cds = xp.cds
+        xp.show_plot(cds, os.path.join(project_dir, 'blixt_rp\\results_folder\\plot.html'))
+
     def test_from_well(self):
         from blixt_rp.core.project_new import Project
         from blixt_rp.core.core import LogTable, Intervals
@@ -1197,4 +1447,28 @@ class TestCases(unittest.TestCase):
 
         return xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis
 
+
+    def test_moduli(self):
+        from blixt_rp.core.well_new import Well
+        from blixt_rp.core.core import LogTable
+        from blixt_rp.rp.rp_wrapper_new import data_source_moduli
+        las_fileA = os.path.join(project_dir, "blixt_rp\\test_data\\Well A.las")
+        w = Well()
+        w.read_las(las_fileA, True)
+        lt1 = LogTable(name='ptb5', log_table={'P velocity': 'vp_ptb5', 'S velocity': 'vs_ptb5', 'Density': 'rho_ptb5'})
+        wds1 = w.data_source(log_table=lt1, verbose=False)
+        data_source_moduli(wds1, lt1, verbose=False)
+        lt2 = LogTable(name='so08', log_table={'P velocity': 'vp_so08', 'S velocity': 'vs_so08', 'Density': 'rho_so08'})
+        wds2 = w.data_source(log_table=lt2, verbose=True)
+        data_source_moduli(wds2, lt2, verbose=False)
+        lt3 = LogTable(name='sg08', log_table={'P velocity': 'vp_sg08', 'S velocity': 'vs_sg08', 'Density': 'rho_sg08'})
+        wds3 = w.data_source(log_table=lt3, verbose=False)
+        data_source_moduli(wds3, lt3, verbose=False)
+
+        xp = CrossPlotter(
+            {wds.name: wds for wds in [wds1, wds2, wds3]}
+            # {wds.name: wds for wds in [wds1]}
+        )
+        cds = xp.cds
+        xp.show_plot(cds, os.path.join(project_dir, 'blixt_rp\\results_folder\\plot.html'))
 

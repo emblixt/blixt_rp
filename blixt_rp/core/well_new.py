@@ -30,6 +30,8 @@ import pint
 from scipy.constants import degree
 from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
+
+from blixt_rp.rp.rp_core import linear_gassmann
 from .. import ureg, Q_
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
@@ -353,7 +355,8 @@ class Well(object):
         return _templates
 
     def read_las(self, file_name: str, verbose: bool = False, encoding: str = 'UTF8',
-                 log_table: LogTable | None = None, ignore_header: bool = False,
+                 log_table: LogTable | None = None,
+                 ignore_header: bool = False,
                  rename_logs: dict | None = None,
                  if_log_exists: str = 'overwrite',
                  template_file: str | None = None):
@@ -416,7 +419,7 @@ class Well(object):
             if self.name in list(template_dict.keys()):
                 self.style = template_dict[self.name]
 
-            # add extra info to the header
+            # add well info to the header
             for i, ans in enumerate(table['Given well name']):
                 if not isinstance(ans, str):
                     continue
@@ -572,8 +575,11 @@ class Well(object):
         _log = None
         for _log in self.logs:
             _dict[_log.name] = _log.data  # Keep the units!
-        # Extract depth from the last log
-        _dict['depth'] = _log.depth.depth
+
+        # TODO Is it needed?
+        # TESTING WITHOUT IT
+        # # The depth (= md) log is always needed. Comes with units
+        # _dict['depth'] = _log.depth.depth
 
         if cutoffs is not None:
             masks = []
@@ -602,17 +608,64 @@ class Well(object):
 
         return _dict
 
-    def data_source(self, down_sample: int | None = None):
+    def data_source(self,
+                    down_sample: int | None = None,
+                    log_table: LogTable | None = None,
+                    verbose: bool = False
+                    ):
         """
         Returns a DataSource object based on the well content
+        :param down_sample:
+            int
+        :param log_table:
+            LogTable
+            Object which contains which log types, and associated and which log(s) to use for each log type
+            When this is specified, we only keep those logs that are listed in the resulting DataSource
         :return:
             DataSource
         """
         from blixt_rp.plotting.cross_plotter import DataSource
+
+        _data=self.dict(down_sample=down_sample)
+        _templates = {}
+        _name=self.name
+
+        # Remove the logs from the dictionary that are not listed in the LogTable
+        if log_table is not None:
+            if verbose:
+                print('Prior to applying LogTable:')
+                print(' Variables: ', len(_data.keys()), list(_data.keys()))
+                print(' Templates: ', len(self.templates().keys()), list(self.templates().keys()))
+                print(' Units: {}'.format(
+                    ', '.join(
+                        [self.templates()[_k].units  for _k in self.templates() if self.templates()[_k].units is not None])))
+            for _log in list(_data.keys()):
+                # We must always keep the depth log (md), but the solution below is not robust.
+                # The depth log can be named differently
+                if _log not in log_table.log_names + ['dept']:
+                    try:
+                        _data.pop(_log)
+                    except KeyError:
+                        continue
+                else:
+                    _templates[_log] = self.templates()[_log]
+            if log_table.name is not None:
+                _name += ' {}'.format(log_table.name)
+            if verbose:
+                print('After applying LogTable:')
+                print(' Variables: ', len(_data.keys()), list(_data.keys()))
+                print(' Templates: ', len(_templates.keys()), list(_templates.keys()))
+                print(' Units: {}'.format(
+                    ', '.join(
+                        [_templates[_k].units  for _k in _templates if _templates[_k].units is not None])))
+        else:
+            _templates = self.templates()
+
+
         return DataSource(
-            name=self.name,
-            data=self.dict(down_sample=down_sample),
-            templates=self.templates()
+            name=_name,
+            data=_data,
+            templates=_templates
         )
 
     def calc_press_ref(self, rho_sea: Q_):

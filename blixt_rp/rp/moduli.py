@@ -3,7 +3,7 @@
 ===================
 moduli.py
 ===================
-Converts between various acoustic/eslatic parameters, and provides a way to
+Converts between various acoustic/elastic parameters, and provides a way to
 calculate all the elastic moduli from Vp, Vs, and rho.
 Created June 2014, Matt Hall
 https://github.com/agile-geoscience/bruges/blob/master/bruges/rockphysics/moduli.py
@@ -13,6 +13,15 @@ from Mavko, G, T Mukerji and J Dvorkin (2003), The Rock Physics Handbook,
 Cambridge University Press.
 """
 import numpy as np
+import sys
+import os
+
+# To test blixt_rp and blixt_utils libraries directly, without installation:
+project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\rp', ''))
+sys.path.append(os.path.join(project_dir, 'blixt_utils'))
+sys.path.append(os.path.join(project_dir, 'blixt_rp'))
+
+from blixt_rp import Q_, ureg
 
 
 def youngs(vp=None, vs=None, rho=None, mu=None, lam=None, bulk=None, pr=None,
@@ -335,15 +344,15 @@ def moduli_dict(vp, vs, rho):
     Returns:
         A dict of elastic moduli, plus P-wave impedance.
     """
-    mod = {}
-
-    mod['imp'] = vp * rho
-
-    mod['mu'] = mu(vs=vs, rho=rho)
-    mod['pr'] = pr(vp=vp, vs=vs, rho=rho)
-    mod['lam'] = lam(vp=vp, vs=vs, rho=rho)
-    mod['bulk'] = bulk(vp=vp, vs=vs, rho=rho)
-    mod['pmod'] = pmod(vp=vp, rho=rho)
-    mod['youngs'] = youngs(vp=vp, vs=vs, rho=rho)
+    mod = {
+        'ai': vp * rho / 1.E3 * ureg.kPa * ureg.second / ureg.meter,
+        'vp/vs': vp / vs * ureg.dimensionless,
+        'mu': mu(vs=vs, rho=rho) / 1.E9 * ureg.gigaPa,
+        'pr': pr(vp=vp, vs=vs, rho=rho) * ureg.dimensionless,
+        'lam': lam(vp=vp, vs=vs, rho=rho) * 1E-9 * ureg.gigaPa,
+        'bulk': bulk(vp=vp, vs=vs, rho=rho) * 1.E-9 * ureg.gigaPa,
+        'pmod': pmod(vp=vp, rho=rho) * 1E-9 * ureg.gigaPa,
+        'youngs': youngs(vp=vp, vs=vs, rho=rho) * 1E-9 * ureg.gigaPa
+    }
 
     return mod

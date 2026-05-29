@@ -12,7 +12,9 @@ sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 # test = 'log_plotter__test_cutoffs'
 # test = 'log_plotter__test_well_plotter_with_cutoffs'
-test = 'cross_plotter__test_both'
+# test = 'cross_plotter__test_both'
+# test = 'rp_plotter__test_well'
+test = 'rp_plotter__test_well_with_rpt'
 
 
 if test == 'log_plotter__test_cutoffs':
@@ -51,13 +53,50 @@ elif test == 'cross_plotter__test_both':
               row(x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask),
           ),
           column(ct_guis[0],
-                 row(ct_guis[1], ct_guis[2], ct_guis[3], ct_guis[4]),
-                 wis_guis[0],
-                 wis_guis[1]
+                 row(ct_guis[1], ct_guis[2], ct_guis[3]),  # , ct_guis[4]),
+                 wis_guis[0]  # ,
+                 #  wis_guis[1]
                  )
        )
     )
 
+elif test == 'rp_plotter__test_well':
+    import rp_plotter
+    test = rp_plotter.TestCases()
+    xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis, style_table\
+        = test.test_well(unit_test=False)
+    curdoc().add_root(
+        row(
+            column(
+                xplot,
+                row(x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask)
+            ),
+            column(style_table,
+                   column(ct_guis[0], row(ct_guis[1], ct_guis[2], ct_guis[3])),  #,  ct_guis[4])),
+                   column(wis_guis[0])  #, wis_guis[1])
+                   )
+        )
+    )
 
+elif test == 'rp_plotter__test_well_with_rpt':
+    import rp_plotter
+    test = rp_plotter.TestCases()
+    (xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis, style_table,
+     rpt_dt, add_row, var_select, delete_row, update_table) = test.test_well_with_rpt(unit_test=False)
+    curdoc().add_root(
+        row(
+            column(
+                xplot,
+                row(x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask)
+            ),
+            column(style_table,
+                   column(ct_guis[0], row(ct_guis[1], ct_guis[2], ct_guis[3])),  #,  ct_guis[4])),
+                   column(wis_guis[0]),  #, wis_guis[1]),
+                   column(
+                       rpt_dt, row(add_row, var_select, delete_row, update_table)
+                   )
+           )
+        )
+    )
 
 

@@ -30,6 +30,7 @@ log_table2 = LogTable({
 })
 
 las_file3 = os.path.join(test_file_dir, "Well F.las")
+las_fileA = os.path.join(test_file_dir, "Well A.las")
 data_file1 = os.path.join(test_file_dir, "Well A checkshot.txt")
 data_file2 = "S:\\Well\\UTM32_Mid_Norway_All\\Q-6406\\6406_11_1_S\\6406_11_1_S___checkshot.txt"
 data_file2_wellpath = "S:\\Well\\UTM32_Mid_Norway_All\\Q-6406\\6406_11_1_S\\6406_11_1_S___wellpath.txt"
@@ -306,6 +307,9 @@ class WellTestCase(unittest.TestCase):
         w = Well()
         w.read_las(las_file1, True)
         wds = w.data_source()
+        print('Data and units:')
+        print('  #', len(wds.variables), wds.variables)
+        print('  #', len(wds.units), wds.units)
         for key in list(wds.data.keys()):
             print(key, len(wds.data[key]))
         print('Downsample to every 10th:')
@@ -326,3 +330,21 @@ class WellTestCase(unittest.TestCase):
         print(max(wds['rhob']))
 
         # Note! The cutoffs should potentially hold a working interval!!
+
+    def test_data_source_with_logtable(self):
+        from blixt_rp.core.well_new import Well
+        from blixt_rp.core.core import LogTable
+        w = Well()
+        w.read_las(las_fileA, True)
+        lt1 = LogTable(name='ptb5', log_table={'P velocity': 'vp_ptb5', 'S velocity': 'vs_ptb5', 'Density': 'rho_ptb5'})
+        wds1 = w.data_source(log_table=lt1, verbose=True)
+        lt2 = LogTable(name='so08', log_table={'P velocity': 'vp_so08', 'S velocity': 'vs_so08', 'Density': 'rho_so08'})
+        wds2 = w.data_source(log_table=lt2)
+        lt3 = LogTable(name='sg08', log_table={'P velocity': 'vp_sg08', 'S velocity': 'vs_sg08', 'Density': 'rho_sg08'})
+        wds3 = w.data_source(log_table=lt3)
+        print('Data and units:')
+        for data_source in [wds1, wds2, wds3]:
+            print(data_source.name)
+            print('  #', len(data_source.variables), data_source.variables)
+            print('  #', len(data_source.units), data_source.units)
+            print('  -x-')

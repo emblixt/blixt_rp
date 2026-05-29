@@ -1534,6 +1534,12 @@ class ModelTable:
         def update_table_function():
             new_data = dict(cds.data)
             layers = []
+
+            # TODO
+            # It doesn't seem to catch if I change name of a layer correctly.
+            # The names are updated in the table, but if I by mistake had several layers with the
+            # same name and case, I can't fix that interactively
+
             # Iterate over all layers
             for _i in range(len(new_data['name'])):
                 this_lf = new_data['litho_fluid'][_i]

@@ -7,6 +7,7 @@ from bokeh.models import (Slider, ColorPicker, Range1d, LinearAxis, LogAxis, Spa
 from bokeh.models import PanTool, BoxZoomTool, WheelZoomTool, ResetTool, SaveTool, CrosshairTool, HoverTool, TextInput
 from bokeh.plotting import figure, show
 from bokeh.plotting import column, row
+from bokeh.io import output_file
 
 import sys
 import os.path
@@ -26,8 +27,15 @@ from blixt_rp.rp_utils.version import info
 from blixt_rp.core.core import Intervals, WorkingIntervalsTable
 from blixt_rp.core.core import Cutoffs, ClassificationTable
 from blixt_rp.plotting.cross_plotter import CrossPlotter
+from blixt_rp import Q_
 
+output_file(os.path.join(project_dir, 'blixt_rp\\results_folder\\plot.html'))
 logger = logging.getLogger(__name__)
+
+test_file_dir = str(os.path.dirname(__file__).replace(
+    'blixt_rp\\plotting',
+    'test_data'))
+las_fileA = os.path.join(test_file_dir, "Well A.las")
 
 
 class RockPhysicsPlotter(CrossPlotter):
@@ -45,14 +53,12 @@ class RockPhysicsPlotter(CrossPlotter):
     """
     def __init__(self,
                  data_sources: dict,
-                 x: str,
-                 y: str | None = None,
                  working_intervals: Intervals | None = None,
                  cutoffs: Cutoffs | None = None,
                  width: int | None = None,
                  height: int | None = None,
-                 tools: list | None = None,
-                 project_table: str | None = None):
+                 tools: list | None = None
+                 ):
         """
         Plots the data in data_sources in a x vs. y cross plot, where x is the independent variable
         (typically TVD) and y is the dependent variable (e.g. Vp), and it tries to find the function
@@ -64,128 +70,202 @@ class RockPhysicsPlotter(CrossPlotter):
                 {w.name: w.data_source() for w in project.wells}
             where project is a Project object from project_new.py
 
-        :param x:
-            str
-            Name of the independent variable (e.g. 'tvd')
-        :param y:
-            str
-            Name of the dependent variable (e.g. 'vp_oil')
-
         :param working_intervals:
         :param cutoffs:
         :param width:
         :param height:
         :param tools:
-        :param project_table:
-            str
-            Full path name of excel (typically the project table excel file) to where we can
-            write the results
         """
+
         if width is None:
             width = 900
-        self.project_table = project_table
 
-        super().__init__(data_sources, x, y, working_intervals, cutoffs, width, height, tools)
+        super().__init__(data_sources, working_intervals=working_intervals, cutoffs=cutoffs, width=width,
+                         height=height, tools=tools)
 
 
     def draw(self, cds: ColumnDataSource, set_all_intervals_active: bool = False, verbose: bool = False):
         from bokeh.models import Button, Tooltip
-        calc_trend_tooltip = Tooltip(content='Calculate trend for shown data', position='right')
-        calc_save_tooltip = Tooltip(content=
-                                    'Calculate trends for all common y variables, and saves the result',
-                                    position='right')
-        # Tooltips on Button doesn't work, try this CustomJS solution instead:
-        #  # Use CustomJS to add a tooltip via JavaScript
-        #  tooltip_js = CustomJS(args=dict(btn=button), code="""
-        #      btn.el.title = "This is a tooltip added via CustomJS";
-        #  """)
-
-        #  # Trigger the JS when the document is ready
-        #  button.js_on_event('document_ready', tooltip_js)
 
         if verbose:
             cds.js_on_change('patching', CustomJS(
                 args=dict(source=cds),
                 code="""
-                console.log('Patching event detected in TrendPlotter');
+                console.log('Patching event detected in RockPhysicsPlotter');
                 """
             ))
 
             cds.js_on_change('data', CustomJS(
                 args=dict(source=cds),
                 code="""
-                console.log('Data event detected in TrendPlotter');
+                console.log('Data event detected in RockPhysicsPlotter');
                 """
             ))
 
         xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis = super().draw(cds)
-        x_menu.disabled = True
-
-        def calc_trend_func():
-            line_cds, res = self.calc_trend(x_menu.value, y_menu.value, cds, verbose=verbose)
-            self.plot_trend(xplot, line_cds)
-
-        calc_trend = Button(label='Calculate trend', button_type='success')
-        calc_trend.on_click(calc_trend_func)
-
-        def calc_save_func():
-            from blixt_utils.io.io import write_regression
-            for y_param in y_menu.options:
-                if y_param in ['md', 'tvd', 'twt']:  # don't calculate trends for these
-                    continue
-                line_cds, res = self.calc_trend(x_menu.value, y_param, cds, verbose=verbose)
-                print(y_param, res['success'], res['x'])
-                if res['success'] and self.project_table is not None:
-                    print('Trying to save results')
-                    write_regression(self.project_table,
-                                     res['x'],
-                                     y_param,
-                                     ', '.join(list(self._data_sources.keys())),
-                                     ', '.join(self.active_intervals),
-                                     'Linear',
-                                     note=line_cds.data['label'][0])
-
-        calc_all_and_save = Button(label='Calculate trends and save',
-                                   button_type='success')
-        calc_all_and_save.on_click(calc_save_func)
+        style_table = self.add_data_source_style(cds)
 
         return (xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask,
                 ct_guis,
                 wis_guis,
-                calc_trend, calc_all_and_save)
+                style_table)
 
 class TestCases(unittest.TestCase):
 
-    def test_data_cds(self):
+    def test_data_cds(self, unit_test=True):
         import blixt_rp.plotting.cross_plotter as xp
         test = xp.TestCases()
 
         ds1, ds2, wis, coffs = test.test_data()
 
-        tp = TrendPlotter({str(_s.name):_s for _s in [ds1, ds2]},
-                          x='md',
-                          y='var_two',
-                          cutoffs=coffs,
-                          working_intervals=wis,
-                          project_table="C:\\Users\\emb\\Downloads\\Book.xlsx")
+        tp = RockPhysicsPlotter({str(_s.name):_s for _s in [ds1, ds2]},
+                                cutoffs=coffs,
+                                working_intervals=wis,
+                                )
 
         d_cds = tp.cds
 
-        return tp.draw(d_cds)
+        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis, style_table = tp.draw(d_cds)
+        if unit_test:
+            show(
+                row(
+                    column(
+                        xplot,
+                        row(x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask)
+                    ),
+                    column(style_table,
+                           column(ct_guis[0], row(ct_guis[1], ct_guis[2], ct_guis[3])),  #,  ct_guis[4])),
+                           column(wis_guis[0])  #, wis_guis[1])
+                           )
+                )
+            )
+        else:
+            return xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis, style_table
 
-    def test_calc_trend(self):
-        import matplotlib.pyplot as plt
-        import blixt_rp.plotting.cross_plotter as xp
-        test = xp.TestCases()
+    def test_well(self, unit_test=True):
+        from blixt_rp.core.well_new import Well
+        from blixt_rp.core.core import LogTable, CutoffRule, Cutoffs
+        from blixt_rp.rp.rp_wrapper_new import data_source_moduli
 
-        ds1, ds2, wis, coffs = test.test_data()
+        w = Well()
+        w.read_las(las_fileA, True)
 
-        tp = TrendPlotter({str(_s.name):_s for _s in [ds1, ds2]},
-                          x='md',
-                          y='var_two',
-                          cutoffs=coffs,
-                          working_intervals=wis)
-        cds = tp.cds
-        tp.calc_trend(cds, verbose=True)
+        lt1 = LogTable(name='ptb5', log_table={'P velocity': 'vp_ptb5', 'S velocity': 'vs_ptb5', 'Density': 'rho_ptb5',
+                                               'Porosity': 'phie', 'Volume': 'vcl'})
+        lt2 = LogTable(name='so08', log_table={'P velocity': 'vp_so08', 'S velocity': 'vs_so08', 'Density': 'rho_so08',
+                                               'Porosity': 'phie', 'Volume': 'vcl'})
+        lt3 = LogTable(name='sg08', log_table={'P velocity': 'vp_sg08', 'S velocity': 'vs_sg08', 'Density': 'rho_sg08',
+                                               'Porosity': 'phie', 'Volume': 'vcl'})
 
-        plt.show()
+        wds1 = w.data_source(log_table=lt1, verbose=False)
+        wds2 = w.data_source(log_table=lt2, verbose=False)
+        wds3 = w.data_source(log_table=lt3, verbose=False)
+
+        data_source_moduli(wds1, lt1, verbose=False)
+        data_source_moduli(wds2, lt2, verbose=False)
+        data_source_moduli(wds3, lt3, verbose=False)
+
+        rule1 = CutoffRule('phie', '>', Q_(0.1, ''))
+        rule2 = CutoffRule('vcl', '<', Q_(0.4, ''))
+        cutoffs = Cutoffs(cutoffs=[rule1, rule2])
+
+        tp = RockPhysicsPlotter({str(_s.name):_s for _s in [wds1, wds2, wds3]},
+                                cutoffs=cutoffs,
+                                working_intervals=None,
+                                )
+
+        d_cds = tp.cds
+
+        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis, style_table = tp.draw(d_cds)
+        if unit_test:
+            show(
+                row(
+                    column(
+                        xplot,
+                        row(x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask)
+                    ),
+                    column(style_table,
+                           column(ct_guis[0], row(ct_guis[1], ct_guis[2], ct_guis[3])),  # ,  ct_guis[4])),
+                           column(wis_guis[0])  #, wis_guis[1])
+                           )
+                )
+            )
+        else:
+            return xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis, style_table
+
+
+    def test_well_with_rpt(self, unit_test=True):
+        from blixt_rp.core.well_new import Well
+        from blixt_rp.core.core import LogTable, CutoffRule, Cutoffs
+        from blixt_rp.rp.rp_wrapper_new import (data_source_moduli, rpt_wrapper, rpt_to_moduli,
+                                                rpt_phi_sw, return_rpt_keywords, RptVariableTable)
+
+        w = Well()
+        w.read_las(las_fileA, True)
+
+        lt1 = LogTable(name='ptb5', log_table={'P velocity': 'vp_ptb5', 'S velocity': 'vs_ptb5', 'Density': 'rho_ptb5',
+                                               'Porosity': 'phie', 'Volume': 'vcl'})
+        lt2 = LogTable(name='so08', log_table={'P velocity': 'vp_so08', 'S velocity': 'vs_so08', 'Density': 'rho_so08',
+                                                'Porosity': 'phie', 'Volume': 'vcl'})
+        lt3 = LogTable(name='sg08', log_table={'P velocity': 'vp_sg08', 'S velocity': 'vs_sg08', 'Density': 'rho_sg08',
+                                                'Porosity': 'phie', 'Volume': 'vcl'})
+
+        wds1 = w.data_source(log_table=lt1, verbose=False)
+        wds2 = w.data_source(log_table=lt2, verbose=False)
+        wds3 = w.data_source(log_table=lt3, verbose=False)
+
+        data_source_moduli(wds1, lt1, verbose=False)
+        data_source_moduli(wds2, lt2, verbose=False)
+        data_source_moduli(wds3, lt3, verbose=False)
+
+        rule1 = CutoffRule('phie', '>', Q_(0.1, ''))
+        rule2 = CutoffRule('vcl', '<', Q_(0.4, ''))
+        cutoffs = Cutoffs(cutoffs=[rule1, rule2])
+
+        tp = RockPhysicsPlotter({str(_s.name):_s for _s in [wds1, wds2, wds3]},
+                          cutoffs=cutoffs,
+                          working_intervals=None,
+                          )
+
+        d_cds = tp.cds
+
+        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis, style_table = tp.draw(d_cds)
+
+        rpt_table = RptVariableTable()
+        table_cds = rpt_table.cds
+
+        phi = Q_(np.linspace(0.05, 0.35, 4))
+        sw = [Q_(_x, '') for _x in [0.1, 0.5, 1.0]]
+        annotations = ['SW=0.1', 'SW=0.5', 'SW=1.0']
+        _vp, _vs, _rho = rpt_wrapper(phi, rpt_phi_sw, sw, return_rpt_keywords())
+        _dict = rpt_to_moduli(_vp, _vs, _rho, annotations)
+
+        rpt_lines_cds = ColumnDataSource(_dict)
+
+        rpt_dt, add_row, var_select, delete_row, update_table, rpt_lines_cds = rpt_table.draw(table_cds, rpt_lines_cds, t=phi, rpt=rpt_phi_sw, constants=sw, rpt_annotations=annotations)
+
+        # This doesn't work as intended. Add it to RockPhysicsPlotter
+        x_menu.value = 'ai'
+        y_menu.value = 'vp/vs'
+
+        xplot.multi_line(xs=x_menu.value, ys=y_menu.value, line_color='colors', line_width=3, legend_field='labels',
+                         source=rpt_lines_cds)
+
+        if unit_test:
+            show(
+                row(
+                    column(
+                        xplot,
+                        row(x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask)
+                    ),
+                    column(style_table,
+                           column(ct_guis[0], row(ct_guis[1], ct_guis[2], ct_guis[3])),  #,  ct_guis[4])),
+                           column(wis_guis[0])  # , wis_guis[1])
+                           )
+                )
+            )
+        else:
+            return (xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis, style_table,
+                    rpt_dt, add_row, var_select, delete_row, update_table)
+
+
