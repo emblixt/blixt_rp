@@ -153,6 +153,11 @@ class RptVariableTable:
         from bokeh.models import DataTable, Button, Div, Select
         from bokeh.plotting import column, row
 
+        if rpt_lines_cds is not None and (len(constants) != len(rpt_annotations)):
+            print_info('Annotations ({}) must have same length as Constants ({})'.format(
+                len(rpt_annotations) ,len(constants)),
+            'error', logger, 'IOError')
+
         rpt_params = list(_rpt_kwargs.keys())
         rpt_def_values = {_y: _x.magnitude if isinstance(_x, Q_) else _x for _y, _x in list(_rpt_kwargs.items())}
         # rpt_units = [str(_x.units) if isinstance(_x, Q_) else '' for _x in list(_rpt_kwargs.values())]
@@ -255,7 +260,7 @@ class RptVariableTable:
         add_row.on_click(add_row_function)
 
         variable_selector = Select(
-            title='Variable:',
+            # title='Variable:',
             value=rpt_params[0],
             options=rpt_params
         )
@@ -274,7 +279,7 @@ class RptVariableTable:
 def rpt_wrapper(
         t: Q_,
         rpt: Callable,
-        constants: list,
+        constants: Q_,
         rpt_keywords: dict
 ):
     """
@@ -297,8 +302,8 @@ def rpt_wrapper(
         def rpt(t, c, **rpt_keywords):
             return c*t + rpt_keywords.pop('zero_crossing', 0)
     :param constants:
-        list
-        list of length M of constants (pint quantities) used to parametrize the rpt function
+        Pint Quantity with a list of constants
+        list of length M of constants  used the parametrization the rpt function
     :param rpt_keywords:
         dict
         Dictionary with keywords passed on to the rpt function
@@ -347,9 +352,15 @@ def rpt_to_moduli(v_p: list, v_s: list, rho: list, annotations: list) -> dict:
         if _i == 0:
             for _key in moduli_keys:
                 _dict[_key] = [_moduli[_key]]
+            # Add the extra keys needed for the multi_line plot
+            for _key, _val in zip(['xs', 'ys'], ['ai', 'vp/vs']):
+                _dict[_key] = [_moduli[_val]]
         else:
             for _key in moduli_keys:
                 _dict[_key].append(_moduli[_key])
+            for _key, _val in zip(['xs', 'ys'], ['ai', 'vp/vs']):
+                _dict[_key].append(_moduli[_val])
+
         # add annotations and colors
         _dict['colors'].append(cnames[_i])
         _dict['labels'].append(annotations[_i])
@@ -481,7 +492,6 @@ def rpt_phi_sw(phi: Q_, sw: Q_, **kwargs):
     print_info(info_txt, 'info', logger)
 
     # Calculate the final fluid properties for the given water saturation
-    print(sw, k_b, k_hc)
     _k_f2 = rp.vrh_bounds([_sw, 1.-_sw], [_k_b, _k_hc])[1]  # K_f
     _rho_f2 = rp.vrh_bounds([_sw, 1.-_sw],  [_rho_b, _rho_hc])[0]  #RHO_f
 
@@ -663,7 +673,7 @@ class TestCases(unittest.TestCase):
         output_file(os.path.join(project_dir, 'blixt_rp\\results_folder\\plot.html'))
 
         phi = Q_(np.linspace(0.05, 0.35, 4))
-        sw = [Q_(_x, '') for _x in [0.1, 0.5, 1.0]]
+        sw = Q_([0.1, 0.5, 1.0], '')
         annotations = ['SW=0.1', 'SW=0.5', 'SW=1.0']
         _vp, _vs, _rho = rpt_wrapper(phi, rpt_phi_sw, sw, return_rpt_keywords())
         _dict = rpt_to_moduli(_vp, _vs, _rho, annotations)
@@ -680,7 +690,7 @@ class TestCases(unittest.TestCase):
         cds = table.cds
 
         phi = Q_(np.linspace(0.05, 0.35, 4))
-        sw = [Q_(_x, '') for _x in [0.1, 0.5, 1.0]]
+        sw = Q_([0.1, 0.5, 1.0], '')
         annotations = ['SW=0.1', 'SW=0.5', 'SW=1.0']
         _vp, _vs, _rho = rpt_wrapper(phi, rpt_phi_sw, sw, return_rpt_keywords())
         _dict = rpt_to_moduli(_vp, _vs, _rho, annotations)
