@@ -669,8 +669,7 @@ class TestCases(unittest.TestCase):
     def test_fluid_table(self):
         from bokeh.io import output_file
         from bokeh.plotting import show, row, column
-        # output_file('C:\\Users\\emb\\Downloads\\plot.html')
-        output_file('C:\\Users\\marte\\Downloads\\plot.html')
+        output_file(os.path.join(project_dir, 'blixt_rp\\results_folder\\plot.html'))
 
         all_fluids, fluid_mix = self.test_data()
         ft = FluidsTable(fluids=list(all_fluids.values()))
@@ -694,7 +693,7 @@ class TestCases(unittest.TestCase):
         project_table = os.path.join(file_dir, 'excels\\project_table_new.xlsx')
 
         las_file =  os.path.join(file_dir, 'test_data/Well A.las')
-        output_file('C:\\Users\\emb\\Downloads\\plot.html')
+        _output_file = os.path.join(file_dir, 'results_folder/plot.html')
 
         logs = {'vp_dry': 'P velocity', 'vp_so08': 'P velocity', 'vp_sg08': 'P velocity',
                 'vs_dry': 'S velocity', 'vs_so08': 'S velocity', 'vs_sg08': 'S velocity',
@@ -715,12 +714,12 @@ class TestCases(unittest.TestCase):
         w_dict = w1.dict(cutoffs=ct, use_cutoffs=True)
         # w_dict = w1.dict(cutoffs=ct, use_cutoffs=False)  # Now it creates and an extra parameter 'mask'
 
-        test = 'constants'  #'array'
+        test = 'array'  # 'constants'
         # Test with constant Vsh and constant Sw
         v_sh = 0.2
         s_w = 0.2
         if test == 'array':  # test with arrays of v_sh and s_w
-            # v_sh = w.block['Logs'].logs['vcl'].values[mask]
+            v_sh = w_dict['vcl'].magnitude
             # create a mock-up water saturation
             s_w = 0.2 + v_sh
             s_w[s_w > 1.0] = 1.0
@@ -760,18 +759,17 @@ class TestCases(unittest.TestCase):
             w_dict['phie'].magnitude)
         # Add fluid subst. logs to well
         depth = Depth(w_dict['dept'])
-        lc_vp = LogCurve('vp_hc', Q_(v_p_2, 'm/s'), depth, log_type='P velocity', style=deepcopy(w1.get_log_curve('vp_dry').style))
+        lc_vp = LogCurve('vp_so08', Q_(v_p_2, 'm/s'), depth, log_type='P velocity', style=deepcopy(w1.get_log_curve('vp_dry').style))
         w2.add_log(lc_vp)
-        lc_vs = LogCurve('vs_hc', Q_(v_s_2, 'm/s'), depth, log_type='S velocity', style=deepcopy(w1.get_log_curve('vs_dry').style))
+        lc_vs = LogCurve('vs_so08', Q_(v_s_2, 'm/s'), depth, log_type='S velocity', style=deepcopy(w1.get_log_curve('vs_dry').style))
         w2.add_log(lc_vs)
-        lc_rho = LogCurve('rho_hc', Q_(rho_2, 'g/cm**3'), depth, log_type='Density', style=deepcopy(w1.get_log_curve('rho_dry').style))
+        lc_rho = LogCurve('rho_so08', Q_(rho_2, 'g/cm**3'), depth, log_type='Density', style=deepcopy(w1.get_log_curve('rho_dry').style))
         w2.add_log(lc_rho)
         lc_depth = LogCurve('dept', Q_(depth.magnitude, depth.units), depth, log_type='MD')
         w2.add_log(lc_depth)
-        print(w2.get_log_names)
 
 
         xp = CrossPlotter({w.name: w.data_source() for w in [w1, w2]})
         cds = xp.cds
-        xp.show_plot(cds, out_file='C:/Users/emb/Downloads/plot.html')
+        xp.show_plot(cds, out_file=_output_file)
 

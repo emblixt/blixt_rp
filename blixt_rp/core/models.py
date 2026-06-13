@@ -1461,6 +1461,7 @@ class ModelTable:
                 else:
                     _vp[i_inds[i-1]:i_inds[i]] = this_vp.magnitude
                     _vs[i_inds[i-1]:i_inds[i]] = this_vs.magnitude
+                    print('XXX', _case, this_rho)
                     _rho[i_inds[i-1]:i_inds[i]] = this_rho.magnitude
 
             _twt = np.cumsum(2.0 * resolution.to('m').magnitude / _vp) + 1.0
@@ -2233,7 +2234,8 @@ class WedgeModel(LaminarModel):
         horizons_cds = self.model.horizons_cds(resolution=self.resolution)
 
         # Draw the outline of the wedge
-        for h_name in ['Top Top', 'Top Wedge', 'Top Bottom']:
+        # for h_name in ['Top Top', 'Top Wedge', 'Top Bottom']:
+        for h_name in ['Top Wedge', 'Top Bottom']:
             grid.children[0].children[2][0].scatter(x='x', y=h_name, marker='dash', source=horizons_cds, size=10)
 
         top_picker = Select(

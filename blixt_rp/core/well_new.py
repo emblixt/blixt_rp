@@ -311,26 +311,47 @@ class Well(object):
         else:
             self.logs.append(log_curve)
 
-    def harmonize_logs(self, down_sample: int | None = None):
+    def harmonize_logs(self, down_sample: int | None = None, enforce_evenly_spaced: bool = True, step: Q_ = Q_(0.1, 'm')):
         """
         Adjusts all logs to have the same length and sample rate
+        :param down_sample:
+            int
+            If set, only every 'down_sample' data item is kept.
+        :param enforce_evenly_spaced:
+            bool
+            If the longest, or none, LogCurve is evenly sampled, then this ensures that the
+            data becomes evenly sampled (if set to True)
+        :param step:
+            pint Quantity
+            The step length used in the interpolation when we enforce even sampling
         :return:
+            Nothing, the logs of the well are modified
         """
         _harmonized_logs = []
         _longest = None
         _longest_length = Q_(0, 'm')
+
+        # Find the longest log
         for _log in self.logs:
-            # TODO MAKE SURE THE TEST OF is_evenly_spaced WORKS!
-            # IT DOES, BUT MAYBE IT IS TO STRONG? Creates problems after applying cutoffs
+
             delta =_log.base - _log.top
-            if delta > _longest_length and _log.is_evenly_spaced:
+
+            if delta > _longest_length:
                 _longest = _log
                 _longest_length = delta
+
+        if not _longest.is_evenly_spaced:
+            if not enforce_evenly_spaced:
+                print_info('Can not harmonize logs based on a log which is unevenly spaced: {}'.format(_longest.name),
+                           'error', logger, 'IOError')
+            else:
+                _longest.make_evenly_spaced(step)
 
         # Down sample the longest log, then the rest will be down sampled too
         if down_sample is not None:
             _temp = _longest.down_sample(step=down_sample, suffix=None)
             _longest = _temp
+
 
         for _log in self.logs:
             if _log.name == _longest.name:

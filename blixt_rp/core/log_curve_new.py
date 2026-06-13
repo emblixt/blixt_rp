@@ -244,9 +244,8 @@ class LogCurve(object):
         elif isinstance(style, dict):
             style = Template(**style)
         elif isinstance(style, Template):
+            # This case is handled later in init()
             pass
-            # Continues later in init()
-            # self._style = style
         else:
             raise TypeError('style must be either a dict or a Template, not {}'.format(type(style)))
 
@@ -599,6 +598,37 @@ class LogCurve(object):
             style=self.style
         )
 
+    def make_evenly_spaced(self, step):
+        """
+        Interpolates the LogCurve so that it becomes evenly sampled with a step length of step
+        :param step:
+            pint Quantity
+        :return:
+            Nothing
+            It modifies the original LogCurve
+        """
+        old_x = self.depth.values
+        old_y = self.values
+
+        # create a new depth parameter which is evenly sampled with given step size
+        new_x = np.arange(
+            self.depth.values[0],
+            self.depth.values[-1],
+            step.to(self.depth.units).magnitude
+        )
+
+        # Do the interpolation
+        new_y = _interpolate(old_x, old_y, new_x)
+
+        # Replace the original data in the LogCurve
+        replace_data(self,
+                     log_data=Q_(new_y, self.units),
+                     depth=Depth(Q_(new_x, self.depth.units)),
+                     overwrite=True,
+                     info_txt='Resampled to match the given step {}'.format(str(step))
+                     )
+
+
     def take_sampling_from(self, log_curve, suffix: str | None = 'resampled', verbose=False):
         """
         Interpolates the data to match the depth parameter (sampling) of input log_curve,
@@ -619,13 +649,6 @@ class LogCurve(object):
         if self.depth_type != log_curve.depth_type:
             raise ValueError('The two depth formats (depth_type) are not the same: {} != {}'.format(
                 self.depth_type, log_curve.depth_type))
-
-        # # Create copy of original that we will modify
-        # result = self.copy(suffix='')
-        #
-        # # If depth_units doesn't match convert to the units of the input log_curve
-        # if result.depth_units != log_curve.depth_units:
-        #     result.convert_depth_to(log_curve.depth_units)
 
         # Do the interpolation
         old_x = self.depth.values

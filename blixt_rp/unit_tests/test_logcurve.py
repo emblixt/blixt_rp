@@ -102,6 +102,21 @@ class LogCurveTestCase(unittest.TestCase):
         print(lc.units)
         print(lc.get_line().min, lc.get_line().max, lc.get_line().x_range)
 
+    def test_make_evenly_sampled(self):
+        lc = LogCurve(
+            'test',
+            data2,
+            Depth(depth2)
+        )
+        print('Before interpolation:')
+        print('  ', lc.is_evenly_spaced, lc.header.modification_history, len(lc))
+        print('  ', lc.data[:3], lc.depth.values[:3])
+
+        lc.make_evenly_spaced(Q_(0.1, 'meter'))
+        print('After interpolation:')
+        print('  ', lc.is_evenly_spaced, lc.header.modification_history, len(lc))
+        print('  ', lc.data[:3], lc.depth.values[:3])
+
     def test_unit_convert_using_style(self):
         # This should fail, and raise warning, because the data pair has units us/ft,
         # which can't be converted to 'kg' which the # style asks for

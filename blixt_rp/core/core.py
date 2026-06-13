@@ -1933,6 +1933,12 @@ class LithoFluid:
             thickness = Q_(thickness, 'm')
         return Layer(name, case, color, thickness, self)
 
+    def fluid_sub(self):
+        # TODO
+        # new method that should return a new LithoFluid where the vp, vs and rho values are updated from the
+        # original using a given fluid substitution
+        pass
+
 
 class LithoFluids:
     """
