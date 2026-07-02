@@ -4,7 +4,6 @@ import pandas as pd
 import os, sys
 import matplotlib.pyplot as plt
 from bokeh.models import ColumnDataSource
-from pint import Quantity as Q_
 from bokeh.plotting import show
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
@@ -12,6 +11,7 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_te
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 # sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
+from blixt_rp import Q_
 from blixt_rp.core.core import (Interval, StratUnit, Intervals, Template, Header, CutoffRule, Cutoffs, LogTable,
                                 templates_from_table)
 
@@ -32,7 +32,9 @@ rule3 = CutoffRule('name3', '==', Q_(1000, 'm'))
 rule4 = CutoffRule('name4', None, 'my_interval')
 rule5 = CutoffRule('name5', '><', [Q_(10, 'm'), Q_(1000, 'm')])
 rule6 = CutoffRule('P velocity', '><', [Q_(10, 'm/s'), Q_(1000, 'm/s')])
-rule7 = CutoffRule('Density', '><', [Q_(1.5, 'gr/cm**3'), Q_(2.5, 'gr/cm**3')])
+rule7 = CutoffRule('Density', '><', [Q_(1.5, 'G/cc'), Q_(2.5, 'G/cc')])
+rule8 = CutoffRule('Porosity', '==', Q_(0.3, ''))
+rule9 = CutoffRule('Porosity', '<', Q_(0.35, 'dimensionless'))
 
 log_table = {
     'P velocity': 'vp',
@@ -75,8 +77,17 @@ class CutoffTests(unittest.TestCase):
         self.assertRaises(IOError, CutoffRule, param='', operator='XXX', limit=4)
 
     def test_print_rules(self):
-        for rule in [rule1, rule2, rule3, rule4, rule5]:
+        for rule in [rule1, rule2, rule3, rule4, rule5, rule6, rule7, rule8, rule9]:
             print(rule)
+
+    def test_from_string(self):
+        for rule in [rule1, rule2, rule3, rule4, rule5, rule6, rule7, rule8, rule9]:
+            new_rule = CutoffRule(from_string=str(rule))
+            print(rule, new_rule)
+
+        string = "VCL>0.8[], PHIE<0.1[], vp><[2000, 4000][m/s], interval:Heather FM[]"
+        cutoffs = Cutoffs(from_string=string)
+        print(cutoffs)
 
     def test_failed_init(self):
         cutoffs = Cutoffs
@@ -446,6 +457,35 @@ class HeaderTestCase(unittest.TestCase):
 
 
 class LithoFluidTests(unittest.TestCase):
+
+    def litho_fluids(self):
+        """
+        Create a set of useful litho-fluids
+        :return:
+        """
+        from blixt_rp.core.core import LithoFluid
+        lf1 = LithoFluid(None, 3440., 2170., 2.17)
+        lf2 = LithoFluid('Oseberg SST', 3400., 2050., 2.21)
+        lf3 = LithoFluid('Fluid sub. problem', 3200., 2050., 2.21)
+
+        return lf1, lf2, lf3
+
+    def test_fluid_sub(self):
+        for lf in self.litho_fluids():
+            lf_hc = lf.fluid_sub(verbose=True)
+            # print(lf_hc.name, lf_hc.vp.magnitude, lf_hc.vs.magnitude, lf_hc.rho.magnitude)
+        # In RokDoc we have the following results for these values:
+        #  lf1 -> 80% oil: 3311.	2194.	2.12
+        #  lf1 -> 100% gas: 3274.	2305.	1.92
+        #  lf2 -> 80% oil: 3269.	2070.	2.17
+        #  lf3 -> 80% oil: Fails because of K_dry
+        lf = self.litho_fluids()[0]
+        lf_gas = lf.fluid_sub(s_w2=Q_(0., ''), hc=dict(rho=Q_(0.15, 'G/cc'), k=Q_(0.037, 'GPa')), verbose=True)
+        # print('Gas: ', lf_gas.name, lf_gas.vp.magnitude, lf_gas.vs.magnitude, lf_gas.rho.magnitude)
+        lf_heavy_oil = lf.fluid_sub(hc=dict(rho=Q_(1.1, 'G/cc'), k=Q_(2.757, 'GPa')), verbose=True)
+        # print('Heavy oil: ', lf_heavy_oil.name, lf_heavy_oil.vp.magnitude, lf_heavy_oil.vs.magnitude, lf_heavy_oil.rho.magnitude)
+
+
     def test_2d_lf(self):
         from blixt_rp.core.core import LithoFluid
         def vp(_i):

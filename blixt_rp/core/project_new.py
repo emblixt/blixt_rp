@@ -154,7 +154,7 @@ class Project(object):
     def get_well_names(self):
         return [_well.name for _well in self.wells]
 
-    def get_well(self, name):
+    def get_well(self, name: str):
         for _well in self.wells:
             if _well.name.lower() == name.lower():
                 return _well
@@ -286,7 +286,7 @@ class Project(object):
                 # Force name of well to be that given in the project_table, and not given by the las file
                 w.name = result[_key]['Given well name']
 
-            elif uio.filetype(_key) in ['txt', 'dat', 'ascii', 'asc']:
+            elif uio.filetype(_key) in ['txt', 'dat', 'ascii', 'asc', 'dev', 'cs']:
                 var_names = list(result[_key]['logs'].keys())
                 var_columns = [result[_key]['columns'][_var] for _var in var_names]
                 var_units = [result[_key]['units'][_var] for _var in var_names]
@@ -303,6 +303,8 @@ class Project(object):
                 )
                 w.name = result[_key]['Given well name']
                 w.header.note = result[_key]['Note']
+            else:
+                print_info('File {} is of unknown format. Skipped'.format(_key), 'warning', logger)
 
             if w.logs is not None:
                 self.add_well(w, if_well_exists=if_well_exists, if_log_exists=if_log_exists)

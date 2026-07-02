@@ -32,6 +32,8 @@ class UnitsTestCase(unittest.TestCase):
 
         pct1 = Q_(50., 'pct')
         print(pct1.magnitude, pct1.to('dimensionless'))
+        frac = Q_(0.5, '')
+        print(frac.magnitude, frac.to('dimensionless'), frac.to('dimensionless').magnitude)
         print('Convert 0.1 to percent: ', Q_(0.1, '').to('percent'))
 
         rho = Q_(10., 'G/cc')

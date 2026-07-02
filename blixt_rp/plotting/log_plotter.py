@@ -240,7 +240,7 @@ class LogPlotter:
             One common CDS for all line objects in the plot.
             Must have a field called 'mask'
             To create a cutoff, the mask can be dependent on the data in the other columns too.
-            To make this work, we need to a CDS which is common for all Lines in the LogPlotter
+            To make this work, we need to have a CDS which is common for all Lines in the LogPlotter
         :param cutoffs:
             Cutoffs
             Object containing the rules used for masks and classification

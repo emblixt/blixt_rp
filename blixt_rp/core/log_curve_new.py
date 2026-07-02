@@ -286,7 +286,7 @@ class LogCurve(object):
         # If the style Template contains a unit, which is not None, then we should convert the data to this
         # unit if it is not already using those units.
         if style.units is not None:
-            # print('XXX Units in template is {}'.format(style.units))
+            # print('XXX Units in template for {} is {}, while units in las file is {}'.format(name, style.units, self.data.units))
             if not is_equivalent(self.data.units, ureg.Unit(style.units)):
                 # print(' XXX Units are not the same, try to convert')
                 try:
@@ -1427,7 +1427,8 @@ def read_las(file_name: str, verbose: bool = False, encoding: str = 'UTF8',
             )
             print_info(warn_txt, 'warning', logger)
             continue
-        if (data_units is None) or (data_units == ''):
+        # if (data_units is None) or (data_units == ''):
+        if data_units is None:
             warn_txt = 'No valid data unit was found in {} for data key {}. Skipping reading it'.format(
                 os.path.basename(file_name), _key
             )
@@ -1557,6 +1558,9 @@ def fix_units_for_pint(unit):
         unit = unit.replace('_', ' ')
 
     if unit == 'unitless':
+        unit = 'dimensionless'
+
+    if unit == '':
         unit = 'dimensionless'
 
     return unit
@@ -1828,13 +1832,17 @@ def replace_data(
     return output
 
 
-def is_equivalent(first: pint.Unit, second: pint.Unit) -> bool:
+def is_equivalent(first: pint.Unit, second: pint.Unit, verbose: bool = False) -> bool:
     """
     Test if two units are equivalent
     :param first:
     :param second:
     :return:
     """
+    # verbose = True
+    if verbose:
+        from blixt_utils.utils import print_info
+        print_info('Testing if the units {} and {} are equivalent'.format(first, second), 'info', logger)
     try:
         factor = ureg.convert(1, first, second)
     except pint.DimensionalityError:

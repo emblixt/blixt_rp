@@ -524,7 +524,7 @@ class Layer:
                  name: str | None = None,
                  case: str | None = None,
                  color: str | None  = '#D9D9D9',
-                 thickness: Q_ | Callable[[int], Q_] |  None = None,
+                 thickness: pint.Quantity | Callable[[int], pint.Quantity] |  None = None,
                  litho_fluid: LithoFluid | None = None,
                  ntg=None,
                  **kwargs
@@ -753,7 +753,7 @@ class Model:
     """
 
     def __init__(self,
-                 depth_to_top: Q_ | None = None,
+                 depth_to_top: pint.Quantity | None = None,
                  layers: list | None = None,
                  trace_index_range=None,
                  name: str | None = None):
@@ -1014,7 +1014,7 @@ class Model:
                 return _layer
         return base_case_layer
 
-    def total_thickness(self) -> Q_ | None:
+    def total_thickness(self) -> pint.Quantity | None:
         """
         Returns the total thickness of the model.
         NOTE. Only sums up the thickness of base case layers
@@ -1088,7 +1088,7 @@ class Model:
 
         return _list
 
-    def horizons_cds(self, resolution: Q_ | None = None) -> ColumnDataSource:
+    def horizons_cds(self, resolution: pint.Quantity | None = None) -> ColumnDataSource:
         """
         Returns ColumnDataSource (cds) with the top depths of each layer in the model
 
@@ -1098,7 +1098,7 @@ class Model:
 
         :return:
         """
-        print('XXX', [self.layers[_i].name for _i in self.base_case_layers])
+        # print('XXX', [self.layers[_i].name for _i in self.base_case_layers])
         _dict = {'Top {}'.format(self.layers[_i].name): [] for _i in self.base_case_layers}
         if resolution is not None:
             depths = self.depth_array(resolution)
@@ -1461,7 +1461,11 @@ class ModelTable:
                 else:
                     _vp[i_inds[i-1]:i_inds[i]] = this_vp.magnitude
                     _vs[i_inds[i-1]:i_inds[i]] = this_vs.magnitude
-                    print('XXX', _case, this_rho)
+                    # TODO
+                    # Sometimes I get a
+                    #    "TypeError: float() argument must be a string or a real number, not 'datetime.datetime'"
+                    # here. But when I first write it out, it doesn't occur??!!
+                    # print('XXX1', _case, i, j, this_rho)
                     _rho[i_inds[i-1]:i_inds[i]] = this_rho.magnitude
 
             _twt = np.cumsum(2.0 * resolution.to('m').magnitude / _vp) + 1.0
@@ -1650,7 +1654,7 @@ class LaminarModel:
     def __init__(self,
                  model: Model | None = None,
                  litho_fluids: LithoFluids | None = None,
-                 resolution: Q_ | None = None,
+                 resolution: pint.Quantity | None = None,
                  wavelet: dict | None = None,
                  avo_or_eei: str | None = None,
                  **kwargs
@@ -1696,7 +1700,7 @@ class LaminarModel:
         if resolution is None:
             resolution = Q_(0.1, 'm')
         self.resolution = resolution
-        self.dt = kwargs.pop('dt', Q_(1., 'millisecond'))
+        self.dt = kwargs.pop('dt', Q_(0.1, 'millisecond'))
         self.freq = kwargs.pop('freq', 20.)
         self.lf_width = kwargs.pop('lf_width', 300)
         self.model_width = kwargs.pop('model_width', None)
@@ -2132,10 +2136,12 @@ class WedgeModel(LaminarModel):
     def __init__(self,
                  litho_fluids: LithoFluids | None = None,
                  top_layers: list | None = None,
-                 resolution: Q_ | None = None,
-                 depth_to_top: Q_ | None = None,
-                 min_thickness: Q_ | None = None,
-                 max_thickness: Q_ | None = None,
+                 mid_layers: list | None = None,
+                 base_layers: list | None = None,
+                 resolution: pint.Quantity | None = None,
+                 depth_to_top: pint.Quantity | None = None,
+                 min_thickness: pint.Quantity | None = None,
+                 max_thickness: pint.Quantity | None = None,
                  n_traces: int | None = None,
                  **kwargs
                  ):
@@ -2144,15 +2150,23 @@ class WedgeModel(LaminarModel):
 
         :param litho_fluids:
             LithoFluids
-            Need to contain at least 3 LithoFluids for the set up to work smoothly.
-                1 for the top and base
-                1 for the wedge
-                and 1 for the variant of the wedge
-        : param top_layers:
+            Need to contain at least 3 LithoFluids for the set-up to work smoothly.
+                One for the top and base
+                One for the wedge
+                and One for the variant of the wedge
+        :param top_layers:
             list
             Optional
             List of model layers (of type Layer) that builds a more complex overburden than the default
             "Top" layer.
+        :param mid_layers:
+            list
+            Optional
+            List of model layers that are situated between the upper and lower wedge
+        :param base_layers:
+            list
+            Optional
+            List of model layers that are situated below the lower wedge
         :param resolution:
         :param depth_to_top:
         :param min_thickness:
@@ -2187,7 +2201,10 @@ class WedgeModel(LaminarModel):
             return min_thickness + (max_thickness - min_thickness) * i / (n_traces - 1)
 
         def reverse_wedge(i):
-            return top_thickness + (max_thickness - min_thickness) - (max_thickness - min_thickness) * i / (n_traces - 1)
+            if base_layers is None:
+                return top_thickness + (max_thickness - min_thickness) - (max_thickness - min_thickness) * i / (n_traces - 1)
+            else:
+                return (max_thickness - min_thickness) - (max_thickness - min_thickness) * i / (n_traces - 1)
 
         #
         # Create the layers that define the model
@@ -2196,17 +2213,42 @@ class WedgeModel(LaminarModel):
         layer2 = Layer(name='Wedge', thickness=wedge, litho_fluid=litho_fluids.litho_fluids[1])
         layer2_variant = Layer(name='Wedge', case='Perturb', thickness=wedge, litho_fluid=litho_fluids.litho_fluids[2])
         layer3 = Layer(name='Bottom', thickness=reverse_wedge, litho_fluid=litho_fluids.litho_fluids[0])
-        if top_layers is not None:
-            layers = top_layers + [layer2, layer2_variant, layer3]
-        else:
-            layers = [layer1, layer2, layer2_variant, layer3]
+        # if top_layers is None:
+        #     if mid_layers is None:
+        #         if base_layers is None:
+        #             layers = [layer1, layer2, layer2_variant, layer3]
+        #         else:
+        #             layers = [layer1, layer2, layer2_variant, layer3] + base_layers
+        #     else:
+        #         if base_layers is None:
+        #             layers = [layer2, layer2_variant] + mid_layers +  [layer3]
+        #         else:
+        #             layers = [layer2, layer2_variant] + mid_layers +  [layer3] + base_layers
+        # else:
+        #     if mid_layers is None:
+        #         if base_layers is None:
+        #             layers = top_layers + [layer2, layer2_variant, layer3]
+        #         else:
+        #             layers = top_layers + [layer2, layer2_variant, layer3] + base_layers
+        #     else:
+        #         if base_layers is None:
+        #             layers = top_layers + [layer2, layer2_variant] + mid_layers +  [layer3]
+        #         else:
+        #             layers = top_layers + [layer2, layer2_variant] + mid_layers +  [layer3] + base_layers
+        if top_layers is None:
+            top_layers = [layer1]
+        if mid_layers is None:
+            mid_layers = []
+        if base_layers is None:
+            base_layers = []
+        layers = top_layers + [layer2, layer2_variant] + mid_layers +  [layer3] + base_layers
 
         model = Model(layers=layers,
                       depth_to_top=depth_to_top,
                       trace_index_range=np.arange(n_traces)
                       )
         super().__init__(
-            model=model, litho_fluids=litho_fluids, resolution=resolution
+            model=model, litho_fluids=litho_fluids, resolution=resolution, **kwargs
         )
 
     def draw(self):

@@ -112,7 +112,7 @@ class RptVariableTable:
     def draw(self,
              cds: ColumnDataSource,
              rpt_lines_cds: ColumnDataSource | None = None,
-             t: Q_ | None = None,
+             t: pint.Quantity | None = None,
              rpt: Callable | None = None,
              constants: list | None = None,
              rpt_annotations: list | None = None

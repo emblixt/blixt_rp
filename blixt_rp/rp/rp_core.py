@@ -217,7 +217,6 @@ def eei(vp, vs, rho, vp0=None, vs0=None, rho0=None, k=None):
         )
     return func
 
-
 def v_p(k, mu, rho):
     return np.sqrt(
         (k + 4. * mu / 3.) / rho)
@@ -228,8 +227,18 @@ def v_s(mu, rho):
 
 
 def k_from_v(vp, vs, rho):
-    return rho * (vp**2 - 4. * vs**2 / 3.)
+    """
 
+    :param vp:
+        km/s
+    :param vs:
+        km/s
+    :param rho:
+        gram/cm3
+    :return:
+        GPa
+    """
+    return rho * (vp**2 - 4. * vs**2 / 3.)
 
 def k_dry(_k_sat, _k_min, _k_fluid, _phi):
     """
@@ -250,6 +259,71 @@ def k_dry(_k_sat, _k_min, _k_fluid, _phi):
     _c = _k_fluid / (_phi * (_k_min - _k_fluid))
     return _k_min / ((1. / (_a - _c)) + 1)
 
+def k_dry_ratio_from_gassmann(_k_sat, _k_min, _k_fluid, _phi):
+    """
+    Compute x = k_dry / _k_min using Gassmann, vectorized.
+
+    From CoPilot
+
+    isolates frame stiffness ratio x = k_dry/k_min
+    removes explicit dependence on k_dry
+    is numerically stable for inversion/QC
+
+    Nice limiting checks
+
+    phi -> 0 -> x -> 1 (solid rock)
+    k_fluid -> 0 -> x -> k_sat / k_min
+    soft frame → small x
+
+    Parameters
+    ----------
+    _k_sat : array_like
+        Saturated bulk modulus
+    _k_min : float or array_like
+        Mineral bulk modulus
+    _k_fluid : float or array_like
+        Fluid bulk modulus
+    _phi : array_like
+        Porosity (fraction, not %)
+
+    Returns
+    -------
+    x : ndarray
+        k_dry / _k_min (same shape as inputs)
+    """
+
+    _k_sat = np.asarray(_k_sat, dtype=float)
+    _k_min   = np.asarray(_k_min, dtype=float)
+    _k_fluid   = np.asarray(_k_fluid, dtype=float)
+    _phi  = np.asarray(_phi, dtype=float)
+
+    # Avoid division issues
+    eps = 1e-12
+    _phi = np.clip(_phi, eps, 1.0)
+
+    # Define A term
+    A = _k_fluid / (_phi * _k_min)
+
+    # Coefficients of quadratic: a x^2 + b x + c = 0
+    a = _k_min
+    b = -(_k_sat + (_k_min - _k_sat) * A)
+    c = (_k_min - _k_sat) * A
+
+    # Discriminant
+    D = b**2 - 4 * a * c
+    D = np.maximum(D, 0.0)  # numerical safety
+
+    sqrtD = np.sqrt(D)
+
+    # Two roots
+    x1 = (-b + sqrtD) / (2 * a)
+    x2 = (-b - sqrtD) / (2 * a)
+
+    # Select physically valid root: 0 < x < 1
+    # Prefer the one within bounds; fall back safely
+    x = np.where((x1 > 0) & (x1 < 1), x1, x2)
+
+    return x
 
 def k_sat(_k_dry, _k_min, _k_fluid, _phi):
     """
@@ -1109,7 +1183,7 @@ def toc_from_delta_log_r(deltalogr, lom, a=None, b=None):
     )
 
 
-def gassmann_vel(vp_1, vs_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
+def gassmann_vel(vp_1, vs_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k_min, phi):
     """
     Gassmann fluid substitution with velocity and density as input and output, following the
     recipe in chapter 1.3.1 of Avseth et. al 2011
@@ -1132,10 +1206,10 @@ def gassmann_vel(vp_1, vs_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
         float
         Density of fluid 1 [2] in [g/cm3]
         rho_f = s_w*rho_b + s_o*rho_o + s_g*rho_g
-    :param k0:
+    :param k_min:
         float
         Mineral bulk modulus [GPa]
-    :param por:
+    :param phi:
         np.array
         Porosity
     """
@@ -1143,8 +1217,8 @@ def gassmann_vel(vp_1, vs_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
     # Allow a mask to only do the fluid substitution where the mask is True
 
     # Avoid low porosity points
-    if isinstance(por, np.ndarray):  # when input is an array
-        por[por < 7E-3] = 7E-3
+    if isinstance(phi, np.ndarray):  # when input is an array
+        phi[phi < 7E-3] = 7E-3
 
     # Extract the initial bulk and shear modulus from vp_1, vs_1 and rho_1
     mu_1 = rho_1 * vs_1**2 * 1E-6  # GPa
@@ -1152,12 +1226,12 @@ def gassmann_vel(vp_1, vs_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
     k_1 = rho_1 * vp_1**2 * 1E-6 - (4/3.)*mu_1  # GPa
 
     # Apply Gassmann's relation to transform the bulk modulus
-    a = k_1/(k0 - k_1) + (k_f2/(k0 - k_f2) - k_f1/(k0-k_f1))/por
-    # a = gassmann_a(k_1, k0, k_f1, k_f2, por)
-    k_2 = k0*a / (1.+a)  # GPa
+    a = k_1/(k_min - k_1) + (k_f2/(k_min - k_f2) - k_f1/(k_min-k_f1))/phi
+    # a = gassmann_a(k_1, k_min, k_f1, k_f2, phi)
+    k_2 = k_min*a / (1.+a)  # GPa
 
     # Correct the bulk density for the fluid change
-    rho_2 = rho_1 + por*(rho_f2 - rho_f1)  # g/cm3
+    rho_2 = rho_1 + phi*(rho_f2 - rho_f1)  # g/cm3
 
     # Leave the shear modulus unchanged
     mu_2 = mu_1  # GPa
@@ -1169,22 +1243,22 @@ def gassmann_vel(vp_1, vs_1, rho_1, k_f1, rho_f1, k_f2, rho_f2, k0, por):
     return vp_2, vs_2, rho_2, k_2
 
 
-def gassmann_a(_k1, _k0, _k_f1, _k_f2, _por):
+def gassmann_a(_k1, _k_min, _k_f1, _k_f2, _phi):
     """
 
     :param _k1:
         Initial saturated rock bulk modulus
-    :param _k0:
+    :param _k_min:
         Mineral bulk modulus
     :param _k_f1:
         Initial fluid bulk modulus
     :param _k_f2:
         Final fluid bulk modulus
-    :param _por:
+    :param _phi:
         porosity
     :return:
     """
-    return _k1/(_k0 - _k1) + (_k_f2/(_k0 - _k_f2) - _k_f1/(_k0-_k_f1))/_por
+    return _k1/(_k_min - _k1) + (_k_f2/(_k_min - _k_f2) - _k_f1/(_k_min-_k_f1))/_phi
 
 
 def vels(_k_dry, _mu_dry, _k_min, _rho_min, _k_fluid, _rho_fluid, _phi):
@@ -1225,6 +1299,8 @@ def linear_brine_elastics():
 
 def run_fluid_sub(wells, log_table, mineral_mix, fluid_mix, cutoffs, working_intervals, tag,
                   templates=None, block_name=None, log_type_input=True):
+    # TODO This is the old fluid substitution method. Will be replaced by run_fluid_substitution() in
+    #  fluid_substitution.py
     """
     Run fluid substitution using the defined fluids and minerals given in mineral_mix and fluid_mix, and only for the
     wells where they have been defined.

@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 
 
 class LogTable(dict):
+    """
+    Creates the mapping between a log type (e.g. 'P velocity') and a specific log (e.g. 'vp_oil')
+    """
     def __init__(self,
                  log_table: dict | None = None,
                  name: str | None = None
@@ -230,10 +233,11 @@ class CutoffRule:
     >      array([8, 9])
     """
     def __init__(self,
-                 param: str,
-                 operator: str | None,
-                 limit: pint.Quantity | list | str,
-                 name: str | None = None):
+                 param: str | None = None,
+                 operator: str | None = None,
+                 limit: pint.Quantity | list | str | None = None,
+                 name: str | None = None,
+                 from_string: str | None = None):
         """
 
         :param param:
@@ -248,6 +252,9 @@ class CutoffRule:
             '><': masked_inside
             '==': masked_equal
             '!=': masked_not_equal
+
+            When the operator is None, and limit is a str, the CutoffRule refers to a specific Interval
+
         :param limit:
             pint.Quantity | list | str
             If limit is a string, the CutoffRule becomes an interval cutoff, where the string is the name of
@@ -255,6 +262,12 @@ class CutoffRule:
         :param name:
             Name of the rule
             Useful for classifying data according to a set of rules sharing the same name
+        :param from_string:
+            str
+            Interpret a string, following the same rules as the built-in __str__ method
+            E.G.: "P velocity><[10, 1000][m/s]"
+            Is over-ruled by param, operator and limit
+
         """
         from blixt_utils.utils import print_info
         raise_unit_error = False
@@ -263,45 +276,98 @@ class CutoffRule:
         # instantiate 'param'
         self.param = param
 
+        # over-rule from_string whenever param is set
+        if param is not None:
+            from_string = None
+
         self.__name__ = name
         self.name = name
 
-        # instantiate 'operator'
-        if operator is None and not isinstance(limit, str):
-            error_txt = 'If no operator is provided, the limit must be the name of an interval, not {}'.format(limit)
-            print_info(error_txt, 'error', logger=logger, raiser='IOError')
-        if isinstance(operator, str):
-            if operator not in [ '<', '<=', '>', '>=', '><', '==', '!=']:
-                error_txt = 'Could not match "{}" with any valid operator'.format(operator)
+        # Only check the operator and the limits if param is given
+        if param is not None:
+            # instantiate 'operator'
+            if operator is None and not isinstance(limit, str):
+                error_txt = 'If no operator is provided, the limit must be the name of an interval, not {}'.format(limit)
                 print_info(error_txt, 'error', logger=logger, raiser='IOError')
+            if isinstance(operator, str):
+                if operator not in [ '<', '<=', '>', '>=', '><', '==', '!=']:
+                    error_txt = 'Could not match "{}" with any valid operator'.format(operator)
+                    print_info(error_txt, 'error', logger=logger, raiser='IOError')
+
+
+            # instantiate 'limit'
+            if isinstance(limit, list):
+                for _item in limit:
+                    if not isinstance(_item, pint.Quantity):
+                        raise_unit_error = True
+            elif isinstance(limit, str):
+                self.interval_cutoff = True
+            elif not isinstance(limit, pint.Quantity):
+                raise_unit_error = True
+            if raise_unit_error:
+                error_txt = 'Limits must be provided as a pint.Quantity (has units)'
+                print_info(error_txt, 'error', logger=logger, raiser='IOError')
+        else:
+            operator = None
+            limit = None
 
         self.operator = operator
-
-        # instantiate 'limit'
-        if isinstance(limit, list):
-            for _item in limit:
-                if not isinstance(_item, pint.Quantity):
-                    raise_unit_error = True
-        elif isinstance(limit, str):
-            self.interval_cutoff = True
-        elif not isinstance(limit, pint.Quantity):
-            raise_unit_error = True
-        if raise_unit_error:
-            error_txt = 'Limits must be provided as a pint.Quantity (has units)'
-            print_info(error_txt, 'error', logger=logger, raiser='IOError')
-
         self.limit = limit
+
+        if isinstance(from_string, str):
+            # Remember structure: "P velocity><[10, 1000][m/s]" OR "Porosity<0.35[]"
+            o = None  # operator
+            p = None  # parameter
+            l = None  # limit(s)
+            u = None  # units
+            for operator in [ '<=', '>=', '><', '==', '!=', '>', '<', ':']:
+                # Try to split the string using one of the approved operators
+                _split = from_string.split(operator)  # returns a list
+                if len(_split) == 2:
+                    p = _split[0]
+                    o = operator
+                    rest = _split[1]
+                    _split2 = rest.split('][')  # If successful, the limits are a list (with units)
+                    if len(_split2) == 2:
+                        l = _split2[0].lstrip('[').split(',')
+                        u = _split2[1].rstrip(']')
+                    else:  # Limits are a value, then with a unit within square brackets
+                        _split3 = rest.split('[')
+                        l = _split3[0]
+                        u = _split3[1].rstrip(']')
+
+                    break
+            self.param = p.strip()
+            if o == ':':  # case of intervals as limit
+                self.operator = None
+            else:
+                self.operator = o
+            if isinstance(l, list):
+                _l = [Q_(float(_x), u) for _x in l]
+            else:
+                try:
+                    _l = Q_(float(l), u)
+                except ValueError:
+                    _l = l
+            self.limit = _l
+            # print(p, o, _l, u)
+
 
     def __str__(self):
         _param = '' if self.param is None else self.param
         _operator = '' if self.operator is None else self.operator
+        _units = ''
         if isinstance(self.limit, list):
-            _limits = '[{}]'.format(' ,'.join([str(m.magnitude) for m in self.limit]))
+            _limits = '[{}]'.format(', '.join([str(m.magnitude) for m in self.limit]))
+            _units = str(self.limit[0].units)
         elif isinstance(self.limit, pint.Quantity):
             _limits = str(self.limit.magnitude)
+            _units = str(self.limit.units)
+        elif isinstance(self.limit, str):  # The case when we use Intervals to define a CutoffRule
+            _limits = ':{}'.format(self.limit)
         else:
             _limits = self.limit
-        return '{}: {} {}'.format( _param, _operator, _limits)
+        return '{}{}{}[{}]'.format( _param, _operator, _limits, _units)
 
 
 class ClassificationTable:
@@ -669,19 +735,45 @@ class ClassificationTable:
 class Cutoffs:
     def __init__(self,
                  cutoffs: list | None = None,
-                 name: str | None = None
+                 name: str | None = None,
+                 from_string: str | None = None
                  ):
         """
 
         :param name:
         :param cutoffs:
             List of CutOffRules
+        :param from_string:
+            str
+            Interpret a string,
+            E.G.: "VCL>0.8[], PHIE<0.1[], vp><[2000, 4000][m/s], interval:Heather FM[]"
+
+            Is over-ruled by cutoffs when it is set
         """
+        import re
         from blixt_utils.utils import print_info
         self.name = name
-        if cutoffs is None:
+
+        # over-rule from_string when cutoffs are set
+        if cutoffs is not None:
+            from_string = None
+        else:
             cutoffs = []
+
         cutoff_names = []
+
+        # Interpret the from_string to create cutoff rules
+        if isinstance(from_string, str):
+            #  To find a comma that is NOT within square brackets
+            pattern = r',(?=(?:[^\[\]]*\[[^\[\]]*\])*[^\[\]]*$)'
+            parts = re.split(pattern, from_string)
+            # print("Split result:", [p.strip() for p in parts])
+            for p in parts:
+                cutoffs.append(
+                    CutoffRule(from_string=p)
+                )
+
+
         for _key in cutoffs:
             if not isinstance(_key, CutoffRule):
                 error_txt = 'Cutoffs must be provided as a CutoffRule'
@@ -690,6 +782,7 @@ class Cutoffs:
                 warn_txt = '{} is repeated and last occurrence is ignored'.format(_key.param)
                 print_info(warn_txt, 'warning', logger=logger)
             cutoff_names.append(_key.param)
+
         self.cutoffs = cutoffs
 
     @property
@@ -759,6 +852,18 @@ class Cutoffs:
                 continue
         return Cutoffs(cutoffs=new_rules)
 
+    def from_string(self, input_string: str):
+        """
+        Creates a list of CutoffRule's given a list similar to:
+            "VCL>0.8[], PHIE<0.1[], vp><[2000, 4000][m/s], interval:Heather FM[]"
+
+        :param input_string:
+            str
+            e.g.
+            "VCL>0.8, PHIE<0.1"
+        :return:
+        """
+        pass
 
 class Template:
     """
@@ -1933,12 +2038,133 @@ class LithoFluid:
             thickness = Q_(thickness, 'm')
         return Layer(name, case, color, thickness, self)
 
-    def fluid_sub(self):
-        # TODO
-        # new method that should return a new LithoFluid where the vp, vs and rho values are updated from the
-        # original using a given fluid substitution
-        pass
+    def fluid_sub(self,
+                  s_w1 = Q_(1.,''),
+                  s_w2 = Q_(0.2, ''),
+                  hc: dict | None = None,
+                  mineral: dict | None = None,
+                  brine: dict | None = None,
+                  phi: pint.Quantity | None = None,
+                  fluid_mix = 'Reuss',
+                  verbose: bool = False):
 
+        # TODO
+        # Insert a test of k_dry
+        """
+        Simplistic fluid substitution.
+        Returns a new LithoFluid after fluid substitution.
+        By default we assume an initial fluid of 100% brine, and a final fluid with 80% oil and 20% brine.
+
+        :param s_w1:
+            fraction
+            Initial water saturation
+        :param s_w2:
+            fraction
+            Final water saturation
+        :param hc:
+            dict
+            Dictionary with density and bulk modulus of the hydrocarbons,
+        :param mineral:
+            dict
+            Dictionary with density and bulk modulus of the minerals,
+        :param brine:
+            dict
+            Dictionary with density and bulk modulus of the brine,
+        :param phi:
+            pint.Quantity
+            Porosity
+            By default it is calculated using the mass balance equation
+        :param fluid_mix:
+            str
+            'Reuss' for uniform fluid mix, and 'Voigt' for patchy fluid mix
+        :param verbose:
+            bool
+
+        :return:
+            LithoFluid with fluid substituted results
+        """
+        from blixt_rp.rp.rp_core import gassmann_vel, por_from_mass_balance, k_from_v, k_dry
+
+        name='{}_hc'.format(str(self.name))
+
+        if hc is None:
+            hc = dict(rho=Q_(0.8, 'G/cc'), k=Q_(1.152, 'GPa'))  # oil
+            # hc = dict(rho=Q_(0.15, 'G/cc'), k=Q_(0.037, 'GPa'))  # gas
+            # hc = dict(rho=Q_(0.45, 'G/cc'), k=Q_(0.325, 'GPa'))  # condensate
+            # hc = dict(rho=Q_(1.1, 'G/cc'), k=Q_(2.757, 'GPa'))  # Heavy oil
+        if mineral is None:
+            mineral = dict(rho=Q_(2.6, 'G/cc'), k=Q_(36.6, 'GPa')) # quartz
+            # mineral = dict(rho=Q_(2.35, 'G/cc'), k=Q_(11.4, 'GPa')) # shale
+            # mineral = dict(rho=Q_(2.71, 'G/cc'), k=Q_(63.7, 'GPa')) # Calcite
+        if brine is None:
+            brine = dict(rho=Q_(1.02, 'G/cc'), k=Q_(2.56, 'GPa'))
+
+        # Bulk modulus of fluid 1 [2]  in [GPa]
+        if fluid_mix == 'Reuss':
+            k_f1 = (s_w1.to('dimensionless').magnitude / brine['k'].to('GPa').magnitude +
+                    (1. - s_w1.to('dimensionless').magnitude) / hc['k'].to('GPa').magnitude )**(-1)
+            k_f2 = (s_w2.to('dimensionless').magnitude / brine['k'].to('GPa').magnitude +
+                    (1. - s_w2.to('dimensionless').magnitude) / hc['k'].to('GPa').magnitude )**(-1)
+        else:  # for patchy (Voigt) fluid mix
+            k_f1 = (s_w1.to('dimensionless').magnitude * brine['k'].to('GPa').magnitude +
+                    (1. - s_w1.to('dimensionless').magnitude) * hc['k'].to('GPa').magnitude)
+            k_f2 = (s_w2.to('dimensionless').magnitude * brine['k'].to('GPa').magnitude +
+                    (1. - s_w2.to('dimensionless').magnitude) * hc['k'].to('GPa').magnitude)
+
+        # Density of fluid 1 [2] in [g/cm3]
+        rho_f1 = (s_w1.to('dimensionless').magnitude * brine['rho'].to('G/cc').magnitude +
+                  (1. - s_w1.to('dimensionless').magnitude) * hc['rho'].to('G/cc').magnitude)
+        rho_f2 = (s_w2.to('dimensionless').magnitude * brine['rho'].to('G/cc').magnitude +
+                (1. - s_w2.to('dimensionless').magnitude) * hc['rho'].to('G/cc').magnitude)
+
+        estimated = False
+        if phi is None:
+            estimated = True
+            phi = Q_(por_from_mass_balance(
+                self.rho.to('G/cc').magnitude,
+                mineral['rho'].to('G/cc').magnitude,
+                rho_f1), '')
+
+        _k_dry =  k_dry(
+            k_from_v(self.vp.to('km/s').magnitude,
+                     self.vs.to('km/s').magnitude,
+                     self.rho.to('G/cc').magnitude),
+            mineral['k'].to('GPa').magnitude,
+            k_f1,
+            phi.to('dimensionless').magnitude
+        )
+
+        if verbose:
+            print('Litho-fluid Fluid substitution: {} - {}:'.format(self.name, name))
+            print('  From inital to final Sw: {} - {}'.format(s_w1.magnitude, s_w2.magnitude))
+            print('  Inital to final fluid density: {} - {}'.format(rho_f1, rho_f2))
+            if estimated:
+                print('  Porosity is estimated to ', phi)
+            else:
+                print('  Porosity is given ', phi)
+
+            print('  K_dry: {}\n  K_dry / K_min: {}'.format(_k_dry, _k_dry/mineral['k'].to('GPa').magnitude))
+
+        _vp, _vs, _rho, _k_2 = gassmann_vel(
+            self.vp.to('m/s').magnitude,
+            self.vs.to('m/s').magnitude,
+            self.rho.to('G/cc').magnitude,
+            k_f1,
+            rho_f1,
+            k_f2,
+            rho_f2,
+            mineral['k'].to('GPa').magnitude,
+            phi.to('dimensionless').magnitude)
+
+        if verbose:
+            print('  Vp: {} - {}'.format(self.vp.to('m/s').magnitude, _vp))
+            print('  Vs: {} - {}'.format(self.vs.to('m/s').magnitude, _vs))
+            print('  Rho: {} - {}'.format(self.rho.to('G/cc').magnitude, _rho))
+
+        return LithoFluid(
+            name=name,
+            vp=_vp, vs=_vs, rho=_rho
+        )
 
 class LithoFluids:
     """
@@ -2022,6 +2248,7 @@ class LithoFluidsTable:
     """
     def __init__(self,
                  litho_fluids: LithoFluids | None = None,
+                 title: str | None = 'Litho-fluids',
                  advanced: bool = True,
                  width: int | None = None,
                  height: int | None = None):
@@ -2032,6 +2259,7 @@ class LithoFluidsTable:
         :param width:
             int
         """
+        self.title = title
         if width is None:
             width = 700
         self.width = width
@@ -2169,7 +2397,7 @@ class LithoFluidsTable:
         title = Div(text =
                     """
                     <div style="font-size:12px; font-weight:600; margin-bottom:0px; text-align:center">
-                        Litho-fluids
+                    """ + self.title +  """
                     </div>
                """)
 

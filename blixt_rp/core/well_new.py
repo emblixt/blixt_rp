@@ -577,6 +577,8 @@ class Well(object):
     def dict(self, harmonize: bool = True, down_sample: int | None = None, cutoffs: Cutoffs | None = None,
              use_cutoffs: bool = True) -> dict:
         """
+        Returns a dictionary with log_name: log_data as key: value pairs, where the data are pint Quantities
+        (except from the mask)
 
         :param harmonize:
              When True all logs are made equal in length and with the same sample rate. Necessary for a ColumnDataSource
@@ -607,14 +609,14 @@ class Well(object):
             if not harmonize:
                 raise IOError('The cutoffs can only be calculated when the harmonize parameter is True')
             for _rule in cutoffs.cutoffs:
-                if _rule.param not in list(_dict.keys()):
+                if _rule.param.lower() not in list(_dict.keys()):
                     warn_txt = 'Log {} to calculate mask from is not present in well {}'.format(
-                        _rule.param, self.name)
+                        _rule.param.lower(), self.name)
                     print_info(warn_txt, 'warning', logger)
                 else:
                     masks.append(
                         msks.create_mask(
-                            _dict[_rule.param], _rule.operator, _rule.limit
+                            _dict[_rule.param.lower()], _rule.operator, _rule.limit
                         )
                     )
             if len(masks) > 0:

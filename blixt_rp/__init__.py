@@ -7,6 +7,7 @@ Q_ = ureg.Quantity
 dim_file = os.path.join(os.path.dirname(__file__), 'units_to_pint.txt')
 print('Loaded: {}'.format(dim_file))
 ureg.load_definitions(dim_file)
+ureg.default_format = '~P'
 
 __version__ = "unknown"
 try:

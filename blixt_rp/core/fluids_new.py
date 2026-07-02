@@ -17,9 +17,11 @@ import numpy as np
 import pandas as pd
 import unittest
 import os, sys
+from typing import Literal, List
 
 from bokeh.io import output_file
 from bokeh.models import ColumnDataSource
+from bokeh.plotting import column, row
 import pint
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
@@ -27,17 +29,33 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', 
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
+from blixt_rp import Q_
 from blixt_rp.core.param import Param
 import blixt_rp.rp.rp_core as rp
 import blixt_rp.core.well as cw
 from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
 from blixt_utils.utils import isnan, print_info
-from blixt_rp.core.core import Intervals
+from blixt_rp.core.core import Interval, Intervals
 
-from .. import ureg, Q_
 
 logger = logging.getLogger(__name__)
+
+def_fluids = dict(
+    # From RokDoc
+    brine=dict(
+        rho=Q_(1.0, 'G/cc'), vp=Q_(1600.0, 'm/s'), k=Q_(2.56, 'GPa'), vs=Q_(0.0, 'm/s'), mu=Q_(0.0, 'GPa')),
+    oil=dict(
+        rho=Q_(0.8, 'G/cc'), vp=Q_(1200.0, 'm/s'), k=Q_(1.152, 'GPa'), vs=Q_(0.0, 'm/s'), mu=Q_(0.0, 'GPa')),
+    gas=dict(
+        rho=Q_(0.15, 'G/cc'), vp=Q_(500.0, 'm/s'), k=Q_(0.0375, 'GPa'), vs=Q_(0., 'm/s'), mu=Q_(0.0, 'GPa')),
+    condensate=dict(
+        rho=Q_(0.45, 'G/cc'), vp=Q_(850.0, 'm/s'), k=Q_(0.325125, 'GPa'), vs=Q_(0.0, 'm/s'), mu=Q_(0.0, 'GPa')),
+    co2=dict(
+        rho=Q_(0.15, 'G/cc'), vp=Q_(500.0, 'm/s'), k=Q_(0.0375, 'GPa'), vs=Q_(0.0, 'm/s'), mu=Q_(0.0, 'GPa')),
+    heavy_oil=dict(
+        rho=Q_(1.1, 'G/cc'), vp=Q_(1600.0, 'm/s'), k=Q_(2.7573, 'GPa'), vs=Q_(200.0, 'm/s'), mu=Q_(0.044, 'GPa'))
+)
 
 def_fluid_vals = dict(
     k=Q_(2, 'GPa'),
@@ -58,16 +76,16 @@ def_fluid_vals = dict(
 )
 
 
-def read_all_fluids_from_excel(filename, fluid_sheet: str = 'Fluids', fluid_header: int = 1) -> dict:
-    # First read in all fluids defined in the project table
-    all_fluids = {}
+def read_all_mother_fluids_from_excel(filename, fluid_sheet: str = 'Fluids', fluid_header: int = 1) -> dict:
+    # First read in all mother_fluids defined in the project table
+    all_mother_fluids = {}
     fluids_table = pd.read_excel(filename,
                                  sheet_name=fluid_sheet, header=fluid_header, engine='openpyxl')
 
     for i, name in enumerate(fluids_table['Name']):
         if isnan(name):
             continue  # Avoid empty lines
-        this_fluid = Fluid(
+        this_fluid = MotherFluid(
             calculation_method='User specified' if isnan(fluids_table['Calculation method'][i]) else fluids_table['Calculation method'][i],
             k=Q_(float(fluids_table['Bulk moduli [GPa]'][i]), 'GPa'),
             mu=Q_(float(fluids_table['Shear moduli [GPa]'][i]), 'GPa'),
@@ -85,11 +103,11 @@ def read_all_fluids_from_excel(filename, fluid_sheet: str = 'Fluids', fluid_head
             name=name.lower(),
             status='from excel'
         )
-        all_fluids[name.lower()] = this_fluid
+        all_mother_fluids[name.lower()] = this_fluid
 
-    return all_fluids
+    return all_mother_fluids
 
-def read_fluidmixes_from_excel(filename,
+def read_fluidmixes_from_excel_old(filename,
                                fluid_sheet: str = 'Fluids', fluid_header: int = 1,
                                mix_sheet: str = 'Fluid mixtures', mix_header: int = 1):
     """
@@ -112,8 +130,8 @@ def read_fluidmixes_from_excel(filename,
             }}}}
     """
 
-    # First read in all fluids defined in the project table
-    all_fluids = read_all_fluids_from_excel(filename, fluid_sheet, fluid_header)
+    # First read in all mother_fluids defined in the project table
+    all_mother_fluids = read_all_mother_fluids_from_excel(filename, fluid_sheet, fluid_header)
 
     # Then read in the fluid mixes
     fluid_mixes = {
@@ -129,11 +147,11 @@ def read_fluidmixes_from_excel(filename,
         # Need to pair fluid name with fluid type to get unique fluid names in fluid mixture
         this_name = '{}_{}'.format(name.lower(), '' if isnan(ftype) else ftype.lower())
         if isnan(vf):
-            continue  # Avoid fluids where the volume fraction is not set
+            continue  # Avoid mother_fluids where the volume fraction is not set
         this_subst = mix_table['Substitution order'][i].lower()
         this_well = mix_table['Well name'][i].upper()
         this_wi = mix_table['Interval name'][i].upper()
-        this_fluid = deepcopy(all_fluids[name.lower()])
+        this_fluid = deepcopy(all_mother_fluids[name.lower()])
         this_fluid.name = this_name
         try:
             this_tag = mix_table['Tag'][i]
@@ -161,6 +179,119 @@ def read_fluidmixes_from_excel(filename,
                                                              'tag': this_tag}}
 
     return fluid_mixes
+
+def read_fluidmixes_from_excel(
+        filename: str,
+        intervals: Intervals,
+        fluid_sheet: str = 'Fluids', fluid_header: int = 1,
+        mix_sheet: str = 'Fluid mixtures', mix_header: int = 1):
+    """
+
+    :param filename:
+    :param intervals:
+        Intervals object
+    :param fluid_sheet:
+    :param fluid_header:
+    :param mix_sheet:
+    :param mix_header:
+    :return:
+      Returns a fluid mixture dictionary
+      {this_subst:                          # 1'st level: 'initial' or 'final'
+            {this_well:                     # 2'nd level: well name
+                {this_wi:                   # 3'd level: working interval name
+                    {fluid_name: Fluid(),   # 4'th level: fluid object
+                    fluid_type: str,       # 4'th level: Fluid type: Brine, Oil, Gas
+                    volume_fraction: str | float,    # 4'th level: <Name of saturation log>, 'complement',
+                                                     # or saturation as a float
+                    tag: str,              # 4'th level: Tag that can be used when exporting logs
+            }}}}
+    """
+
+    # First read in all mother_fluids defined in the project table
+    all_mother_fluids = read_all_mother_fluids_from_excel(filename, fluid_sheet, fluid_header)
+
+    # Emtpy list of fluids
+    fluids = []
+
+    # # Then read in the fluid mixes
+    # fluid_mixes = {
+    #     'initial': {},
+    #     'final': {}
+    # }
+
+    # Read the fluid mixes sheet
+    mix_table = pd.read_excel(filename, sheet_name=mix_sheet, header=mix_header, engine='openpyxl')
+    for i, name in enumerate(mix_table['Fluid name']):
+        if mix_table['Use'][i] != 'Yes':
+            continue
+
+        vf = mix_table['Volume fraction'][i]
+        # When 'volume_fraction' is a string, make it low case
+        try:
+            vf = vf.lower()
+        except AttributeError:
+            pass
+
+
+        ftype = mix_table['Fluid type'][i]
+        if not isinstance(ftype, str) and np.isnan(ftype):
+            ftype = ''
+        ftype = ftype.lower()
+        if ' ' in ftype:
+            ftype = ftype.replace(' ', '_')
+
+        # Need to pair fluid name with fluid type to get unique fluid names in fluid mixture
+        this_name = '{}_{}'.format(name.lower(), '' if isnan(ftype) else ftype.lower())
+        if isnan(vf):
+            continue  # Avoid mother_fluids where the volume fraction is not set
+        this_subst = mix_table['Substitution order'][i].lower()
+        this_well = mix_table['Well name'][i].lower()
+        this_wi = mix_table['Interval name'][i].lower()
+        this_mother_fluid = deepcopy(all_mother_fluids[name.lower()])
+        # Why should we rename the mother fluid??
+        # this_mother_fluid.name = this_name
+        try:
+            this_tag = mix_table['Tag'][i]
+        except KeyError:
+            this_tag = None
+
+        # Try to extract the Interval from the given Intervals
+        this_interval = intervals.get_interval(this_wi, this_well)
+        if this_interval is None:
+            print_info('Interval: {} was not found in well: {}'.format(this_wi, this_well), 'warning', logger)
+            continue
+
+        fluids.append(
+            Fluid(
+                mother_fluid=this_mother_fluid,
+                interval=this_interval,
+                substitution_order=this_subst,
+                fluid_type=ftype,
+                volume_fraction=vf,
+                tag=this_tag
+            )
+        )
+        # # 2'nd level
+        # if this_well in list(fluid_mixes[this_subst].keys()):
+        #     # 3'rd level
+        #     if this_wi in list(fluid_mixes[this_subst][this_well].keys()):
+        #         # 4'th level
+        #         fluid_mixes[this_subst][this_well][this_wi][this_name] = this_mother_fluid
+        #         fluid_mixes[this_subst][this_well][this_wi]['fluid_type'] = ftype
+        #         fluid_mixes[this_subst][this_well][this_wi]['volume_fraction'] = vf
+        #         fluid_mixes[this_subst][this_well][this_wi]['tag'] = this_tag
+        #     else:
+        #         fluid_mixes[this_subst][this_well][this_wi] = {this_name: this_mother_fluid,
+        #                                                        'fluid_type': ftype,
+        #                                                        'volume_fraction': vf,
+        #                                                        'tag': this_tag}
+        # else:
+        #     fluid_mixes[this_subst][this_well] = {this_wi: {this_name: this_mother_fluid,
+        #                                                     'fluid_type': ftype,
+        #                                                     'volume_fraction': vf,
+        #                                                     'tag': this_tag}}
+
+    return fluids
 
 
 class Header(AttribDict):
@@ -222,20 +353,24 @@ class Header(AttribDict):
         p.text(str(self))
 
 
-class Fluid(object):
+# TODO
+# Rename this to "MotherFluid" (or similar)
+# Then let new Fluid inherit its settings, and add the new parameters / methods that the Fluids that FluidMixes is
+# made up from (e.g. well, working interval, fluid type, mother fluid name, tag (-> name), substitution order, volume fraction, ...
+class Fluid_old(object):
     def __init__(self,
                  calculation_method: str | None = None,  # or Batzle and Wang',  # or 'User specified'
-                 k: Q_ | None = None,  # Bulk modulus in GPa
-                 mu: Q_ | None = None,  # Shear modulus in GPa
-                 rho: Q_ | None = None,  # Density in g/cm3
-                 temp_gradient: Q_ | None = None,
-                 pressure_gradient: Q_ | None = None,
-                 salinity: Q_ | None = None,
-                 gor: Q_ | None = None,
-                 oil_api: Q_ | None = None,
-                 gas_gravity: Q_ | None = None,
+                 k: pint.Quantity | None = None,  # Bulk modulus in GPa
+                 mu: pint.Quantity | None = None,  # Shear modulus in GPa
+                 rho: pint.Quantity | None = None,  # Density in g/cm3
+                 temp_gradient: pint.Quantity | None = None,
+                 pressure_gradient: pint.Quantity | None = None,
+                 salinity: pint.Quantity | None = None,
+                 gor: pint.Quantity | None = None,
+                 oil_api: pint.Quantity | None = None,
+                 gas_gravity: pint.Quantity | None = None,
                  gas_mixing: str | None = None,
-                 brie_exponent: Q_ | None = None,
+                 brie_exponent: pint.Quantity | None = None,
                  name: str | None = 'Default',
                  status: str | None = None,
                  header: dict | None = None):
@@ -342,34 +477,174 @@ class Fluid(object):
             self._mu = Q_(np.nan, 'GPa')
             self._rho = Q_(_this_rho, 'GPa')
 
+class MotherFluid(object):
+    """
+    A "mother fluid" is a set of fluid properties that can be used to create different kind of fluids (e.g. oil, brine, ...)
+    Or it can be fixed with a given set of k, mu and rho
+    """
+    def __init__(self,
+                 calculation_method: str | None = None,  # or Batzle and Wang',  # or 'User specified'
+                 k: pint.Quantity | None = None,  # Bulk modulus in GPa
+                 mu: pint.Quantity | None = None,  # Shear modulus in GPa
+                 rho: pint.Quantity | None = None,  # Density in g/cm3
+                 temp_gradient: pint.Quantity | None = None,
+                 pressure_gradient: pint.Quantity | None = None,
+                 salinity: pint.Quantity | None = None,
+                 gor: pint.Quantity | None = None,
+                 oil_api: pint.Quantity | None = None,
+                 gas_gravity: pint.Quantity | None = None,
+                 gas_mixing: str | None = None,
+                 brie_exponent: pint.Quantity | None = None,
+                 name: str | None = 'Default',
+                 status: str | None = None,
+                 header: dict | None = None):
+
+        if header is None:
+            header = {}
+        if name is not None:
+            header['name'] = name
+        elif 'name' not in list(header.keys()):
+            header['name'] = None
+
+        self.header = Header(header)
+        self.calculation_method = calculation_method
+        self._k = k
+        self._mu = mu
+        self._rho = rho
+        self._bd = None  # Burial depth
+        self.temp_gradient = temp_gradient
+        self.pressure_gradient = pressure_gradient
+        self.salinity = salinity
+        self.gor = gor
+        self.oil_api = oil_api
+        self.gas_gravity = gas_gravity
+        self.gas_mixing = gas_mixing
+        self.brie_exponent = brie_exponent
+        self._name = header['name']
+        self.status = status
+
+    def __str__(self):
+        keys = list(self.__dict__.keys())
+
+        pattern = "%%%ds: %%s" % len(keys)
+
+        head = [ pattern % (k, self.__dict__[k]) for k in keys]
+        return "\n".join(head)
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        self._name = value
+        self.header['name'] = value
+
+    def print_fluid(self, verbose=False):
+        out = '  {}\n'.format(self.name)
+        if verbose:
+            out = str(self)
+        else:
+            out += '      K: {}, Mu: {}, Rho {}\n'.format(
+                self.k, self.mu, self.rho)
+            out += '      Calculation method: {}\n'.format(self.calculation_method)
+            out += '      Status: {}\n'.format(self.status)
+        return out
+
+    def keys(self):
+        return self.__dict__.keys()
+
+    @property
+    def k(self):
+        return self._k
+
+    @property
+    def mu(self):
+        return self._mu
+
+    @property
+    def rho(self):
+        return self._rho
+
+    @property
+    def bd(self):
+        return self._bd
+
+    def calc_elastics(self, fluid_type: str, burial_depth: Q_):
+        if self.calculation_method == 'Batzle and Wang':
+            _s = self.salinity.to('ppm').magnitude
+            # _p = self.pressure_ref + self.pressure_gradient * burial_depth
+            # We ignore the pressure reference now. Will be calculated more exactly in FluidMix
+            _p = Q_(0.0, 'MPa') + self.pressure_gradient * burial_depth
+            _p = _p.to('MPa').magnitude
+            # _t = self.temp_ref + self.temp_gradient * burial_depth
+            _t = Q_(4.0, 'degC') + self.temp_gradient * burial_depth
+            _t = _t.to('degC').magnitude
+            if fluid_type.lower() == 'brine':
+                _this_rho = rp.rho_b(_s, _p,  _t).value
+                v_p_b = rp.v_p_b(_s, _p, _t).value
+                _this_k = v_p_b**2 * _this_rho * 1.E-6
+            elif fluid_type.lower() == 'oil':
+                _this_k, _this_rho = rp.k_and_rho_o(
+                    self.oil_api.magnitude,
+                    self.gas_gravity.magnitude,
+                    self.gor.magnitude,
+                    _p,
+                    _t
+                )
+            elif fluid_type.lower() == 'gas':
+                _this_k, _this_rho = rp.k_and_rho_g(self.gas_gravity.magnitude, _p, _t)
+            else:
+                raise NotImplementedError('Elastic properties not possible to calculate for {}'.format(fluid_type))
+            self._bd = burial_depth
+            self._k = Q_(_this_k, 'GPa')
+            self._mu = Q_(np.nan, 'GPa')
+            self._rho = Q_(_this_rho, 'GPa')
+
 
 class FluidsTable:
     """
-    Returns a table and bokeh CDS for the provided fluids
+    Returns a table and bokeh CDS for the provided mother_fluids
     """
     def __init__(self,
-                 fluids: list | None = None,
+                 mother_fluids: list | None = None,
+                 title: str | None = 'Fluids',
                  width: int | None = None,
-                 height: int | None = None):
+                 height: int | None = None,
+                 default_fluids_only: bool = False):
         """
 
-        :param fluids:
-            list of Fluid objects
+        :param mother_fluids:
+            list of MotherFluid objects
         :param width:
             int
+        :param default_fluids_only:
+            bool
+            If True we draw a simplified table containing the mother_fluids defined in def_fluids
         """
+        self.title = title
         if width is None:
-            width = 700
-        self.width = width
+            width = 70
         if height is None:
                 height = 135
         self.height = height
-        if fluids is None:
-            fluids = []
-        self.fluids = fluids
+        if mother_fluids is None:
+            mother_fluids = []
+        self.fluids = mother_fluids
         self.keys = ['name', 'k', 'mu', 'rho', 'calculation_method',
                      'temp_gradient', 'pressure_gradient',
                      'salinity', 'gor', 'oil_api', 'gas_gravity', 'gas_mixing', 'brie_exponent']
+        self.default_fluids_only = default_fluids_only
+        if default_fluids_only:
+            self.fluids = [
+                Fluid(
+                    k=_val['k'],
+                    mu=_val['mu'],
+                    rho=_val['rho'],
+                    name=_name) for _name, _val in def_fluids.items()
+            ]
+            self.keys = ['name', 'k', 'mu', 'rho']
+
     @property
     def cds(self) -> ColumnDataSource:
         _dict = {_x:[] for _x in self.keys}
@@ -419,11 +694,15 @@ class FluidsTable:
             TableColumn(field='oil_api', title='Oil API'),
             TableColumn(field='gas_gravity', title='Gas gravity')
         ]
+
+        if self.default_fluids_only:
+            table_columns = table_columns[:4]
+
         return table_columns
 
     def draw(self,
              cds: ColumnDataSource):
-        from bokeh.models import DataTable, Button, CheckboxGroup
+        from bokeh.models import DataTable, Button, CheckboxGroup, Div
 
         def add_row_function():
             new_data = dict(cds.data)
@@ -449,27 +728,43 @@ class FluidsTable:
             new_data = dict(cds.data)
             _fluids = []
             for _i in range(len(new_data['name'])):
-                # print(' - Iteration: {} of {}'.format( _i, len(new_data['name'])))
-                this_fluid = Fluid(
-                    calculation_method=new_data['calculation_method'][_i],
-                    k=Q_(new_data['k'][_i], 'GPa'),
-                    mu=Q_(new_data['mu'][_i], 'GPa'),
-                    rho=Q_(new_data['rho'][_i], 'gram / cm^3'),
-                    temp_gradient=Q_(new_data['temp_gradient'][_i], 'degC / meter'),
-                    # temp_ref=Q_(new_data['temp_ref'][_i], 'degC'),
-                    pressure_gradient=Q_(new_data['pressure_gradient'][_i], 'MPa / meter'),
-                    # pressure_ref=Q_(new_data['pressure_ref'][_i], 'MPa'),
-                    salinity=Q_(new_data['salinity'][_i], 'ppm'),
-                    gor=Q_(new_data['gor'][_i], ''),
-                    oil_api=Q_(new_data['oil_api'][_i], ''),
-                    gas_gravity=Q_(new_data['gas_gravity'][_i], ''),
-                    name=new_data['name'][_i])
+                # Avoid empty rows
+                if new_data['name'][_i] is None or new_data['name'][_i] == '':
+                    continue
+                if self.default_fluids_only:
+                    this_fluid = Fluid(
+                        k=Q_(new_data['k'][_i], 'GPa'),
+                        mu=Q_(new_data['mu'][_i], 'GPa'),
+                        rho=Q_(new_data['rho'][_i], 'gram / cm^3'),
+                        name=new_data['name'][_i])
+                else:
+                    this_fluid = Fluid(
+                        calculation_method=new_data['calculation_method'][_i],
+                        k=Q_(new_data['k'][_i], 'GPa'),
+                        mu=Q_(new_data['mu'][_i], 'GPa'),
+                        rho=Q_(new_data['rho'][_i], 'gram / cm^3'),
+                        temp_gradient=Q_(new_data['temp_gradient'][_i], 'degC / meter'),
+                        # temp_ref=Q_(new_data['temp_ref'][_i], 'degC'),
+                        pressure_gradient=Q_(new_data['pressure_gradient'][_i], 'MPa / meter'),
+                        # pressure_ref=Q_(new_data['pressure_ref'][_i], 'MPa'),
+                        salinity=Q_(new_data['salinity'][_i], 'ppm'),
+                        gor=Q_(new_data['gor'][_i], ''),
+                        oil_api=Q_(new_data['oil_api'][_i], ''),
+                        gas_gravity=Q_(new_data['gas_gravity'][_i], ''),
+                        name=new_data['name'][_i])
                 _fluids.append(this_fluid)
 
             self.fluids = _fluids
 
             print(self.fluid_names)
             cds.data = new_data
+
+        title = Div(text =
+                    """
+                    <div style="font-size:12px; font-weight:600; margin-bottom:0px; text-align:center">
+                    """ + self.title +  """
+                    </div>
+               """)
 
         dt = DataTable(
             source=cds,
@@ -490,12 +785,52 @@ class FluidsTable:
         update_table = Button(label='Update', button_type='success')
         update_table.on_click(update_table_function)
 
-        return dt, add_row, delete_row, update_table
+        return column(title, dt, sizing_mode='stretch_width'), add_row, delete_row, update_table
 
-
-class FluidMix(object):
+class Fluid:
     """
-    Dictionary containing the initial, and final, fluids for given wells and intervals
+    A Fluid takes the general properties of a MotherFluid and sets into work for specific setting
+    e.g. for a specific well, interval and fluid type
+    """
+    def __init__(self,
+                 mother_fluid: MotherFluid,
+                 # # TODO Or should well be a Well object?
+                 # well: str,
+                 # TODO Or, if interval is an Interval object, the above well is not necessary
+                 # interval: str,
+                 interval: Interval,
+                 substitution_order: Literal['Initial', 'Final'],
+                 fluid_type: str,
+                 volume_fraction: str,
+                 tag: str):
+        """
+
+        :param mother_fluid:
+        :param interval:
+        :param substitution_order:
+        :param fluid_type:
+            str
+            'Oil', 'Gas' or 'Brine' (or '' or 'User specified' for  User specified fluids)
+        :param volume_fraction:
+        :param tag:
+        """
+        self.mother_fluid = mother_fluid
+        self.interval = interval
+        self.substitution_order = substitution_order
+        self.fluid_type = fluid_type
+        self.volume_fraction = volume_fraction
+        self.tag = tag
+
+    @property
+    def name(self):
+        if len(self.tag) > 0:
+            return '{}_{}_{}_{}'.format(self.substitution_order, self.mother_fluid.name,self.fluid_type, self.tag)
+        else:
+            return '{}_{}_{}'.format(self.substitution_order, self.mother_fluid.name,self.fluid_type)
+
+class FluidMix_old(object):
+    """
+    Dictionary containing the initial, and final, mother_fluids for given wells and intervals
     {substition order:
         {well name:
             {working interval:
@@ -561,7 +896,7 @@ class FluidMix(object):
 
     def calc_elastics(self, wells: dict, wis: Intervals, debug=False):
         """
-        Calculates k, mu, and rho for all fluids for each well and working interval they are defined in, and where the
+        Calculates k, mu, and rho for all mother_fluids for each well and working interval they are defined in, and where the
         calculation method is not 'User specified'
         :param wells:
             dict
@@ -575,7 +910,7 @@ class FluidMix(object):
             if True, generate verbose information and create some plots
         :return:
         """
-        # 1'st level: Initial and Final fluids
+        # 1'st level: Initial and Final mother_fluids
         for key in ['initial', 'final']:
             # 2'nd level: loop over all wells
             for w in list(self.fluid_mixes[key].keys()):
@@ -591,43 +926,477 @@ class FluidMix(object):
                     continue
 
                 # Extract the measured and burial depth for this well
-                bd = wells[w].get_burial_depth(block_name=block_name, templates=templates)
-                md = wells[w].block[block_name].get_md()
+                wells[w].create_tvd_ml_log()
+                bd = wells[w].get_log_curve('tvd_ml')
+                md = wells[w].get_md_log()
 
                 # 3'rd level: loop over all working intervals
                 for wi in list(self.fluid_mixes[key][w].keys()):
-                    if wi not in list(wis[w].keys()):
+                    if wi.lower() not in [_x.lower() for _x in wis.interval_names()]:
                         warn_txt = 'Interval {} not present among the working intervals'.format(wi)
                         print_info(warn_txt, 'warning', logger)
                         continue
                     # Extract the mean burial depth for this working interval
-                    wi_md = np.mean(wis[w][wi])
-                    wi_md_i = np.nanargmin((md - wi_md)**2)
-                    wi_bd = bd[wi_md_i]
+                    _wi = wis.get_interval(wi, w)
+                    wi_md_i = np.nanargmin((md.data - _wi.mid)**2)
+                    wi_bd = bd.data[wi_md_i]
 
                     if debug:
                         print('{}, Well: {}, interval: {}, burial depth: {:.2f}'.format(key, w, wi, wi_bd))
 
-                    # iterate over all fluids
+                    # iterate over all mother_fluids
                     info_txt = ''
+                    # TODO
+                    # "f" below takes on other values than just mother_fluids (like 'fluid_type', 'tag', ...)
                     for f in list(self.fluid_mixes[key][w][wi].keys()):
                         this_fluid = self.fluid_mixes[key][w][wi][f]
-                        info_txt += ' Fluid: {}, '.format(f)
-                        if this_fluid.calculation_method.value == 'User specified':
+                        if not isinstance(this_fluid, Fluid):
+                            continue
+                        # TODO CONTINUE HERE. Every fluid is has fluid_type = 'Brine'
+                        # Something is wrong!!
+                        info_txt += ' Fluid, type {}: {}, '.format(self.fluid_mixes[key][w][wi]['fluid_type'], f)
+                        if this_fluid.calculation_method == 'User specified':
                             info_txt += 'user specified. Skipped.'
                             continue
-                        if this_fluid.status.value == 'from excel':
+                        if this_fluid.status == 'from excel':
                             # start calculating fluid properties
                             info_txt += "has status 'from excel', "
-                            if this_fluid.calculation_method.value == 'Batzle and Wang':
+                            if this_fluid.calculation_method == 'Batzle and Wang':
                                 info_txt += "and will be calculated using 'Batzle and Wang'. "
                                 if debug:
                                     print(info_txt)
                                 # Start Batzle and Wang calculation
-                                this_fluid.calc_k(wi_bd)
-                                this_fluid.calc_mu(wi_bd)
-                                this_fluid.calc_rho(wi_bd)
-                                this_fluid.status.value = \
+                                # this_fluid.calc_k(wi_bd)
+                                # this_fluid.calc_mu(wi_bd)
+                                # this_fluid.calc_rho(wi_bd)
+                                this_fluid.calc_elastics(self.fluid_mixes[key][w][wi]['fluid_type'], wi_bd)
+                                this_fluid.status = \
+                                    'calculated using Batzle and Wang at burial depth {:.2f}'.format(wi_bd)
+                        else:
+                            if debug:
+                                info_txt += 'has already been calculated'
+                                print(info_txt)
+                            continue
+
+
+class FluidMix(object):
+    """
+    Object containing the initial, and final, mother_fluids for given wells and intervals
+    """
+    def __init__(self,
+                 name: str | None = None,
+                 fluids: List[Fluid] | None = None,
+                 header: dict | None = None):
+
+        if header is None:
+            header = {}
+        if name is not None:
+            header['name'] = name
+        elif 'name' not in list(header.keys()):
+            header['name'] = None
+
+        self.header = Header(header)
+
+        if fluids is None:
+            fluids = []
+        self.fluids = fluids
+
+        self._name = header['name']
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        self._name = value
+        self.header['name'] = value
+
+    def with_key(self, _key ):
+        """
+        Returns a list of fluids attributes for the given _key
+        :param _key:
+        :return:
+        """
+        return list(
+            set(
+                [_f.__dict__[_key] for _f in self.fluids]
+            )
+        )
+
+    def fluid_types(self):
+        """
+        Returns a list of all fluid types present among the fluids
+        :return:
+        """
+        return self.with_key('fluid_type')
+
+    def tags(self):
+        return self.with_key('tag')
+
+    def volume_fractions(self):
+        return self.with_key('volume_fraction')
+
+    def substitution_orders(self):
+        return self.with_key('substitution_order')
+
+    def well_names(self):
+        return list(
+            set(
+                [_f.interval.well.lower() for _f in self.fluids]
+            )
+        )
+
+    def interval_names(self):
+        return list(
+            set(
+                [_f.interval.name.lower() for _f in self.fluids]
+            )
+        )
+
+    def intervals(self):
+        _list = []
+        for _f in self.fluids:
+            # print('XXX', _f.interval.name, [_i.name for _i in _list])
+            if _f.interval.name not in [_i.name for _i in _list]:
+                _list.append(_f.interval)
+
+        return _list
+
+    def mother_fluid_names(self):
+        return list(
+            set(
+                [_f.mother_fluid.name for _f in self.fluids]
+            )
+        )
+
+    def mother_fluids(self):
+        _list = []
+        for _f in self.fluids:
+            if _f.mother_fluid.name.lower() not in [_l.name for _l in _list]:
+                _list.append(_f.mother_fluid)
+        return _list
+
+
+    def get_fluids(self,
+                   subst_order: str | None = None,
+                   well_name: str | None = None,
+                   wi_name: str | None = None,
+                   mother_fluid_name: str | None = None,
+                   fluid_type: str | None = None,
+                   volume_fraction: str | float | None = None,
+                   tag: str | None = None,
+                   verbose: bool = False) -> list:
+        """
+        Returns a list of fluids that matches the set requirements
+
+        :param subst_order:
+            str
+            Not case-sensitive
+        :param well_name:
+        :param wi_name:
+        :param mother_fluid_name:
+        :param fluid_type:
+        :param volume_fraction:
+            str | float
+            If a string, the matching is case-sensitive
+        :param tag:
+            str
+            The matching is case-sensitive
+        :param verbose:
+        :return:
+        """
+
+        # Check consistency of input data
+        if subst_order is not None and subst_order.lower() not in self.substitution_orders():
+            print_info('Substitution order: {} not present among subst. orders ([{}]) in FluidMix: {}'.format(
+                subst_order, ', '.join(self.substitution_orders()), self.name),
+                       'warning', logger)
+            return []
+        if well_name is not None and well_name.lower() not in self.well_names():
+            print_info('Well: {} not present among well names ([{}]) in FluidMix: {}'.format(
+            well_name, ', '.join(self.well_names()), self.name),
+                       'warning', logger)
+            return []
+        if wi_name is not None and wi_name.lower() not in self.interval_names():
+            print_info('Interval: {} not present among interval names ([{}]) in FluidMix: {}'.format(
+            wi_name, ', '.join(self.interval_names()), self.name),
+                       'warning', logger)
+            return []
+        if mother_fluid_name is not None and mother_fluid_name.lower() not in self.mother_fluid_names():
+            print_info('Mother fluid: {} not present among mother fluids ([{}]) in FluidMix: {}'.format(
+            mother_fluid_name, ', '.join(self.mother_fluid_names()), self.name),
+                       'warning', logger)
+            return []
+        if fluid_type is not None and fluid_type.lower() not in self.fluid_types():
+            print_info('Fluid type: {} not present among fluid types ([{}]) in FluidMix: {}'.format(
+            fluid_type, ', '.join(self.fluid_types()), self.name),
+                       'warning', logger)
+            return []
+        if volume_fraction is not None and volume_fraction not in self.volume_fractions():
+            print_info('Volume fraction: {} not present among volume fractions ([{}]) FluidMix: {}'.format(
+                volume_fraction, ', '.join([str(_x) for _x in self.volume_fractions()]), self.name),
+                       'warning', logger)
+            return []
+        if tag is not None and tag not in self.tags():
+            print_info('Tag: {} not present among tags ([{}]) in FluidMix: {}'.format(
+                tag, ', '.join(self.tags()), self.name),
+                       'warning', logger)
+            return []
+
+        # Initiate a list of all fluids
+        _list = deepcopy(self.fluids)
+
+        # Then start removing the ones that doesn't match the requirements
+        # Do this by iterating over a copy of the original list
+        for _fluid in list(_list):
+            if subst_order is not None and subst_order.lower() != _fluid.substitution_order.lower():
+                try:
+                    _list.remove(_fluid)
+                    if verbose:
+                        print('Subst. order: Removing fluid: {}'.format(_fluid.name))
+                except ValueError:
+                    if verbose:
+                        print('Subst. order: Tried to remove fluid: {}'.format(_fluid.name))
+                    continue
+            if well_name is not None and well_name.lower() != _fluid.interval.well.lower():
+                try:
+                    _list.remove(_fluid)
+                    if verbose:
+                        print('Well name: Removing fluid: {}'.format(_fluid.name))
+                except ValueError:
+                    if verbose:
+                        print('Well name: Tried to remove fluid: {}'.format(_fluid.name))
+                    continue
+            if wi_name is not None and wi_name.lower() != _fluid.interval.name.lower():
+                try:
+                    _list.remove(_fluid)
+                    if verbose:
+                        print('Interval name: Removing fluid: {}'.format(_fluid.name))
+                except ValueError:
+                    if verbose:
+                        print('Interval name: Tried to remove fluid: {}'.format(_fluid.name))
+                    continue
+            if mother_fluid_name is not None and mother_fluid_name.lower() != _fluid.mother_fluid.name.lower():
+                try:
+                    _list.remove(_fluid)
+                    if verbose:
+                        print('Mother fluid name: Removing fluid: {}'.format(_fluid.name))
+                except ValueError:
+                    if verbose:
+                        print('Mother fluid name: Tried to remove fluid: {}'.format(_fluid.name))
+                    continue
+            if fluid_type is not None and fluid_type.lower() != _fluid.fluid_type.lower():
+                try:
+                    _list.remove(_fluid)
+                    if verbose:
+                        print('Fluid type: Removing fluid: {}'.format(_fluid.name))
+                except ValueError:
+                    if verbose:
+                        print('Fluid type: Tried to remove fluid: {}'.format(_fluid.name))
+                    continue
+            if volume_fraction is not None and volume_fraction != _fluid.volume_fraction:
+                try:
+                    _list.remove(_fluid)
+                    if verbose:
+                        print('Volume fraction: Removing fluid: {}'.format(_fluid.name))
+                except ValueError:
+                    if verbose:
+                        print('Volume fraction: Tried to remove fluid: {}'.format(_fluid.name))
+                    continue
+            if tag is not None and tag != _fluid.tag:
+                try:
+                    _list.remove(_fluid)
+                    if verbose:
+                        print('Tag: Removing fluid: {}'.format(_fluid.name))
+                except ValueError:
+                    if verbose:
+                        print('Tag: Tried to remove fluid: {}'.format(_fluid.name))
+                    continue
+
+        return _list
+
+    def print_all_fluids(self, verbose=False):
+        out = ''
+        for key in self.substitution_orders():
+            for w in self.well_names():
+                for wi in self.interval_names():
+                    out += self.print_fluids(key, w, wi, verbose)
+        return out
+
+    def print_fluids(self, subst_order, well_name, wi_name, verbose=False):
+        out = '-- Fluid mixture {}: {}, {}, {} --'.format(self.name, well_name, wi_name, subst_order)
+        for _fluid in self.get_fluids(subst_order=subst_order, well_name=well_name, wi_name=wi_name):
+            for m in ['fluid_type', 'volume_fraction', 'tag']:
+                out += '\n{}: {}'.format(m, _fluid.__dict__[m])
+            out += '\n' + _fluid.mother_fluid.print_fluid(verbose)
+        return out + '\n'
+
+    def read_excel(self, filename,
+                   intervals: Intervals,
+                   fluid_sheet: str = 'Fluids', fluid_header: int = 1,
+                   mix_sheet: str = 'Fluid mixtures', mix_header: int = 1):
+
+        self.fluids = read_fluidmixes_from_excel(filename, intervals, fluid_sheet, fluid_header, mix_sheet, mix_header)
+        self.header['orig_file'] = filename
+
+    def calc_elastics_old(self, wells: dict, wis: Intervals, debug=False):
+        """
+        Calculates k, mu, and rho for all mother_fluids for each well and working interval they are defined in, and where the
+        calculation method is not 'User specified'
+        :param wells:
+            dict
+            {well name: core.wells.Well} key: value pairs
+        :param wis:
+            Intervals
+            blixt_rp.core.core Interval object which contain multiple working intervals for multiple wells
+            e.g. wis = Intervals()
+        :param debug:
+            bool
+            if True, generate verbose information and create some plots
+        :return:
+        """
+        # 1'st level: Initial and Final mother_fluids
+        for key in ['initial', 'final']:
+            # 2'nd level: loop over all wells
+            for w in list(self.fluid_mixes[key].keys()):
+                if w not in list(wells.keys()):
+                    warn_txt = 'Well {} not present among the input wells'.format(w)
+                    print_info(warn_txt, 'warning', logger)
+                    continue
+
+                # test if this will is listed in the working intervals
+                if w not in wis.well_names():
+                    warn_txt = 'Well {} not present among the working intervals'.format(w)
+                    print_info(warn_txt, 'warning', logger)
+                    continue
+
+                # Extract the measured and burial depth for this well
+                wells[w].create_tvd_ml_log()
+                bd = wells[w].get_log_curve('tvd_ml')
+                md = wells[w].get_md_log()
+
+                # 3'rd level: loop over all working intervals
+                for wi in list(self.fluid_mixes[key][w].keys()):
+                    if wi.lower() not in [_x.lower() for _x in wis.interval_names()]:
+                        warn_txt = 'Interval {} not present among the working intervals'.format(wi)
+                        print_info(warn_txt, 'warning', logger)
+                        continue
+                    # Extract the mean burial depth for this working interval
+                    _wi = wis.get_interval(wi, w)
+                    wi_md_i = np.nanargmin((md.data - _wi.mid)**2)
+                    wi_bd = bd.data[wi_md_i]
+
+                    if debug:
+                        print('{}, Well: {}, interval: {}, burial depth: {:.2f}'.format(key, w, wi, wi_bd))
+
+                    # iterate over all mother_fluids
+                    info_txt = ''
+                    # TODO
+                    # "f" below takes on other values than just mother_fluids (like 'fluid_type', 'tag', ...)
+                    for f in list(self.fluid_mixes[key][w][wi].keys()):
+                        this_fluid = self.fluid_mixes[key][w][wi][f]
+                        if not isinstance(this_fluid, Fluid):
+                            continue
+                        # TODO CONTINUE HERE. Every fluid is has fluid_type = 'Brine'
+                        # Something is wrong!!
+                        info_txt += ' Fluid, type {}: {}, '.format(self.fluid_mixes[key][w][wi]['fluid_type'], f)
+                        if this_fluid.calculation_method == 'User specified':
+                            info_txt += 'user specified. Skipped.'
+                            continue
+                        if this_fluid.status == 'from excel':
+                            # start calculating fluid properties
+                            info_txt += "has status 'from excel', "
+                            if this_fluid.calculation_method == 'Batzle and Wang':
+                                info_txt += "and will be calculated using 'Batzle and Wang'. "
+                                if debug:
+                                    print(info_txt)
+                                # Start Batzle and Wang calculation
+                                # this_fluid.calc_k(wi_bd)
+                                # this_fluid.calc_mu(wi_bd)
+                                # this_fluid.calc_rho(wi_bd)
+                                this_fluid.calc_elastics(self.fluid_mixes[key][w][wi]['fluid_type'], wi_bd)
+                                this_fluid.status = \
+                                    'calculated using Batzle and Wang at burial depth {:.2f}'.format(wi_bd)
+                        else:
+                            if debug:
+                                info_txt += 'has already been calculated'
+                                print(info_txt)
+                            continue
+
+    def calc_elastics(self, wells: dict, debug=False):
+        """
+        Calculates k, mu, and rho for all mother_fluids for each well and working interval they are defined in, and where the
+        calculation method is not 'User specified'
+        :param wells:
+            dict
+            {well name: core.wells.Well} key: value pairs
+        :param debug:
+            bool
+            if True, generate verbose information and create some plots
+        :return:
+        """
+        # 1'st level: Initial and Final mother_fluids
+        for key in ['initial', 'final']:
+            # 2'nd level: loop over all wells
+            for w in list(self.fluid_mixes[key].keys()):
+                if w not in list(wells.keys()):
+                    warn_txt = 'Well {} not present among the input wells'.format(w)
+                    print_info(warn_txt, 'warning', logger)
+                    continue
+
+                # test if this will is listed in the working intervals
+                if w not in wis.well_names():
+                    warn_txt = 'Well {} not present among the working intervals'.format(w)
+                    print_info(warn_txt, 'warning', logger)
+                    continue
+
+                # Extract the measured and burial depth for this well
+                wells[w].create_tvd_ml_log()
+                bd = wells[w].get_log_curve('tvd_ml')
+                md = wells[w].get_md_log()
+
+                # 3'rd level: loop over all working intervals
+                for wi in list(self.fluid_mixes[key][w].keys()):
+                    if wi.lower() not in [_x.lower() for _x in wis.interval_names()]:
+                        warn_txt = 'Interval {} not present among the working intervals'.format(wi)
+                        print_info(warn_txt, 'warning', logger)
+                        continue
+                    # Extract the mean burial depth for this working interval
+                    _wi = wis.get_interval(wi, w)
+                    wi_md_i = np.nanargmin((md.data - _wi.mid)**2)
+                    wi_bd = bd.data[wi_md_i]
+
+                    if debug:
+                        print('{}, Well: {}, interval: {}, burial depth: {:.2f}'.format(key, w, wi, wi_bd))
+
+                    # iterate over all mother_fluids
+                    info_txt = ''
+                    # TODO
+                    # "f" below takes on other values than just mother_fluids (like 'fluid_type', 'tag', ...)
+                    for f in list(self.fluid_mixes[key][w][wi].keys()):
+                        this_fluid = self.fluid_mixes[key][w][wi][f]
+                        if not isinstance(this_fluid, Fluid):
+                            continue
+                        # TODO CONTINUE HERE. Every fluid is has fluid_type = 'Brine'
+                        # Something is wrong!!
+                        info_txt += ' Fluid, type {}: {}, '.format(self.fluid_mixes[key][w][wi]['fluid_type'], f)
+                        if this_fluid.calculation_method == 'User specified':
+                            info_txt += 'user specified. Skipped.'
+                            continue
+                        if this_fluid.status == 'from excel':
+                            # start calculating fluid properties
+                            info_txt += "has status 'from excel', "
+                            if this_fluid.calculation_method == 'Batzle and Wang':
+                                info_txt += "and will be calculated using 'Batzle and Wang'. "
+                                if debug:
+                                    print(info_txt)
+                                # Start Batzle and Wang calculation
+                                # this_fluid.calc_k(wi_bd)
+                                # this_fluid.calc_mu(wi_bd)
+                                # this_fluid.calc_rho(wi_bd)
+                                this_fluid.calc_elastics(self.fluid_mixes[key][w][wi]['fluid_type'], wi_bd)
+                                this_fluid.status = \
                                     'calculated using Batzle and Wang at burial depth {:.2f}'.format(wi_bd)
                         else:
                             if debug:
@@ -638,10 +1407,37 @@ class FluidMix(object):
 
 class TestCases(unittest.TestCase):
     def test_read_fluid_mixes(self):
-        # project_table = 'C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx'
-        project_table = 'C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx'
-        my_fluid_mixes = read_fluidmixes_from_excel(project_table)
-        fmix = FluidMix(fluid_mixes=my_fluid_mixes)
+        project_table = os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx')
+        intervals = Intervals(name='MyIntervals')
+        intervals.read_blixt_tops(project_table)
+        my_fluid_mixes = read_fluidmixes_from_excel(project_table, intervals)
+        fmix = FluidMix(name='MyFluidMix', fluids=my_fluid_mixes)
+        print(fmix.volume_fractions())
+        print(fmix.get_fluids(
+            # subst_order='fInal',
+            subst_order=None,
+            # well_name='wElL_F',
+            well_name=None,
+            # wi_name='sand E',
+            wi_name=None,
+            # mother_fluid_name='DEFAULT',
+            mother_fluid_name=None,
+            # fluid_type='bRiNe',
+            fluid_type=None,
+            volume_fraction='complement',
+            # volume_fraction=None,
+            # tag='XX',
+            tag=None,
+            verbose=True
+        ))
+        print(fmix.print_all_fluids())
+
+    def test_calc_elastics(self):
+        project_table = os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx')
+        intervals = Intervals(name='MyIntervals')
+        intervals.read_blixt_tops(project_table)
+        fmix = FluidMix(name='Fluids')
+        fmix.read_excel(project_table, intervals)
         print(fmix.print_all_fluids())
 
 
@@ -654,8 +1450,8 @@ class TestCases(unittest.TestCase):
         # myfluids = FluidMix()
         # myfluids.read_excel(wp.project_table)
         myfluids = read_fluidmixes_from_excel(wp.project_table)
-        all_fluids = read_all_fluids_from_excel(wp.project_table)
-        return all_fluids, myfluids
+        all_mother_fluids = read_all_mother_fluids_from_excel(wp.project_table)
+        return all_mother_fluids, myfluids
 
     def test_fluid(self):
         default = def_fluid_vals
@@ -666,19 +1462,23 @@ class TestCases(unittest.TestCase):
             print('{}: '.format(ft), f1.k, f1.mu, f1.rho)
 
 
-    def test_fluid_table(self):
-        from bokeh.io import output_file
-        from bokeh.plotting import show, row, column
-        output_file(os.path.join(project_dir, 'blixt_rp\\results_folder\\plot.html'))
+    def test_fluid_table(self, unit_test=True):
 
         all_fluids, fluid_mix = self.test_data()
-        ft = FluidsTable(fluids=list(all_fluids.values()))
+        ft = FluidsTable(mother_fluids=list(all_fluids.values()))
+        # ft = FluidsTable(default_fluids_only=True)
         cds = ft.cds
         # for _key in list(cds.data.keys()):
         #     print(_key, cds.data[_key])
         table, add_row, delete_row, update = ft.draw(cds)
-        show(column(table, row(add_row, delete_row, update)))
-        # return table, add_row, delete_row, update
+        if unit_test:
+            from bokeh.io import output_file
+            from bokeh.plotting import show, row, column
+            output_file(os.path.join(project_dir, 'blixt_rp\\results_folder\\plot.html'))
+            show(column(table, row(add_row, delete_row, update)))
+            return None, None, None, None
+        else:
+            return table, add_row, delete_row, update
 
     def test_fluidsub(self):
         import matplotlib.pyplot as plt

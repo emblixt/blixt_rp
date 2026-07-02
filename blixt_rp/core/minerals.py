@@ -24,6 +24,13 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 from datetime import datetime
 from dataclasses import dataclass
+import sys
+import os
+
+# To test blixt_rp and blixt_utils libraries directly, without installation:
+project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
+sys.path.append(os.path.join(project_dir, 'blixt_rp'))
+sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info

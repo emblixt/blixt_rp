@@ -16,6 +16,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import logging
 from typing import Callable
+import pint
 
 from blixt_rp.rp.rp_wrapper_new import data_source_moduli
 
@@ -107,8 +108,8 @@ class RockPhysicsPlotter(CrossPlotter):
                          height=height, tools=tools)
 
     def rpt_table(self,
-                  rpt_variable: Q_ | None = None,
-                  rpt_constants: Q_ | None = None,
+                  rpt_variable: pint.Quantity | None = None,
+                  rpt_constants: pint.Quantity | None = None,
                   rpt_function: Callable | None = None,
                   rpt_annotations: list | None = None,
                   ):
@@ -159,8 +160,8 @@ class RockPhysicsPlotter(CrossPlotter):
 
     def draw(self,
              cds: ColumnDataSource,
-             rpt_variable: Q_ | None = None,
-             rpt_constants: Q_ | None = None,
+             rpt_variable: pint.Quantity | None = None,
+             rpt_constants: pint.Quantity | None = None,
              rpt_function: Callable | None = None,
              rpt_annotations: list | None = None,
              set_all_intervals_active: bool = False,
