@@ -81,7 +81,7 @@ class Depth(object):
         self.depth_type = depth_type.lower()
 
     def __len__(self):
-        return len(self.depth)
+        return len(self.depth.magnitude)
 
     @property
     def values(self):

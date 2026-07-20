@@ -268,6 +268,29 @@ class Well(object):
         else:
             raise TypeError('style must be either a dict or a Template, not {}'.format(type(style_template)))
 
+    @property
+    def is_evenly_spaced(self) -> bool:
+        """
+        Tests if the dimension of each LogCurve is evenly spaced
+
+        :return:
+            bool
+            True if evenly sampled
+        """
+        return all([_log.is_evenly_spaced for _log in self.logs])
+
+    @property
+    def is_of_equal_length(self) -> bool:
+        """
+        Tests if the length of each LogCurve is the same
+
+        :return:
+            bool
+            True if all are of the same length
+        """
+        all_lengths = [len(_log) for _log in self.logs]
+        return len(set(all_lengths)) == 1
+
     def get_log_curve(self, name):
         for _log in self.logs:
             if _log.name == name:

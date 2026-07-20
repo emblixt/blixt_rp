@@ -13,6 +13,45 @@ Outline:
            There is one problem with using the CrossPlotter for visualizing the results, as the parameters both
            before and after fluid substitution need to have the same name for them to be plotted simultaneously.
            So we need a new 'Well' (or DataSource) to store the substituted results.
+
+    The 'advanced' option takes the fluid, and mineral, properties and their respective mixtures, from the
+    'project table' Excel file.
+    It describes a Gassmann fluid substitution in multiple intervals for multiple wells, where the fluid properties
+    are given in the sheet "Fluids" of the 'project table' Excel file, and the initial and final mixtures
+    (for each well and each interval) of the fluids are given in the "Fluid mixtures" sheet:
+
+      -The column 'Use' of the "Fluid mixtures" sheet is either 'Yes' or 'No'. If not 'Yes', the given well and interval
+    combination is ignored.
+
+      -The column 'Substitution order' of the "Fluid mixtures" sheet is either 'Initial' or 'Final'. Which describes the
+    substitution order that goes from initial to final.
+
+      -The column 'Well name' of the "Fluid mixtures" sheet contains the name of the well for which the fluid substitution
+    is to be done
+
+      -The column 'Interval name' of the "Fluid mixtures" sheet contains the name of the interval (specified elsewhere as
+    top and bottom measured depth) for which the fluid substitution is to be done
+
+      -The column 'Fluid name' of the "Fluid mixtures" sheet which of the fluids in the "Fluids" sheet to use
+
+      -The "Fluid type" column determines which fluid ('Brine', 'Oil' or 'Gas') the Batzle and Wang method should calculate.
+    Or it can be 'User specified', which means that no calculation is needed - it just takes the given Bulk, Shear moduli
+    and density.
+
+      -The column "Volume fraction" of the "Fluid mixtures" sheet, which determines the fraction of each fluid type,
+    is either the name of a specific well log curve (e.g. SW = water saturation), a constant (e.g. 0,2),
+    or "complement" (meaning that it occupies the rest of the pore volume. The total pore volume is of course 1.
+
+    For the "Fluids" sheet of the 'project table' Excel file, we have the following columns:
+
+      -'Name': a unique name of this specific fluid
+
+      -'Bulk moduli', 'Shear moduli' and 'Density' can be given as fixed values in these columns when the column
+      'Calculation method' is set to 'User specified'
+
+      -'Calculation method' is either 'User specified' or 'Batzle and Wang'
+
+      - The other columns are parameters that are used by the Batzle and Wang calculation
 """
 import logging
 from copy import deepcopy
@@ -21,6 +60,7 @@ import numpy as np
 import pandas as pd
 import unittest
 import os, sys
+import logging
 
 from bokeh.io import output_file
 from bokeh.models import ColumnDataSource
@@ -34,13 +74,15 @@ sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 import blixt_rp.rp.rp_core as rp
 from blixt_rp import Q_
 from blixt_rp.core.project_new import Project
-from blixt_rp.core.well import Well
+from blixt_rp.core.well_new import Well
 from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
 from blixt_utils.utils import isnan, print_info
 from blixt_rp.core.core import Intervals, LogTable, Cutoffs, CutoffRule
 from blixt_rp.core.fluids_new import FluidMix
-from blixt_rp.core.minerals import MineralMix
+from blixt_rp.core.minerals_new import MineralMix
+
+logger = logging.getLogger(__name__)
 
 def run_fluid_substitution(
         wells: dict,
@@ -72,8 +114,112 @@ def run_fluid_substitution(
     elif tag[0] != '_':
         tag = '_{}'.format(tag)
 
-    # Calculate the elastic properties of the fluids
-    fluid_mix.calc_elastics(wells, working_intervals, debug=verbose)
+    # Calculate the elastic properties of the fluids.
+    # It is done for each well and for each interval we want to do
+    # fluid substitution in
+    fluid_mix.calc_elastics(wells, debug=verbose)
+
+    # TODO Insert mineral calc_elastics here?, or later?
+
+    # Create a list of necessary logs for this fluid substitution
+    necessary_logs = [log_table[_x] for _x in ['Porosity', 'Density', 'P velocity', 'S velocity']]
+    # Lists the necessary logs in a fluid mix
+    necessary_logs += fluid_mix.necessary_logs()
+    # TODO Create a similar method for the mineral mix
+    necessary_logs += mineral_mix.necessary_logs()
+
+# Loop over all wells
+    for w, well in wells.items():
+        w = w.lower()
+
+        #
+        # Test if well is listed in the fluid mix
+        if w not in fluid_mix.well_names():
+            print_info('Well {} not listed in the fluid mixture. Skipping'.format(w), 'warning', logger)
+            continue
+
+        info_txt = 'Starting Gassmann fluid substitution on well {}'.format(w)
+        print_info('{}'.format(info_txt), 'info', logger)
+
+        #
+        # test if necessary logs are present in the well
+        skip_this_well = False
+        warn_txt = ''
+        for _x in necessary_logs:
+            if _x.lower() not in [_y.lower() for _y in well.log_names()]:
+                warn_txt += 'Log name {} not present in well {}\n'.format(log_table[_x], w)
+                skip_this_well = True
+        if skip_this_well:
+            warn_txt += '  SKIPPING well {}'.format(w)
+            print_info(warn_txt, 'warning', logger)
+            continue
+
+        #
+        # Calculate initial values
+        # TODO the below method does not exist, and maybe it should be a method of
+        # mineral_mix rather than the well?
+        k0_dict = well.calc_vrh_bounds(mineral_mix, param='k', wis=working_intervals, method='Voigt-Reuss-Hill', block_name=block_name)
+        por = well.get_log_curve(log_table['Porosity'])
+        vp_1 = well.get_log_curve(log_table['P velocity'])
+        vs_1 = well.get_log_curve(log_table['S velocity'])
+        rho_1 = well.get_log_curve(log_table['Density'])
+        # TODO the below method does not exist, maybe it should be a function of fluid_mix instead?
+        rho_f1_dict = well.calc_vrh_bounds(fluid_mix.fluids['initial'], param='rho', wis=working_intervals, method='Voigt', block_name=block_name)
+        k_f1_dict = well.calc_vrh_bounds(fluid_mix.fluids['initial'], param='k', wis=working_intervals, method='Reuss', block_name=block_name)
+
+        #
+        # Final fluids
+        rho_f2_dict = well.calc_vrh_bounds(fluid_mix.fluids['final'], param='rho', wis=working_intervals, method='Voigt', block_name=block_name)
+        k_f2_dict = well.calc_vrh_bounds(fluid_mix.fluids['final'], param='k', wis=working_intervals, method='Reuss', block_name=block_name)
+
+        # Run the fluid substitution separately in each working interval
+        for wi in fluid_mix.interval_names():
+            # TODO We could perhaps extend the 'calc_elastics' of the fluid and mineral mixes
+            # TODO so that it calculates the VRH bounds too? Then we could something like
+            # Not 'calculates the VRH bounds too' It should calculate the VRH bounds of the initial and final fluid
+            # instead of each constituent fluid
+            k_f1 = fluid_mix.get_fluids( subst_order='initial', well_name=w, wi_name=wi)[0].k
+            rho_f1 = fluid_mix.get_fluids( subst_order='initial', well_name=w, wi_name=wi)[0].rho
+            k_f2 = fluid_mix.get_fluids( subst_order='final', well_name=w, wi_name=wi)[0].k
+            rho_f2 = fluid_mix.get_fluids( subst_order='final', well_name=w, wi_name=wi)[0].rho
+            # TODO And similarly for the mineral mix
+            k0 = mineral_mix.get_minerals(well_name=w, wi_name=wi)[0].k
+            # TODO Instead of the current solution where we pick up everything from the dictionaries we
+            # created above. E.G.
+            k_f1 = k_f1_dict[wi]
+            rho_f1 = rho_f1_dict[wi]
+            k_f2 = k_f2_dict[wi]
+            rho_f2 = rho_f2_dict[wi]
+            k0 = k0_dict[wi]
+
+            # TODO Below code is old, needs to be updated accordingly
+            # calculate the mask for the given cut-offs, and for the given working interval
+            well.calc_mask(cutoffs, wis=wis, wi_name=wi, name='this_mask', log_table=log_table,
+                           log_type_input=log_type_input)
+            mask = lb.masks['this_mask'].values
+
+            # Do the fluid substitution itself
+            _vp_2, _vs_2, _rho_2, _k_2 = gassmann_vel(
+                vp_1.values, vs_1.values, rho_1.values, k_f1, rho_f1, k_f2, rho_f2, k0, por)
+
+            # Add the fluid substituted results to the well
+            for xx, yy in zip([vp_1, vs_1, rho_1], [_vp_2, _vs_2, _rho_2]):
+                new_name = deepcopy(xx.name)
+                new_name += '{}'.format(tag.lower())
+                new_header = deepcopy(xx.header)
+                new_header.name += '{}'.format(tag.lower())
+                new_header.desc = 'Fluid substituted {}'.format(xx.name)
+                mod_history = 'Calculated using Gassmann fluid substitution using following\n'
+                mod_history += 'Mineral mixtures: {}\n'.format(mm.print_minerals(wname, wi))
+                mod_history += 'Initial fluids: {}\n'.format(
+                    fm.print_fluids('initial', wname, wi))
+                mod_history += 'Final fluids: {}\n'.format(
+                    fm.print_fluids('final', wname, wi))
+                new_header.modification_history = mod_history
+                new_data = deepcopy(xx.values)
+                new_data[mask] = yy[mask]
+                lb.add_log(new_data, new_name, xx.get_log_type(), new_header)
+
 
 class   InteractiveFluidSub:
     def __init__(self,
@@ -120,7 +266,7 @@ class TestCases(unittest.TestCase):
 
         # Load fluids
         my_fluids = FluidMix()
-        my_fluids.read_excel(wp.project_table)
+        my_fluids.read_excel(wp.project_table, wis)
         print(my_fluids.print_all_fluids())
 
         # Load minerals

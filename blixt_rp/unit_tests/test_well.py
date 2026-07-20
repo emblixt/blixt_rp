@@ -137,6 +137,11 @@ class WellTestCase(unittest.TestCase):
 
         # harmonize logs
         for w in [w1, w2, w3]:
+            print('Before: Is well {} evenly spaced?: {}'.format(w.name, w.is_evenly_spaced))
+            print('Before: Are logs in well {} of the same length?: {}'.format(w.name, w.is_of_equal_length))
+            w.harmonize_logs()
+            print('After: Is well {} evenly spaced?: {}'.format(w.name, w.is_evenly_spaced))
+            print('After: Are logs in well {} of the same length?: {}'.format(w.name, w.is_of_equal_length))
             w.harmonize_logs()
             for lc in w.logs:
                 print(lc.name, len(lc), lc.is_evenly_spaced, lc.units, lc.depth_units,  lc.base - lc.top)

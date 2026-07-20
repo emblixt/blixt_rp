@@ -737,6 +737,8 @@ def vrh_bounds(f, m):
          M_Reuss,  # lower bound or Reuss average
          M_VRH]  # Voigt-Reuss-Hill average
     """
+    # print('From VRH bounds: Fractions:', f)
+    # print('From VRH bounds: Parameter:', m)
     if (not isinstance(f, list)) or (not isinstance(m, list)):
         raise IOError('Input must be given as lists')
 
