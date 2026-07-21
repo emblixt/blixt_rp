@@ -174,6 +174,20 @@ class CutoffTests(unittest.TestCase):
         # Raise an NotImplementedError because we don't support multi log LogTables yet
         self.assertRaises(NotImplementedError, cutoffs.use_log_table, LogTable(log_table_multi))
 
+    def test_create_mask_from_cutoff_rule(self):
+        data = {'name2': np.linspace(5., 20, 10)}
+        mask = rule2.create_mask(data)
+        print(mask)
+        self.assertTrue(
+            all(_x == _y for _x, _y in zip(mask, [True, True, True, False, False, False, False, False, False, False])))
+
+    def test_create_mask_from_cutoffs(self):
+        data = {'name1': np.linspace(90., 190, 10), 'name2': np.linspace(5., 20, 10)}
+        cfs = Cutoffs(cutoffs=[rule1, rule2])
+        mask = cfs.create_mask(data)
+        print(mask)
+        self.assertTrue(
+            all(_x == _y for _x, _y in zip(mask, [False, True, True, False, False, False, False, False, False, False])))
 
 class LogTableTests(unittest.TestCase):
     def test_lt_init(self):

@@ -40,8 +40,7 @@ from blixt_rp.core.well_new import Well
 from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
 from blixt_utils.utils import isnan, print_info
-from blixt_rp.core.core import Interval, Intervals
-
+from blixt_rp.core.core import Interval, Intervals, Cutoffs
 
 logger = logging.getLogger(__name__)
 
@@ -121,19 +120,102 @@ class FluidSpec:
                 self.shear_gpa = 0.0
                 self.density_gcc = _this_density
 
+@dataclass()
+class MineralSpec:
+    """
+    Represents one row of the "Fluids" sheet in the project_table Excel file, formerly known as the "mother fluid"
+    """
+    name: str
+    calculation_method: Literal["interval average"] | None = None
+    bulk_gpa: float | None = None
+    shear_gpa: float | None = None
+    density_gcc: float | None = None
+    cutoffs: Cutoffs | None = None
+    params: dict[str, Any] | None = None
+
+    def __str__(self, indent=4):
+        """
+        Return better readable string representation of the FluidSpec object.
+        """
+        keys = list(self.__dict__.keys())
+        values = list(self.__dict__.values())
+        out = ''
+        indent = ' ' * indent
+        for _key, _value in zip(keys, values):
+            out += '{}{}: {}\n'.format(indent, _key, _value)
+        return out
+
+    def calc_elastics(self, logs: dict[str, np.ndarray] | None = None):
+        """
+        Most minerals have the elastic properties fixed, and given in the project table Excel file.
+        But some minerals are allowed to be calculated by an interval average
+
+        So this function will only operate on minerals which have 'calculation_method' == 'interval average'
+
+        :param logs:
+            dict
+            Dictionary with log values for the necessary parameters needed to calculate bulk and shear moduli, and
+            density.
+            E.G.
+                logs = {'vp': np.ndarray, # in m/s
+                        'vs': np.ndarray, # in m/s
+                        'rho': np.ndarray, # in g/cc}
+
+            If there is a Cutoff specified, the log values for the logs specified in the Cutoffs string must also be
+            present.
+            E.G if Cutoffs is given by e.g. 'VCL>0.8[], PHIE<0.1[]' the logs also need to contain
+                {'VCL': np.ndarray,
+                 'PHIE: np.ndarray}
+
+            All of which must have the same length
+        :return:
+        """
+        if self.calculation_method.lower() == 'interval average':
+            # Check that the necessary logs are present
+            for _param in ['vp', 'vs', 'rho']:
+                if _param not in list(logs.keys()):
+                    raise IOError('Log {} is missing among the input logs'.format(_param))
+
+            # Check that the logs defined in any cutoff are present
+            if self.cutoffs is not None:
+                for _param in self.cutoffs.cutoff_params:
+                    if _param not in list(logs.keys()):
+                        raise IOError('Log {} is missing among the input logs'.format(_param))
+
+
+            _this_density = logs['rho']
+            _this_bulk = (logs['vp']**2 - 4. * logs['vs']**2 / 3.) * _this_density * 1.E-6
+            _this_shear = logs['vs']**2 * _this_density * 1.E-6
+
+            # Calculate the mask
+            if self.cutoffs is not None:
+                mask = self.cutoffs.create_mask(logs)
+            else:
+                n = len(logs[list(logs.keys())[0]])
+                mask =  np.array(np.ones(n), dtype=bool)
+
+            self.bulk_gpa = float(np.nanmedian(_this_bulk[mask]))
+            self.shear_gpa = float(np.nanmedian(_this_shear[mask]))
+            self.density_gcc = float(np.nanmedian(_this_density[mask]))
+        else:
+            pass
 
 @dataclass(frozen=True)
 class MixtureComponent:
     """
-    One object per row in the 'FluidMixture' sheet of the project_table Excel file.
-    A combination of MixtureComponent's are used to specify one SubstitutionCase, and represents one row in the
-    'FluidMixture' sheet of the project_table Excel file.
+    One object per row in the 'FluidMixture' (or 'MineralMixture') sheet of the project_table Excel file.
+    A combination of MixtureComponent's are used to specify one SubstitutionCase
+
     "frozen=True" is generally better because this object shouldn't change during calculation
     """
-    mother_fluid_name: str
-    fluid_type: Literal["gas", "oil", "brine", "user specified"]
+    mother_name: str
+    # Formerly 'fluid_type', but now renamed to 'type' to be able to better handle minerals too
+    # fluid_type: Literal["gas", "oil", "brine", "user specified"]
+    type: Literal["gas", "oil", "brine", "user specified", "mineral"]
     volume: VolumeFraction
-    fluid: FluidSpec
+    # Formerly 'fluid', but renamed to 'source' to be able to better handle minerals too
+    # fluid: FluidSpec
+    source: FluidSpec | MineralSpec
 
     def __str__(self, indent=4):
         """
@@ -164,7 +246,7 @@ class SubstitutionCase:
     final_shear_gpa: float | None = 0.0
     final_density_gcc: float | None = None
 
-    def calc_elastics(self, burial_depth: Q_, logs: dict[str, np.ndarray], verbose: bool = False):
+    def calc_elastics(self, logs: dict[str, np.ndarray], burial_depth: Q_ | None = None, verbose: bool = False):
         """
         Calculates the elastic properties of the Voigt-Reuss-Hill averaged fluid for the initial and final fluids
         for this specific SubstitutionCase
@@ -180,6 +262,17 @@ class SubstitutionCase:
         """
         if len(self.initial) == 0 or len(self.final) == 0:
             raise IOError('Need a list of initial and final MixtureComponents to calculate the elastics')
+
+        # Try to separate if the input MixtureComponents are based on FluidSpec or MineralSpec
+        from_fluids = isinstance(self.initial[0].source, FluidSpec)
+        print('Are the initial and final MixtureComponents based on FluidSpec?', from_fluids)
+
+        if from_fluids and burial_depth is None:
+            err_txt = 'Burial depth is necessary for calculating the elastic properties of fluid mixtures'
+            print_info(err_txt, 'error', logger, 'IOError')
+
+
+        # Check the logs if they are of the same length, and extract that length
         n = None
         last_n = 0
         for i, _key in enumerate(list(logs.keys())):
@@ -197,12 +290,12 @@ class SubstitutionCase:
         _shear = []
         _density = []
         for _x in self.initial:
-            _key = f'{_x.mother_fluid_name}:User specified' if _x.fluid_type == 'User specified' else f'{_x.mother_fluid_name}:{_x.fluid_type}'
+            _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
             _f.append(vol_fractions[_key])
-            _x.fluid.calc_elastics(_x.fluid_type, burial_depth)
-            _bulk.append([_x.fluid.bulk_gpa] * n)
-            _shear.append([_x.fluid.shear_gpa] * n)
-            _density.append([_x.fluid.density_gcc] * n)
+            _x.source.calc_elastics(_x.type, burial_depth)
+            _bulk.append([_x.source.bulk_gpa] * n)
+            _shear.append([_x.source.shear_gpa] * n)
+            _density.append([_x.source.density_gcc] * n)
         # Bulk modulus
         self.initial_bulk_gpa = rp.vrh_bounds(_f, _bulk)[2]
         # Shear modulus
@@ -221,12 +314,12 @@ class SubstitutionCase:
         _shear = []
         _density = []
         for _x in self.final:
-            _key = f'{_x.mother_fluid_name}:User specified' if _x.fluid_type == 'User specified' else f'{_x.mother_fluid_name}:{_x.fluid_type}'
+            _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
             _f.append(vol_fractions[_key])
-            _x.fluid.calc_elastics(_x.fluid_type, burial_depth)
-            _bulk.append([_x.fluid.bulk_gpa] * n)
-            _shear.append([_x.fluid.shear_gpa] * n)
-            _density.append([_x.fluid.density_gcc] * n)
+            _x.source.calc_elastics(_x.type, burial_depth)
+            _bulk.append([_x.source.bulk_gpa] * n)
+            _shear.append([_x.source.shear_gpa] * n)
+            _density.append([_x.source.density_gcc] * n)
         # Bulk modulus
         self.final_bulk_gpa = rp.vrh_bounds(_f, _bulk)[2]
         # Shear modulus
@@ -311,7 +404,7 @@ def load_fluid_specs(xlsx: str | Path) -> dict[str, FluidSpec]:
     return out
 
 def load_mineral_specs(xlsx: str | Path) -> dict[str, FluidSpec]:
-    minerals = read_sheet_table(xlsx, 'Minerals', {'Name', 'Calculation method'})
+    minerals = read_sheet_table(xlsx, 'Minerals', {'Name', 'Calculation method', 'Cutoffs'})
     minerals = minerals[minerals['Name'].notna()].copy()
     if minerals['Name'].duplicated().any():
         dups = minerals.loc[minerals['Name'].duplicated(), 'Name'].tolist()
@@ -320,33 +413,56 @@ def load_mineral_specs(xlsx: str | Path) -> dict[str, FluidSpec]:
     for _, r in minerals.iterrows():
         name = clean_str(r['Name'])
         method = clean_str(r['Calculation method']) or ''
+        cutoffs = clean_str(r['Cutoffs']) or None
+        if cutoffs is not None:
+            cutoffs = Cutoffs(from_string=cutoffs)
         if method.lower() not in ['interval average', '']:
             raise IOError('Mineral calculation method must be either "Interval average" or empty. Not: {}'.format(
                 method
             ))
         params = {c: None if pd.isna(r[c]) else r[c] for c in minerals.columns if c not in {'Name'}}
 
-        # out[name] = MineralSpec(
-        #     name=name,
-        #     calculation_method=method.lower(),
-        #     bulk_gpa=as_float_or_none(r.get('Bulk moduli [GPa]')),
-        #     shear_gpa=as_float_or_none(r.get('Shear moduli [GPa]')),
-        #     density_gcc=as_float_or_none(r.get('Density [g/cm3]')),
-        #     params=params,
-        # )
-        print(name, method.lower(), params)
+        out[name] = MineralSpec(
+            name=name,
+            calculation_method=method.lower(),
+            bulk_gpa=as_float_or_none(r.get('Bulk moduli [GPa]')),
+            shear_gpa=as_float_or_none(r.get('Shear moduli [GPa]')),
+            density_gcc=as_float_or_none(r.get('Density [g/cm3]')),
+            cutoffs=cutoffs,
+            params=params,
+        )
     return out
 
 
-def component_from_row(r: pd.Series, fluids: dict[str, FluidSpec]) -> MixtureComponent:
-    fluid_name = clean_str(r['Fluid name'])
-    if fluid_name not in fluids:
-        raise ValueError(f'Fluid mixture references unknown fluid {fluid_name!r}')
+def component_from_row(r: pd.Series, sources: dict[str, FluidSpec | MineralSpec]) -> MixtureComponent:
+    """
+    Returns the Mixture component from one row in the project_table Excel fil
+
+    :param r:
+    :param sources:
+    :return:
+    """
+
+    # Discriminate between the case where the sources are a dictionary of FluidSpec's or MineralSpec's
+    if isinstance(list(sources.values())[0], FluidSpec):
+        fluid = True
+    else:
+        fluid = False
+
+    if fluid:
+        source_name = clean_str(r['Fluid name'])
+        _type = clean_str(r['Fluid type']) or ''
+    else:
+        source_name = clean_str(r['Mineral name'])
+        _type = 'mineral'
+
+    if source_name not in sources:
+        raise ValueError(f'Fluid / Mineral mixture references unknown source {source_name!r}')
     return MixtureComponent(
-        mother_fluid_name=fluid_name,
-        fluid_type=clean_str(r['Fluid type']) or '',
+        mother_name=source_name,
+        type=_type,
         volume=parse_volume_fraction(r['Volume fraction']),
-        fluid=fluids[fluid_name],
+        source=sources[source_name],
     )
 
 def validate_component_set(components: list[MixtureComponent], label: str) -> None:
@@ -364,32 +480,65 @@ def validate_component_set(components: list[MixtureComponent], label: str) -> No
         if abs(const_sum - 1) > 1e-6:
             raise ValueError(f'{label}: constant fractions sum to {const_sum:.3f}, expected 1')
 
-def load_substitution_cases(xlsx: str | Path) -> list[SubstitutionCase]:
+def load_substitution_cases(xlsx: str | Path, from_fluid_mixture: bool = True) -> list[SubstitutionCase]:
     """
     By including "Well name", "Interval name", "Tag" in the groupby method of a panda table we can run several
     substitution scenarios for the same well and interval
     :param xlsx:
+
+    :param from_fluid_mixture:
+        bool
+        Setting this to False tells the script to load the substitution cases from a mineral mixture table.
+        Now in reality, The mineral mixture will be the same before and after fluid substitution, so substitution order
+        doesn't make sense.
     :return:
     """
-    fluids = load_fluid_specs(xlsx)
-    mix = read_sheet_table(xlsx, 'Fluid mixtures', {'Use', 'Substitution order', 'Well name', 'Interval name', 'Fluid name', 'Fluid type', 'Volume fraction'})
+    # Load the fluid or mineral mixtures
+    if from_fluid_mixture:
+        fluids = load_fluid_specs(xlsx)
+        minerals = None
+        mix = read_sheet_table(xlsx, 'Fluid mixtures', {'Use', 'Substitution order', 'Well name', 'Interval name',
+                                                        'Fluid name', 'Fluid type', 'Volume fraction'})
+    else:
+        fluids = None
+        minerals = load_mineral_specs(xlsx)
+        mix = read_sheet_table(xlsx, 'Mineral mixtures', {'Use', 'Well name', 'Interval name',
+                                                          'Mineral name', 'Volume fraction'})
+
+    # Only keep the mixtures which have a 'Yes' in the 'Use' column
     mix = mix[mix['Use'].astype(str).str.strip().str.lower().eq('yes')].copy()
-    mix['Substitution order'] = mix['Substitution order'].map(lambda x: (clean_str(x) or '').title())
-    bad_orders = sorted(set(mix['Substitution order']) - {'Initial', 'Final'})
-    if bad_orders:
-        raise ValueError(f'Unsupported substitution order values: {bad_orders}')
+
+    # For fluid mixtures, clean up and check the 'Substitution order' column
+    if from_fluid_mixture:
+        mix['Substitution order'] = mix['Substitution order'].map(lambda x: (clean_str(x) or '').title())
+        # Checks if there are any other substitution orders that "Initial" and "Final"
+        bad_orders = sorted(set(mix['Substitution order']) - {'Initial', 'Final'})
+        if bad_orders:
+            raise ValueError(f'Unsupported substitution order values: {bad_orders}')
+
+    # Make sure the loaded table is consistent with respect to our requirements
     for col in ['Well name', 'Interval name']:
         if mix[col].isna().any():
-            raise ValueError(f'Missing {col} in enabled Fluid mixtures rows')
+            raise ValueError(f'Missing {col} in enabled mixtures rows')
     if 'Tag' not in mix.columns:
         mix['Tag'] = None
+
+    # Create an empty results container to begin with
     cases: list[SubstitutionCase] = []
+
+    # Group the table and start iterating
     group_cols = ['Well name', 'Interval name', 'Tag']
     for key, g in mix.groupby(group_cols, dropna=False, sort=False):
         well, interval, tag = key
         well, interval, tag = clean_str(well), clean_str(interval), clean_str(tag)
-        initial = [component_from_row(r, fluids) for _, r in g[g['Substitution order'].eq('Initial')].iterrows()]
-        final = [component_from_row(r, fluids) for _, r in g[g['Substitution order'].eq('Final')].iterrows()]
+        if from_fluid_mixture:
+            initial = [component_from_row(r, fluids) for _, r in g[g['Substitution order'].eq('Initial')].iterrows()]
+            final = [component_from_row(r, fluids) for _, r in g[g['Substitution order'].eq('Final')].iterrows()]
+        else:
+            # For minerals we have the same initial and final minerals
+            initial = [component_from_row(r, minerals) for _, r in g.iterrows()]
+            final = [component_from_row(r, minerals) for _, r in g.iterrows()]
+
         if not initial or not final:
             raise ValueError(f'{well}/{interval}/{tag}: need both Initial and Final mixture rows')
         validate_component_set(initial, f'{well}/{interval}/{tag}/Initial')
@@ -397,6 +546,8 @@ def load_substitution_cases(xlsx: str | Path) -> list[SubstitutionCase]:
         cases.append(SubstitutionCase(well=well, interval=interval, tag=tag, initial=initial, final=final))
     return cases
 
+# TODO CONTINUE HERE
+# TODO Modify this so that it can handle minerals too
 def resolve_volume_fractions(components: list[MixtureComponent], logs: dict[str, np.ndarray], n: int) -> dict[str, np.ndarray]:
     """
     Calculates the volume fractions of each of the fluids listed in components
@@ -419,7 +570,7 @@ def resolve_volume_fractions(components: list[MixtureComponent], logs: dict[str,
     out: dict[str, np.ndarray] = {}
     complement_name = None
     for c in components:
-        key = f'{c.mother_fluid_name}:User specified' if c.fluid_type == 'User specified' else f'{c.mother_fluid_name}:{c.fluid_type}'
+        key = f'{c.mother_name}:User specified' if c.type == 'User specified' else f'{c.mother_name}:{c.type}'
         if c.volume.mode == 'constant':
             arr = np.full(n, float(c.volume.value))
             out[key] = arr
@@ -462,6 +613,11 @@ class TestCases(unittest.TestCase):
                 _value.calc_elastics(_fluid, Q_(3000., 'm'))
                 print(_key, _fluid , _value)
 
+    def test_load_mineral_spec(self):
+        project_table = os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx')
+        for _key, _value in list(load_mineral_specs(project_table).items()):
+            print(_key, _value)
+
     def test_read_sheet_table(self):
         project_table = os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx')
         mix = read_sheet_table(project_table, 'Fluid mixtures',
@@ -475,6 +631,8 @@ class TestCases(unittest.TestCase):
 
     def test_component_from_row(self):
         project_table = os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx')
+
+        # First test the case with fluids
         fluids = load_fluid_specs(project_table)
         mix = read_sheet_table(project_table, 'Fluid mixtures',
                                {'Use', 'Substitution order',
@@ -488,6 +646,18 @@ class TestCases(unittest.TestCase):
             final = [component_from_row(r, fluids) for _, r in g[g['Substitution order'].eq('Final')].iterrows()]
             print('Initial:\n', '\n'.join([str(_i) for _i in initial]))
             print('Final:\n', '\n'.join([str(_f) for _f in final]))
+
+        # Next, try loading the mineral components
+        minerals = load_mineral_specs(project_table)
+        mix = read_sheet_table(project_table, 'Mineral mixtures',
+                               {'Use',
+                                'Well name', 'Interval name',
+                                'Mineral name', 'Volume fraction'})
+        mix = mix[mix['Use'].astype(str).str.strip().str.lower().eq('yes')].copy()
+        group_cols = ['Well name', 'Interval name']
+        for key, g in mix.groupby(group_cols, dropna=False, sort=False):
+            _minerals = [component_from_row(r, minerals) for _, r in g.iterrows()]
+            print('Minerals:\n', '\n'.join([str(_i) for _i in _minerals]))
 
     def test_validate_component_set(self):
         project_table = os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx')
@@ -505,14 +675,34 @@ class TestCases(unittest.TestCase):
             print('Initial is valid?:\n', validate_component_set(initial, 'TEST'))
             print('Final is valid?:\n', validate_component_set(final, 'TEST FINAL'))
 
+        # Next, try loading the mineral components
+        minerals = load_mineral_specs(project_table)
+        mix = read_sheet_table(project_table, 'Mineral mixtures',
+                               {'Use',
+                                'Well name', 'Interval name',
+                                'Mineral name', 'Volume fraction'})
+        mix = mix[mix['Use'].astype(str).str.strip().str.lower().eq('yes')].copy()
+        group_cols = ['Well name', 'Interval name']
+        for key, g in mix.groupby(group_cols, dropna=False, sort=False):
+            _minerals = [component_from_row(r, minerals) for _, r in g.iterrows()]
+            print('Minerals are valid:\n', validate_component_set(_minerals, 'TEST MINERAL'))
+
 
     def test_load_substitution_cases(self):
         project_table = os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx')
-        cases = load_substitution_cases(project_table)
+        # First the fluids
+        cases = load_substitution_cases(project_table, from_fluid_mixture=True)
         for c in cases:
             print(f'{c.well} | {c.interval} | tag={c.tag}')
-            print('  Initial:', [(x.mother_fluid_name, x.fluid_type, x.volume.mode, x.volume.value) for x in c.initial])
-            print('  Final:  ', [(x.mother_fluid_name, x.fluid_type, x.volume.mode, x.volume.value) for x in c.final])
+            print('  Initial:', [(x.mother_name, x.type, x.volume.mode, x.volume.value) for x in c.initial])
+            print('  Final:  ', [(x.mother_name, x.type, x.volume.mode, x.volume.value) for x in c.final])
+
+        # Then the minerals
+        cases = load_substitution_cases(project_table, from_fluid_mixture=False)
+        for c in cases:
+            print(f'{c.well} | {c.interval} | tag={c.tag}')
+            print('  Initial:', [(x.mother_name, x.type, x.volume.mode, x.volume.value) for x in c.initial])
+            print('  Final:  ', [(x.mother_name, x.type, x.volume.mode, x.volume.value) for x in c.final])
 
     def test_resolve_volume_fraction(self):
         project_table = os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx')
@@ -531,7 +721,7 @@ class TestCases(unittest.TestCase):
         n = 10
         for c in cases:
             print(f'{c.well} | {c.interval} | tag={c.tag}')
-            c.calc_elastics(Q_(3000., 'meter'), {'SW': np.full(n, 0.4)}, verbose=True)
+            c.calc_elastics({'SW': np.full(n, 0.4)}, Q_(3000., 'meter'), verbose=True)
 
     def test_calc_elastics_for_substitution_cases_detailed(self):
         fluid_params = {'Bulk moduli [GPa]': None, 'Shear moduli [GPa]': None, 'Density [g/cm3]': None,
@@ -546,34 +736,34 @@ class TestCases(unittest.TestCase):
             params=fluid_params
         )
         mc1 = MixtureComponent(
-            mother_fluid_name='MyFluid',
-            fluid_type='brine',
+            mother_name='MyFluid',
+            type='brine',
             volume=VolumeFraction(
                 mode='constant',
                 value=1,
                 excel_value=1
             ),
-            fluid=fs
+            source=fs
         )
         mc2 = MixtureComponent(
-            mother_fluid_name='MyFluid',
-            fluid_type='brine',
+            mother_name='MyFluid',
+            type='brine',
             volume=VolumeFraction(
                 mode='log',
                 value='SW',
                 excel_value='SW'
             ),
-            fluid=fs
+            source=fs
         )
         mc3 = MixtureComponent(
-            mother_fluid_name='MyFluid',
-            fluid_type='gas',
+            mother_name='MyFluid',
+            type='gas',
             volume=VolumeFraction(
                 mode='complement',
                 value=None,
                 excel_value='complement'
             ),
-            fluid=fs
+            source=fs
         )
         sc = SubstitutionCase(
             well='Well 1',
@@ -592,7 +782,7 @@ class TestCases(unittest.TestCase):
         gas_density = fs.density_gcc
 
         # The water saturation goes from 0 to 1
-        sc.calc_elastics(Q_(2000., 'm'), {'SW': np.linspace(0., 1., 10)}, verbose=False)
+        sc.calc_elastics({'SW': np.linspace(0., 1., 10)}, Q_(2000., 'm'), verbose=False)
 
         # print(brine_bulk, brine_density)
         # print(gas_bulk, gas_density)
@@ -611,3 +801,26 @@ class TestCases(unittest.TestCase):
         # The first sample of the VRH averaged value of the final density should equal the gas density
         self.assertAlmostEqual(sc.final_density_gcc[0], gas_density)
 
+    def test_calc_elastics_for_mineral_detailed(self):
+        cutoffs = Cutoffs(from_string='VCL>0.8[], PHIE<0.1[]')
+        ms = MineralSpec(
+            name='MyMineral',
+            calculation_method='interval average',
+            cutoffs=cutoffs
+        )
+        logs = {
+            'vp': np.linspace(2900., 3100, 20),
+            'vs': np.linspace(1400., 1600, 20),
+            'rho': np.linspace(2.3, 2.5, 20),
+            'VCL': np.linspace(1., 0.6, 20),
+            'PHIE': np.linspace(0., 0.2, 20)
+        }
+        ms.calc_elastics(logs)
+        print(ms)
+
+        # if we shift the order of data in VCL and PHIE, we should get a higher result, as the mask
+        # then should filter out the lower values of vp, vs, and rho
+        logs['VCL'] = np.linspace(0.6, 1, 20)
+        logs['PHIE'] = np.linspace(0.2, 0., 20)
+        ms.calc_elastics(logs)
+        print(ms)

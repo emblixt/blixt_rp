@@ -29,6 +29,7 @@ sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 from blixt_utils.utils import add_one, fix_well_name, cycle_colors, isnan, print_info
 from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
+from blixt_utils.misc.masks import create_mask, combine_masks
 
 logger = logging.getLogger(__name__)
 
@@ -369,6 +370,25 @@ class CutoffRule:
             _limits = self.limit
         return '{}{}{}[{}]'.format( _param, _operator, _limits, _units)
 
+    def create_mask(self, data: dict[str, np.ndarray]):
+        """
+        Calculates the boolean mask for the input data by naively assuming it has the same units as the given limits
+
+        :param data:
+            dict
+            Dictionary in which the key must match the name of the parameter (self.param)
+
+        :return:
+            Boolean mask
+        """
+        if self.operator is None or self.limit is None:
+            print_info('No operator and/or limit defined for this CutoffRule: {}'.format(self.name), 'warning', logger)
+            return np.array(np.ones(len(data)), dtype=bool)
+        if self.param not in list(data.keys()):
+            print_info('The cutoff parameter: {} does not match any of the data keys {}'.format(
+                self.param, ', '.join(list(data.keys()))), 'warning', logger)
+            return np.array(np.ones(len(data)), dtype=bool)
+        return create_mask(data[self.param], self.operator, self.limit)
 
 class ClassificationTable:
     """
@@ -863,7 +883,13 @@ class Cutoffs:
             "VCL>0.8, PHIE<0.1"
         :return:
         """
-        pass
+        if self.cutoffs is None:
+            self.cutoffs = [CutoffRule(from_string=_x) for _x in input_string.split(',')]
+
+    def create_mask(self, data: dict[str, np.ndarray]):
+        return(combine_masks([
+            _r.create_mask(data) for _r in self.cutoffs
+        ]))
 
 class Template:
     """
