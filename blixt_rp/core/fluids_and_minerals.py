@@ -82,7 +82,7 @@ class FluidSpec:
             out += '{}{}: {}\n'.format(indent, _key, _value)
         return out
 
-    def calc_elastics(self, fluid_type: str, burial_depth: Q_):
+    def calc_elastics(self, fluid_type: str, burial_depth: Q_, verbose: bool = False):
         if self.calculation_method.lower() == 'batzle and wang':
             _this_density = None
             _this_bulk = None
@@ -120,6 +120,11 @@ class FluidSpec:
                 self.shear_gpa = 0.0
                 self.density_gcc = _this_density
 
+        if verbose:
+            print('FluidSpec elastics calculated through {}, to: Bulk; {:.2f}, Shear; {:.2f}, Density; {:.2f}'.format(
+                self.calculation_method, self.bulk_gpa, self.shear_gpa, self.density_gcc
+            ))
+
 @dataclass()
 class MineralSpec:
     """
@@ -145,7 +150,7 @@ class MineralSpec:
             out += '{}{}: {}\n'.format(indent, _key, _value)
         return out
 
-    def calc_elastics(self, logs: dict[str, np.ndarray] | None = None):
+    def calc_elastics(self, logs: dict[str, np.ndarray], verbose: bool = False):
         """
         Most minerals have the elastic properties fixed, and given in the project table Excel file.
         But some minerals are allowed to be calculated by an interval average
@@ -199,6 +204,11 @@ class MineralSpec:
             self.density_gcc = float(np.nanmedian(_this_density[mask]))
         else:
             pass
+
+        if verbose:
+            print('MineralSpec elastics calculated through {}, to: Bulk; {:.2f}, Shear; {:.2f}, Density; {:.2f}'.format(
+                self.calculation_method, self.bulk_gpa, self.shear_gpa, self.density_gcc
+            ))
 
 @dataclass(frozen=True)
 class MixtureComponent:
@@ -265,7 +275,6 @@ class SubstitutionCase:
 
         # Try to separate if the input MixtureComponents are based on FluidSpec or MineralSpec
         from_fluids = isinstance(self.initial[0].source, FluidSpec)
-        print('Are the initial and final MixtureComponents based on FluidSpec?', from_fluids)
 
         if from_fluids and burial_depth is None:
             err_txt = 'Burial depth is necessary for calculating the elastic properties of fluid mixtures'
@@ -290,9 +299,15 @@ class SubstitutionCase:
         _shear = []
         _density = []
         for _x in self.initial:
-            _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
+            # _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
+            if from_fluids:
+                _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
+                _x.source.calc_elastics(_x.type, burial_depth, verbose=verbose)
+            else:
+                _key = f'{_x.mother_name}:Mineral'
+                _x.source.calc_elastics(logs, verbose=verbose)
+
             _f.append(vol_fractions[_key])
-            _x.source.calc_elastics(_x.type, burial_depth)
             _bulk.append([_x.source.bulk_gpa] * n)
             _shear.append([_x.source.shear_gpa] * n)
             _density.append([_x.source.density_gcc] * n)
@@ -314,9 +329,15 @@ class SubstitutionCase:
         _shear = []
         _density = []
         for _x in self.final:
-            _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
+            # _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
+            if from_fluids:
+                _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
+                _x.source.calc_elastics(_x.type, burial_depth, verbose=verbose)
+            else:
+                _key = f'{_x.mother_name}:Mineral'
+                _x.source.calc_elastics(logs, verbose=verbose)
+
             _f.append(vol_fractions[_key])
-            _x.source.calc_elastics(_x.type, burial_depth)
             _bulk.append([_x.source.bulk_gpa] * n)
             _shear.append([_x.source.shear_gpa] * n)
             _density.append([_x.source.density_gcc] * n)
@@ -546,11 +567,9 @@ def load_substitution_cases(xlsx: str | Path, from_fluid_mixture: bool = True) -
         cases.append(SubstitutionCase(well=well, interval=interval, tag=tag, initial=initial, final=final))
     return cases
 
-# TODO CONTINUE HERE
-# TODO Modify this so that it can handle minerals too
 def resolve_volume_fractions(components: list[MixtureComponent], logs: dict[str, np.ndarray], n: int) -> dict[str, np.ndarray]:
     """
-    Calculates the volume fractions of each of the fluids listed in components
+    Calculates the volume fractions of each of the fluids-, mineral-, mixtures listed in components
 
     :param components:
         list
@@ -566,11 +585,18 @@ def resolve_volume_fractions(components: list[MixtureComponent], logs: dict[str,
         Dictionary with the volume fraction for each fluid in the SubstitionCase which is made up from the input list
         of MixtureComponent's
     """
+    # Try to separate if the input MixtureComponents are based on FluidSpec or MineralSpec
+    from_fluids = isinstance(components[0].source, FluidSpec)
+
     known_sum = np.zeros(n, dtype=float)
     out: dict[str, np.ndarray] = {}
     complement_name = None
     for c in components:
-        key = f'{c.mother_name}:User specified' if c.type == 'User specified' else f'{c.mother_name}:{c.type}'
+        if from_fluids:
+            key = f'{c.mother_name}:User specified' if c.type == 'User specified' else f'{c.mother_name}:{c.type}'
+        else:
+            key = f'{c.mother_name}:Mineral'
+
         if c.volume.mode == 'constant':
             arr = np.full(n, float(c.volume.value))
             out[key] = arr
@@ -706,8 +732,10 @@ class TestCases(unittest.TestCase):
 
     def test_resolve_volume_fraction(self):
         project_table = os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx')
-        cases = load_substitution_cases(project_table)
         n = 10
+
+        # First for fluids
+        cases = load_substitution_cases(project_table)
         for c in cases:
             print(f'{c.well} | {c.interval} | tag={c.tag}')
             _out = resolve_volume_fractions(c.initial, {'SW': np.full(n, 0.33)}, n)
@@ -715,13 +743,41 @@ class TestCases(unittest.TestCase):
             _out = resolve_volume_fractions(c.final, {'SW': np.full(n, 0.33)}, n)
             print('  Final: ', _out)
 
-    def test_calc_elastics_for_substitution_cases(self):
-        project_table = os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx')
-        cases = load_substitution_cases(project_table)
-        n = 10
+        # Then for minerals
+        # And in this case, the initial and final results will be the same
+        cases = load_substitution_cases(project_table, from_fluid_mixture=False)
         for c in cases:
             print(f'{c.well} | {c.interval} | tag={c.tag}')
-            c.calc_elastics({'SW': np.full(n, 0.4)}, Q_(3000., 'meter'), verbose=True)
+            _out = resolve_volume_fractions(c.initial, {'VCL': np.full(n, 0.33)}, n)
+            print('  Initial: ', _out)
+            _out = resolve_volume_fractions(c.final, {'VCL': np.full(n, 0.33)}, n)
+            print('  Final: ', _out)
+
+    def test_calc_elastics_for_substitution_cases(self):
+        project_table = os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx')
+        n = 10
+        logs = {
+            'vp': np.linspace(2900., 3100, n),
+            'vs': np.linspace(1400., 1600, n),
+            'rho': np.linspace(2.3, 2.5, n),
+            'VCL': np.linspace(1., 0.6, n),
+            'PHIE': np.linspace(0., 0.2, n),
+            'SW': np.linspace(0.05, 1., n)
+        }
+
+        # First for fluids
+        cases = load_substitution_cases(project_table)
+        print('FLUIDS')
+        for c in cases:
+            print(f'{c.well} | {c.interval} | tag={c.tag}')
+            c.calc_elastics(logs, Q_(3000., 'meter'), verbose=True)
+
+        # Then for minerals
+        cases = load_substitution_cases(project_table, from_fluid_mixture=False)
+        print('\nMINERALS')
+        for c in cases:
+            print(f'{c.well} | {c.interval} | tag={c.tag}')
+            c.calc_elastics(logs, Q_(3000., 'meter'), verbose=True)
 
     def test_calc_elastics_for_substitution_cases_detailed(self):
         fluid_params = {'Bulk moduli [GPa]': None, 'Shear moduli [GPa]': None, 'Density [g/cm3]': None,
@@ -782,7 +838,7 @@ class TestCases(unittest.TestCase):
         gas_density = fs.density_gcc
 
         # The water saturation goes from 0 to 1
-        sc.calc_elastics({'SW': np.linspace(0., 1., 10)}, Q_(2000., 'm'), verbose=False)
+        sc.calc_elastics({'SW': np.linspace(0.05, 1., 10)}, Q_(2000., 'm'), verbose=False)
 
         # print(brine_bulk, brine_density)
         # print(gas_bulk, gas_density)
@@ -808,12 +864,14 @@ class TestCases(unittest.TestCase):
             calculation_method='interval average',
             cutoffs=cutoffs
         )
+        n=20
         logs = {
-            'vp': np.linspace(2900., 3100, 20),
-            'vs': np.linspace(1400., 1600, 20),
-            'rho': np.linspace(2.3, 2.5, 20),
-            'VCL': np.linspace(1., 0.6, 20),
-            'PHIE': np.linspace(0., 0.2, 20)
+            'vp': np.linspace(2900., 3100, n),
+            'vs': np.linspace(1400., 1600, n),
+            'rho': np.linspace(2.3, 2.5, n),
+            'VCL': np.linspace(1., 0.6, n),
+            'PHIE': np.linspace(0., 0.2, n),
+            'SW': np.linspace(0.05, 1., n)
         }
         ms.calc_elastics(logs)
         print(ms)
