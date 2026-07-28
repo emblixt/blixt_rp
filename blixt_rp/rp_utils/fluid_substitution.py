@@ -13,45 +13,6 @@ Outline:
            There is one problem with using the CrossPlotter for visualizing the results, as the parameters both
            before and after fluid substitution need to have the same name for them to be plotted simultaneously.
            So we need a new 'Well' (or DataSource) to store the substituted results.
-
-    The 'advanced' option takes the fluid, and mineral, properties and their respective mixtures, from the
-    'project table' Excel file.
-    It describes a Gassmann fluid substitution in multiple intervals for multiple wells, where the fluid properties
-    are given in the sheet "Fluids" of the 'project table' Excel file, and the initial and final mixtures
-    (for each well and each interval) of the fluids are given in the "Fluid mixtures" sheet:
-
-      -The column 'Use' of the "Fluid mixtures" sheet is either 'Yes' or 'No'. If not 'Yes', the given well and interval
-    combination is ignored.
-
-      -The column 'Substitution order' of the "Fluid mixtures" sheet is either 'Initial' or 'Final'. Which describes the
-    substitution order that goes from initial to final.
-
-      -The column 'Well name' of the "Fluid mixtures" sheet contains the name of the well for which the fluid substitution
-    is to be done
-
-      -The column 'Interval name' of the "Fluid mixtures" sheet contains the name of the interval (specified elsewhere as
-    top and bottom measured depth) for which the fluid substitution is to be done
-
-      -The column 'Fluid name' of the "Fluid mixtures" sheet which of the fluids in the "Fluids" sheet to use
-
-      -The "Fluid type" column determines which fluid ('Brine', 'Oil' or 'Gas') the Batzle and Wang method should calculate.
-    Or it can be 'User specified', which means that no calculation is needed - it just takes the given Bulk, Shear moduli
-    and density.
-
-      -The column "Volume fraction" of the "Fluid mixtures" sheet, which determines the fraction of each fluid type,
-    is either the name of a specific well log curve (e.g. SW = water saturation), a constant (e.g. 0,2),
-    or "complement" (meaning that it occupies the rest of the pore volume. The total pore volume is of course 1.
-
-    For the "Fluids" sheet of the 'project table' Excel file, we have the following columns:
-
-      -'Name': a unique name of this specific fluid
-
-      -'Bulk moduli', 'Shear moduli' and 'Density' can be given as fixed values in these columns when the column
-      'Calculation method' is set to 'User specified'
-
-      -'Calculation method' is either 'User specified' or 'Batzle and Wang'
-
-      - The other columns are parameters that are used by the Batzle and Wang calculation
 """
 import logging
 from copy import deepcopy
@@ -61,10 +22,14 @@ import pandas as pd
 import unittest
 import os, sys
 import logging
+from typing import Literal, List, Any
+from pathlib import Path
+import matplotlib.pyplot as plt
 
 from bokeh.io import output_file
 from bokeh.models import ColumnDataSource
 import pint
+from urllib3.fields import format_header_param
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\rp_utils', ''))
@@ -79,146 +44,257 @@ from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
 from blixt_utils.utils import isnan, print_info
 from blixt_rp.core.core import Intervals, LogTable, Cutoffs, CutoffRule
+from blixt_rp.rp.rp_core import gassmann_vel
 from blixt_rp.core.fluids_new import FluidMix
 from blixt_rp.core.minerals_new import MineralMix
+from blixt_rp.core.fluids_and_minerals import load_substitution_cases
 
 logger = logging.getLogger(__name__)
 
 def run_fluid_substitution(
         wells: dict,
+        project_table: str | Path,
         log_table: LogTable,
-        mineral_mix: MineralMix,
-        fluid_mix: FluidMix,
-        cutoffs: Cutoffs,
+        lithology_cutoffs: Cutoffs,
         working_intervals: Intervals,
-        tag: str | None = None,
         verbose: bool = False
 ):
+
     """
-    Runs the fluid substitution for the input wells, in the lithologies defined by the cutoffs and stratigraphies
-    defined in the fluid_mix.
+
+    This 'advanced' option takes the fluid, and mineral, properties and their respective mixtures, from the
+    'project table' Excel file.
+    It describes a Gassmann fluid substitution in multiple intervals for multiple wells, where the fluid properties
+    are given in the sheet "Fluids" of the 'project table' Excel file, and the initial and final mixtures
+    (for each well and each interval) of the fluids are given in the "Fluid mixtures" sheet:
+
+    -The column 'Use' of the "Fluid mixtures" sheet is either 'Yes' or 'No'. If not 'Yes', the given well and interval
+     combination is ignored.
+
+    -The column 'Substitution order' of the "Fluid mixtures" sheet is either 'Initial' or 'Final'. Which describes the
+     substitution order that goes from initial to final.
+
+    -The column 'Well name' of the "Fluid mixtures" sheet contains the name of the well for which the fluid substitution
+    is to be done
+
+    -The column 'Interval name' of the "Fluid mixtures" sheet contains the name of the interval (specified elsewhere as
+    top and bottom measured depth) for which the fluid substitution is to be done
+
+    -The 'Tag' column makes it possible to run different fluid sub. scenarios in the same well & interval, e.g.
+    'fs_oil_08' and 'fs_gas_09'
+
+    A *fluid substitution case* is defined by a unique combination of Well name, Interval name and Tag
+
+    -The column 'Fluid name' of the "Fluid mixtures" sheet determines which of the fluids in the "Fluids" sheet to use
+
+    -The "Fluid type" column determines which fluid ('Brine', 'Oil' or 'Gas') the Batzle and Wang method should calculate.
+    Or it can be 'User specified', which means that no calculation is needed - it just takes the given Bulk, Shear moduli
+    and density.
+
+    -The column "Volume fraction" of the "Fluid mixtures" sheet, which determines the fraction of each fluid type,
+    is either the name of a specific well log curve (e.g. SW = water saturation), a constant (e.g. 0,2),
+    or "complement" (meaning that it occupies the rest of the pore volume. The total pore volume is of course 1.
+
+    For the "Fluids" sheet of the 'project table' Excel file, we have the following columns:
+
+    -'Name': a unique name of this specific fluid
+
+    -'Bulk moduli', 'Shear moduli' and 'Density' can be given as fixed values in these columns when the column
+      'Calculation method' is set to 'User specified'
+
+   -'Calculation method' is either 'User specified' or 'Batzle and Wang'
+
+   - The other columns are parameters that are used by the Batzle and Wang calculation
 
     :param wells:
+        dict
+        Dictionary with well name: Well object as key: value pairs
+    :param project_table:
+        str | Path
+        file path to the project table .xlsx file that contains the Fluid and Mineral specifications
     :param log_table:
-    :param mineral_mix:
-    :param fluid_mix:
-    :param cutoffs:
+        LogTable
+        LogTable object contain the mapping between a log type (e.g. 'P velocity') and a specific log (e.g. 'vp_oil')
+    :param lithology_cutoffs:
+        Cutoffs
+        The Cutoffs object contains a list of cut-off rules which are used to define the lithology the
+        fluid substitution should be applied to (that is, preferably sands)
+
+        Some mineral properties are calculated using cutoffs too (e.g. Shale), but those cutoffs are specified
+        in the project_table.
+        Because of these mineral-specific cutoffs, it is important to NOT apply the lithology_cutoffs of the fluid-substitution
+        before we start with the calculations.
     :param working_intervals:
-    :param tag:
+        Intervals
+        Holds the information about the working intervals that are defined for the wells
     :param verbose:
     :return:
     """
 
-    if tag is None:
-        tag = ''
-    elif tag[0] != '_':
-        tag = '_{}'.format(tag)
+    # Load all fluid substitution cases:
+    fluid_subst_cases = load_substitution_cases(project_table)
 
-    # Calculate the elastic properties of the fluids.
-    # It is done for each well and for each interval we want to do
-    # fluid substitution in
-    fluid_mix.calc_elastics(wells, debug=verbose)
+    # Load all mineral mixtures
+    mineral_subst_cases = load_substitution_cases(project_table, from_fluid_mixture=False)
 
-    # TODO Insert mineral calc_elastics here?, or later?
+    last_well = 'XXX'
+    # Iterate over all fluid substitution cases:
+    for fsc in fluid_subst_cases:
+        print('\n-----------------------------------------------------------------------------' )
+        mod_history = f'Running fluid substitution in well {fsc.well}, in interval {fsc.interval}, with tag={fsc.tag}\n'
+        print(mod_history)
 
-    # Create a list of necessary logs for this fluid substitution
-    necessary_logs = [log_table[_x] for _x in ['Porosity', 'Density', 'P velocity', 'S velocity']]
-    # Lists the necessary logs in a fluid mix
-    necessary_logs += fluid_mix.necessary_logs()
-    # TODO Create a similar method for the mineral mix
-    necessary_logs += mineral_mix.necessary_logs()
+        if last_well != fsc.well.upper():
+            new_well = True
+        else:
+            new_well = False
 
-# Loop over all wells
-    for w, well in wells.items():
-        w = w.lower()
+        # Check if this well | interval pair is among the mineral cases
+        msc = None
+        for _msc in mineral_subst_cases:
+            if _msc.well == fsc.well and _msc.interval == fsc.interval:
+                msc = _msc
+        if msc is None:
+            err_txt = f'There is no mineral case listed in {os.path.basename(project_table)} that matches well {fsc.well} and interval {fsc.interval}'
+            print_info(err_txt, 'error', logger, 'IOError')
 
-        #
-        # Test if well is listed in the fluid mix
-        if w not in fluid_mix.well_names():
-            print_info('Well {} not listed in the fluid mixture. Skipping'.format(w), 'warning', logger)
-            continue
+        # Check if the well exist
+        if fsc.well.upper() not in list(wells.keys()):
+            err_txt = f'There is no well {fsc.well} among the input wells'
+            print_info(err_txt, 'error', logger, 'IOError')
 
-        info_txt = 'Starting Gassmann fluid substitution on well {}'.format(w)
-        print_info('{}'.format(info_txt), 'info', logger)
+        # prepare the well to be used as input for the fluid and mineral elastics calculation
+        well = wells[fsc.well.upper()]
 
-        #
-        # test if necessary logs are present in the well
-        skip_this_well = False
-        warn_txt = ''
-        for _x in necessary_logs:
-            if _x.lower() not in [_y.lower() for _y in well.log_names()]:
-                warn_txt += 'Log name {} not present in well {}\n'.format(log_table[_x], w)
-                skip_this_well = True
-        if skip_this_well:
-            warn_txt += '  SKIPPING well {}'.format(w)
-            print_info(warn_txt, 'warning', logger)
-            continue
+        # The dict method harmonizes the logs in this well.
+        well_dict = well.dict()
 
-        #
-        # Calculate initial values
-        # TODO the below method does not exist, and maybe it should be a method of
-        # mineral_mix rather than the well?
-        k0_dict = well.calc_vrh_bounds(mineral_mix, param='k', wis=working_intervals, method='Voigt-Reuss-Hill', block_name=block_name)
-        por = well.get_log_curve(log_table['Porosity'])
-        vp_1 = well.get_log_curve(log_table['P velocity'])
-        vs_1 = well.get_log_curve(log_table['S velocity'])
-        rho_1 = well.get_log_curve(log_table['Density'])
-        # TODO the below method does not exist, maybe it should be a function of fluid_mix instead?
-        rho_f1_dict = well.calc_vrh_bounds(fluid_mix.fluids['initial'], param='rho', wis=working_intervals, method='Voigt', block_name=block_name)
-        k_f1_dict = well.calc_vrh_bounds(fluid_mix.fluids['initial'], param='k', wis=working_intervals, method='Reuss', block_name=block_name)
+        # Add the necessary keys needed to calculate the mineral properties
+        for _new_key, _log_type in zip(['vp', 'vs', 'rho'], ['P velocity', 'S velocity', 'Density']):
+            well_dict[_new_key] = well_dict[log_table[_log_type]]
 
-        #
-        # Final fluids
-        rho_f2_dict = well.calc_vrh_bounds(fluid_mix.fluids['final'], param='rho', wis=working_intervals, method='Voigt', block_name=block_name)
-        k_f2_dict = well.calc_vrh_bounds(fluid_mix.fluids['final'], param='k', wis=working_intervals, method='Reuss', block_name=block_name)
+        # Get the cut-off rule that corresponds to this specific well and interval pair
+        interval_rule = working_intervals.get_cutoff_rule(fsc.interval, fsc.well)
 
-        # Run the fluid substitution separately in each working interval
-        for wi in fluid_mix.interval_names():
-            # TODO We could perhaps extend the 'calc_elastics' of the fluid and mineral mixes
-            # TODO so that it calculates the VRH bounds too? Then we could something like
-            # Not 'calculates the VRH bounds too' It should calculate the VRH bounds of the initial and final fluid
-            # instead of each constituent fluid
-            k_f1 = fluid_mix.get_fluids( subst_order='initial', well_name=w, wi_name=wi)[0].k
-            rho_f1 = fluid_mix.get_fluids( subst_order='initial', well_name=w, wi_name=wi)[0].rho
-            k_f2 = fluid_mix.get_fluids( subst_order='final', well_name=w, wi_name=wi)[0].k
-            rho_f2 = fluid_mix.get_fluids( subst_order='final', well_name=w, wi_name=wi)[0].rho
-            # TODO And similarly for the mineral mix
-            k0 = mineral_mix.get_minerals(well_name=w, wi_name=wi)[0].k
-            # TODO Instead of the current solution where we pick up everything from the dictionaries we
-            # created above. E.G.
-            k_f1 = k_f1_dict[wi]
-            rho_f1 = rho_f1_dict[wi]
-            k_f2 = k_f2_dict[wi]
-            rho_f2 = rho_f2_dict[wi]
-            k0 = k0_dict[wi]
+        # Make a copy of the lithology_cutoffs so that you can modify this local version of it
+        local_cutoffs = deepcopy(lithology_cutoffs)
 
-            # TODO Below code is old, needs to be updated accordingly
-            # calculate the mask for the given cut-offs, and for the given working interval
-            well.calc_mask(cutoffs, wis=wis, wi_name=wi, name='this_mask', log_table=log_table,
-                           log_type_input=log_type_input)
-            mask = lb.masks['this_mask'].values
+        # Add the interval_rule to these cutoffs
+        local_cutoffs.append([interval_rule])
+        # And calculate the mask. This mask identifies the lithology defined by the input lithology_cutoffs (hopefully sands)
+        # within this interval
+        local_mask = local_cutoffs.create_mask(well_dict)
 
-            # Do the fluid substitution itself
-            _vp_2, _vs_2, _rho_2, _k_2 = gassmann_vel(
-                vp_1.values, vs_1.values, rho_1.values, k_f1, rho_f1, k_f2, rho_f2, k0, por)
+        # Calculate the interval mask given the interval rules and input data
+        interval_cutoffs = Cutoffs([interval_rule])
+        interval_mask = interval_cutoffs.create_mask(well_dict)
 
-            # Add the fluid substituted results to the well
-            for xx, yy in zip([vp_1, vs_1, rho_1], [_vp_2, _vs_2, _rho_2]):
-                new_name = deepcopy(xx.name)
-                new_name += '{}'.format(tag.lower())
-                new_header = deepcopy(xx.header)
-                new_header.name += '{}'.format(tag.lower())
-                new_header.desc = 'Fluid substituted {}'.format(xx.name)
-                mod_history = 'Calculated using Gassmann fluid substitution using following\n'
-                mod_history += 'Mineral mixtures: {}\n'.format(mm.print_minerals(wname, wi))
-                mod_history += 'Initial fluids: {}\n'.format(
-                    fm.print_fluids('initial', wname, wi))
-                mod_history += 'Final fluids: {}\n'.format(
-                    fm.print_fluids('final', wname, wi))
-                new_header.modification_history = mod_history
-                new_data = deepcopy(xx.values)
-                new_data[mask] = yy[mask]
-                lb.add_log(new_data, new_name, xx.get_log_type(), new_header)
+        # In the unit-ignorant version of the dictionary, used by the mineral elastic calculation,
+        # apply the interval mask
+        # (Remember that we cant apply the input lithology_cutoffs, as we then typically only keep sands and remove the shale)
+        well_dict_wo_units = {_key: _value.magnitude[interval_mask] if isinstance(_value, Q_) else _value[interval_mask] for _key, _value in well_dict.items()}
+
+        # Print the log parameters and their length before and after applying the mask
+        if verbose:
+            print(list(well_dict_wo_units.keys()))
+        mod_history += ' -Interval rule: {}\n'.format(interval_rule)
+        for _key in list(well_dict_wo_units.keys()):
+            if _key == 'md':
+                mod_history += ' -{}: length before & after mask; {} & {}\n'.format(_key,
+                    len(well_dict[_key]), len(well_dict_wo_units[_key]))
+                mod_history += ' -MD data now covers: {} to  {}\n'.format(well_dict_wo_units[_key][0], well_dict_wo_units[_key][-1])
+
+        # Extract the burial depth to this specific substitution case
+        bd = working_intervals.get_interval(fsc.interval, fsc.well).mid
+
+        # Calculate the fluid elastic properties ('well_dict_wo_units' is not used in this calculation)
+        mod_history += fsc.calc_elastics(well_dict_wo_units, bd, verbose=verbose)
+
+        # Calculate the mineral elastic properties ('bd' is not used in this calculation)
+        mod_history += msc.calc_elastics(well_dict_wo_units, bd, verbose=verbose)
+
+        # Now that we have calculated the fluid and mineral elastics, we can apply the initial cutoff on these
+        # results.
+        # Because we previously masked out everything outside our interval, we now identify the lithology within
+        # this interval that matches the initial cutoff (hopefully sands)
+        # To do that, we first create a data set that just contain the data needed by the cutoff rule
+        _data = {_param.lower(): well_dict_wo_units[_param.lower()] for _param in lithology_cutoffs.cutoff_params}
+        # Then we calculate the mask
+        lithology_mask = lithology_cutoffs.create_mask(_data)
+
+
+        # check consistency of input data
+        # if verbose:
+        if False:
+            print('INPUT:')
+            print('  Vp: ', type(well_dict['vp']), len(well_dict['vp'][local_mask]))
+            print('  Vs: ', type(well_dict['vs']), len(well_dict['vs'][local_mask]))
+            print('  Rho: ', type(well_dict['rho']), len(well_dict['rho'][local_mask]))
+            print('  Porosity: ', type(well_dict[log_table['Porosity']]), len(well_dict[log_table['Porosity']][local_mask]))
+            print('  Initial bulk: ', type(fsc.initial_bulk_gpa), len(fsc.initial_bulk_gpa[lithology_mask]))
+            print('  Initial density: ', type(fsc.initial_density_gcc), len(fsc.initial_density_gcc[lithology_mask]))
+            print('  Final bulk: ', type(fsc.final_bulk_gpa), len(fsc.final_bulk_gpa[lithology_mask]))
+            print('  Final density: ', type(fsc.final_density_gcc), len(fsc.final_density_gcc[lithology_mask]))
+            print('  Mineral bulk: ', type(msc.final_bulk_gpa), len(msc.final_bulk_gpa[lithology_mask]))
+
+        if verbose:
+            print(mod_history)
+
+        # Notice the use of the 'local_mask' on the well logs, while the 'lithology_mask' is used on the calculated
+        # elastic properties
+        # Double check that their length matches
+        n_1 = len(well_dict['vp'][local_mask])
+        n_2 = len(fsc.initial_bulk_gpa[lithology_mask])
+        if n_1 != n_2:
+            err_txt = 'Length of the masks does not match: {} vs. {}'.format(n_1, n_2)
+            print_info(err_txt, 'error', logger, 'IOError')
+
+        # Now run the fluid substitution
+        _vp_2, _vs_2, _rho_2, _k_2 = gassmann_vel(
+            well_dict['vp'][local_mask].to('m/s').magnitude,
+            well_dict['vs'][local_mask].to('m/s').magnitude,
+            well_dict['rho'][local_mask].to('g/cc').magnitude,
+            fsc.initial_bulk_gpa[lithology_mask],
+            fsc.initial_density_gcc[lithology_mask],
+            fsc.final_bulk_gpa[lithology_mask],
+            fsc.final_density_gcc[lithology_mask],
+            msc.final_bulk_gpa[lithology_mask],
+            well_dict[log_table['Porosity']][local_mask].magnitude
+        )
+
+        # Create new vp, vs and rho logs based on copies of the input logs, and replace the original
+        # values with the fluid substituted values only where the combined mask of interval and cutoffs are True
+        for _type, _result, _result_units in zip(['P velocity', 'S velocity', 'Density'], [_vp_2, _vs_2, _rho_2], ['m/s', 'm/s', 'g/cc']):
+            _log = well.get_log_curve(log_table[_type])
+            _units = _log.units
+
+            # Create a new name for the fluid substituted log
+            _suffix = 'fs_{}'.format(fsc.tag) if fsc.tag is not None else '{}_fs'.format(_log.name)
+            _name = '{}_{}'.format(_log.name, _suffix)
+
+            # If the well is new, the new fluid_substituted log should not exist
+            if new_well and _name in well.get_log_names:
+                err_txt = 'The log {} already exists in well {}'.format(_name, well.name)
+                print_info(err_txt, 'error', logger, 'IOError')
+
+            # Only copy the LogCurve if the new log doesn't exist within the well, else modify the existing substituted log
+            if _name not in well.get_log_names:
+                # Copy the existing _log
+                fs_log = _log.copy(_suffix)
+            else:
+                # Get the fluid substituted log
+                fs_log = well.get_log_curve(_name)
+
+            # Now replace the original with the fluid substituted results
+            fs_log.data[local_mask] = Q_(_result, _result_units).to(_units)
+
+            fs_log.header.modification_history += mod_history
+
+            # Add the new fluid substituted log to the well if it wasn't there before
+            if _name not in well.get_log_names:
+                well.add_log(fs_log, if_log_exists='ask')
+
+        last_well = fsc.well.upper()
 
 
 class   InteractiveFluidSub:
@@ -257,22 +333,12 @@ class TestCases(unittest.TestCase):
         )
 
         # Load wells (and then automatically all templates)
-        wells = wp.load_all_wells(verbose=True)
-        print(wp.get_well_names)
-        w = wp.get_well('WELL_F')
+        wp.load_all_wells(verbose=True)
+        wells = {_w.name: _w for _w in wp.wells}
+        print(list(wells.keys()))
 
         # Load working intervals
         wis = wp.load_all_wis()
-
-        # Load fluids
-        my_fluids = FluidMix()
-        my_fluids.read_excel(wp.project_table, wis)
-        print(my_fluids.print_all_fluids())
-
-        # Load minerals
-        my_mins = MineralMix()
-        my_mins.read_excel(wp.project_table)
-        print(my_mins.print_all_minerals())
 
         # Create cutoffs
         cutoffs = Cutoffs(
@@ -283,18 +349,30 @@ class TestCases(unittest.TestCase):
 
         # Create log table
         log_table = LogTable({'P velocity': 'vp_dry', 'S velocity': 'vs_dry', 'Density': 'rho_dry',
-                     'Porosity': 'phie', 'Volume': 'vcl'})
+                              'Porosity': 'phie', 'Volume': 'vcl'})
 
-        # Fluid substitution
-        tag = 'fs'  # tag the resulting logs after fluid substitution
-        run_fluid_substitution(
-            {w.name: w},
-            log_table,
-            mineral_mix=my_mins,
-            fluid_mix=my_fluids,
-            cutoffs=cutoffs,
-            working_intervals=wis,
-            tag=tag,
-            verbose=True
-        )
+        # Take into account that the Cutoffs are created using LogTypes and not log names
+        cutoffs = cutoffs.use_log_table(log_table)
 
+        # print the names of the important logs prior to fluid substitution:
+        print('Original:')
+        for _log_type in log_table.log_types:
+            for _wn, _w in wells.items():
+                print(' {} | {}: {}'.format(_wn, _log_type, ', '.join([_l.name for _l in _w.get_logs_of_type(_log_type)])))
+
+        run_fluid_substitution(wells, wp.project_table, log_table, cutoffs, wis, verbose=True)
+
+        # print the names of the important logs prior to fluid substitution:
+        print('Final:')
+        for _log_type in log_table.log_types:
+            for _wn, _w in wells.items():
+                print(' {} | {}: {}'.format(_wn, _log_type, ', '.join([_l.name for _l in _w.get_logs_of_type(_log_type)])))
+
+        for _w in wells.values():
+            _file = os.path.join(project_dir, 'blixt_rp\\results_folder\\fs_plot_{}.html'.format(_w.name))
+            _w.plot([
+                ['vp_dry', 'vp_dry_fs_MyTag'],
+                ['vs_dry', 'vs_dry_fs_MyTag'],
+                ['rho_dry', 'rho_dry_fs_MyTag']],
+                _file,
+                wis=wis)

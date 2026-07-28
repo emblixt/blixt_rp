@@ -5,6 +5,7 @@ Collection of objects and methods used throughout blixt_rp
 import os, sys
 from copy import deepcopy
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 from .. import Q_
@@ -370,7 +371,7 @@ class CutoffRule:
             _limits = self.limit
         return '{}{}{}[{}]'.format( _param, _operator, _limits, _units)
 
-    def create_mask(self, data: dict[str, np.ndarray]):
+    def create_mask(self, data: dict[str, np.ndarray], verbose: bool = False):
         """
         Calculates the boolean mask for the input data by naively assuming it has the same units as the given limits
 
@@ -384,11 +385,19 @@ class CutoffRule:
         if self.operator is None or self.limit is None:
             print_info('No operator and/or limit defined for this CutoffRule: {}'.format(self.name), 'warning', logger)
             return np.array(np.ones(len(data)), dtype=bool)
-        if self.param not in list(data.keys()):
+        if self.param.lower() not in list(data.keys()):
             print_info('The cutoff parameter: {} does not match any of the data keys {}'.format(
                 self.param, ', '.join(list(data.keys()))), 'warning', logger)
             return np.array(np.ones(len(data)), dtype=bool)
-        return create_mask(data[self.param], self.operator, self.limit)
+        _mask = create_mask(data[self.param.lower()], self.operator, self.limit)
+        if verbose:
+            fig, ax = plt.subplots()
+            # ax.plot(data[self.param.lower()][_mask])
+            ax.plot(data[self.param.lower()])
+            ax.set_xlabel('Index')
+            ax.set_ylabel(self.param)
+
+        return _mask
 
 class ClassificationTable:
     """
@@ -886,9 +895,9 @@ class Cutoffs:
         if self.cutoffs is None:
             self.cutoffs = [CutoffRule(from_string=_x) for _x in input_string.split(',')]
 
-    def create_mask(self, data: dict[str, np.ndarray]):
+    def create_mask(self, data: dict[str, np.ndarray], verbose: bool = False):
         return(combine_masks([
-            _r.create_mask(data) for _r in self.cutoffs
+            _r.create_mask(data, verbose=verbose) for _r in self.cutoffs
         ]))
 
 class Template:
@@ -1341,7 +1350,6 @@ class Intervals(object):
         if _interval is None:
             _top, _base = self.get_well_depth_range(well_name)
             return CutoffRule('md', '><', [Q_(_top, 'm'), Q_(_base, 'm')])
-        print(_interval.top, _interval.base)
         return CutoffRule('md', '><', [_interval.top, _interval.base])
 
     def write_to_excel(self, file_name, intervals_sheet, interval_info_sheet, append: bool = False):
@@ -1455,7 +1463,7 @@ class Intervals(object):
 
 class WorkingIntervalsTable:
     def __init__(self,
-                 intervals,
+                 intervals: Intervals,
                  width: int | None = None,
                  set_all_active: bool = True):
         """

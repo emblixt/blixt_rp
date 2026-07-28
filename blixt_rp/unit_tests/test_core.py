@@ -182,9 +182,10 @@ class CutoffTests(unittest.TestCase):
             all(_x == _y for _x, _y in zip(mask, [True, True, True, False, False, False, False, False, False, False])))
 
     def test_create_mask_from_cutoffs(self):
-        data = {'name1': np.linspace(90., 190, 10), 'name2': np.linspace(5., 20, 10)}
+        data_no_units = {'name1': np.linspace(90., 190, 10), 'name2': np.linspace(5., 20, 10)}
+        data_with_units = {'name1': Q_(np.linspace(90., 190, 10), 'm'), 'name2': Q_(np.linspace(5., 20, 10), 'm')}
         cfs = Cutoffs(cutoffs=[rule1, rule2])
-        mask = cfs.create_mask(data)
+        mask = cfs.create_mask(data_with_units)
         print(mask)
         self.assertTrue(
             all(_x == _y for _x, _y in zip(mask, [False, True, True, False, False, False, False, False, False, False])))
@@ -202,6 +203,7 @@ class LogTableTests(unittest.TestCase):
         print(lt.log_types)
         print(inv)
         print(lt.dict)
+        print(lt['P velocity'])
 
     def test_from_invert(self):
         inv_dict = {'bs': 'Bit size', 'cali': 'Caliper', 'cpi_phie': 'Porosity', 'cpi_sw': 'Saturation', 'gr': 'Gamma ray', 'rho_fsub_gas80': 'Density', 'rho_fsub_oil80': 'Density', 'rho_insitu_conditioned': 'Density', 'vcl_used': 'Volume', 'vp_fsub_gas80': 'P velocity', 'vp_fsub_oil80': 'P velocity', 'vp_insitu_conditioned': 'P velocity', 'vs_fsub_gas80': 'S velocity', 'vs_fsub_oil80': 'S velocity', 'vs_insitu_conditioned': 'S velocity', 'vsh_mineral': 'Volume'}
@@ -407,10 +409,7 @@ class IntervalTests(unittest.TestCase):
     def test_intervals_table(self):
         from blixt_rp.core.core import Intervals, WorkingIntervalsTable
         from bokeh.io import output_file
-        output_file('C:\\Users\\emb\\Downloads\\plot.html')
-        project_table = "C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
-        # output_file('C:\\Users\\marte\\Downloads\\plot.html')
-        # project_table = "C:\\Users\\marte\\PycharmProjects\\blixt_rp\\excels\\project_table_new.xlsx"
+        output_file(os.path.join(test_file_dir,'plot.html'))
         wis = Intervals()
         wis.read_blixt_tops(project_table)
         wis.keep_wells(['WELL_B', 'WELL_C', 'WELL_F'])
@@ -429,8 +428,8 @@ class IntervalTests(unittest.TestCase):
         wis_cds = wis_table.cds
         print(wis_table.active_intervals(wis_cds))
 
-        # table = wis_table.draw(wis_table.cds)
-        # show(table)
+        table = wis_table.draw(wis_table.cds)
+        show(table)
 
     def test_intervals_table_2(self):
         from blixt_rp.core.core import Intervals, WorkingIntervalsTable

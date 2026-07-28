@@ -82,7 +82,7 @@ class FluidSpec:
             out += '{}{}: {}\n'.format(indent, _key, _value)
         return out
 
-    def calc_elastics(self, fluid_type: str, burial_depth: Q_, verbose: bool = False):
+    def calc_elastics(self, fluid_type: str, burial_depth: Q_) -> str:
         if self.calculation_method.lower() == 'batzle and wang':
             _this_density = None
             _this_bulk = None
@@ -120,10 +120,9 @@ class FluidSpec:
                 self.shear_gpa = 0.0
                 self.density_gcc = _this_density
 
-        if verbose:
-            print('FluidSpec elastics calculated through {}, to: Bulk; {:.2f}, Shear; {:.2f}, Density; {:.2f}'.format(
+        return 'FluidSpec elastics calculated through {}, to: Bulk; {:.2f}, Shear; {:.2f}, Density; {:.2f}'.format(
                 self.calculation_method, self.bulk_gpa, self.shear_gpa, self.density_gcc
-            ))
+            )
 
 @dataclass()
 class MineralSpec:
@@ -150,7 +149,7 @@ class MineralSpec:
             out += '{}{}: {}\n'.format(indent, _key, _value)
         return out
 
-    def calc_elastics(self, logs: dict[str, np.ndarray], verbose: bool = False):
+    def calc_elastics(self, logs: dict[str, np.ndarray]) -> str:
         """
         Most minerals have the elastic properties fixed, and given in the project table Excel file.
         But some minerals are allowed to be calculated by an interval average
@@ -174,7 +173,9 @@ class MineralSpec:
 
             All of which must have the same length
         :return:
+            str
         """
+        make_logs_lowercase(logs)
         if self.calculation_method.lower() == 'interval average':
             # Check that the necessary logs are present
             for _param in ['vp', 'vs', 'rho']:
@@ -184,7 +185,7 @@ class MineralSpec:
             # Check that the logs defined in any cutoff are present
             if self.cutoffs is not None:
                 for _param in self.cutoffs.cutoff_params:
-                    if _param not in list(logs.keys()):
+                    if _param.lower() not in list(logs.keys()):
                         raise IOError('Log {} is missing among the input logs'.format(_param))
 
 
@@ -194,10 +195,18 @@ class MineralSpec:
 
             # Calculate the mask
             if self.cutoffs is not None:
-                mask = self.cutoffs.create_mask(logs)
+                mask = self.cutoffs.create_mask(logs, verbose=False)
+                # print('Cutoffs are defined ({}) -> '.format(self.cutoffs), mask[:5])
             else:
                 n = len(logs[list(logs.keys())[0]])
                 mask =  np.array(np.ones(n), dtype=bool)
+
+            # Check that there any data left after masking
+            n_data_left =  len(_this_bulk[mask])
+            if n_data_left < 3:
+                warn_txt = 'Little or no ({} data points) data to base the mineral calculation on for {}'.format(
+                    n_data_left, self.name)
+                print_info(warn_txt, 'warning', logger)
 
             self.bulk_gpa = float(np.nanmedian(_this_bulk[mask]))
             self.shear_gpa = float(np.nanmedian(_this_shear[mask]))
@@ -205,10 +214,9 @@ class MineralSpec:
         else:
             pass
 
-        if verbose:
-            print('MineralSpec elastics calculated through {}, to: Bulk; {:.2f}, Shear; {:.2f}, Density; {:.2f}'.format(
+        return 'MineralSpec elastics calculated through {}, to: Bulk; {:.2f}, Shear; {:.2f}, Density; {:.2f}'.format(
                 self.calculation_method, self.bulk_gpa, self.shear_gpa, self.density_gcc
-            ))
+            )
 
 @dataclass(frozen=True)
 class MixtureComponent:
@@ -219,12 +227,8 @@ class MixtureComponent:
     "frozen=True" is generally better because this object shouldn't change during calculation
     """
     mother_name: str
-    # Formerly 'fluid_type', but now renamed to 'type' to be able to better handle minerals too
-    # fluid_type: Literal["gas", "oil", "brine", "user specified"]
     type: Literal["gas", "oil", "brine", "user specified", "mineral"]
     volume: VolumeFraction
-    # Formerly 'fluid', but renamed to 'source' to be able to better handle minerals too
-    # fluid: FluidSpec
     source: FluidSpec | MineralSpec
 
     def __str__(self, indent=4):
@@ -249,14 +253,14 @@ class SubstitutionCase:
     tag: str
     initial: List[MixtureComponent]
     final: List[MixtureComponent]
-    initial_bulk_gpa: float | None = None
-    initial_shear_gpa: float | None = 0.0
-    initial_density_gcc: float | None = None
-    final_bulk_gpa: float | None = None
-    final_shear_gpa: float | None = 0.0
-    final_density_gcc: float | None = None
+    initial_bulk_gpa: np.ndarray | float | None = None
+    initial_shear_gpa: np.ndarray | float | None = 0.0
+    initial_density_gcc: np.ndarray | float | None = None
+    final_bulk_gpa: np.ndarray | float | None = None
+    final_shear_gpa: np.ndarray | float | None = 0.0
+    final_density_gcc: np.ndarray | float | None = None
 
-    def calc_elastics(self, logs: dict[str, np.ndarray], burial_depth: Q_ | None = None, verbose: bool = False):
+    def calc_elastics(self, logs: dict[str, np.ndarray], burial_depth: Q_ | None = None, verbose: bool = False) -> str:
         """
         Calculates the elastic properties of the Voigt-Reuss-Hill averaged fluid for the initial and final fluids
         for this specific SubstitutionCase
@@ -268,13 +272,30 @@ class SubstitutionCase:
             dict
             Dictionary with log values that represents the volume fraction for a fluid (e.g. SW = water saturation)
 
+        :param verbose:
+            bool
         :return:
+            str
+            String useful for logging the progress of the fluid substitution case
         """
+        def print_nicely(_param_name, _param_value, indent=4):
+            _str = '\n{}In {} | {} | {}, {} was calculated to: '.format(' '*indent, self.well, self.interval, self.tag, _param_name)
+            _str += 'Min: {:.2f}, Mean: {:.2f}, Max {:.2f} '.format(np.nanmin(_param_value), np.nanmean(_param_value), np.nanmax(_param_value))
+            try:
+                _n = len(_param_value)
+            except TypeError:
+                _n = 1
+            _str += 'with length {}'.format(_n)
+            return _str
+
+        info_txt = ''
+
         if len(self.initial) == 0 or len(self.final) == 0:
             raise IOError('Need a list of initial and final MixtureComponents to calculate the elastics')
 
         # Try to separate if the input MixtureComponents are based on FluidSpec or MineralSpec
         from_fluids = isinstance(self.initial[0].source, FluidSpec)
+        type_txt = 'FLUIDS' if from_fluids else 'MINERALS'
 
         if from_fluids and burial_depth is None:
             err_txt = 'Burial depth is necessary for calculating the elastic properties of fluid mixtures'
@@ -298,14 +319,20 @@ class SubstitutionCase:
         _bulk = []
         _shear = []
         _density = []
+        info_txt += '----INITIAL {}----'.format(type_txt)
         for _x in self.initial:
             # _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
             if from_fluids:
                 _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
-                _x.source.calc_elastics(_x.type, burial_depth, verbose=verbose)
+                _info_txt = _x.source.calc_elastics(_x.type, burial_depth)
             else:
                 _key = f'{_x.mother_name}:Mineral'
-                _x.source.calc_elastics(logs, verbose=verbose)
+                _info_txt = _x.source.calc_elastics(logs)
+
+            info_txt += '\n -Calculating initial elastics for {} in {} | {} | {}:\n   {}\n'.format(
+                        _key, self.well, self.interval, self.tag, _info_txt)
+            info_txt += '   Using volume mode {}, with value {}, which yields volume fractions from {:.2f} to {:.2f}'.format(
+                    _x.volume.mode, _x.volume.value, np.nanmin(vol_fractions[_key]), np.nanmax(vol_fractions[_key]))
 
             _f.append(vol_fractions[_key])
             _bulk.append([_x.source.bulk_gpa] * n)
@@ -317,10 +344,10 @@ class SubstitutionCase:
         self.initial_shear_gpa = rp.vrh_bounds(_f, _shear)[2]
         # Density
         self.initial_density_gcc = rp.vrh_bounds(_f, _density)[0]
-        if verbose:
-            print('initial_bulk_gpa: {}'.format(self.initial_bulk_gpa))
-            print('initial_shear_gpa: {}'.format(self.initial_shear_gpa))
-            print('initial_density_gcc: {}'.format(self.initial_density_gcc))
+        info_txt += print_nicely('initial_bulk_gpa', self.initial_bulk_gpa)
+        info_txt += print_nicely('initial_shear_gpa', self.initial_shear_gpa)
+        info_txt += print_nicely('initial_density_gcc', self.initial_density_gcc)
+        info_txt += '\n'
 
         # Then take the final fluids
         vol_fractions = resolve_volume_fractions(self.final, logs, n)
@@ -328,14 +355,20 @@ class SubstitutionCase:
         _bulk = []
         _shear = []
         _density = []
+        if from_fluids:  # The mineral composition will stay the same, so we only print the final fluids
+            info_txt += '\n----FINAL {}----'.format(type_txt)
         for _x in self.final:
             # _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
             if from_fluids:
                 _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
-                _x.source.calc_elastics(_x.type, burial_depth, verbose=verbose)
+                _info_txt = _x.source.calc_elastics(_x.type, burial_depth)
+                info_txt += '\n -Calculating final elastics for {} in {} | {} | {}:\n   {}\n'.format(
+                    _key, self.well, self.interval, self.tag, _info_txt)
+                info_txt += '   Using volume mode {}, with value {}, which yields volume fractions from {:.2f} to {:.2f}\n'.format(
+                    _x.volume.mode, _x.volume.value, np.nanmin(vol_fractions[_key]), np.nanmax(vol_fractions[_key]))
             else:
                 _key = f'{_x.mother_name}:Mineral'
-                _x.source.calc_elastics(logs, verbose=verbose)
+                _info_txt = _x.source.calc_elastics(logs)
 
             _f.append(vol_fractions[_key])
             _bulk.append([_x.source.bulk_gpa] * n)
@@ -347,11 +380,13 @@ class SubstitutionCase:
         self.final_shear_gpa = rp.vrh_bounds(_f, _shear)[2]
         # Density
         self.final_density_gcc = rp.vrh_bounds(_f, _density)[0]
-        if verbose:
-            print('final_bulk_gpa: {}'.format(self.final_bulk_gpa))
-            print('final_shear_gpa: {}'.format(self.final_shear_gpa))
-            print('final_density_gcc: {}'.format(self.final_density_gcc))
+        if from_fluids:
+            info_txt += print_nicely('final_bulk_gpa', self.final_bulk_gpa)
+            info_txt += print_nicely('final_shear_gpa', self.final_shear_gpa)
+            info_txt += print_nicely('final_density_gcc', self.final_density_gcc)
+            info_txt += '\n'
 
+        return info_txt
 
 def read_sheet_table(xlsx: str | Path, sheet_name: str, required_columns: set[str]) -> pd.DataFrame:
     raw = pd.read_excel(xlsx, sheet_name=sheet_name, header=None, engine='openpyxl')
@@ -453,7 +488,6 @@ def load_mineral_specs(xlsx: str | Path) -> dict[str, FluidSpec]:
             params=params,
         )
     return out
-
 
 def component_from_row(r: pd.Series, sources: dict[str, FluidSpec | MineralSpec]) -> MixtureComponent:
     """
@@ -585,6 +619,7 @@ def resolve_volume_fractions(components: list[MixtureComponent], logs: dict[str,
         Dictionary with the volume fraction for each fluid in the SubstitionCase which is made up from the input list
         of MixtureComponent's
     """
+    make_logs_lowercase(logs)
     # Try to separate if the input MixtureComponents are based on FluidSpec or MineralSpec
     from_fluids = isinstance(components[0].source, FluidSpec)
 
@@ -602,8 +637,8 @@ def resolve_volume_fractions(components: list[MixtureComponent], logs: dict[str,
             out[key] = arr
             known_sum += arr
         elif c.volume.mode == 'log':
-            log_name = str(c.volume.value)
-            if log_name not in logs:
+            log_name = str(c.volume.value).lower()
+            if log_name not in [_l.lower() for _l in logs]:
                 raise KeyError(f'Missing log curve {log_name!r}')
             arr = np.asarray(logs[log_name], dtype=float)
             if arr.shape[0] != n:
@@ -621,7 +656,17 @@ def resolve_volume_fractions(components: list[MixtureComponent], logs: dict[str,
         raise ValueError(f'Resolved volume fractions do not sum to 1; range={np.nanmin(total):.3f}-{np.nanmax(total):.3f}')
     return out
 
+def make_logs_lowercase(x:dict):
+    for _key in list(x.keys()):
+        x[_key.lower()] = x.pop(_key)
+
 class TestCases(unittest.TestCase):
+    def test_lowercase(self):
+        a = {'A':1, 'B':2}
+        print(a)
+        make_logs_lowercase(a)
+        print(a)
+
     def test_print_fluid_spec(self):
         fs = FluidSpec(
             name='AnyThing',
@@ -636,8 +681,8 @@ class TestCases(unittest.TestCase):
         project_table = os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx')
         for _key, _value in list(load_fluid_specs(project_table).items()):
             for _fluid in ['brine', 'oil', 'gas']:
-                _value.calc_elastics(_fluid, Q_(3000., 'm'))
-                print(_key, _fluid , _value)
+                info_txt = _value.calc_elastics(_fluid, Q_(3000., 'm'))
+                print(info_txt, _key, _fluid , _value)
 
     def test_load_mineral_spec(self):
         project_table = os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx')
@@ -770,14 +815,16 @@ class TestCases(unittest.TestCase):
         print('FLUIDS')
         for c in cases:
             print(f'{c.well} | {c.interval} | tag={c.tag}')
-            c.calc_elastics(logs, Q_(3000., 'meter'), verbose=True)
+            _str = c.calc_elastics(logs, Q_(3000., 'meter'), verbose=True)
+            print(_str)
 
         # Then for minerals
         cases = load_substitution_cases(project_table, from_fluid_mixture=False)
         print('\nMINERALS')
         for c in cases:
             print(f'{c.well} | {c.interval} | tag={c.tag}')
-            c.calc_elastics(logs, Q_(3000., 'meter'), verbose=True)
+            _str = c.calc_elastics(logs, Q_(3000., 'meter'), verbose=True)
+            print(_str)
 
     def test_calc_elastics_for_substitution_cases_detailed(self):
         fluid_params = {'Bulk moduli [GPa]': None, 'Shear moduli [GPa]': None, 'Density [g/cm3]': None,
@@ -829,16 +876,16 @@ class TestCases(unittest.TestCase):
             final=[mc2, mc3]
         )
 
-        fs.calc_elastics('brine', Q_(2000., 'm'))
+        info_txt = fs.calc_elastics('brine', Q_(2000., 'm'))
         brine_bulk = fs.bulk_gpa
         brine_density = fs.density_gcc
 
-        fs.calc_elastics('gas', Q_(2000., 'm'))
+        info_txt = fs.calc_elastics('gas', Q_(2000., 'm'))
         gas_bulk = fs.bulk_gpa
         gas_density = fs.density_gcc
 
         # The water saturation goes from 0 to 1
-        sc.calc_elastics({'SW': np.linspace(0.05, 1., 10)}, Q_(2000., 'm'), verbose=False)
+        info_txt = sc.calc_elastics({'SW': np.linspace(0.05, 1., 10)}, Q_(2000., 'm'), verbose=False)
 
         # print(brine_bulk, brine_density)
         # print(gas_bulk, gas_density)
@@ -873,12 +920,12 @@ class TestCases(unittest.TestCase):
             'PHIE': np.linspace(0., 0.2, n),
             'SW': np.linspace(0.05, 1., n)
         }
-        ms.calc_elastics(logs)
+        info_txt = ms.calc_elastics(logs)
         print(ms)
 
         # if we shift the order of data in VCL and PHIE, we should get a higher result, as the mask
         # then should filter out the lower values of vp, vs, and rho
         logs['VCL'] = np.linspace(0.6, 1, 20)
         logs['PHIE'] = np.linspace(0.2, 0., 20)
-        ms.calc_elastics(logs)
+        info_txt = ms.calc_elastics(logs)
         print(ms)

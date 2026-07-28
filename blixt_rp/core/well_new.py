@@ -186,7 +186,7 @@ class Well(object):
     so that they don't have to be regularly sampled, or with the same sampling.
     This also means that a LogCurve object can contain other data than typical log data, such as core samples.
     """
-    from blixt_rp.core.core import Header, LogTable, Template
+    from blixt_rp.core.core import Header, LogTable, Template, Intervals
     from blixt_rp.core.log_curve_new import LogCurve
 
     def __init__(self,
@@ -600,6 +600,7 @@ class Well(object):
     def dict(self, harmonize: bool = True, down_sample: int | None = None, cutoffs: Cutoffs | None = None,
              use_cutoffs: bool = True) -> dict:
         """
+
         Returns a dictionary with log_name: log_data as key: value pairs, where the data are pint Quantities
         (except from the mask)
 
@@ -632,7 +633,7 @@ class Well(object):
             if not harmonize:
                 raise IOError('The cutoffs can only be calculated when the harmonize parameter is True')
             for _rule in cutoffs.cutoffs:
-                if _rule.param.lower() not in list(_dict.keys()):
+                if _rule.param.lower() not in [_x.lower() for _x in list(_dict.keys())]:
                     warn_txt = 'Log {} to calculate mask from is not present in well {}'.format(
                         _rule.param.lower(), self.name)
                     print_info(warn_txt, 'warning', logger)
@@ -673,6 +674,9 @@ class Well(object):
         from blixt_rp.plotting.cross_plotter import DataSource
 
         _data=self.dict(down_sample=down_sample)
+        if 'depth' not in list(_data.keys()):
+            _md = self.get_md_log()
+            _data['depth'] = _data[_md.name]
         _templates = {}
         _name=self.name
 
@@ -833,7 +837,7 @@ class Well(object):
             print_info(info_str, 'info', logger)
 
 
-    def plot(self, log_columns: list, output_filename: str):
+    def plot(self, log_columns: list, output_filename: str, wis: Intervals | None = None):
         """
         Plots the selected logs in a Bokeh plot
         :param log_columns:
@@ -844,14 +848,34 @@ class Well(object):
         :param output_filename:
             str
             Full path name of a html file in which the plot is drawn
+        :param wis:
+            Intervals
         :return:
         """
-        from bokeh.plotting import show
+        from bokeh.plotting import show, column
         from bokeh.io import output_file
-        from blixt_rp.plotting.plot_logs_new import plot_logs
+        from blixt_rp.plotting.log_plotter import WellPlotter, LogColumn, add_strat_table
         output_file(output_filename, title=self.name)
-        plotter = plot_logs(self, log_columns)
-        show(plotter.figure())
+        rel_widths = [1.] * len(log_columns)
+        if wis is not None:
+            # add an extra column to hold the intervals
+            # strati_col = LogColumn('strati', rel_width=0.3)
+            # log_columns.insert(0, strati_col)
+            log_columns.insert(0, [])
+            rel_widths.insert(0, 0.3)
+
+        well_plot = WellPlotter(self, log_columns, rel_widths=rel_widths)
+        p = well_plot.draw()
+
+        if wis is not None:
+            strat_table = add_strat_table(
+                p,
+                wis.get_intervals_dict(well_name=self.name),
+                column_index=0
+            )
+            show(column(p, strat_table))
+        else:
+            show(p)
 
 def add_headers(_header, _well_info, _ignore_keys, _note):
     """

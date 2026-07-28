@@ -68,7 +68,7 @@ class LogPlotter:
     Class for plotting multiple well logs, from one well, in different "columns", all with a common y-axis (time
     or depth)
     """
-    from blixt_rp.core.core import Cutoffs
+    from blixt_rp.core.core import Cutoffs, Intervals
 
     def __init__(self,
                  width: int = 300,
@@ -261,10 +261,10 @@ class LogPlotter:
 
         # Initialize the Cutoffs table and its controls
         table_cds = _cutoffs_table.cds
-        table, add_row, delete_row, update, use = _cutoffs_table.draw(table_cds,
+        # table, add_row, delete_row, update, use = _cutoffs_table.draw(table_cds,
+        table, add_row, delete_row, update = _cutoffs_table.draw(table_cds,
                                                                       parameters=self.logs,
                                                                       units=self.units)
-
         def apply_mask_function():
             _data = dict(common_cds.data)
             if _cutoffs_table is not None:
@@ -606,7 +606,8 @@ class WellPlotter(LogPlotter):
     Class for plotting well logs from one well
     """
     from blixt_rp.core.well_new import Well
-    from blixt_rp.core.core import Cutoffs
+    from blixt_rp.core.core import Cutoffs, Intervals
+
     def __init__(self,
                  well: Well,
                  column_content: list,
@@ -614,7 +615,8 @@ class WellPlotter(LogPlotter):
                  width: int | None = None,
                  height: int | None = None,
                  scales: list | None = None,
-                 rel_widths: list | None = None
+                 rel_widths: list | None = None,
+                 # wis: Intervals | None = None
                  ):
         """
         Attempts to plot logs side by side, or together, in different "columns", utilizing the interactive plotting
@@ -655,6 +657,7 @@ class WellPlotter(LogPlotter):
                     print_info('Log {} does not exist in {}'.format(_log, well.name), 'warning', logger)
                     # flat_list.remove(_log)
                     _col.remove(_log)
+
         if scales is None:
             scales = ['linear'] * len(column_content)
         if rel_widths is None:
@@ -668,6 +671,12 @@ class WellPlotter(LogPlotter):
 
         # Gather data that should be plotted in each of the columns
         plot_columns = []
+
+        # if wis is not None:
+        #     # add an extra column to hold the intervals
+        #     strati_col = LogColumn('strati', rel_width=0.3)
+        #     plot_columns.append(strati_col)
+
         for _i, _c in enumerate(column_content):
             plot_columns.append(
                 LogColumn(
@@ -678,6 +687,7 @@ class WellPlotter(LogPlotter):
                     scale=scales[_i])
             )
         super().__init__(width=width, height=height, columns=plot_columns, tools=None)
+
 
     def add_cutoffs_table(self, cutoffs: Cutoffs | None = None, width: int | None = None):
         return super().add_cutoffs_table(self.cds, cutoffs, width)
@@ -1277,7 +1287,7 @@ class TestCases(unittest.TestCase):
         self.assertTrue(True)
 
     def test_link_table(self):
-        _, line1, line2, line3, _ = test_data()
+        _, line1, line2, line3, wis, _ = test_data()
         lp = LogPlotter(width=800, height=1000)
         c3 = LogColumn('c3', rel_width=0.5)
         c2 = LogColumn('c2', lines=[line1, line2])
