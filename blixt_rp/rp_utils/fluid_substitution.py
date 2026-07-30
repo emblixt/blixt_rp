@@ -22,7 +22,7 @@ import pandas as pd
 import unittest
 import os, sys
 import logging
-from typing import Literal, List, Any
+from typing import Literal, List, Any, Dict
 from pathlib import Path
 import matplotlib.pyplot as plt
 
@@ -57,6 +57,7 @@ def run_fluid_substitution(
         log_table: LogTable,
         lithology_cutoffs: Cutoffs,
         working_intervals: Intervals,
+        pvt_table: dict | None = None,
         verbose: bool = False
 ):
 
@@ -127,6 +128,17 @@ def run_fluid_substitution(
     :param working_intervals:
         Intervals
         Holds the information about the working intervals that are defined for the wells
+    :param pvt_table:
+        dict
+        Dictionary that contains pressure, density and bulk modulus values from typically a PVT simulation.
+        It can be used to calculate the elastic properties as a function of pressure for fluids (e.g. gas condensates)
+        which can't be modelled accurately from Batzle & Wang
+        E.G.
+            pvt_table = dict(
+                pressure = Q_([10., 15., 20., 25., 30., 35., 40., 45., 50.], 'MPa'),
+                rho = Q_([0.12, 0.18, 0.25, 0.31, 0.38, 0.45, 0.52, 0.58, 0.64], 'g/cc'),
+                k = Q_([0.020, 0.035, 0.055, 0.080, 0.110, 0.145, 0.185, 0.230, 0.28], 'GPa')
+            )
     :param verbose:
     :return:
     """
@@ -208,7 +220,7 @@ def run_fluid_substitution(
         bd = working_intervals.get_interval(fsc.interval, fsc.well).mid
 
         # Calculate the fluid elastic properties ('well_dict_wo_units' is not used in this calculation)
-        mod_history += fsc.calc_elastics(well_dict_wo_units, bd, verbose=verbose)
+        mod_history += fsc.calc_elastics(well_dict_wo_units, bd, pvt_table=pvt_table, verbose=verbose)
 
         # Calculate the mineral elastic properties ('bd' is not used in this calculation)
         mod_history += msc.calc_elastics(well_dict_wo_units, bd, verbose=verbose)
@@ -331,6 +343,11 @@ class TestCases(unittest.TestCase):
             project_table=os.path.join(project_dir, 'blixt_rp\\excels\\project_table_new.xlsx'),
             working_dir=os.path.join(project_dir, 'blixt_rp')
         )
+        pvt_table = dict(
+            pressure = Q_([10., 15., 20., 25., 30., 35., 40., 45., 50.], 'MPa'),
+            rho = Q_([0.12, 0.18, 0.25, 0.31, 0.38, 0.45, 0.52, 0.58, 0.64], 'g/cc'),
+            k = Q_([0.020, 0.035, 0.055, 0.080, 0.110, 0.145, 0.185, 0.230, 0.28], 'GPa')
+        )
 
         # Load wells (and then automatically all templates)
         wp.load_all_wells(verbose=True)
@@ -360,7 +377,7 @@ class TestCases(unittest.TestCase):
             for _wn, _w in wells.items():
                 print(' {} | {}: {}'.format(_wn, _log_type, ', '.join([_l.name for _l in _w.get_logs_of_type(_log_type)])))
 
-        run_fluid_substitution(wells, wp.project_table, log_table, cutoffs, wis, verbose=True)
+        run_fluid_substitution(wells, wp.project_table, log_table, cutoffs, wis, pvt_table=pvt_table, verbose=True)
 
         # print the names of the important logs prior to fluid substitution:
         print('Final:')
@@ -371,8 +388,8 @@ class TestCases(unittest.TestCase):
         for _w in wells.values():
             _file = os.path.join(project_dir, 'blixt_rp\\results_folder\\fs_plot_{}.html'.format(_w.name))
             _w.plot([
-                ['vp_dry', 'vp_dry_fs_MyTag'],
-                ['vs_dry', 'vs_dry_fs_MyTag'],
-                ['rho_dry', 'rho_dry_fs_MyTag']],
+                ['vp_dry', 'vp_dry_fs_MyTag', 'vp_dry_fs_Cond'],
+                ['vs_dry', 'vs_dry_fs_MyTag', 'vs_dry_fs_Cond'],
+                ['rho_dry', 'rho_dry_fs_MyTag', 'rho_dry_fs_Cond']],
                 _file,
                 wis=wis)

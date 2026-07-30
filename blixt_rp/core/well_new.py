@@ -852,7 +852,7 @@ class Well(object):
             Intervals
         :return:
         """
-        from bokeh.plotting import show, column
+        from bokeh.plotting import show, column, row
         from bokeh.io import output_file
         from blixt_rp.plotting.log_plotter import WellPlotter, LogColumn, add_strat_table
         output_file(output_filename, title=self.name)
@@ -866,6 +866,8 @@ class Well(object):
 
         well_plot = WellPlotter(self, log_columns, rel_widths=rel_widths)
         p = well_plot.draw()
+        settings = well_plot.add_settings(p)
+
 
         if wis is not None:
             strat_table = add_strat_table(
@@ -873,9 +875,9 @@ class Well(object):
                 wis.get_intervals_dict(well_name=self.name),
                 column_index=0
             )
-            show(column(p, strat_table))
+            show(column(p, row(settings, strat_table)))
         else:
-            show(p)
+            show(column(p, settings))
 
 def add_headers(_header, _well_info, _ignore_keys, _note):
     """

@@ -616,7 +616,6 @@ class WellPlotter(LogPlotter):
                  height: int | None = None,
                  scales: list | None = None,
                  rel_widths: list | None = None,
-                 # wis: Intervals | None = None
                  ):
         """
         Attempts to plot logs side by side, or together, in different "columns", utilizing the interactive plotting

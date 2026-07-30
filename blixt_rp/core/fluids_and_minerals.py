@@ -17,10 +17,11 @@ import logging
 from copy import deepcopy
 from datetime import datetime
 import numpy as np
+from scipy.interpolate import interp1d
 import pandas as pd
 import unittest
 import os, sys
-from typing import Literal, List, Any
+from typing import Literal, List, Any, Dict
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -63,7 +64,7 @@ class FluidSpec:
     Represents one row of the "Fluids" sheet in the project_table Excel file, formerly known as the "mother fluid"
     """
     name: str
-    calculation_method: Literal["batzle and wang", "user specified"]
+    calculation_method: Literal["batzle and wang", "user specified", "interpolation"]
     bulk_gpa: float | None = None
     shear_gpa: float | None = 0.0
     density_gcc: float | None = None
@@ -82,10 +83,29 @@ class FluidSpec:
             out += '{}{}: {}\n'.format(indent, _key, _value)
         return out
 
-    def calc_elastics(self, fluid_type: str, burial_depth: Q_) -> str:
+    def calc_elastics(self, fluid_type: str, burial_depth: Q_, pvt_table: dict | None = None) -> str:
+        """
+        Calculates the elastic (density and bulk modulus) for different types of fluids
+
+        :param fluid_type:
+        :param burial_depth:
+        :param pvt_table:
+            dict
+            Dictionary that contains pressure, density and bulk modulus values from typically a PVT simulation.
+            It can be used to calculate the elastic properties as a function of pressure for fluids (e.g. gas condensates)
+            which can't be modelled accurately from Batzle & Wang
+            E.G.
+                pvt_table = dict(
+                    pressure = Q_([10., 15., 20., 25., 30., 35., 40., 45., 50.], 'MPa'),
+                    rho = Q_([0.12, 0.18, 0.25, 0.31, 0.38, 0.45, 0.52, 0.58, 0.64], 'g/cc'),
+                    k = Q_([0.020, 0.035, 0.055, 0.080, 0.110, 0.145, 0.185, 0.230, 0.28], 'GPa')
+                )
+        :return:
+        """
+        calc_success = False
+        _this_density = None
+        _this_bulk = None
         if self.calculation_method.lower() == 'batzle and wang':
-            _this_density = None
-            _this_bulk = None
             _s = self.params['Salinity [ppm]']
             _p = self.params['P ref [MPa]'] + self.params['P gradient [MPa/m]'] * burial_depth.to('meter').magnitude
             _t = self.params['T ref [C]'] + self.params['T gradient [deg C/m]'] * burial_depth.to('meter').magnitude
@@ -114,11 +134,26 @@ class FluidSpec:
                 calc_success = False
                 print_info('No calculation done for fluid type {}'.format(fluid_type),
                            'warning', logger)
-            if calc_success:
-                self.bd = burial_depth
-                self.bulk_gpa = _this_bulk
-                self.shear_gpa = 0.0
-                self.density_gcc = _this_density
+        elif self.calculation_method.lower() == 'interpolation':
+            _p = self.params['P ref [MPa]'] + self.params['P gradient [MPa/m]'] * burial_depth.to('meter').magnitude
+            print('XXX: Pressure as calculated from parameters [MPa]: ', _p)
+            if pvt_table is None:
+                print_info('A table of pressure, rho and k is needed for the calculation of an Interpolation fluid',
+                           'error', logger, 'IOError')
+            _fluid = InterpolatedFluid(**pvt_table)
+            if fluid_type.lower() == 'gas condensate':
+                _this_density = _fluid.rho(Q_(_p, 'MPa')).to('g/cc').magnitude
+                _this_bulk = _fluid.k(Q_(_p, 'MPa')).to('GPa').magnitude
+                calc_success = True
+            else:
+                calc_success = False
+                print_info('No calculation done for fluid type {}'.format(fluid_type),
+                           'warning', logger)
+        if calc_success:
+            self.bd = burial_depth
+            self.bulk_gpa = _this_bulk
+            self.shear_gpa = 0.0
+            self.density_gcc = _this_density
 
         return 'FluidSpec elastics calculated through {}, to: Bulk; {:.2f}, Shear; {:.2f}, Density; {:.2f}'.format(
                 self.calculation_method, self.bulk_gpa, self.shear_gpa, self.density_gcc
@@ -260,7 +295,9 @@ class SubstitutionCase:
     final_shear_gpa: np.ndarray | float | None = 0.0
     final_density_gcc: np.ndarray | float | None = None
 
-    def calc_elastics(self, logs: dict[str, np.ndarray], burial_depth: Q_ | None = None, verbose: bool = False) -> str:
+    def calc_elastics(self, logs: dict[str, np.ndarray], burial_depth: pint.Quantity | None = None,
+                      pvt_table: dict | None = None,
+                      verbose: bool = False) -> str:
         """
         Calculates the elastic properties of the Voigt-Reuss-Hill averaged fluid for the initial and final fluids
         for this specific SubstitutionCase
@@ -271,7 +308,17 @@ class SubstitutionCase:
         :param logs:
             dict
             Dictionary with log values that represents the volume fraction for a fluid (e.g. SW = water saturation)
-
+        :param pvt_table:
+            dict
+            Dictionary that contains pressure, density and bulk modulus values from typically a PVT simulation.
+            It can be used to calculate the elastic properties as a function of pressure for fluids (e.g. gas condensates)
+            which can't be modelled accurately from Batzle & Wang
+            E.G.
+                pvt_table = dict(
+                    pressure = Q_([10., 15., 20., 25., 30., 35., 40., 45., 50.], 'MPa'),
+                    rho = Q_([0.12, 0.18, 0.25, 0.31, 0.38, 0.45, 0.52, 0.58, 0.64], 'g/cc'),
+                    k = Q_([0.020, 0.035, 0.055, 0.080, 0.110, 0.145, 0.185, 0.230, 0.28], 'GPa')
+                )
         :param verbose:
             bool
         :return:
@@ -324,7 +371,7 @@ class SubstitutionCase:
             # _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
             if from_fluids:
                 _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
-                _info_txt = _x.source.calc_elastics(_x.type, burial_depth)
+                _info_txt = _x.source.calc_elastics(_x.type, burial_depth, pvt_table=pvt_table)
             else:
                 _key = f'{_x.mother_name}:Mineral'
                 _info_txt = _x.source.calc_elastics(logs)
@@ -361,7 +408,7 @@ class SubstitutionCase:
             # _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
             if from_fluids:
                 _key = f'{_x.mother_name}:User specified' if _x.type == 'User specified' else f'{_x.mother_name}:{_x.type}'
-                _info_txt = _x.source.calc_elastics(_x.type, burial_depth)
+                _info_txt = _x.source.calc_elastics(_x.type, burial_depth, pvt_table=pvt_table)
                 info_txt += '\n -Calculating final elastics for {} in {} | {} | {}:\n   {}\n'.format(
                     _key, self.well, self.interval, self.tag, _info_txt)
                 info_txt += '   Using volume mode {}, with value {}, which yields volume fractions from {:.2f} to {:.2f}\n'.format(
@@ -387,6 +434,44 @@ class SubstitutionCase:
             info_txt += '\n'
 
         return info_txt
+
+class InterpolatedFluid:
+    """
+    Class that takes an input table of simulated / observed pressure, density and bulk modulus values
+    and allows the density and bulk modulus to be extracted at ~any pressure.
+    These are useful for e.g. gas condensates which are not well covered by the Batzle & Wang model
+    """
+    def __init__(self, pressure: pint.Quantity , rho: pint.Quantity, k: pint.Quantity):
+
+        self.rho_interp = interp1d(
+            pressure.magnitude,
+            rho.magnitude,
+            bounds_error=False,
+            fill_value="extrapolate"
+        )
+
+        self.k_interp = interp1d(
+            pressure.magnitude,
+            k.magnitude,
+            bounds_error=False,
+            fill_value="extrapolate"
+        )
+
+        self.p_min = min(pressure)
+        self.p_max = max(pressure)
+        self.pressure_units = pressure.units
+        self.rho_units = rho.units
+        self.k_units = k.units
+
+    def rho(self, pressure: pint.Quantity):
+        if pressure < self.p_min or pressure > self.p_max:
+            warn_txt = 'Pressure {} is outside the initial bounds ({} - {}) and extrapolation is used'.format(
+                pressure, self.p_min, self.p_max)
+            print_info(warn_txt, 'warning', logger)
+        return Q_(self.rho_interp(pressure.to(self.pressure_units)), self.rho_units)
+
+    def k(self, pressure: pint.Quantity):
+        return Q_(self.k_interp(pressure.to(self.pressure_units)), self.k_units)
 
 def read_sheet_table(xlsx: str | Path, sheet_name: str, required_columns: set[str]) -> pd.DataFrame:
     raw = pd.read_excel(xlsx, sheet_name=sheet_name, header=None, engine='openpyxl')
@@ -440,7 +525,7 @@ def load_fluid_specs(xlsx: str | Path) -> dict[str, FluidSpec]:
     for _, r in fluids.iterrows():
         name = clean_str(r['Name'])
         method = clean_str(r['Calculation method']) or ''
-        if method.lower() not in ['batzle and wang', 'user specified']:
+        if method.lower() not in ['batzle and wang', 'user specified', 'interpolation']:
             raise IOError('Fluid calculation method must be either "Batzle and Wang" or "User specified". Not: {}'.format(
                 method
             ))
@@ -929,3 +1014,15 @@ class TestCases(unittest.TestCase):
         logs['PHIE'] = np.linspace(0.2, 0., 20)
         info_txt = ms.calc_elastics(logs)
         print(ms)
+
+    def test_interpolated_fluid(self):
+        pvt_table = dict(
+            pressure = Q_([10., 15., 20., 25., 30., 35., 40., 45., 50.], 'MPa'),
+            rho = Q_([0.12, 0.18, 0.25, 0.31, 0.38, 0.45, 0.52, 0.58, 0.64], 'g/cc'),
+            k = Q_([0.020, 0.035, 0.055, 0.080, 0.110, 0.145, 0.185, 0.230, 0.28], 'GPa')
+        )
+
+        eos_fluid = InterpolatedFluid(**pvt_table)
+
+        for p in [Q_(_p, 'Pa') for _p in [12.5E+6, 15.E+6, 17.5E+6, 60.E+6]]:
+            print(p, eos_fluid.rho(p), eos_fluid.k(p))
