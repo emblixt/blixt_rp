@@ -7,9 +7,10 @@ import logging
 import types
 from copy import deepcopy
 import pint
+from Tools.scripts.objgraph import printundef
 from bokeh.models import ColumnDataSource
 from scipy.stats import theilslopes
-from typing import Callable
+from typing import Callable, List
 
 from .log_curve_new import LogCurve, Depth
 from ..plotting.log_plotter import add_color_amp
@@ -42,6 +43,7 @@ max_amp = 1E-6
 def plot_quasi_2d(model, ax=None, **kwargs):
     show = False
     new_ax = False
+    dx = kwargs.pop('dx', None)
     if ax is None:
         # fig, axs = plt.subplots(1, len(model.trace_index_range), figsize=(10, 8))
         fig, ax = plt.subplots(figsize=(10, 8))
@@ -59,8 +61,15 @@ def plot_quasi_2d(model, ax=None, **kwargs):
         last_layer_depth = None
         print_info('Domain of model is not set properly ({}). Should "TWT" or "Z"'.format(model.domain),
                    'error', logger, 'IOError')
-    ax.plot(i_range, last_layer_depth, **kwargs)
-    for _layer in model.layers:
+
+    if dx is not None:
+        x = i_range * dx.to('m').magnitude
+    else:
+        x = i_range
+    ax.plot(x, last_layer_depth, **kwargs)
+
+    # Only consider the base case layers for drawing the geometry
+    for _layer in [_l for _l in model.layers if _l.case == global_base_case_name]:
         if isinstance(_layer.thickness, pint.Quantity):
             if model.domain == 'TWT':
                 _this_thick = _layer.thickness.to('ms').magnitude
@@ -75,7 +84,7 @@ def plot_quasi_2d(model, ax=None, **kwargs):
                 _this_thick = [_layer.thickness(_i).to('m').magnitude for _i in i_range]
             _h = np.array([_this_thick[_i] for _i in i_range])
             _tmp = np.array([last_layer_depth[_i] + _this_thick[_i] for _i in i_range])
-        ax.plot(i_range[_h > 0], _tmp[_h > 0], **kwargs)
+        ax.plot(x[_h > 0], _tmp[_h > 0], **kwargs)
         last_layer_depth = _tmp
     if new_ax:
         ax.set_ylim(ax.get_ylim()[::-1])
@@ -146,10 +155,11 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
             bwb.append(last_top + model.layers[i].thickness)
 
     # realize the model to create data
-    twt, layer_index, vp, vs, rho, z = model.realize_model(0.001)
     if model.domain == 'TWT':
+        twt, layer_index, vp, vs, rho, z = model.realize_model(Q_(1, 'millisecond'))
         y = twt
     else:
+        twt, layer_index, vp, vs, rho, z = model.realize_model(Q_(0.1, 'meter'))
         y = z
 
     if model.model_type == 'quasi 2D':
@@ -202,7 +212,8 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
 
     for i, _y in enumerate(bwb[1:-1]):
         #ax.plot([0., ais[i+1]/max_ai], [_y, _y], **linestyle_ai)
-        ax.plot([0., vps[i+1] * rhos[i+1]/max_ai], [_y, _y], **linestyle_ai)
+        print(vps[i+1].magnitude, rhos[i+1].magnitude, max_ai)
+        ax.plot([0., vps[i+1].magnitude * rhos[i+1].magnitude/max_ai], [_y, _y], **linestyle_ai)
 
     i = 0
     for _vp, _vs, _rho in zip(vps, vss, rhos):
@@ -584,11 +595,9 @@ class Layer:
             Number of internal layers in the reservoir (net) part of the layer
             If 1, the net portion is taken up by one homogeneous layer
         """
+
         # get the required parameters
         self.resolution = None
-        self.layer_type = '1D'
-        if isinstance(thickness, Callable) or isinstance(ntg, Callable) or litho_fluid.type == 'quasi 2D':
-            self.layer_type = 'quasi 2D'
 
         if thickness is None:
             thickness = Q_(25., 'm')
@@ -651,6 +660,13 @@ class Layer:
     # def thickness(self, new_thickness):
     #     self.domain = check_domain(new_thickness)
     #     self._thickness = new_thickness
+
+    @property
+    def layer_type(self):
+        if isinstance(self.thickness, Callable) or isinstance(self.ntg, Callable) or self.litho_fluid.type == 'quasi 2D':
+            return 'quasi 2D'
+        else:
+             return '1D'
 
     def realize_layer(self, resolution: Q_, voigt_reuss_hill=False, index=0):
         """
@@ -756,7 +772,8 @@ class Model:
                  depth_to_top: pint.Quantity | None = None,
                  layers: list | None = None,
                  trace_index_range=None,
-                 name: str | None = None):
+                 name: str | None = None,
+                 dx: pint.Quantity | None = None):
         """
         :param model_type:
             str
@@ -788,6 +805,9 @@ class Model:
         :param name:
             str
             Optional string which we can use to add a title to the model
+        :param dx:
+            Quasi 2D models can (not necessary) be assigned a horizontal resolution.
+            Distance between each 1D model
         """
 
         # set the required parameters
@@ -798,6 +818,7 @@ class Model:
         if any([_layer.layer_type == 'quasi 2D' for _layer in layers]):
             self.model_type = 'quasi 2D'
 
+        self.dx = dx
         self._layers = layers
 
         last_domain = None
@@ -1268,7 +1289,7 @@ class Model:
             else:
                 plot_1d(self, ax, index=index, **kwargs1d)
         elif self.model_type == 'quasi 2D':
-            plot_quasi_2d(self, ax)
+            plot_quasi_2d(self, ax, dx=self.dx)
 
 
 class ModelTable:
@@ -1921,8 +1942,6 @@ class LaminarModel:
 
     def draw_2d(self):
         from bokeh.models import Span, Slider, Select, Div
-        from bokeh.models import GlyphRenderer
-        from bokeh.models.glyphs import Image, ImageRGBA, ImageURL
         from bokeh.plotting import row
 
         from blixt_rp.plotting.log_plotter import LogPlotter, LogColumn, Line, select_column, select_line
@@ -2006,32 +2025,30 @@ class LaminarModel:
         ai_column = LogColumn('AI', lines=ais_lines, rel_width=0.3)
         vpvs_column = LogColumn('VpVs', lines=vpvs_lines, rel_width=0.25)  # Make this thinner to compensate for tick marks on ai_column
 
-        def calc_synth_2d_cds(_case_name):
-            # Calculate the synthetics for the whole 2d section
-            synth_values = []
-            _elastics_dict = None
-            for _i in self.model.trace_index_range:
-                _elastics_dict = self.model_table.realize(self.resolution, _i)
+        synth_2d_cds, elastics_dict = calc_synthetic_2d_cds(
+            self.model,
+            self.model_table,
+            self.resolution,
+            global_base_case_name,
+            dt,
+            self.avo_or_eei,
+            float(freq_slider.value)
+        )
 
-                _synth_cds_base = calc_synth_cds(
-                    _elastics_dict[_case_name]['vp'],
-                    _elastics_dict[_case_name]['vs'],
-                    _elastics_dict[_case_name]['rho'],
-                    _elastics_dict[_case_name]['twt'],
-                    dt, 0., self.avo_or_eei, freq_slider.value
-                )
-                synth_values.append(_synth_cds_base.data['value'][0])
-
-            _synth_cds = ColumnDataSource({'value': [np.array(synth_values, dtype=float).T]})
-            print('Total size: {}'.format(_synth_cds.data['value'][0].shape))
-            return _synth_cds, _elastics_dict
-
-        synth_2d_cds, elastics_dict = calc_synth_2d_cds(global_base_case_name)
-
+        # TODO
+        # Tried to plot the physical x axis range when dx is given.
+        # It works, but adds two follow-up problems:
+        # 1. The x-axis range does not update when we change dx interactively
+        # 2. The trace-index selector needs to be updated too
+        # if self.model.dx is not None:
+        #     _x = self.model.trace_index_range * self.model.dx.to('m').magnitude
+        # else:
+        #     _x = self.model.trace_index_range
+        _x = self.model.trace_index_range
         traces_base = create_traces(
             synth_2d_cds,
             elastics_dict[global_base_case_name]['vp'].depth.values,
-            'Base case', self.model.trace_index_range, self.avo_or_eei)
+            'Base case', _x, self.avo_or_eei)
 
         synth_2d_column = LogColumn('SYNTH_2D', seismic_traces=traces_base, rel_width=1.4)
 
@@ -2053,45 +2070,21 @@ class LaminarModel:
         color_amp_factor = add_color_amp(_p)
 
         def update_m_function():
-            # Update the elastic properties based on the new model
-            _elastics_dict = self.model_table.realize(self.resolution, int(trace_selector.value))
-
-            # Update the ColumnDataSource of the lines and the model
-            cds_lines.data = dict(self.model_table.line_cds(_elastics_dict).data)
-            cds_m.data = dict(self.model_table.cds.data)
-
-            # Update the CDS of the synthetics
-            _synth_2d_cds, _elastics_dict = calc_synth_2d_cds(str(case_selector.value))
-            synth_2d_cds.data = dict(_synth_2d_cds.data)
-
-            # Update the depth range of the synthetics to match the changes in depth
-            for _column in [select_column(grid, _col_name) for _col_name in ['SYNTH_2D']]:
-                image_renderers = [
-                    r for r in _column.renderers
-                    if isinstance(r, GlyphRenderer) and isinstance(r.glyph, (Image, ImageRGBA, ImageURL))
-                ]
-                image_renderers[0].glyph.y = self.model.depth_to_top.to('m').magnitude
-                image_renderers[0].glyph.dh = total_cds_thickness(cds_m)
-
-            # Detect changes in number of cases
-            case_changes = detect_change_in_cases(self.model.case_names, self.previous_cases)
-            if len(case_changes['new']) > 0:
-                # get AI, and VpVs columns
-                _p_ai = select_column(grid, 'AI')
-                _p_vpvs = select_column(grid, 'VpVs')
-                for _case in case_changes['new']:
-                    _y = 'ai_{}'.format(_case)
-                    # print('Trying to plot the new case:', _case, _y)
-                    _p_ai.line(x='ai_{}'.format(_case), y='depth', source=cds_lines,
-                               **{'line_color': 'red', 'legend_label': 'AI_{}'.format(_case)})
-                    _p_vpvs.line(x='vpvs_{}'.format(_case), y='depth', source=cds_lines,
-                                 **{'line_color': 'red', 'legend_label': 'VpVs_{}'.format(_case)})
-
-            # Only handle the situation when a new case is added, for now (TODO)
-            if len(case_changes['removed']) > 0:
-                print_info('Can not handle the situation when a case is removed', 'error', logger, 'IOError')
-
-            self.previous_cases = self.model.case_names
+            update_model_function(
+                self.model,
+                self.model_table,
+                self.resolution,
+                str(case_selector.value),
+                dt,
+                self.avo_or_eei,
+                float(freq_slider.value),
+                int(trace_selector.value),
+                cds_lines,
+                cds_m,
+                synth_2d_cds,
+                grid,
+                self.previous_cases
+            )
 
         def update_trace_function(attr, old, new):
             print('Trace: ', attr, old, new)
@@ -2107,11 +2100,19 @@ class LaminarModel:
             self.active_2d_case = new
 
             # Update the CDS of the synthetics
-            _synth_2d_cds, _elastics_dict = calc_synth_2d_cds(str(case_selector.value))
+            # _synth_2d_cds, _elastics_dict = calc_synth_2d_cds(str(case_selector.value))
+            _synth_2d_cds, _elastics_dict = calc_synthetic_2d_cds(
+                self.model,
+                self.model_table,
+                self.resolution,
+                str(case_selector.value),
+                dt,
+                self.avo_or_eei,
+                float(freq_slider.value)
+            )
             synth_2d_cds.data = dict(_synth_2d_cds.data)
 
         update_m.on_click(update_m_function)
-        # update.on_click(update_m_function)  # When using this the model table returns to its previous state when "Update" is clicked
 
         trace_selector.on_change("value", update_trace_function)
         case_selector.on_change("value", update_case_function)
@@ -2401,6 +2402,146 @@ class WedgeModel(LaminarModel):
 
         return (lf_table, row(add_row, delete_row, update), model_table, row(update_m), grid,
                 row(controls, top_picker, base_picker), new_grid, synth_2d_cds)
+
+
+class FaultModel(LaminarModel):
+    """
+    Creates a seismic model of a fault
+    """
+    def __init__(self,
+        litho_fluids: LithoFluids | None = None,
+        layers: List[Layer] | None = None,
+        resolution: pint.Quantity | None = None,
+        dx: pint.Quantity | None = None,
+        depth_to_top: pint.Quantity | None = None,
+        throw: pint.Quantity | None = None,
+        dip: pint.Quantity | None = None,
+        n_traces: int | None = None,
+        **kwargs
+    ):
+        """
+        ---------------------i0--------------------------------------
+         - layers[0]
+         ---------------------\
+          - layers[1:-1]      \------------------------------------
+         ......................\
+                                \..................................
+         - layers[-1]
+        -----------------------------------------------------------
+
+        :param litho_fluids:
+        :param layers:
+        :param resolution:
+        :param dx:
+            Distance between each 1D model
+        :param depth_to_top:
+        :param throw:
+            Vertical throw
+        :param dip:
+        :param n_traces:
+        :param kwargs:
+        """
+
+        if litho_fluids is None:
+            litho_fluids = LithoFluids(
+                [LithoFluid(default='shale'), LithoFluid(default='brine_sst'), LithoFluid(default='oil_sst')]
+            )
+
+        if layers is None:
+            layers = [
+                Layer(name='Top', thickness=Q_(50., 'm'), litho_fluid=LithoFluid(default='shale')),
+                Layer(name='Layer 1', thickness=Q_(20., 'm'), litho_fluid=LithoFluid(default='brine_sst')),
+                Layer(name='Layer 1', case='Oil', thickness=Q_(20., 'm'), litho_fluid=LithoFluid(default='oil_sst')),
+                Layer(name='Layer 2', thickness=Q_(10., 'm'), litho_fluid=LithoFluid(default='shale')),
+                Layer(name='Layer 3', thickness=Q_(20., 'm'), litho_fluid=LithoFluid(default='brine_sst')),
+                Layer(name='Bottom', thickness=Q_(50., 'm'), litho_fluid=LithoFluid(default='shale')),
+            ]
+
+        if resolution is None:
+            resolution = Q_(0.1, 'm')
+        if dx is None:
+            dx = Q_(12.5, 'm')
+        self.dx = dx
+        if depth_to_top is None:
+            depth_to_top = Q_(3000., 'm')
+        self.depth_to_top = depth_to_top
+        if throw is None:
+            throw = Q_(20., 'm')
+        self.throw = throw
+        if dip is None:
+            dip = Q_(60., 'deg')
+        self.dip = dip
+        if n_traces is None:
+            n_traces = 101
+        self.n_traces = n_traces
+
+        model = build_faulted_model(
+            layers, dx, depth_to_top, throw, dip, n_traces, True
+        )
+
+        super().__init__(model=model, litho_fluids=litho_fluids, resolution=resolution, **kwargs)
+
+    def draw(self):
+        from bokeh.models import NumericInput
+
+        # Create the default Quasi 2D widgets
+        (title, lf_table, add_row, delete_row, update, model_table,
+         add_row_m, delete_row_m, update_m, grid,
+         controls, synth_2d_cds) = self.draw_2d()
+
+        # Select dip angle
+        dip_selector = NumericInput(
+            value=self.dip.to('deg').magnitude, low=45., high=90., title='Dip [deg]'
+        )
+        # Select throw
+        throw_selector = NumericInput(
+            value=self.throw.to('m').magnitude, low=0., high=200, title='Vertical throw [m]'
+        )
+
+        # Select lateral resolution
+        dx_selector = NumericInput(
+            value=self.dx.to('m').magnitude, low=0.5, high=50., title='Lateral resolution [m]',
+            mode='float',
+        )
+
+        # Add functionality to the update model button
+        def update_faulting():
+            # We can't recreate the layers from the model_able cds, because the update_table_function() stops us
+            # from updating the thickness when they are functions
+
+            # But we can re-build the faulted model based on Fault input
+            self.model = build_faulted_model(
+                self.model.layers,
+                Q_(dx_selector.value, 'm'),
+                self.depth_to_top,
+                Q_(throw_selector.value, 'm'),
+                Q_(dip_selector.value, 'deg'),
+                self.n_traces,
+                True
+            )
+
+            # Update the model_table
+            self.model_table.model = self.model
+
+            # And then recreate the synthetics
+            _synth_2d_cds, _elastics_dict = calc_synthetic_2d_cds(
+                self.model,
+                self.model_table,
+                self.resolution,
+                str(controls.children[1].value),
+                self.dt,
+                self.avo_or_eei,
+                float(controls.children[2].value)
+            )
+            synth_2d_cds.data = dict(_synth_2d_cds.data)
+
+        update_m.on_click(update_faulting)
+
+        return (title, lf_table, add_row, delete_row, update, model_table,
+                add_row_m, delete_row_m, update_m, grid,
+                controls, synth_2d_cds,
+                dip_selector, throw_selector, dx_selector)
+
 
 def build_layered_model(depth_to_target, overburden_thickness, target_thickness,
                         overburden, target, underburden, domain='TWT') -> Model:
@@ -2827,4 +2968,266 @@ def total_cds_thickness(cds: ColumnDataSource) -> float:
             _i += 1
     return _thickness
 
+def faulted_layer_top(
+        x,
+        interface_index,
+        thicknesses,  # list of thicknesses of all layers
+        throw, # Vertical throw
+        dip_rad,
+        x0,  # X position of fault at the top
+        z0: float | None = None   # Depth of the top
+):
+    if z0 is not None:
+        _z0 = np.ones(len(x)) * z0
+    else:
+        _z0 = np.zeros(len(x))
+
+    if interface_index == 0:
+        return _z0
+
+    if interface_index == len(thicknesses):
+        return _z0 + sum(thicknesses) + throw
+
+    x_top = x0 + sum(thicknesses[:interface_index]) / np.tan(dip_rad)
+    wedge_width = throw / np.tan(dip_rad)
+    return _z0 + sum(thicknesses[:interface_index]) + throw * np.clip((x - x_top) / wedge_width, 0, 1)
+
+def faulted_layer_thickness(
+        x,  # horizontal distance in meters
+        layer_index,
+        thicknesses,  # list of thicknesses of all layers in meters
+        throw, # Vertical throw in meters
+        dip_rad,
+        x0,  # X position of fault at the top in meters
+):
+    return faulted_layer_top(
+        x,
+        layer_index + 1,
+        thicknesses,
+        throw,
+        dip_rad,
+        x0
+    ) - faulted_layer_top(
+        x,
+        layer_index,
+        thicknesses,
+        throw,
+        dip_rad,
+        x0
+    )
+
+def faulted_layer_thickness_indexed(
+        j: int,  # index of position in x-direction
+        x,  # horizontal distance in meters
+        layer_index,
+        thicknesses,  # list of thicknesses of all layers in meters
+        throw, # Vertical throw in meters
+        dip_rad,
+        x0,  # X position of fault at the top in meters
+):
+    t = faulted_layer_thickness(x, layer_index, thicknesses, throw, dip_rad, x0)
+    return Q_(t[j], 'm')
+
+def build_faulted_model(
+        layers: List[Layer],
+        dx: pint.Quantity,
+        depth_to_top: pint.Quantity,
+        throw: pint.Quantity,
+        dip: pint.Quantity,
+        n_traces: int,
+        verbose: bool = False
+) -> Model:
+    """
+
+    :param layers:
+
+    :param dx:
+    :param depth_to_top:
+    :param throw:
+    :param dip:
+    :param n_traces:
+    :param verbose:
+    :return:
+    """
+    dip_rad = dip.to('rad').magnitude
+    dz = dx * np.tan(dip_rad)  # Vertical step along the fault plane
+    wedge_width = throw / np.tan(dip_rad)  # width of the wedge that the fault introduces
+
+    base_case_layers = [_l for _l in layers if _l.case == global_base_case_name]
+    # The below three lines only work in the first step, when the thickness is constant
+    # thicknesses = [
+    #     _l.thickness.to('m').magnitude for _l in base_case_layers
+    # ]
+    # After first iteration all thickness are functions, so we need to test:
+    thicknesses = [
+        _l.thickness(0).to('m').magnitude if isinstance(_l.thickness, Callable) else
+        _l.thickness.to('m').magnitude for _l in base_case_layers
+    ]
+    tot_thickness =sum(thicknesses) + throw.to('m').magnitude
+
+
+    lateral_shift = tot_thickness / np.tan(dip_rad)
+
+    vertical_shift = throw.to('m')
+
+    if verbose:
+        print('Dip:', dip)
+        print('Lateral:', dx, lateral_shift)
+        print('Vertical:', dz, vertical_shift)
+
+    # Lateral position where the fault should start
+    i0 = int(n_traces / 4.)
+
+    # create array for the lateral dimension
+    x = np.linspace(0, n_traces * dx.to('m').magnitude, n_traces)
+
+
+    for layer_i, _l in enumerate(base_case_layers):
+        _l.thickness = lambda j, layer_i=layer_i: faulted_layer_thickness_indexed(j,
+                                  x=x, layer_index = layer_i, thicknesses=thicknesses, throw=throw.to('m').magnitude,
+                                  dip_rad=dip_rad, x0=x[i0])
+
+    model = Model(
+        layers=layers,
+        depth_to_top=depth_to_top,
+        trace_index_range=np.arange(n_traces),
+        dx = dx
+    )
+
+    if verbose:
+        fig, ax = plt.subplots()
+        plt.gca().set_aspect('equal')
+        model.plot(ax=ax)
+        x0 = dx * int(n_traces / 4.)
+        z0 = depth_to_top
+        ax.plot(
+            [x0.magnitude, x0.magnitude + model.total_thickness().magnitude / np.tan(dip.to('rad').magnitude)],
+            [z0.magnitude, z0.magnitude + model.total_thickness().magnitude],
+            'r--',
+            lw=2
+        )
+        ax.set_xlabel('X')
+        ax.set_ylabel('depth')
+        ax.set_ylim(ax.get_ylim()[::-1])
+        plt.show()
+
+    return model
+
+def update_model_function(
+        model: Model,
+        model_table: ModelTable,
+        resolution: pint.Quantity,
+        case_name: str,
+        dt: pint.Quantity,
+        avo_or_eei: str,
+        freq: float,
+        trace_nr: int,
+        cds_lines: ColumnDataSource,  # CDS for the lines that are drawn
+        cds_m: ColumnDataSource,   # CDS of the model_table
+        cds_synth_2d: ColumnDataSource,  # CDS of the synthetic 2d data,
+        grid,  # Output from LogPlotter().draw_ext_toolbar()
+        previous_cases: List[str]   # List of previous case names
+):
+    from bokeh.models import GlyphRenderer
+    from bokeh.models.glyphs import Image, ImageRGBA, ImageURL
+
+    from blixt_rp.plotting.log_plotter import LogPlotter, LogColumn, Line, select_column, select_line
+
+    # Update the elastic properties based on the new model
+    _elastics_dict = model_table.realize(resolution, trace_nr)
+
+    # Update the ColumnDataSource of the lines and the model
+    cds_lines.data = dict(model_table.line_cds(_elastics_dict).data)
+    cds_m.data = dict(model_table.cds.data)
+
+    # Update the CDS of the synthetics
+    # _synth_2d_cds, _elastics_dict = calc_synth_2d_cds(str(case_selector.value))
+    _synth_2d_cds, _elastics_dict = calc_synthetic_2d_cds(
+        model,
+        model_table,
+        resolution,
+        case_name,
+        dt,
+        avo_or_eei,
+        freq
+    )
+    # Update the CDS of the synthetic 2d data
+    cds_synth_2d.data = dict(_synth_2d_cds.data)
+
+    # Update the depth range of the synthetics to match the changes in depth
+    for _column in [select_column(grid, _col_name) for _col_name in ['SYNTH_2D']]:
+        image_renderers = [
+            r for r in _column.renderers
+            if isinstance(r, GlyphRenderer) and isinstance(r.glyph, (Image, ImageRGBA, ImageURL))
+        ]
+        image_renderers[0].glyph.y = model.depth_to_top.to('m').magnitude
+        image_renderers[0].glyph.dh = total_cds_thickness(cds_m)
+
+    # Detect changes in number of cases
+    case_changes = detect_change_in_cases(model.case_names, previous_cases)
+    if len(case_changes['new']) > 0:
+        # get AI, and VpVs columns
+        _p_ai = select_column(grid, 'AI')
+        _p_vpvs = select_column(grid, 'VpVs')
+        for _case in case_changes['new']:
+            _y = 'ai_{}'.format(_case)
+            _p_ai.line(x='ai_{}'.format(_case), y='depth', source=cds_lines,
+                       **{'line_color': 'red', 'legend_label': 'AI_{}'.format(_case)})
+            _p_vpvs.line(x='vpvs_{}'.format(_case), y='depth', source=cds_lines,
+                         **{'line_color': 'red', 'legend_label': 'VpVs_{}'.format(_case)})
+
+    # Only handle the situation when a new case is added, for now (TODO)
+    if len(case_changes['removed']) > 0:
+        print_info('Can not handle the situation when a case is removed', 'error', logger, 'IOError')
+
+    previous_cases = model.case_names
+
+
+def calc_synthetic_2d_cds(
+        model: Model,
+        model_table: ModelTable,
+        resolution: pint.Quantity,
+        case_name: str,
+        dt: pint.Quantity,
+        avo_or_eei: str,
+        freq: float,
+
+):
+    """
+    Calculates the synthetic seismic for a (quasi) 2D model
+
+    :param model:
+        Model object with multiple layers
+    :param model_table:
+        A bokeh data table that contain each layer of the above model
+    :param resolution:
+        Vertical resolution of the model
+    :param case_name:
+        Name of the case being calculated
+    :param dt:
+        Resolution (in time) of the synthetic data
+        The sample rate of the resampled log data when converted to TWT
+    :param avo_or_eei:
+        str: 'avo' or 'eei'
+    :param freq:
+        float: Central frequency of the Ricker wavelet in Hz
+    :return:
+    """
+    synth_values = []
+    elastics_dict = None
+    for _i in model.trace_index_range:
+        elastics_dict = model_table.realize(resolution, _i)
+
+        synth_cds_base = calc_synth_cds(
+            elastics_dict[case_name]['vp'],
+            elastics_dict[case_name]['vs'],
+            elastics_dict[case_name]['rho'],
+            elastics_dict[case_name]['twt'],
+            dt, 0., avo_or_eei, freq
+        )
+        synth_values.append(synth_cds_base.data['value'][0])
+
+    synth_cds = ColumnDataSource({'value': [np.array(synth_values, dtype=float).T]})
+    print('Total size: {}'.format(synth_cds.data['value'][0].shape))
+    return synth_cds, elastics_dict
 

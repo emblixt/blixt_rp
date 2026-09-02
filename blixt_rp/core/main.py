@@ -12,8 +12,11 @@ sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 # test = 'seismic__test_avo_qc'
-test = 'fluid_table'
+# test = 'fluid_table'
 # test = 'mineral_table'
+# test = 'test_laminar_model'
+# test = 'test_laminar_q2d_model'
+test = 'test_fault_model'
 
 
 if test == 'seismic__test_avo_qc':
@@ -21,6 +24,32 @@ if test == 'seismic__test_avo_qc':
     test = seismic.TestCases()
     p, b1, b2, b3, b4, b5, b6, b7, b8 = test.test_avo_qc()
     curdoc().add_root(row(column(row(b1, b2, b3, b4), p, b5), column(b7, b8, b6)))
+
+elif test == 'test_laminar_model':
+    import blixt_rp.unit_tests.test_models as test_models
+    test = test_models.TestCase()
+    model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid, controls \
+        = test.test_laminar_model(unit_test=False)
+    curdoc().add_root(
+        column(grid, controls,
+               row(
+                   column(model_table, row(add_row_m, delete_row_m, update_m)),
+                   column(lf_table, row(add_row, delete_row, update))
+               ))
+    )
+
+elif test == 'test_laminar_q2d_model':
+    import blixt_rp.unit_tests.test_models as test_models
+    test = test_models.TestCase()
+    model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid, controls\
+        = test.test_laminar_q2d_model(unit_test=False)
+    curdoc().add_root(
+        column(grid, controls,
+                    row(
+                        column(model_table, row(add_row_m, delete_row_m, update_m)),
+                        column(lf_table, row(add_row, delete_row, update))
+                    ))
+    )
 
 elif test == 'mineral_table':
     import minerals_new
@@ -33,3 +62,24 @@ elif test == 'fluid_table':
     test = fluids_new.TestCases()
     table, add_row, delete_row, update = test.test_fluid_table(unit_test=False)
     curdoc().add_root(column(table, row(add_row, delete_row, update)))
+
+elif test == 'test_fault_model':
+    import blixt_rp.unit_tests.test_models as test_models
+    test = test_models.TestCase()
+    (title, lf_table, add_row, delete_row, update, model_table,
+     add_row_m, delete_row_m, update_m, grid,
+     controls, synth_2d_cds,
+     dip_selector, throw_selector, dx_selector) = test.test_fault_model(unit_test=False)
+
+    curdoc().add_root(
+            row(
+                column(
+                    column(title, grid, sizing_mode='stretch_width'),
+                    controls,
+                    row(
+                        column(model_table, row(add_row_m, delete_row_m, update_m)),
+                        column(lf_table, row(add_row, delete_row, update))
+                    )),
+                column(dip_selector, throw_selector, dx_selector)
+            )
+    )

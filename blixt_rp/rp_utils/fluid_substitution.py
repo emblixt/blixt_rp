@@ -58,6 +58,8 @@ def run_fluid_substitution(
         lithology_cutoffs: Cutoffs,
         working_intervals: Intervals,
         pvt_table: dict | None = None,
+        save_result_folder: Path | str | None = None,
+        result_file_postfix: str | None = 'FS',
         verbose: bool = False
 ):
 
@@ -139,6 +141,15 @@ def run_fluid_substitution(
                 rho = Q_([0.12, 0.18, 0.25, 0.31, 0.38, 0.45, 0.52, 0.58, 0.64], 'g/cc'),
                 k = Q_([0.020, 0.035, 0.055, 0.080, 0.110, 0.145, 0.185, 0.230, 0.28], 'GPa')
             )
+    :param save_result_folder:
+        Path | str | None
+        If None, the results are not saved
+        Else each well is saved as a las file in the specified folder, with the name:
+            <WELL NAME>_<result_file_postfix>.las
+    :param result_file_postfix:
+        str | None
+        default 'FS'
+        Postfix added to the resulting las file,
     :param verbose:
     :return:
     """
@@ -149,17 +160,14 @@ def run_fluid_substitution(
     # Load all mineral mixtures
     mineral_subst_cases = load_substitution_cases(project_table, from_fluid_mixture=False)
 
-    last_well = 'XXX'
+    last_well = None
+    last_mod_history = ''
     # Iterate over all fluid substitution cases:
     for fsc in fluid_subst_cases:
         print('\n-----------------------------------------------------------------------------' )
-        mod_history = f'Running fluid substitution in well {fsc.well}, in interval {fsc.interval}, with tag={fsc.tag}\n'
-        print(mod_history)
-
-        if last_well != fsc.well.upper():
-            new_well = True
-        else:
-            new_well = False
+        mod_history = f'\nRunning fluid substitution in well {fsc.well}, in interval {fsc.interval}, with tag={fsc.tag}\n'
+        if verbose:
+            print(mod_history)
 
         # Check if this well | interval pair is among the mineral cases
         msc = None
@@ -175,9 +183,28 @@ def run_fluid_substitution(
             err_txt = f'There is no well {fsc.well} among the input wells'
             print_info(err_txt, 'error', logger, 'IOError')
 
-        # prepare the well to be used as input for the fluid and mineral elastics calculation
+        # Extract current well from the input
         well = wells[fsc.well.upper()]
 
+        # For the first iteration:
+        if last_well is None:
+            last_well = well
+
+        # Identify if we have met a new well in fsc
+        if last_well.name != fsc.well.upper():
+            new_well = True
+            # Save the last well if we have asked for it
+            if save_result_folder is not None:
+                _tag = '' if result_file_postfix is None else '_{}'.format(result_file_postfix)
+                _file_name = os.path.join(save_result_folder, '{}{}.las'.format(last_well.name, _tag))
+                print('Saving to {}'.format(_file_name))
+                last_well.header.modification_history += last_mod_history
+                last_well.write_las(_file_name)
+            last_mod_history = ''
+        else:
+            new_well = False
+
+        # Prepare the well to be used as input for the fluid and mineral elastics calculation
         # The dict method harmonizes the logs in this well.
         well_dict = well.dict()
 
@@ -300,14 +327,20 @@ def run_fluid_substitution(
             # Now replace the original with the fluid substituted results
             fs_log.data[local_mask] = Q_(_result, _result_units).to(_units)
 
-            fs_log.header.modification_history += mod_history
-
             # Add the new fluid substituted log to the well if it wasn't there before
             if _name not in well.get_log_names:
                 well.add_log(fs_log, if_log_exists='ask')
 
-        last_well = fsc.well.upper()
+        last_well = well
+        last_mod_history += mod_history
 
+    # Save the last well if we have asked for it
+    if save_result_folder is not None:
+        _tag = '' if result_file_postfix is None else '_{}'.format(result_file_postfix)
+        _file_name = os.path.join(save_result_folder, '{}{}.las'.format(last_well.name, _tag))
+        print('Saving to {}'.format(_file_name))
+        last_well.header.modification_history += last_mod_history
+        last_well.write_las(_file_name)
 
 class   InteractiveFluidSub:
     def __init__(self,
@@ -377,7 +410,16 @@ class TestCases(unittest.TestCase):
             for _wn, _w in wells.items():
                 print(' {} | {}: {}'.format(_wn, _log_type, ', '.join([_l.name for _l in _w.get_logs_of_type(_log_type)])))
 
-        run_fluid_substitution(wells, wp.project_table, log_table, cutoffs, wis, pvt_table=pvt_table, verbose=True)
+        run_fluid_substitution(
+            wells,
+            wp.project_table,
+            log_table,
+            cutoffs,
+            wis,
+            pvt_table=pvt_table,
+            save_result_folder=os.path.join(project_dir, 'blixt_rp\\results_folder'),
+            result_file_postfix='XXX',
+            verbose=True)
 
         # print the names of the important logs prior to fluid substitution:
         print('Final:')

@@ -12,6 +12,7 @@ sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 # test = 'log_plotter__test_cutoffs'
 # test = 'log_plotter__test_well_plotter_with_cutoffs'
+# test = 'cross_plotter__test_working_intervals'
 # test = 'cross_plotter__test_both'
 # test = 'rp_plotter__test_well'
 test = 'rp_plotter__test_well_with_rpt'
@@ -42,6 +43,21 @@ elif test == 'log_plotter__test_well_plotter_with_cutoffs':
             )
         )
     )
+elif test == 'cross_plotter__test_working_intervals':
+    import cross_plotter
+    test = cross_plotter.TestCases()
+    xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, wis_guis = test.test_working_intervals()
+    curdoc().add_root(
+        row(
+            column(
+                xplot,
+                row(x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask),
+            ),
+            column( wis_guis  # ,
+                   )
+        )
+    )
+
 elif test == 'cross_plotter__test_both':
     import cross_plotter
     test = cross_plotter.TestCases()
@@ -54,8 +70,7 @@ elif test == 'cross_plotter__test_both':
           ),
           column(ct_guis[0],
                  row(ct_guis[1], ct_guis[2], ct_guis[3]),  # , ct_guis[4]),
-                 wis_guis[0]  # ,
-                 #  wis_guis[1]
+                 wis_guis
                  )
        )
     )
@@ -73,7 +88,7 @@ elif test == 'rp_plotter__test_well':
             ),
             column(style_table,
                    column(ct_guis[0], row(ct_guis[1], ct_guis[2], ct_guis[3])),  #,  ct_guis[4])),
-                   column(wis_guis[0])  #, wis_guis[1])
+                   column(wis_guis)
                    )
         )
     )
@@ -91,7 +106,7 @@ elif test == 'rp_plotter__test_well_with_rpt':
             ),
             column(style_table,
                    column(ct_guis[0], row(ct_guis[1], ct_guis[2], ct_guis[3])),  #,  ct_guis[4])),
-                   column(wis_guis[0]),  #, wis_guis[1]),
+                   column(wis_guis),
                    column(
                        rpt_dt, row(add_row, var_select, delete_row, update_table)
                    )

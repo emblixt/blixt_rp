@@ -13,6 +13,7 @@ import logging
 import sys
 import os
 from typing import Callable
+import pint
 
 from bokeh.models.callbacks import CustomJS
 from bokeh.models.sources import ColumnDataSource
@@ -296,7 +297,7 @@ def rpt_wrapper(
         nice plots
     :param rpt:
         function
-        Rock physics template function of t
+        Rock physics template function of t which returns Vp, Vs and Density
         Should take a second argument which is used to parameterize the function
         e.g.
         def rpt(t, c, **rpt_keywords):
@@ -401,7 +402,6 @@ def rpt_phi_sw(phi: Q_, sw: Q_, **kwargs):
     calc_phi_eff = kwargs.pop('calc_phi_eff', False)      # set this to True to calculate effective porosity and use it
 
     # rp_core is not handling Pint Quantities correctly, so we need to take their magnitude
-    # TODO DO THIS FOR ALL VARIABLES
     # TODO
     # Insert a test so that 'float' isn't used on the input variables that are arrays or lists
     _phi = phi.to('dimensionless').magnitude

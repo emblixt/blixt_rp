@@ -1134,9 +1134,8 @@ class CrossPlotter:
         if self.interval_table is not None:
             wis_cds = self.interval_table.cds
             wis_guis = self.interval_table.draw(wis_cds, verbose=verbose)
-            # wis_guis = wis_table, apply
         else:
-            wis_guis = [Div(text='', width=10, height=10)]
+            wis_guis = Div(text='', width=10, height=10)
 
         # Create a BooleanFilter using the 'mask' column
         boolean_filter = BooleanFilter(booleans=cds.data['mask'])

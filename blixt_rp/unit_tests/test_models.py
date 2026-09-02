@@ -4,6 +4,7 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 from bokeh.io import output_file
+from pint import DimensionalityError
 
 from blixt_rp.core.core import LithoFluid, LithoFluids, LithoFluidsTable
 from blixt_rp.core.seismic import AvoAnalyzer
@@ -13,7 +14,7 @@ project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\unit_te
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 output_file(os.path.join(project_dir, 'blixt_rp', 'test_data','plot.html'))
 
-from blixt_rp.core.models import (Model, Layer, ModelTable, LaminarModel, WedgeModel,
+from blixt_rp.core.models import (Model, Layer, ModelTable, LaminarModel, WedgeModel, FaultModel,
                                   plot_wiggles, build_layered_model, laminar_model_analysis,
                                   build_saturation_wedge, detect_change_in_cases, build_wedge)
 from blixt_rp.core.core import LithoFluid
@@ -32,6 +33,19 @@ layer5 = Layer('Basement', 'Base', thickness=Q_(50., 'm'), litho_fluid=l1)
 layer6 = Layer('Basement', 'Oil', thickness=Q_(50., 'm'), litho_fluid=l1)
 
 class TestCase(unittest.TestCase):
+
+    def test_layer(self):
+        from copy import deepcopy
+        l1 = deepcopy(layer1)
+        print(l1.layer_type, l1.thickness)
+        def thick(i):
+            return Q_(i, 'm')
+        l1.thickness = thick
+        print(l1.layer_type, l1.thickness, l1.thickness(5))
+        i = np.arange(10)
+        plt.plot(i, l1.thickness(i).magnitude)
+        plt.show()
+
 
     def test_1d(self):
         m = Model(depth_to_top=Q_(2000, 'm'), layers=[layer1, layer2, layer3, layer4, layer5])
@@ -443,6 +457,9 @@ class TestCase(unittest.TestCase):
         wm = WedgeModel(n_traces=51)
         lf_table, lf_controls, model_table, model_controls, grid, controls, new_grid, synth_2d_cds = wm.draw()
 
+        wm.model.plot()
+        plt.show()
+
         # Test adding some extraction points
         analyze_avo = AvoAnalyzer(grid, 'line section', None, model=wm)
         points_cds = analyze_avo.cds
@@ -481,3 +498,114 @@ class TestCase(unittest.TestCase):
         cds = model.horizons_cds()
         for _key in list(cds.data.keys()):
             print(_key, cds.data[_key])
+
+    def test_fault_model(self, unit_test=True):
+        from bokeh.plotting import show, row, column
+        dip = Q_(60., 'deg')
+        depth_to_top = Q_(3000., 'm')
+        dx = Q_(12.5, 'm')
+        #   dx = Q_(2.5, 'm')
+        n_traces = 51
+
+        fm = FaultModel(
+            dx=dx,
+            depth_to_top=depth_to_top,
+            dip=dip,
+            n_traces=n_traces
+        )
+
+        (title, lf_table, add_row, delete_row, update, model_table,
+                add_row_m, delete_row_m, update_m, grid,
+                controls, synth_2d_cds,
+                dip_selector, throw_selector, dx_selector) = fm.draw()
+
+        if unit_test:
+            show(
+                row(
+                    column(
+                        column(title, grid, sizing_mode='stretch_width'),
+                        controls,
+                            row(
+                                column(model_table, row(add_row_m, delete_row_m, update_m)),
+                                column(lf_table, row(add_row, delete_row, update))
+                            )),
+                     column(dip_selector, throw_selector, dx_selector)
+                 ))
+            return None
+        else:
+            return (title, lf_table, add_row, delete_row, update, model_table,
+                 add_row_m, delete_row_m, update_m, grid,
+                 controls, synth_2d_cds,
+                 dip_selector, throw_selector, dx_selector)
+
+
+
+    def test_faulted_horizons(self):
+        from blixt_rp.core.models import faulted_layer_top, faulted_layer_thickness
+        T = [30., 50., 50., 30.]
+        n_layers = len(T)
+
+        D = 20  # vertical throw [m]
+
+        fault_dip = 60
+        x_fault_top = 100
+
+
+        x = np.linspace(0,400,50)
+
+        fig, axs = plt.subplots(2, 1, figsize=(10,10))
+
+        for i in range(0,n_layers+1):
+
+            h = faulted_layer_top(
+                x,
+                i,
+                T,
+                D,
+                np.radians(fault_dip),
+                x_fault_top,
+                None
+            )
+
+            axs[0].plot(x, h, label=f"Interface {i}")
+
+            if i < n_layers:
+                _thick = faulted_layer_thickness(
+                    x,
+                    i,
+                    T,
+                    D,
+                    np.radians(fault_dip),
+                    x_fault_top
+                )
+
+                axs[1].plot(x, _thick, label=f"Layer {i}")
+
+        # fault
+        zf = np.linspace(
+            0,
+            sum(T) + D,
+            200
+        )
+
+        xf = (
+                x_fault_top
+                + zf/np.tan(
+            np.radians(fault_dip)
+        )
+        )
+
+        axs[0].plot(
+            xf,
+            zf,
+            'r--',
+            lw=2
+        )
+
+        axs[0].invert_yaxis()
+        axs[0].legend()
+        axs[0].set_aspect('equal')
+
+        axs[1].legend()
+
+        plt.show()

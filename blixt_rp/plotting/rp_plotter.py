@@ -70,7 +70,6 @@ class RockPhysicsPlotter(CrossPlotter):
         :param wells:
             list
             List of Well objects
-            NOTE: ONLY TESTED WITH ONE WELL
         :param log_tables:
             list
             List of LogTable objects:
@@ -274,21 +273,79 @@ class RockPhysicsPlotter(CrossPlotter):
                 rpt_dt, add_row, var_select, delete_row, update_table)
 
 class TestCases(unittest.TestCase):
+    def test_data(self):
+        import blixt_rp.plotting.cross_plotter as xp
+        from blixt_rp.core.well_new import Well, Depth
+        from blixt_rp.core.log_curve_new import LogCurve
+        from blixt_rp.core.core import LogTable, CutoffRule, Interval, StratUnit, Header
+        # Create new test data "from" two wells:
+        n1 = 800
+        md1 = Q_(np.linspace(1000., 2000., n1), 'm')
+        vp1 = Q_(np.random.normal(0, 20, n1) + np.linspace(2000, 3000, n1), 'm/s')
+        vs1 = Q_(np.random.normal(0, 10, n1) + np.linspace(1500, 2500, n1), 'm/s')
+        rho1 = Q_(np.random.normal(0, 0.2, n1) + np.linspace(2.5, 3.5, n1), 'g/cc')
+        phie1 = Q_(np.clip(np.random.normal(0.2, 0.05, n1), 0, 1), '')
+        vcl1 = Q_(np.clip(np.random.normal(0.5, 0.15, n1), 0, 1), '')
+        # data_one = dict(md=md1, vp=vp1, vs=vs1, rho=rho1, phie=phie1, vcl=vcl1)
+        # ds1 = xp.DataSource(name='Well A', data=data_one)
+        w1 = Well(Header(dict(name='Well A')), [
+            LogCurve('vp', vp1, Depth(md1)),
+            LogCurve('vs', vs1, Depth(md1)),
+            LogCurve('rho', rho1, Depth(md1)),
+            LogCurve('phie', phie1, Depth(md1)),
+            LogCurve('vcl', vcl1, Depth(md1))
+        ])
+
+        n2 = 800
+        md2 = Q_(np.linspace(1500., 3500., n2), 'm')
+        vp2 = Q_(np.random.normal(0, 20, n2) + np.linspace(2000, 3500, n2), 'm/s')
+        vs2 = Q_(np.random.normal(0, 10, n2) + np.linspace(1500, 2800, n2), 'm/s')
+        rho2 = Q_(np.random.normal(0, 0.2, n2) + np.linspace(2.5, 3.9, n2), 'g/cc')
+        phie2 = Q_(np.clip(np.random.normal(0.2, 0.05, n2), 0, 1), '')
+        vcl2 = Q_(np.clip(np.random.normal(0.5, 0.15, n2), 0, 1), '')
+        # data_two = dict(md=md2, vp=vp2, vs=vs2, rho=rho2, phie=phie2, vcl=vcl2)
+        # ds2 = xp.DataSource(name='Well B', data=data_two)
+        w2 = Well(Header(dict(name='Well B')), [
+            LogCurve('vp', vp2, Depth(md2)),
+            LogCurve('vs', vs2, Depth(md2)),
+            LogCurve('rho', rho2, Depth(md2)),
+            LogCurve('phie', phie2, Depth(md2)),
+            LogCurve('vcl', vcl2, Depth(md2))
+        ])
+
+        rule1 = CutoffRule('phie', '>', Q_(0.1, ''))
+        rule2 = CutoffRule('vcl', '<', Q_(0.5, ''))
+        cutoffs = Cutoffs(cutoffs=[rule1, rule2])
+
+        wis = Intervals(
+            name='test', intervals=[
+                Interval( well='Well A', top=Q_(1350, 'm'), base=Q_(1450, 'm'), interval_info=StratUnit('Cook FM', 1)),
+                Interval( well='Well A', top=Q_(1550, 'm'), base=Q_(1750, 'm'), interval_info=StratUnit('Oseberg FM', 1)),
+                Interval( well='Well B', top=Q_(1500, 'm'), base=Q_(1900, 'm'), interval_info=StratUnit('Cook FM', 1)),
+                Interval( well='Well B', top=Q_(1900, 'm'), base=Q_(2450, 'm'), interval_info=StratUnit('Oseberg FM', 1)),
+                Interval(well='Well B', top=Q_(2450, 'm'), base=Q_(3500, 'm'), interval_info=StratUnit('Drake FM', 1))
+            ] )
+
+        return w1, w2, wis, cutoffs
 
     def test_data_cds(self, unit_test=True):
-        import blixt_rp.plotting.cross_plotter as xp
-        test = xp.TestCases()
+        from blixt_rp.core.core import LogTable
+        w1, w2, wis, coffs = self.test_data()
 
-        ds1, ds2, wis, coffs = test.test_data()
+        lt1 = LogTable(name='standard', log_table={'P velocity': 'vp', 'S velocity': 'vs', 'Density': 'rho',
+                                                   'Porosity': 'phie', 'Volume': 'vcl'})
 
-        tp = RockPhysicsPlotter({str(_s.name):_s for _s in [ds1, ds2]},
+        tp = RockPhysicsPlotter([w1, w2],
+                                [lt1],
                                 cutoffs=coffs,
                                 working_intervals=wis,
                                 )
 
         d_cds = tp.cds
 
-        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis, style_table = tp.draw(d_cds)
+        (xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask,
+         ct_guis, wis_guis, style_table,
+         rpt_dt, add_row, var_select, delete_row, update_table) = tp.draw(d_cds)
         if unit_test:
             show(
                 row(
@@ -297,11 +354,13 @@ class TestCases(unittest.TestCase):
                         row(x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask)
                     ),
                     column(style_table,
-                           column(ct_guis[0], row(ct_guis[1], ct_guis[2], ct_guis[3])),  #,  ct_guis[4])),
-                           column(wis_guis[0])  #, wis_guis[1])
+                           column(ct_guis[0], row(ct_guis[1], ct_guis[2], ct_guis[3])),  # ,  ct_guis[4])),
+                           # ct_guis,
+                           wis_guis
                            )
                 )
             )
+            return None
         else:
             return xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis, style_table
 
@@ -332,7 +391,10 @@ class TestCases(unittest.TestCase):
 
         d_cds = tp.cds
 
-        xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask, ct_guis, wis_guis, style_table = tp.draw(d_cds)
+        (xplot, x_menu, y_menu, size_menu, color_menu, apply_mask, reset_mask,
+         ct_guis,
+         wis_guis, style_table,
+         rpt_dt, add_row, var_select, delete__row, update_table) = tp.draw(d_cds)
         if unit_test:
             show(
                 row(
@@ -342,7 +404,7 @@ class TestCases(unittest.TestCase):
                     ),
                     column(style_table,
                            column(ct_guis[0], row(ct_guis[1], ct_guis[2], ct_guis[3])),  # ,  ct_guis[4])),
-                           column(wis_guis[0])  #, wis_guis[1])
+                           column(wis_guis)
                            )
                 )
             )
@@ -417,7 +479,7 @@ class TestCases(unittest.TestCase):
                     ),
                     column(style_table,
                            column(ct_guis[0], row(ct_guis[1], ct_guis[2], ct_guis[3])),  #,  ct_guis[4])),
-                           column(wis_guis[0])  # , wis_guis[1])
+                           column(wis_guis)
                            )
                 )
             )

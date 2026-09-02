@@ -201,9 +201,6 @@ class LogTable(dict):
             LogTable
 
         """
-        # TODO We should add a translate_log or rename variable (optional) which 'untranslates" the logs_to_keep
-        # OR
-        # Can we rewrite the whole THING, and the let renaming occur in the reading of the las file?
         _dict = {}
         if self.multi_log:
             for _key in list(self.keys()):

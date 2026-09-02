@@ -308,6 +308,7 @@ class LogPlotter:
                                       _tools=self._tools,
                                       _title=title)
             _p.name = _column.name
+            _p.output_backend = 'svg'
             children.append(_p)
 
         # Let the y-axis of all columns be controlled by the y-axis of the first column
@@ -315,8 +316,10 @@ class LogPlotter:
             if i > 0:
                 child.y_range = children[0].y_range
 
-        return gridplot([[_child for _child in children]],
+        _grid_plot = gridplot([[_child for _child in children]],
                         toolbar_location='right', merge_tools=True)
+
+        return _grid_plot
 
     def draw_ext_toolbar(self, title: str | None = None):
         """

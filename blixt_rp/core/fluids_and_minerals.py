@@ -136,7 +136,6 @@ class FluidSpec:
                            'warning', logger)
         elif self.calculation_method.lower() == 'interpolation':
             _p = self.params['P ref [MPa]'] + self.params['P gradient [MPa/m]'] * burial_depth.to('meter').magnitude
-            print('XXX: Pressure as calculated from parameters [MPa]: ', _p)
             if pvt_table is None:
                 print_info('A table of pressure, rho and k is needed for the calculation of an Interpolation fluid',
                            'error', logger, 'IOError')

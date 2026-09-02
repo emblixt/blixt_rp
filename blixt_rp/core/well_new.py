@@ -188,10 +188,11 @@ class Well(object):
     """
     from blixt_rp.core.core import Header, LogTable, Template, Intervals
     from blixt_rp.core.log_curve_new import LogCurve
+    from typing import List
 
     def __init__(self,
                  header: Header | None = None,
-                 logs: list | None = None,
+                 logs: List[LogCurve] | None = None,
                  style: Template | None = None
                  ):
         """
@@ -506,7 +507,11 @@ class Well(object):
 
         # Harmonize logs before writing to las, as the las format requires an equal and uniform
         # sampling of all logs in a las file
-        self.harmonize_logs()
+        # Maybe first test if it is harmonized:
+        if self.is_of_equal_length and self.is_evenly_spaced:
+            print('Well {} is already harmonized'.format(self.name))
+        else:
+            self.harmonize_logs()
 
         out = (
             '#----------------------------------------------------------------------------\n'
@@ -521,9 +526,11 @@ class Well(object):
             out += '# NOTE: {}\n'.format(self.header['note'])
         out += '# Written to las on: {}\n'.format(datetime.now().isoformat())
         out += '# Modified on: {}\n'.format(self.header['modification_date'])
+        if self.header['modification_history'] is not None:
+            out += '# History: {}\n'.format(self.header['modification_history'].replace('\n', '\n#   '))
         for _log in self.logs:
             if _log.header['modification_history'] is not None:
-                out += '#  Modification: {}: {}\n'.format(_log.name,
+                out += '#  Modification of log: {}: {}\n'.format(_log.name,
                                                           _log.header['modification_history'].replace('\n', '\n#   '))
 
         # WELL INFO
@@ -676,7 +683,7 @@ class Well(object):
         _data=self.dict(down_sample=down_sample)
         if 'depth' not in list(_data.keys()):
             _md = self.get_md_log()
-            _data['depth'] = _data[_md.name]
+            _data['depth'] = _md.data
         _templates = {}
         _name=self.name
 
