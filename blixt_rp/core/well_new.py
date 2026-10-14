@@ -31,18 +31,17 @@ from scipy.constants import degree
 from scipy.interpolate import interp1d
 from matplotlib.font_manager import FontProperties
 
-from blixt_rp.rp.rp_core import linear_gassmann
-from .. import ureg, Q_
 
 # To test blixt_rp and blixt_utils libraries directly, without installation:
 project_dir = str(os.path.dirname(__file__).replace('blixt_rp\\blixt_rp\\core', ''))
 sys.path.append(os.path.join(project_dir, 'blixt_rp'))
 sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
-from blixt_rp.core.core import Cutoffs
+from blixt_rp.core.core import Cutoffs, LithoFluid, LithoFluids
 from blixt_rp.core.log_curve_new import LogCurve, Depth
 from blixt_utils.utils import print_info
 import blixt_utils.misc.masks as msks
+from blixt_rp import ureg, Q_
 
 # global variables
 supported_version = {2.0, 3.0}
@@ -474,6 +473,7 @@ class Well(object):
                     self.header.note = str(table['Note'][i])
                     self.header.content = table['Content'][i]
                     self.header.discovery_in = table['Discovery in'][i]
+                    print(ans, float(table['KB'][i]), table['Water depth'][i], table['Note'][i], table['Content'][i], table['Discovery in'][i])
 
 
 
@@ -843,6 +843,188 @@ class Well(object):
             ) )
             print_info(info_str, 'info', logger)
 
+    def calc_blocked_litho_fluids(self,
+                                  log_table: LogTable,
+                                  wis: Intervals,
+                                  down_weight_outliers: bool = False,
+                                  verbose: bool = False
+                                  ) -> LithoFluids:
+        """
+        Calculates a litho fluid for each working interval in the well
+
+        :param log_table:
+            A LogTable which contains the Vp, Vs and Rho logs
+
+        :param wis:
+            Intervals object with all working intervals
+
+        :param down_weight_outliers:
+        :param verbose:
+        :return:
+        """
+        from blixt_utils.misc.curve_fitting import calculate_one_block
+
+        # Check that the log table contains the necessary log types
+        # And that the necessary logs are in the well
+        necessary_log_types = ['P velocity', 'S velocity', 'Density']
+        for nlt in necessary_log_types:
+            if nlt not in log_table.log_types:
+                print_info('Log type {} is missing'.format(nlt), 'error', logger, raiser='IOError')
+            if log_table[nlt] not in self.get_log_names:
+                print_info('Log {} is missing'.format(log_table[nlt]), 'error', logger, raiser='IOError')
+
+        # Check that the well is represented in the working intervals
+        if not self.name in wis.well_names():
+            print_info('Well {} is missing in the working intervals'.format(self.name), 'error', logger, raiser='IOError')
+
+        litho_fluid_list = []
+        vp = self.get_log_curve(log_table['P velocity'])
+        vs = self.get_log_curve(log_table['S velocity'])
+        rho = self.get_log_curve(log_table['Density'])
+
+        ax = None
+        if verbose:
+            print('Calculating LithoFluids for {}'.format( self.name ))
+            if ax is None:
+                fig, ax = plt.subplots(nrows=1, ncols=3, sharey=True, figsize=(8, 10))
+            for i, nlt in enumerate(necessary_log_types):
+                _log = self.get_log_curve(log_table[nlt])
+                ax[i].scatter(_log.values, _log.depth.values, c='grey', alpha=0.1)
+                ax[i].set_title('{}: {}'.format(nlt, log_table[nlt]))
+
+
+
+        for interval in wis.get_well_intervals(self.name):
+            if verbose:
+                print(' - Working on interval {}, spanning from {} to {}'.format(
+                    interval.name, interval.top, interval.base ))
+                for i, nlt in enumerate(necessary_log_types):
+                    ax[i].axhline(interval.top.magnitude, 0, 1, ls='--')
+                    ax[i].axhline(interval.base.magnitude, 0, 1, ls='--')
+
+
+            if False:
+                print('  Vp: {} : {} : {}'.format(len(vp), np.nanmin(vp.values), np.nanmax(vp.values)))
+            vp_block = calculate_one_block(
+                vp.values,
+                vp.depth.depth.to('m').magnitude,
+                interval.top.to('m').magnitude,
+                interval.base.to('m').magnitude,
+                down_weight_outliers,
+                verbose
+            )
+            if False:
+                print('  Vs: {} : {} : {}'.format(len(vs), np.nanmin(vs.values), np.nanmax(vs.values)))
+                _mask = np.isnan(vs.values)
+                print('  Vs covers a z range from {} to {}'.format(np.nanmin(vs.depth.values[~_mask]),
+                                                                         np.nanmax(vs.depth.values[~_mask])))
+            vs_block = calculate_one_block(
+                vs.values,
+                vs.depth.depth.to('m').magnitude,
+                interval.top.to('m').magnitude,
+                interval.base.to('m').magnitude,
+                down_weight_outliers,
+                verbose
+            )
+            if False:
+                print('  Rho: {} : {} : {}'.format(len(rho), np.nanmin(rho.values), np.nanmax(rho.values)))
+            rho_block = calculate_one_block(
+                rho.values,
+                rho.depth.depth.to('m').magnitude,
+                interval.top.to('m').magnitude,
+                interval.base.to('m').magnitude,
+                down_weight_outliers,
+                verbose
+            )
+
+            # Skip this LithoFluid if not all values are calculated
+            if vp_block['median'] is None or vs_block['median'] is None or rho_block['median'] is None:
+                print_info('Skip {} {} because failed block calculation'.format(interval.name, self.name),
+                           'warning', logger)
+                continue
+
+            if verbose:
+                # TODO! The order of vp, vs, and rho must match the columns of the plot!
+                for i, block in enumerate([vp_block, vs_block, rho_block]):
+                    ax[i].plot(
+                        [block['median'], block['median']],
+                        [interval.top.magnitude, interval.base.magnitude],
+                        c='r'
+                    )
+                    ax[i].plot(
+                        [block['mean'], block['mean']],
+                        [interval.top.magnitude, interval.base.magnitude],
+                        c='b'
+                    )
+                    ax[i].plot(
+                        [block['mean'] + block['std'], block['mean'] + block['std']],
+                        [interval.top.magnitude, interval.base.magnitude],
+                        c='b', ls='--'
+                    )
+                    ax[i].plot(
+                        [block['mean'] - block['std'], block['mean'] - block['std']],
+                        [interval.top.magnitude, interval.base.magnitude],
+                        c='b', ls='--'
+                    )
+
+            _this_litho_fluid = LithoFluid(
+                name = '{} {}'.format(interval.name, self.name),
+                vp = vp_block['median'],
+                vs = vs_block['median'],
+                rho = rho_block['median'],
+                vp_std_dev = vp_block['std'],
+                vs_std_dev = vs_block['std'],
+                rho_std_dev = rho_block['std']
+            )
+
+            litho_fluid_list.append(_this_litho_fluid)
+
+        return LithoFluids(litho_fluid_list)
+
+    def one_d_model(
+            self,
+            log_table: LogTable,
+            wis: Intervals,
+            down_weight_outliers: bool = False,
+            verbose: bool = False):
+        """
+        Builds a model based on the well and the provided working intervals
+        NOTE:
+            Try to avoid working intervals that are overlapping, e.g. VIKING_GP and DRAUPNE_FM, because it
+            breaks the basic principle of Model, which consists of a set of unique layers that doesn't overlap in
+            depth (unless they represent a different case, eg. oil vs. brine)
+        :param log_table:
+            A LogTable which contains the Vp, Vs and Rho logs
+        :param wis:
+            An Intervals object with the intervals that defines the model
+        :param down_weight_outliers:
+        :param verbose:
+        :return:
+        """
+        from blixt_rp.core.models import Model
+        from blixt_rp.core.models import Layer
+        overlaps = wis.check_for_overlapping_intervals(self.name)
+        if len(overlaps) > 0:
+            err_txt = 'Model building failed because of overlapping intervals: {}'.format(
+                ', '.join(overlaps)
+            )
+            print_info(err_txt, 'error', logger, 'IOError')
+            return None
+
+        # Calculate the litho fluids over these intervals
+        lfs = self.calc_blocked_litho_fluids(log_table, wis, down_weight_outliers, verbose)
+
+        well_intervals = wis.get_well_intervals(self.name, sorted_by_top=True)
+
+        # Start creating model
+        top = well_intervals[0].top
+        layers = []
+        for _interval in well_intervals:
+            layers.append(
+                Layer(name=_interval.name, thickness=_interval.thickness, litho_fluid=lfs['{} {}'.format(_interval.name, self.name)])
+            )
+
+        return lfs, Model(depth_to_top=top, layers=layers)
 
     def plot(self, log_columns: list, output_filename: str, wis: Intervals | None = None):
         """

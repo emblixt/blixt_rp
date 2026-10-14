@@ -462,6 +462,18 @@ class LogCurveTestCase(unittest.TestCase):
         # print(res)
         self.assertIsInstance(res, list)
 
+    def test_blocking(self):
+        log_curves, well_info = read_las(las_file2, log_table=log_table2)
+        lc = log_curves['rdep']
+        res = lc.calc_blocking(verbose=True, discrete_intervals=[Q_(_z, 'km').to('m') for _z in [1., 2., 3.]], down_weight_outliers=True)
+        print('-x-')
+        res = lc.calc_blocking(verbose=True, discrete_intervals=[Q_(_z, 'km').to('m') for _z in [1., 2., 3.]])
+        print('-x-')
+        res = lc.calc_blocking(verbose=True)
+        plt.show()
+        # print(res)
+        self.assertIsInstance(res, list)
+
     def test_de_trend(self):
         log_curves, well_info = read_las(las_file2, log_table=log_table2)
         lc = log_curves['dt']

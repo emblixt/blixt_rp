@@ -2118,7 +2118,7 @@ class TestCases(unittest.TestCase):
         elif section_type == 'line section' and synthetic:
             from blixt_rp.core.models import WedgeModel
             model = WedgeModel(n_traces=51)
-            (title, lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls,
+            (title, lf_table, lf_controls, model_table, add_row_m, delete_row_m, update_m, grid, controls,
              seismic_cds) = model.draw_2d()
             p = grid
             c_amp = None
@@ -2141,7 +2141,7 @@ class TestCases(unittest.TestCase):
         elif section_type == 'avo section' and synthetic:
             from blixt_rp.core.models import LaminarModel
             model = LaminarModel()
-            (title, lf_table, add_row, delete_row, update, _model_table,
+            (title, lf_table, lf_controls, _model_table,
              add_row_m, delete_row_m, update_m, grid, freq_slider, synth_cds_base) = model.draw()
             p = grid
             seismic_cds = synth_cds_base

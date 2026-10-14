@@ -28,7 +28,7 @@ sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 from blixt_rp.core.core import Template, Cutoffs, LogTable
 from blixt_rp.core.param import Param
 from blixt_utils.signal_analysis.signal_analysis import smooth as _smooth
-from blixt_utils.misc.curve_fitting import residuals, linear_function, calculate_depth_trend
+from blixt_utils.misc.curve_fitting import residuals, linear_function, calculate_depth_trend, calculate_blocking
 from blixt_rp.rp_utils.definitions import allowed_depth_formats
 from blixt_utils.misc.convert_data import convert
 from blixt_utils.misc import masks as msks
@@ -1096,6 +1096,63 @@ class LogCurve(object):
             }
         )
 
+    def calc_blocking(self,
+                         mask=None,
+                         mask_desc=None,
+                         discrete_intervals=None,
+                         down_weight_outliers=False,
+                         verbose=False
+                         ):
+        """
+        Calculates the blocking for this log data
+
+        Returns a list of mean, median & std parameters in one dictionary for each interval
+
+        :return:
+        :param mask:
+            boolean numpy array of length N
+            A False value indicates that the data is masked out
+        :param mask_desc:
+            str
+            Description of what cutoffs the mask is based on.
+        :param discrete_intervals:
+            list
+            list of depth values (pint.Quantities)
+            at which each "block" is defined
+            Typically the depth of the boundaries between two intervals (formations) in a well.
+        :param down_weight_outliers:
+            bool
+            If True, a weighting is calculated to minimize the impact of data far away from the median.
+        :param verbose:
+        :return:
+            list of dictionaries with 'mean', 'median', 'std' as keys. One dictionary per discrete interval
+            e.g.
+            [ {'mean': XXX, 'median': XXX, 'std': XXX}, ... ]
+        """
+
+        if (mask is not None) and (mask_desc is None):
+            mask_desc = 'UNKNOWN'
+        if discrete_intervals is not None:
+            # Do unit conversion
+            discrete_intervals = [_x.to(self.depth_units).magnitude for _x in discrete_intervals]
+
+            disc_txt = 'allowing discrete jumps at {} {} '.format(
+                ', '.join('{:.2}'.format(_x) for _x in discrete_intervals), self.depth_units)
+
+        results = calculate_blocking(
+            self.values,
+            self.depth.values,
+            mask,
+            discrete_intervals,
+            down_weight_outliers,
+            ax=None,
+            verbose=verbose,
+            xlabel='{} [{}]'.format(self.name, str(self.units)),
+            ylabel='{} [{}]'.format(self.depth_type, str(self.depth_units))
+        )
+
+        return results
+
     def calc_depth_trend(self,
                          trend_function=None,
                          x0=None,
@@ -1113,6 +1170,7 @@ class LogCurve(object):
         Returns a list of optimized parameters for the trend function, with one list of parameters for each of
         the intervals
 
+        :return:
         :param trend_function:
             function
             Function to calculate the residual against

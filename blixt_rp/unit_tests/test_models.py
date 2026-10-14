@@ -123,9 +123,9 @@ class TestCase(unittest.TestCase):
         plt.show()
 
     def test_plot(self):
-        first_layer = Layer(thickness=0.1, **l1)
-        second_layer = Layer(thickness=0.04, **l2, target=True)
-        m = Model(depth_to_top=2.0, layers=[first_layer, second_layer])
+        first_layer = Layer(thickness=Q_(0.1, 's'), litho_fluid=l1)
+        second_layer = Layer(thickness=Q_(0.04, 's'), litho_fluid=l2, target=True)
+        m = Model(depth_to_top=Q_(2.0, 's'), layers=[first_layer, second_layer])
         m.append(first_layer)
 
         wavelet = bumw.ricker(0.096, 0.001, 25)
@@ -199,9 +199,7 @@ class TestCase(unittest.TestCase):
 
     def test_quasi2d(self, unit_test=True):
         from bokeh.plotting import show, row, column
-        import blixt_utils.misc.wavelets as bumw
         from blixt_rp.core.core import LithoFluid, LithoFluids, LithoFluidsTable
-        from blixt_rp.rp.rp_core import constantcement, v_p, v_s
 
         n_samplings = 11
 
@@ -255,7 +253,7 @@ class TestCase(unittest.TestCase):
         ])
         table_lf = LithoFluidsTable(lfs, width=300, advanced=False)
         cds_lf = table_lf.cds
-        lf_table, add_row, delete_row, update = table_lf.draw(cds_lf)
+        lf_table, lf_controls = table_lf.draw(cds_lf)
 
         # wedge model
         first_layer = Layer(name='First', thickness=Q_(50., 'm'), litho_fluid=lfs.litho_fluids[0])
@@ -270,9 +268,9 @@ class TestCase(unittest.TestCase):
         m = Model(depth_to_top=Q_(2000., 'm'), layers=[first_layer, second_layer, third_layer],
                   trace_index_range=np.arange(n_samplings))
         # m.plot()
-        table_model = ModelTable(m, cds_lf)
+        table_model = ModelTable(m)
         cds_model = table_model.cds
-        model_table, add_row_m, delete_row_m, update_m = table_model.draw(cds_model)
+        model_table, add_row_m, delete_row_m, update_m = table_model.draw(cds_model, cds_lf)
 
         # wavelet = bumw.ricker(0.096, 0.001, 25)
 
@@ -284,12 +282,12 @@ class TestCase(unittest.TestCase):
             show(
                 row(
                     column(model_table, row(add_row_m, delete_row_m, update_m)),
-                    column(lf_table, row(add_row, delete_row, update))
+                    column(lf_table, lf_controls)
                 )
             )
             return None
         else:
-            return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update
+            return model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls
 
     def test_layered_model(self):
         wavelet = bumw.ricker(0.096, 0.001, 25)
@@ -334,7 +332,7 @@ class TestCase(unittest.TestCase):
         wedge_ax.legend(loc='upper left')
         plt.show()
 
-    def test_model_table(self, unit_test=True, only_verbatim=True):
+    def test_model_table(self, unit_test=True, only_verbatim=False):
         from bokeh.plotting import show, row, column
 
         # When creating output to Bokeh server, we need to set only_verbatim False
@@ -346,7 +344,7 @@ class TestCase(unittest.TestCase):
         )
         table_lf = LithoFluidsTable(lfs, width=300, advanced=False)
         cds_lf = table_lf.cds
-        lf_table, add_row, delete_row, update = table_lf.draw(cds_lf)
+        lf_table, lf_controls = table_lf.draw(cds_lf)
 
         # layers = [_lf.to_model_layer(_name) for _name, _lf in zip(['Top', 'Middle', 'Bottom'], lfs.litho_fluids)]
         layers = [
@@ -358,9 +356,9 @@ class TestCase(unittest.TestCase):
         ]
         # layers = []
         model = Model(layers=layers)
-        table_model = ModelTable(model, cds_lf)
+        table_model = ModelTable(model)
         cds_model = table_model.cds
-        model_table, add_row_m, delete_row_m, update_m = table_model.draw(cds_model)
+        model_table, add_row_m, delete_row_m, update_m = table_model.draw(cds_model, cds_lf)
 
         if only_verbatim:
             for _key in list(cds_model.data.keys()):
@@ -376,12 +374,12 @@ class TestCase(unittest.TestCase):
                 show(
                     row(
                         column(model_table, row(add_row_m, delete_row_m, update_m)),
-                        column(lf_table, row(add_row, delete_row, update))
+                        column(lf_table, lf_controls)
                     )
                 )
                 return None
             else:
-                return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update
+                return model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls
         return None
 
     def test_laminar_model(self, unit_test=True):
@@ -390,19 +388,52 @@ class TestCase(unittest.TestCase):
         # Create the laminar model
         lm = LaminarModel(resolution=Q_(0.1, 'm'), avo_or_eei='avo')
 
-        (title, lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid,
+        (title, lf_table, lf_controls, model_table, add_row_m, delete_row_m, update_m, grid,
          controls, seismic_cds) = lm.draw()
 
         if unit_test:
             show(column(column(title, grid, sizing_mode='stretch_width'), controls,
                         row(
                             column(model_table, row(add_row_m, delete_row_m, update_m)),
-                            column(lf_table, row(add_row, delete_row, update))
+                            column(lf_table, lf_controls)
                         ))
                  )
             return None
         else:
-            return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid, controls
+            return model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls, grid, controls
+
+    def test_laminar_model_with_avo_points(self, unit_test=True):
+        from bokeh.plotting import show, row, column
+
+        # Create the laminar model
+        lm = LaminarModel(resolution=Q_(0.1, 'm'), avo_or_eei='avo')
+
+        (title, lf_table, lf_controls, model_table, add_row_m, delete_row_m, update_m, grid,
+         controls, seismic_cds) = lm.draw()
+
+        # Test adding some extraction points
+        analyze_avo = AvoAnalyzer(grid, 'avo section', None, model=lm)
+        points_cds = analyze_avo.cds
+        points_table, update_avo, avo_figure, ixg_figure, eei_figure, chi_input, avo_cds = analyze_avo.draw(points_cds, seismic_cds)
+
+        if unit_test:
+            show(
+                row(
+                    column(
+                        column(title, grid, sizing_mode='stretch_width'),
+                        controls,
+                        row(
+                            column(model_table, row(add_row_m, delete_row_m, update_m)),
+                            column(lf_table, lf_controls)
+                        )
+                    ),
+                    column(points_table, row(update_avo, chi_input), avo_figure, ixg_figure, eei_figure)
+                )
+            )
+            return None
+        else:
+            return (model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls, grid, controls,
+                    points_table, update_avo, avo_figure, ixg_figure, eei_figure, chi_input, avo_cds)
 
     def test_laminar_q2d_model(self, unit_test=True):
         from bokeh.plotting import show, row, column
@@ -435,22 +466,22 @@ class TestCase(unittest.TestCase):
         model = Model(layers=layers, trace_index_range=np.arange(11))
 
         # Create the laminar model
-        lm = LaminarModel(model=model, litho_fluids=lfs, resolution=Q_(0.1, 'm'), avo_or_eei='avo')
+        lm = LaminarModel(model=model, litho_fluids=lfs, resolution=Q_(0.1, 'm'), dx=Q_(10., 'm'), avo_or_eei='avo')
 
         # lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls = lm.draw()
-        (title, lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls,
+        (title, lf_table, lf_controls, model_table, add_row_m, delete_row_m, update_m, grid, controls,
          synth_2d_cds) = lm.draw_2d()
 
         if unit_test:
             show(column(grid, controls,
                 row(
                     column(model_table, row(add_row_m, delete_row_m, update_m)),
-                    column(lf_table, row(add_row, delete_row, update))
+                    column(lf_table, lf_controls)
                 ))
             )
             return None
         else:
-            return model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid, controls
+            return model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls, grid, controls
 
     def test_wedge(self, unit_test=True):
         from bokeh.plotting import show, row, column
@@ -465,7 +496,8 @@ class TestCase(unittest.TestCase):
         points_cds = analyze_avo.cds
         points_table, update_avo, avo_figure, ixg_figure, eei_figure, chi_input, avo_cds = analyze_avo.draw(points_cds, synth_2d_cds)
         if unit_test:
-            show(row(column(grid, controls, new_grid,
+            show(row(
+                column(grid, controls, new_grid,
                         row(
                             column(model_table, model_controls),
                             column(lf_table, lf_controls)
@@ -514,10 +546,10 @@ class TestCase(unittest.TestCase):
             n_traces=n_traces
         )
 
-        (title, lf_table, add_row, delete_row, update, model_table,
+        (title, lf_table, lf_controls, model_table,
                 add_row_m, delete_row_m, update_m, grid,
                 controls, synth_2d_cds,
-                dip_selector, throw_selector, dx_selector) = fm.draw()
+                dip_selector, throw_selector, n_traces_selector, dx_selector) = fm.draw()
 
         if unit_test:
             show(
@@ -527,16 +559,16 @@ class TestCase(unittest.TestCase):
                         controls,
                             row(
                                 column(model_table, row(add_row_m, delete_row_m, update_m)),
-                                column(lf_table, row(add_row, delete_row, update))
+                                column(lf_table, lf_controls)
                             )),
-                     column(dip_selector, throw_selector, dx_selector)
+                     column(dip_selector, throw_selector, n_traces_selector, dx_selector)
                  ))
             return None
         else:
-            return (title, lf_table, add_row, delete_row, update, model_table,
+            return (title, lf_table, lf_controls, model_table,
                  add_row_m, delete_row_m, update_m, grid,
                  controls, synth_2d_cds,
-                 dip_selector, throw_selector, dx_selector)
+                 dip_selector, throw_selector, n_traces_selector, dx_selector)
 
 
 

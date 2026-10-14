@@ -377,6 +377,27 @@ class IntervalTests(unittest.TestCase):
         #     print(_i)
         print(wis.get_strat_units())
         print(wis.get_intervals_dict('Well_F'))
+        for well in ['Well_A', 'Well_B', 'Well_C', 'Well_F', 'Well_l']:
+            print(well)
+            print([_i.name for _i in wis.get_well_intervals(well)])
+
+    def test_well_intervals(self):
+        wis = Intervals(
+            name='MyIntervals',
+            intervals=[
+                Interval('Well A', Q_(2300., 'm'), Q_(2500., 'm'), interval_info=StratUnit('Interval A', 2)),
+                Interval('Well A', Q_(2700., 'm'), Q_(3000., 'm'), interval_info=StratUnit('Interval C', 2)),
+                Interval('Well A', Q_(2500., 'm'), Q_(2700., 'm'), interval_info=StratUnit('Interval B', 2)),
+                Interval('Well A', Q_(2500., 'm'), Q_(3000., 'm'), interval_info=StratUnit('Group A', 1))
+            ]
+        )
+        print([_int.name for _int in wis.get_well_intervals('Well A')])
+        print([_int.name for _int in wis.get_well_intervals('Well A', sorted_by_top=True)])
+        wis.keep_intervals(['Interval {}'.format(_x) for _x in ['A', 'B', 'C'] ])
+        print([_int.name for _int in wis.get_well_intervals('Well A')])
+        print([_int.name for _int in wis.get_well_intervals('Well A', sorted_by_top=True)])
+
+
 
     def test_cutoff_rule(self):
         from blixt_utils.misc.masks import create_mask
@@ -454,6 +475,18 @@ class IntervalTests(unittest.TestCase):
                                      wells=['two'] * 10)
         self.assertTrue(np.array_equal(mask, np.array([0, 0, 0, 0, 0, 1, 0, 0, 1, 0], dtype=bool)))
 
+    def test_overlapping_intervals(self):
+        project_file = os.path.join(project_dir,"blixt_rp\\excels\\project_table_new.xlsx")
+        wis = Intervals()
+        wis.read_blixt_tops(project_file)
+
+        overlaps = wis.check_for_overlapping_intervals()
+        print(overlaps)
+        overlaps = wis.check_for_overlapping_intervals('well_f')
+        print(overlaps)
+        overlaps = wis.check_for_overlapping_intervals('WELL_A')
+        print(overlaps)
+
 
 class HeaderTestCase(unittest.TestCase):
 
@@ -482,6 +515,13 @@ class LithoFluidTests(unittest.TestCase):
         lf3 = LithoFluid('Fluid sub. problem', 3200., 2050., 2.21)
 
         return lf1, lf2, lf3
+
+    def test_get_litho_fluids(self):
+        from blixt_rp.core.core import LithoFluids
+        lf1, lf2, lf3 = self.litho_fluids()
+        lfs = LithoFluids([lf1, lf2, lf3])
+        print(lfs['Oseberg SST'])
+        print([_lf.name for _lf in lfs.litho_fluids])
 
     def test_fluid_sub(self):
         for lf in self.litho_fluids():
@@ -529,20 +569,22 @@ class LithoFluidTests(unittest.TestCase):
         output_file('C:\\Users\\marten.blixt\\Downloads\\plot.html')
 
         lfs = LithoFluids(litho_fluids=[LithoFluid(default='shale'), LithoFluid(default='brine_sst')])
+        lfs.__add__(LithoFluid(name='Test_None', vp=None))
+        lfs.__add__(LithoFluid(name='Test_Pint', vp=Q_(3., 'km/s')))
 
-        lft = LithoFluidsTable(lfs)
+        lft = LithoFluidsTable(lfs, advanced=False)
 
         cds = lft.cds
-        dt, add_row, delete_row, update_table = lft.draw(cds)
+        lf_table, lf_controls = lft.draw(cds)
         self.assertTrue(True)
         if unit_test:
             show(column(
-                dt,
-                row(add_row, delete_row, update_table)
+                lf_table,
+                lf_controls
             ))
             return None
         else:
-            return dt, add_row, delete_row, update_table
+            return lf_table, lf_controls
 
     def test_quasi_2D_table(self, unit_test=True):
         from bokeh.io import output_file
@@ -557,13 +599,13 @@ class LithoFluidTests(unittest.TestCase):
         lft = LithoFluidsTable(lfs)
 
         cds = lft.cds
-        dt, add_row, delete_row, update_table = lft.draw(cds)
+        lf_table, lf_controls = lft.draw(cds)
         self.assertTrue(True)
         if unit_test:
             show(column(
-                dt,
-                row(add_row, delete_row, update_table)
+                lf_table,
+                lf_controls
             ))
             return None
         else:
-            return dt, add_row, delete_row, update_table
+            return lf_table, lf_controls

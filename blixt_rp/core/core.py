@@ -31,6 +31,7 @@ from blixt_utils.utils import add_one, fix_well_name, cycle_colors, isnan, print
 from blixt_utils.misc.attribdict import AttribDict
 from blixt_rp.rp_utils.version import info
 from blixt_utils.misc.masks import create_mask, combine_masks
+from blixt_utils.io.io import write_sums_and_averages
 
 logger = logging.getLogger(__name__)
 
@@ -1245,7 +1246,7 @@ class Intervals(object):
     def __str__(self):
         return print_function(self)
 
-    def interval_names(self):
+    def interval_names(self) -> list:
         return list(set([_x.name for _x in self.intervals]))
 
     def keep_wells(self, well_names: list):
@@ -1253,7 +1254,12 @@ class Intervals(object):
             if _interval.well not in well_names:
                 self.intervals.remove(_interval)
 
-    def well_names(self):
+    def keep_intervals(self, interval_names: list):
+        for _interval in self.intervals[:]:
+            if _interval.name.lower() not in [_name.lower() for _name in interval_names]:
+                self.intervals.remove(_interval)
+
+    def well_names(self) -> list:
         return list(set([_x.well for _x in self.intervals]))
 
     def get_interval(self, interval_name, well_name):
@@ -1274,12 +1280,47 @@ class Intervals(object):
                 max_base = _interval.base.magnitude
         return min_top,  max_base
 
-    def get_well_intervals(self, well_name) -> list:
+    def get_well_intervals(self, well_name, sorted_by_top: bool = False) -> list:
         _levels = []
         for _interval in self.intervals:
-            if _interval.well == well_name:
+            if _interval.well.lower() == well_name.lower():
                 _levels.append(_interval)
-        return _levels
+
+        if sorted_by_top:
+           sorted_levels = sorted(_levels, key=lambda _int: _int.top)
+        else:
+            sorted_levels = _levels
+
+        return sorted_levels
+
+    def check_for_overlapping_intervals(self, well_name: str | None = None, tolerance: pint.Quantity | None = None) -> list:
+        """
+        Returns list of overlapping intervals.
+        Empty list if no overlaps are found
+        :param well_name:
+            Only checks for overlaps among intervals in this well
+        :param tolerance:
+        :return:
+        """
+        if tolerance is None:
+            tolerance = Q_(5., 'm')
+
+        if well_name is None:
+            _wells = self.well_names()
+        else:
+            _wells = [well_name]
+
+        overlaps = []
+        for _well in _wells:
+            for i, _interval_a in enumerate(self.get_well_intervals(_well)):
+                for j, _interval_b in enumerate(self.get_well_intervals(_well)):
+                    if _interval_a.name == _interval_b.name:
+                        continue
+                    if np.abs(_interval_a.top.to('m').magnitude - _interval_b.top.to('m').magnitude) < tolerance.to('m').magnitude:
+                        overlaps.append('{} overlaps with {} in {}'.format(_interval_b.name, _interval_a.name, _well))
+
+        return overlaps
+
 
     def add_interval(self, interval: Interval):
         self.intervals.append(interval)
@@ -1881,12 +1922,12 @@ class LithoFluid:
 
 
         # Give default units and values (of shale) if not specified
-        self.vp = Q_(vp, 'm/s') if isinstance(vp, float) else (Q_(3445, 'm/s') if vp is None else vp)
-        self.vs = Q_(vs, 'm/s') if isinstance(vs, float) else (Q_(1767, 'm/s') if vs is None else vs)
-        self.rho = Q_(rho, 'g/cm**3') if isinstance(rho, float) else (Q_(2.6, 'g/cm**3') if rho is None else rho)
-        self.vp_std_dev = Q_(vp_std_dev, 'm/s') if isinstance(vp_std_dev, float) else (Q_(208, 'm/s') if vp_std_dev is None else vp_std_dev)
-        self.vs_std_dev = Q_(vs_std_dev, 'm/s') if isinstance(vs_std_dev, float) else (Q_(171, 'm/s') if vs_std_dev is None else vs_std_dev)
-        self.rho_std_dev= Q_(rho_std_dev, 'g/cm**3') if isinstance(rho_std_dev, float) else (Q_(0.036123123, 'g/cm**3') if rho_std_dev is None else rho_std_dev)
+        self.vp = Q_(vp, 'm/s') if isinstance(vp, float) else (Q_(3445, 'm/s') if vp is None else vp if isinstance(vp, Callable) else vp.to('m/s'))
+        self.vs = Q_(vs, 'm/s') if isinstance(vs, float) else (Q_(1767, 'm/s') if vs is None else vs if isinstance(vs, Callable) else vs.to('m/s'))
+        self.rho = Q_(rho, 'g/cm**3') if isinstance(rho, float) else (Q_(2.6, 'g/cm**3') if rho is None else rho if isinstance(rho, Callable) else rho.to('g/cm**3'))
+        self.vp_std_dev = Q_(vp_std_dev, 'm/s') if isinstance(vp_std_dev, float) else (Q_(208, 'm/s') if vp_std_dev is None else vp_std_dev.to('m/s'))
+        self.vs_std_dev = Q_(vs_std_dev, 'm/s') if isinstance(vs_std_dev, float) else (Q_(171, 'm/s') if vs_std_dev is None else vs_std_dev.to('m/s'))
+        self.rho_std_dev= Q_(rho_std_dev, 'g/cm**3') if isinstance(rho_std_dev, float) else (Q_(0.036123123, 'g/cm**3') if rho_std_dev is None else rho_std_dev.to('g/cm**3'))
         self.vp_vs_cc = Q_(vp_vs_cc) if isinstance(vp_vs_cc, float) else (Q_(0.89) if vp_vs_cc is None else vp_vs_cc)
         self.vp_rho_cc = Q_(vp_rho_cc) if isinstance(vp_rho_cc, float) else (Q_(0.08) if vp_rho_cc is None else vp_rho_cc)
         self.vs_rho_cc = Q_(vs_rho_cc) if isinstance(vs_rho_cc, float) else (Q_(-0.07) if vs_rho_cc is None else vs_rho_cc)
@@ -2076,6 +2117,7 @@ class LithoFluid:
                   mineral: dict | None = None,
                   brine: dict | None = None,
                   phi: pint.Quantity | None = None,
+                  tag: str | None = None,
                   fluid_mix = 'Reuss',
                   verbose: bool = False):
 
@@ -2116,7 +2158,9 @@ class LithoFluid:
         """
         from blixt_rp.rp.rp_core import gassmann_vel, por_from_mass_balance, k_from_v, k_dry
 
-        name='{}_hc'.format(str(self.name))
+        if tag is None:
+            tag = 'hc'
+        name='{}_{}'.format(str(self.name), tag)
 
         if hc is None:
             hc = dict(rho=Q_(0.8, 'G/cc'), k=Q_(1.152, 'GPa'))  # oil
@@ -2224,6 +2268,8 @@ class LithoFluids:
 
     def __getitem__(self, item):
         for _lf in self.litho_fluids:
+            if _lf.name is None:
+                continue
             if _lf.name.lower() == item.lower():
                 return _lf
         print_info('No litho fluid named {} is found'.format(item), 'warning', logger)
@@ -2369,13 +2415,19 @@ class LithoFluidsTable:
         from bokeh.models import DataTable, Button, Div
 
         def add_row_function():
+            if len(cds.selected.indices) > 0:
+                _index = max(cds.selected.indices) + 1
+            else:
+                _index = 0
             new_data = dict(cds.data)
             lf = LithoFluid(default='brine_sst')
             for _key in list(new_data.keys()):
                 if _key == 'name':
-                    new_data[_key].append('brine sst')
+                    # new_data[_key].append('brine sst')
+                    new_data[_key].insert(_index, 'brine sst')
                 else:
-                    new_data[_key].append(lf.__dict__[_key])
+                    # new_data[_key].append(lf.__dict__[_key])
+                    new_data[_key].insert(_index, lf.__dict__[_key])
             cds.data = new_data
 
         def delete_row_function():
@@ -2391,6 +2443,7 @@ class LithoFluidsTable:
 
         def update_table_function():
             from typing import Callable
+            # TODO: I suspect this doesn't work correctly when adding a new row when we're having a Quasi 2D litho fluid
             new_data = dict(cds.data)
             _litho_fluids = []
             for _i in range(len(new_data['name'])):
@@ -2425,6 +2478,48 @@ class LithoFluidsTable:
 
             cds.data = new_data
 
+        def save_function():
+
+            # TODO: Will fail if any data is a function
+            file_name = save_file()
+            # print(list(cds.data.keys()))
+            # ['name', 'vp', 'vs', 'rho', 'vp_std_dev', 'vs_std_dev', 'rho_std_dev', 'vp_vs_cc', 'vp_rho_cc', 'vs_rho_cc']
+            for _i, _name in enumerate(cds.data['name']):
+                write_sums_and_averages(file_name,
+                                        [_name,
+                                         'Litho-fluids table',
+                                         'MD',
+                                         -999.25, -999.25, -999.25,
+                                         cds.data['vp'][_i],
+                                         cds.data['vs'][_i],
+                                         cds.data['rho'][_i],
+                                         cds.data['vp'][_i],
+                                         cds.data['vs'][_i],
+                                         cds.data['rho'][_i],
+                                         cds.data['vp'][_i],
+                                         cds.data['vs'][_i],
+                                         cds.data['rho'][_i],
+                                         'NONE',
+                                         -999.25, -999.25, -999.25, -999.25, -999.25,
+                                         -999.25, -999.25, -999.25, -999.25, -999.25,
+                                         -999.25, -999.25, -999.25,
+                                         cds.data['vp_std_dev'][_i] if 'vp_std_dev' in list(cds.data.keys()) else -999.25,
+                                         cds.data['vs_std_dev'][_i] if 'vs_std_dev' in list(cds.data.keys()) else -999.25,
+                                         cds.data['rho_std_dev'][_i] if 'rho_std_dev' in list(cds.data.keys()) else -999.25,
+                                         -999.25, -999.25, -999.25,
+                                         cds.data['vp_vs_cc'][_i] if 'vp_vs_cc' in list(cds.data.keys()) else -999.25,
+                                         cds.data['vp_rho_cc'][_i] if 'vp_rho_cc' in list(cds.data.keys()) else -999.25,
+                                         cds.data['vs_rho_cc'][_i] if 'vs_rho_cc' in list(cds.data.keys()) else -999.25,
+                                         -999.25, -999.25, -999.25, -999.25, -999.25,
+                                         -999.25, -999.25, -999.25, -999.25, -999.25,
+                                         -999.25, -999.25, -999.25,
+                                         'None',
+                                         0.0,
+                                         '',
+                                         '',
+                                        datetime.now()]
+                                        )
+
         title = Div(text =
                     """
                     <div style="font-size:12px; font-weight:600; margin-bottom:0px; text-align:center">
@@ -2451,7 +2546,11 @@ class LithoFluidsTable:
         update_table = Button(label='Update', button_type='success')
         update_table.on_click(update_table_function)
 
-        return column(title, dt, sizing_mode='stretch_width'), add_row, delete_row, update_table
+        save = Button(label='Save', button_type='success')
+        save.on_click(save_function)
+
+        return column(title, dt, sizing_mode='stretch_width'), row(add_row, delete_row, update_table, save)
+        # return column(title, dt, sizing_mode='stretch_width'), add_row, delete_row, update_table
 
 
 def cutoffs_string(cutoffs_list):
@@ -2535,3 +2634,17 @@ def get_level_from_name(_name: str, source: str | None = None) -> int:
         elif ' fm' in _name.lower():
             this_level = 1
     return this_level
+
+
+def save_file(filetypes=None):
+    from tkinter import Tk
+    from tkinter.filedialog import asksaveasfilename
+
+    if filetypes is None:
+        filetypes=(("Excel file", "*.xlsx"), ("All files", "*.*"))
+
+    root = Tk()
+    root.attributes('-topmost', True)
+    root.withdraw()
+    file_name = asksaveasfilename(filetypes=filetypes)
+    return file_name

@@ -26,13 +26,15 @@ sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 
 import blixt_rp.core.well_new as cw
 import blixt_rp.rp.rp_core as rp
-from blixt_rp.core.core import StratUnit, Interval, Intervals, LogTable, Template, Cutoffs
+from blixt_rp.core.core import StratUnit, Interval, Intervals, LogTable, Template, Cutoffs, LithoFluids
 from blixt_rp.core.log_curve_new import LogCurve, _to_depth, replace_data
-from blixt_rp.plotting.log_plotter import (LogPlotter, LogColumn, Line,  add_strat_table, add_color_amp)
+from blixt_rp.plotting.log_plotter import (LogPlotter, LogColumn, Line, WellPlotter,  add_strat_table, add_color_amp,
+                                           select_column)
 import blixt_utils.utils as uu
 import blixt_utils.misc.wavelets as bumw
 from blixt_utils.utils import nan_corrcoef, print_info
-from blixt_rp.core.seismic import SeismicTraces
+from blixt_rp.core.seismic import SeismicTraces, interpolate_along_offset
+from blixt_rp.core.models import Model, LaminarModel, global_base_case_name, calc_synth_cds, create_traces, find_extremes
 
 logger = logging.getLogger(__name__)
 
@@ -609,10 +611,16 @@ def compare_synth_with_seismic(
         well: cw.Well,
         ref_log_table: LogTable,
         vp_vs_rho_table: LogTable,
-        seismic_traces: SeismicTraces,
+        seismic_traces: SeismicTraces | dict | None = None,
+        model: Model | None = None,
+        litho_fluids: LithoFluids | None = None,
         wis: Intervals | None = None,
         width: int | None = None,
-        height: int | None = None):
+        height: int | None = None,
+        name_of_seismic: str | None = None,
+        ignore_well_synth: bool = False
+):
+
     """
     Plots the synthetic seismic based on the elastic logs in vp_vs_rho_table along with the real seismic (seismic_traces)
     for sake of comparison
@@ -624,15 +632,31 @@ def compare_synth_with_seismic(
         LogTable with Vp, Vs and Rho data that are used to calculate the synthetics
     :param seismic_traces:
         SeismicTraces object with real seismic data
+        OR
+        A dictionary with log curve names for each seismic gather and their respective gather angle (deg), e.g.
+        {'near': 10., 'mid': 20., 'far': 30.}
+        which is useful if we have extracted the seismic along the well bore and saved them in a las file.
+    :param model:
+        blixt_rp.core.models.Model object
+        Object that holds a subsurface model with N layers
+        This function only allows 1D models
+    :param litho_fluids:
+        LithoFluids object
+        Container of multiple LithoFluid objects,
     :param wis:
         Intervals
         If provided the working intervals in wis will be plotted
     :param width:
     :param height:
+    :param name_of_seismic:
+    :param ignore_well_synth:
+        Bool
+        if true, the Well synthetics are not plotted (but always calculated?)
     :return:
     """
+    from blixt_rp.core.models import update_1d_model_function
     if width is None:
-        width = 800.
+        width = 1000.
     if height is None:
         height = 800.
 
@@ -656,7 +680,51 @@ def compare_synth_with_seismic(
     # Create controller widgets
     backus_slider = Slider(title='Backus window length [m]', start=0, end=20, step=2, value=0, width=int(width/3.) - 5)
     freq_slider = Slider(title='Wavelet central freq. [Hz]', start=10, end=40, step=5, value=20, width=int(width/3.) - 5)
-    shift_slider = Slider(title='Shift in MD [m]', start=-40, end=40, step=2, value=0,  width=int(width/3.) - 5)
+    if seismic_traces is not None:
+        shift_slider = Slider(title='Shift in MD [m]', start=-40, end=40, step=2, value=0,  width=int(width/3.) - 5)
+    else:
+        shift_slider = Div(text='', width=1, height=1)
+
+    # Test if all logs have the same length and sampling (is the well "harmonized")
+    if well.is_of_equal_length and well.is_evenly_spaced:
+        # print_info('Well {} is already harmonized'.format(well.name), 'info', logger)
+        pass
+    else:
+        print_info('Well {} needs to be harmonized'.format(well.name), 'info', logger)
+
+        well.harmonize_logs()
+
+    # Check format of the seismic traces
+    if isinstance(seismic_traces, dict):
+        # Create a SeismicTraces object based on the well and the information in the dictionary
+        gather_names = list(seismic_traces.keys())
+        gather_angles = Q_(np.array(list(seismic_traces.values())), 'deg')
+
+        if name_of_seismic is None:
+            name_of_seismic = 'Seismic from .las'
+
+        # Check that the required logs exists in the well
+        for _log in gather_names:
+            if _log not in well.get_log_names:
+                err_txt = 'Log {} does not exist in well {}'.format(_log, well.name)
+                print_info(err_txt, 'error', logger, 'IOError')
+
+        traces = np.zeros((len(gather_angles), len(well.get_log_curve(gather_names[0]))))
+        for _i, _gather_name in enumerate(gather_names):
+            traces[_i, :] = well.get_log_curve(_gather_name).values
+
+        # interpolate the seismic traces
+        _traces = interpolate_along_offset(traces, gather_angles, Q_(np.arange(
+            gather_angles[0].magnitude, gather_angles[-1].magnitude, 1), 'deg'))
+
+        # create the seismic traces object
+        seismic_traces = SeismicTraces(x=gather_angles.magnitude,
+                                       y=well.get_log_curve(gather_names[0]).depth.values,
+                                       traces=None,
+                                       cds=ColumnDataSource({'value': [_traces.T]}),
+                                       trace_type='avo',
+                                       title=name_of_seismic
+                                       )
 
     # Create initial data:
     vp_orig = well.get_log_curve(vp_vs_rho_table['P velocity'])
@@ -669,13 +737,17 @@ def compare_synth_with_seismic(
     ai_max = np.nanmax(ai_orig)
     time_depth_twt = twt.take_sampling_from(vp_orig)
     dt = Q_(1, 'millisecond')
-    avo_angles = np.arange(seismic_traces.x[0], seismic_traces.x[-1], 1)
+    if seismic_traces is None:
+        avo_angles = np.arange(10., 35., 1)
+    else:
+        avo_angles = np.arange(seismic_traces.x[0], seismic_traces.x[-1], 1)
+    ais_lines = []  # Container for AI curves
 
     def create_ai_line(_line_cds):
         return Line(
             x='ai_ba', y='md', cds=_line_cds, style=Template(**{
                 'name': 'AI ba: {}m'.format(backus_slider.value),
-                'line_color': 'blue', 'min': ai_min, 'max': ai_max
+                'line_color': 'black', 'min': ai_min, 'max': ai_max
             })
         )
     def calc_ai(_vp, _vs, _rho, _depth, _ba, _step):
@@ -703,7 +775,83 @@ def compare_synth_with_seismic(
         )
     )
 
-    line_ai = create_ai_line(line_cds)
+
+    ais_lines.append(create_ai_line(line_cds))
+
+    # Extract model
+    if model is not None:
+        laminar_model = LaminarModel(
+            model,
+            litho_fluids
+        )
+
+        case_selector = Select(
+            title='Case',
+            value=laminar_model.active_2d_case,
+            options=laminar_model.model.case_names)
+
+
+        # Create the litho-fluids table
+        laminar_model.initiate_lf_table()
+        cds_lf = laminar_model.lf_table.cds
+        # lf_table, add_row, delete_row, update = laminar_model.draw_lf_table(cds_lf)
+        # lf_table, add_row, delete_row, update, save = laminar_model.draw_lf_table(cds_lf)
+        lf_table, lf_controls = laminar_model.draw_lf_table(cds_lf)
+
+        # Create the models table
+        laminar_model.initiate_model_table()
+        cds_m = laminar_model.model_table.cds
+        _model_table, add_row_m, delete_row_m, update_m = laminar_model.draw_model_table(cds_m, cds_lf)
+
+        elastics_dict = laminar_model.model_table.realize(laminar_model.resolution)
+        cds_lines = laminar_model.model_table.line_cds(elastics_dict)
+        # extremes = find_extremes(cds_lines)
+        for _case in laminar_model.model.case_names:
+            _line_style = '-'
+            _line_color = 'blue'
+            _line_width = 1.
+            if _case != global_base_case_name:
+                _line_style = '--'
+                _line_color = 'red'
+                _line_width = 2.
+            ais_lines.append(Line(x='ai_{}'.format(_case), y='depth', cds=cds_lines,
+                                  style=Template(**{
+                                      'name': 'AI {}'.format(_case),
+                                      'line_color': _line_color,
+                                      'line_width': _line_width,
+                                      'line_style': _line_style,
+                                      'min': ai_min,
+                                      'max': ai_max
+                                      # 'min': extremes['ai'][0]*0.95,
+                                      # 'max': extremes['ai'][1]*1.05
+                                  })))
+
+        # Calculate the initial model synthetics
+        model_synth_cds = calc_synth_cds(
+            elastics_dict[global_base_case_name]['vp'],
+            elastics_dict[global_base_case_name]['vs'],
+            elastics_dict[global_base_case_name]['rho'],
+            elastics_dict[global_base_case_name]['twt'],
+            laminar_model.dt, avo_angles, 'avo', freq_slider.value
+        )
+        model_traces = create_traces(
+            model_synth_cds,
+            elastics_dict[global_base_case_name]['vp'].depth.values,
+            'Base case', avo_angles, 'avo')
+
+    else:
+        laminar_model = None
+        model_traces = None
+        lf_table= Div(text='', width=1, height=1)
+        add_row= Div(text='', width=1, height=1)
+        delete_row= Div(text='', width=1, height=1)
+        update= Div(text='', width=1, height=1)
+        save = Div(text='', width=1, height=1)
+        _model_table= Div(text='', width=1, height=1)
+        add_row_m= Div(text='', width=1, height=1)
+        delete_row_m= Div(text='', width=1, height=1)
+        update_m= Div(text='', width=1, height=1)
+        case_selector = Div(text='', width=1, height=1)
 
     # Calculate synthetic seismic
     def get_amp_cds(_ba, _freq):
@@ -754,37 +902,99 @@ def compare_synth_with_seismic(
         )
         return _seismic_traces
 
-    orig_seismic_values = deepcopy(seismic_traces.cds.data['value'][0])
-    data_cds = seismic_traces.cds
-    real_traces = create_real_traces(seismic_traces, data_cds)
-
-
-    # create a grid plot
-    plotter = LogPlotter(width=width, height=height)
-    c1 = LogColumn('REF', lines=[well.get_log_curve(_x).get_line() for _x in ref_log_table.log_names], rel_width=1)
-    if wis is not None:
-        c2 = LogColumn('WIS', lines=[], rel_width=0.3)
+    if seismic_traces is not None:
+        orig_seismic_values = deepcopy(seismic_traces.cds.data['value'][0])
+        data_cds = seismic_traces.cds
+        real_traces = create_real_traces(seismic_traces, data_cds)
     else:
-        c2 = LogColumn('WIS', lines=[], rel_width=0)
-    c3 = LogColumn('AI', lines=[line_ai], rel_width=1)
-    c4 = LogColumn('SYNTH', seismic_traces=synth_traces, rel_width=1)
-    # c5 = LogColumn('SEISMIC', seismic_traces=seismic_traces, rel_width=1)
-    c5 = LogColumn('SEISMIC', seismic_traces=real_traces, rel_width=1)
-    plotter.columns = [c1, c2, c3, c4, c5]
-    grid = plotter.figure()
+        real_traces = None
+
+
+    #
+    # create a grid plot which can hold a varying number of columns
+    #
+    plotter = LogPlotter(width=width, height=height)
+    log_columns = []
+    col_idxs = 0
+    wis_idx = None
+    ai_idx = None
+    well_synth_idx = None
+    seismic_idx = None
+    model_synth_idx = None
+
+    # Column for the reference logs
+    log_columns.append(
+        LogColumn('REF', lines=[well.get_log_curve(_x).get_line() for _x in ref_log_table.log_names], rel_width=1)
+    )
+
+    # Column for working intervals
+    if wis is not None:
+        col_idxs += 1
+        wis_idx = col_idxs
+        log_columns.append(
+            LogColumn('WIS', lines=[], rel_width=0.3)
+        )
+
+    # Column for acoustic impedance
+    col_idxs += 1
+    ai_idx = col_idxs
+    log_columns.append(
+        LogColumn('AI', lines=ais_lines, rel_width=1)
+    )
+
+    # Column for model synthetic
+    if laminar_model is not None:
+        col_idxs += 1
+        model_synth_idx = col_idxs
+        log_columns.append(
+            LogColumn('MODEL_SYNTH', seismic_traces=model_traces, rel_width=1)
+        )
+
+    # Column for well synthetic
+    if not ignore_well_synth:
+        col_idxs += 1
+        well_synth_idx = col_idxs
+        log_columns.append(
+            LogColumn('SYNTH', seismic_traces=synth_traces, rel_width=1)
+        )
+
+    # Column for seismic traces
+    if seismic_traces is not None:
+        col_idxs += 1
+        seismic_idx = col_idxs
+        log_columns.append(
+            LogColumn('SEISMIC', seismic_traces=real_traces, rel_width=1)
+        )
+
+    plotter.columns = log_columns
+    grid = plotter.draw()
+
     # Fake some data to add a legend to the real seismic
-    grid.children[4][0].scatter([0], [0], fill_color=None, line_color=None, size=0,
-                                legend_label='Shift = {}m MD'.format(shift_slider.value))
-    grid.children[4][0].legend.label_text_font_size = '10px'
-    for ax in [grid.children[_i][0] for _i in [3, 4]]:
+    if seismic_traces is not None:
+        grid.children[seismic_idx][0].scatter([0], [0], fill_color=None, line_color=None, size=0,
+                                    legend_label='Shift = {}m MD'.format(shift_slider.value))
+        grid.children[seismic_idx][0].legend.label_text_font_size = '10px'
+        if ignore_well_synth:
+            avo_columns =  [seismic_idx]
+        else:
+            avo_columns =  [well_synth_idx, seismic_idx]
+    elif not ignore_well_synth:
+        avo_columns = [well_synth_idx]
+    else:
+        avo_columns = []
+
+    for ax in [grid.children[_i][0] for _i in avo_columns]:
         ax.x_range.start = avo_angles[0]
         ax.x_range.end = avo_angles[-1]
 
     # Add possibility to modify colors on the real seismic
-    color_amp_factor = add_color_amp(grid.children[4][0])
+    if seismic_traces is not None:
+        color_amp_factor = add_color_amp(grid.children[seismic_idx][0])
+    else:
+        color_amp_factor = Div(text='', width=1, height=1)
 
     if wis is not None:
-        data_table = add_strat_table(grid, stratigraphy=wis.get_intervals_dict(well.name), column_index=1)
+        data_table = add_strat_table(grid, stratigraphy=wis.get_intervals_dict(well.name), column_index=wis_idx)
     else:
         data_table = Div(text='', width=10, height=10)
 
@@ -807,30 +1017,108 @@ def compare_synth_with_seismic(
         _shifted_data = np.roll(orig_seismic_values, int(new/step), 0)
         data_cds.data['value'] = [_shifted_data]
 
-    legend_callback = CustomJS(args=dict(ba=backus_slider, freq=freq_slider, shift=shift_slider,
-                                         c3_axis=grid.children[2][0].xaxis[0],
-                                         c3_legend=grid.children[2][0].legend[0],
-                                         c4_axis=grid.children[3][0].xaxis[0],
-                                         c5_legend=grid.children[4][0].legend[0]),
-                               code="""
-                                const _ba = ba.value;
-                                const _freq = freq.value;
-                                const _shift = shift.value;
-                                c3_axis.axis_label = 'AI ba:' + _ba + 'm';
-                                c3_legend.items[0].label.value = 'AI ba:' + _ba + 'm';
-                                //c4_legend.items[0].label.value = 'Synth. ba: ' + _ba + 'm, f: ' + _freq + 'Hz: avo';
-                                c4_axis.axis_label = 'Synth. ba: ' + _ba + 'm, f: ' + _freq + 'Hz: avo';
-                                c5_legend.items[0].label.value = 'Shift = ' + _shift + 'm MD'
-                                console.log('Test: ', _ba); 
-                               """)
+    #
+    # Set up the callback function based on which columns we are plotting
+    #
+    xx = grid.children[ai_idx][0]
+    print(xx)
+    args_dict = dict(ba=backus_slider, freq=freq_slider,
+                     ai_axis=grid.children[ai_idx][0].xaxis[0],
+                     ai_legend=grid.children[ai_idx][0].legend[0],
+                     # well_synth_axis=grid.children[well_synth_idx][0].xaxis[0]
+                     )
+
+    _legend_code = """
+     const _ba = ba.value;
+     const _freq = freq.value;
+     ai_axis.axis_label = 'AI ba:' + _ba + 'm';
+     ai_legend.items[0].label.value = 'AI ba:' + _ba + 'm';
+     //well_synth_legend.items[0].label.value = 'Synth. ba: ' + _ba + 'm, f: ' + _freq + 'Hz: avo';
+     //well_synth_axis.axis_label = 'Synth. ba: ' + _ba + 'm, f: ' + _freq + 'Hz: avo';
+    """
+
+    if not ignore_well_synth:
+         args_dict['well_synth_axis'] = grid.children[well_synth_idx][0].xaxis[0]
+         _legend_code += """  well_synth_axis.axis_label = 'Synth. ba: ' + _ba + 'm, f: ' + _freq + 'Hz: avo';
+         """
+
+    if seismic_traces is not None:
+        args_dict['seismic_legend'] = grid.children[seismic_idx][0].legend[0]
+        args_dict['shift'] = shift_slider
+
+        _legend_code += """ const _shift = shift.value;
+         seismic_legend.items[0].label.value = 'Shift = ' + _shift + 'm MD';
+         //console.log('Test: ', _ba);
+        """
+
+    if laminar_model is not None:
+        args_dict['model_axis'] = grid.children[model_synth_idx][0].xaxis[0]
+        # args_dict['case'] = case_selector  # THIS DOES NOT WORK!
+        args_dict['case_sel'] = case_selector
+
+        _legend_code += """ const _case = case_sel.value;
+         model_axis.axis_label = _case + ' case: avo';
+         //console.log('Test: ', _case);
+        """
+
+    legend_callback = CustomJS(args=args_dict,
+                               code=_legend_code
+                               )
     backus_slider.on_change('value_throttled', backus_callback)
     freq_slider.on_change('value_throttled', freq_callback)
-    shift_slider.on_change('value_throttled', shift_callback)
+    if seismic_traces is not None:
+        shift_slider.on_change('value_throttled', shift_callback)
+        shift_slider.js_on_change('value', legend_callback)
     backus_slider.js_on_change('value', legend_callback)
     freq_slider.js_on_change('value', legend_callback)
-    shift_slider.js_on_change('value', legend_callback)
 
-    return grid, backus_slider, freq_slider, shift_slider, data_table, color_amp_factor
+    if laminar_model is not None:
+        def update_m_function():
+            from bokeh.models import GlyphRenderer
+            from bokeh.models.glyphs import Image, ImageRGBA, ImageURL
+            from blixt_rp.core.models import total_cds_thickness
+            print('MODEL UPDATED')
+
+            # Update the elastic properties based on the new model
+            _elastics_dict = laminar_model.model_table.realize(laminar_model.resolution)
+
+            # Update the ColumnDataSource of the lines and the model
+            cds_lines.data = dict(laminar_model.model_table.line_cds(_elastics_dict).data)
+            cds_m.data = dict(laminar_model.model_table.cds.data)
+
+            # Update the CDS of the model synthetics
+            model_synth_cds.data = dict(calc_synth_cds(
+                _elastics_dict[case_selector.value]['vp'],
+                _elastics_dict[case_selector.value]['vs'],
+                _elastics_dict[case_selector.value]['rho'],
+                _elastics_dict[case_selector.value]['twt'],
+                laminar_model.dt, avo_angles, 'avo', freq_slider.value
+            ).data)
+
+            # Update the depth range of the synthetics to match the changes in depth
+            for _column in [select_column(grid, _col_name) for _col_name in ['MODEL_SYNTH']]:
+                image_renderers = [
+                    r for r in _column.renderers
+                    if isinstance(r, GlyphRenderer) and isinstance(r.glyph, (Image, ImageRGBA, ImageURL))
+                ]
+                image_renderers[0].glyph.y = model.depth_to_top.to('m').magnitude
+                image_renderers[0].glyph.dh = total_cds_thickness(cds_m)
+                # print(image_renderers[0].glyph.y)
+                # print(model.depth_to_top.to('m').magnitude)
+                # print(image_renderers[0].glyph.dh)
+                # print(total_cds_thickness(cds_m))
+
+        update_m.on_click(update_m_function)
+        # update_m.js_on_change('value', legend_callback)
+
+
+
+
+    return (grid, backus_slider, freq_slider, shift_slider, data_table, color_amp_factor,
+            # lf_table, add_row, delete_row, update, save,
+            lf_table, add_row, delete_row, update,
+            _model_table, add_row_m, delete_row_m, update_m, case_selector)
+
 
 
 def interactive_edits(well: cw.Well,
@@ -882,12 +1170,13 @@ def interactive_edits(well: cw.Well,
     save_result = Button(label='Save to .las file', button_type='success')
 
     # Create a column plot with the requested logs
-    plotter = plot_logs(well, log_columns)
+    # plotter = plot_logs(well, log_columns)
+    plotter = WellPlotter(well, log_columns)
 
     # add the smoothened data to each column
     line_cdss = []
     for _i, _column in enumerate(plotter.columns):
-        # print(_column)
+        print(_column)
         # Instead of plotting the smoothened version of each log, we only show the first
         # Basically the same as: _log_name = log_columns[_i][0]
         for _j, _log_name in enumerate(log_columns[_i][0:1]):
@@ -904,7 +1193,7 @@ def interactive_edits(well: cw.Well,
             _this_style.line_color = 'red'
             _this_style.name = _this_style.name + '_smooth'
             line_cdss.append(_this_cds)
-            _column.add_line(Line(x='smooth', y='md', source=_this_cds, style=_this_style))
+            _column.add_line(Line(x='smooth', y='md', cds=_this_cds, style=_this_style))
 
     def callback():
         _step = None
@@ -953,7 +1242,7 @@ def interactive_edits(well: cw.Well,
     run_smoothing.on_click(callback)
     save_result.on_click(save)
     # "Realize" the figure
-    grid = plotter.figure(title=well.name)
+    grid = plotter.draw(title=well.name)
     if wis is not None:
         data_table = add_strat_table(grid, stratigraphy=wis.get_intervals_dict(well.name), column_index=None)
     else:

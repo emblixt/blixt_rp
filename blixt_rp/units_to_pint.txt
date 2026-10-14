@@ -22,5 +22,7 @@ ppm = 1e-6 fraction
 @alias inch = IN
 @alias cc = CC
 @alias gram = G
+@alias gram = gm
 @alias API = GAPI
 @alias API = gAPI
+@alias API = gapi

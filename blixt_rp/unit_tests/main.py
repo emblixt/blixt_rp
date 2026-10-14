@@ -13,41 +13,65 @@ sys.path.append(os.path.join(project_dir, 'blixt_utils'))
 # sys.path.append('C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_rp')
 # sys.path.append('C:\\Users\\emb\\Documents\\PycharmProjects\\blixt_utils')
 
-# test = 'core__test_litho_fluid_table'
-# test = 'models__test_model_table'
-test = 'models__test_laminar_model'
+# test = 'core__test_litho_quasi_2D_fluid_table'
+# test = 'core__test_litho_fluid_table_save'
+test = 'models__test_model_table'
+# test = 'models__test_laminar_model'
 # test = 'models__test_wedge'
 
 
-if test == 'core__test_litho_fluid_table':
+if test == 'core__test_litho_quasi_2D_fluid_table':
     import test_core
     test = test_core.LithoFluidTests()
-    # table, add_row, delete_row, update = test.test_table(unit_test=False)
-    table, add_row, delete_row, update = test.test_quasi_2D_table(unit_test=False)
-    curdoc().add_root(column(table, row(add_row, delete_row, update)))
+    lf_table, lf_controls = test.test_quasi_2D_table(unit_test=False)
+
+    def this_test():
+        print(lf_table.children[1].source.data.keys())
+
+    lf_controls.children[2].on_click(this_test)
+    curdoc().add_root(column(lf_table, lf_controls))
+
+elif test == 'core__test_litho_fluid_table_save':
+    import test_core
+    test = test_core.LithoFluidTests()
+    lf_table, lf_controls = test.test_table(unit_test=False)
+    curdoc().add_root(column(lf_table, lf_controls))
 
 elif test == 'models__test_model_table':
     import test_models
 
     test = test_models.TestCase()
     # model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update = test.test_model_table(
-    model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update = test.test_quasi2d(
+    model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls = test.test_quasi2d(
         unit_test=False)
     curdoc().add_root(row(
         column(model_table, row(add_row_m, delete_row_m, update_m)),
-        column(lf_table, row(add_row, delete_row, update))
+        column(lf_table, lf_controls)
     ))
 
 elif test == 'models__test_laminar_model':
     import test_models
     test = test_models.TestCase()
-    # model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid, controls = test.test_laminar_model(unit_test=False)
-    model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid, controls = test.test_laminar_q2d_model(unit_test=False)
+    model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls, grid, controls = test.test_laminar_model(unit_test=False)
+    # model_table, add_row_m, delete_row_m, update_m, lf_table, add_row, delete_row, update, grid, controls = test.test_laminar_q2d_model(unit_test=False)
     curdoc().add_root(column(
         grid, controls,
         row(
             column(model_table, row(add_row_m, delete_row_m, update_m)),
             column(lf_table, row(add_row, delete_row, update))
+        )))
+
+elif test == 'models__test_laminar_model_with_avo_points':
+    import test_models
+    test = test_models.TestCase()
+    (model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls, grid, controls,
+     points_table, update_avo, avo_figure, ixg_figure, eei_figure, chi_input, avo_cds) = test.test_laminar_model_with_avo_points(unit_test=False)
+
+    curdoc().add_root(column(
+        grid, controls,
+        row(
+            column(model_table, row(add_row_m, delete_row_m, update_m)),
+            column(lf_table, lf_controls)
         )))
 
 elif test == 'models__test_wedge':

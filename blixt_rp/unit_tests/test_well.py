@@ -6,8 +6,9 @@ import time
 
 import pint.errors
 from math import isclose
+
 from .. import Q_
-from blixt_rp.core.core import LogTable, Cutoffs, CutoffRule
+from blixt_rp.core.core import LogTable, Cutoffs, CutoffRule, Interval, Intervals
 
 test_file_dir = str(os.path.dirname(__file__).replace(
     'blixt_rp\\unit_tests',
@@ -230,14 +231,8 @@ class WellTestCase(unittest.TestCase):
 
     def test_write_las(self):
         from blixt_rp.core.well_new import Well
-        from blixt_rp.core.core import LogTable
-        log_table = LogTable({
-            'P velocity': 'Vp_brine',
-            'S velocity': 'Vs_brine',
-            'Density': 'Rho_brine'
-        })
         well1 = Well()
-        well1.read_las(las_file2, log_table=log_table, template_file=project_table)
+        well1.read_las(las_file2, log_table=log_table2, template_file=project_table)
         well1.write_las('test.las')
 
     def test_las_and_data(self):
@@ -353,3 +348,54 @@ class WellTestCase(unittest.TestCase):
             print('  #', len(data_source.variables), data_source.variables)
             print('  #', len(data_source.units), data_source.units)
             print('  -x-')
+
+    def test_blocked_litho_fluids(self):
+        from blixt_rp.core.well_new import Well
+        from blixt_rp.core.core import StratUnit, Interval, LithoFluidsTable
+        from bokeh.io import output_file
+        from bokeh.plotting import show
+        well1 = Well()
+        well1.read_las(las_file2, log_table=log_table2, template_file=project_table)
+
+        wis = Intervals(
+            name='MyIntervals',
+            intervals=[
+                Interval(well1.name, Q_(2300., 'm'), Q_(2500., 'm'), interval_info=StratUnit('Interval A', 1)),
+                Interval(well1.name, Q_(2500., 'm'), Q_(2700., 'm'), interval_info=StratUnit('Interval B', 1)),
+                Interval(well1.name, Q_(2700., 'm'), Q_(3000., 'm'), interval_info=StratUnit('Interval C', 1))
+            ]
+        )
+
+        lfs = well1.calc_blocked_litho_fluids(log_table2, wis, down_weight_outliers=False, verbose=True)
+        plt.show()
+
+        lf_table = LithoFluidsTable(lfs)
+
+        _lf_table, lf_controls = lf_table.draw(lf_table.cds)
+        output_file("C:\\Users\\marten.blixt\\Downloads\\plot.html")
+        show(_lf_table)
+
+    def test_one_d_model(self):
+        from blixt_rp.core.well_new import Well
+        from blixt_rp.core.core import StratUnit, Interval, LithoFluidsTable
+        from bokeh.io import output_file
+        from bokeh.plotting import show
+        well1 = Well()
+        well1.read_las(las_file2, log_table=log_table2, template_file=project_table)
+
+        wis = Intervals(
+            name='MyIntervals',
+            intervals=[
+                Interval(well1.name, Q_(2300., 'm'), Q_(2500., 'm'), interval_info=StratUnit('Interval A', 2)),
+                Interval(well1.name, Q_(2500., 'm'), Q_(2700., 'm'), interval_info=StratUnit('Interval B', 2)),
+                Interval(well1.name, Q_(2700., 'm'), Q_(3000., 'm'), interval_info=StratUnit('Interval C', 2)),
+                # Interval(well1.name, Q_(2500., 'm'), Q_(3000., 'm'), interval_info=StratUnit('Group A', 1))
+            ]
+        )
+
+        # TODO: CONTINUE HERE, make sure we actually get a working model out from one_d_model()
+        lfs, model = well1.one_d_model(log_table2, wis, down_weight_outliers=False, verbose=True)
+        print(model.domain)
+        model.plot()
+        plt.show()
+

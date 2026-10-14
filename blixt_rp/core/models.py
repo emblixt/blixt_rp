@@ -14,7 +14,6 @@ from typing import Callable, List
 
 from .log_curve_new import LogCurve, Depth
 from ..plotting.log_plotter import add_color_amp
-from ..plotting.plot_logs_new import get_wiggles_in_depth
 from .core import LithoFluid, LithoFluidsTable, LithoFluids
 
 # sys.path.append('C:\\Users\\eribli\\PycharmProjects\\blixt_utils')
@@ -159,7 +158,10 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
         twt, layer_index, vp, vs, rho, z = model.realize_model(Q_(1, 'millisecond'))
         y = twt
     else:
-        twt, layer_index, vp, vs, rho, z = model.realize_model(Q_(0.1, 'meter'))
+        # TODO: We have said that the realize function need resolution in time domain - but it is not
+        # TODO: fully consistent. FOLLOW THE TAG "TODO: REALIZATION"
+        # twt, layer_index, vp, vs, rho, z = model.realize_model(Q_(0.1, 'meter'))
+        twt, layer_index, vp, vs, rho, z = model.realize_model(Q_(1, 'millisecond'))
         y = z
 
     if model.model_type == 'quasi 2D':
@@ -212,19 +214,19 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
 
     for i, _y in enumerate(bwb[1:-1]):
         #ax.plot([0., ais[i+1]/max_ai], [_y, _y], **linestyle_ai)
-        print(vps[i+1].magnitude, rhos[i+1].magnitude, max_ai)
-        ax.plot([0., vps[i+1].magnitude * rhos[i+1].magnitude/max_ai], [_y, _y], **linestyle_ai)
+        # print(vps[i+1].magnitude, rhos[i+1].magnitude, max_ai, _y)
+        ax.plot([0., vps[i+1].magnitude * rhos[i+1].magnitude/max_ai], [_y.magnitude, _y.magnitude], **linestyle_ai)
 
     i = 0
     for _vp, _vs, _rho in zip(vps, vss, rhos):
-        info_txt = '{}.\nVp: {:.2f}\nVs: {:.2f}\nRho: {:.2f}'.format(i+1, _vp/1000., _vs/1000., _rho)
-        ax.text(0.5*_vp * _rho/max_ai, 0.5*(bwb[i] + bwb[i+1]), info_txt, ha='right', va='center', **text_style)
+        info_txt = '{}.\nVp: {:.2f}\nVs: {:.2f}\nRho: {:.2f}'.format(i+1, _vp.magnitude/1000., _vs.magnitude/1000., _rho.magnitude)
+        ax.text(0.5*_vp.magnitude * _rho.magnitude/max_ai, 0.5*(bwb[i].magnitude + bwb[i+1].magnitude), info_txt, ha='right', va='center', **text_style)
         i += 1
     i = 0
     for _gvp, _gvs, _grho in zip(gross_vp, gross_vs, gross_rho):
         if target[i] and (ntg[i] < 1):
-            info_txt = 'NTG: {:.1f}.\nVp: {:.2f}\nVs: {:.2f}\nRho: {:.2f}'.format(ntg[i], _gvp/1000., _gvs/1000., _grho)
-            ax.text(0.6*vps[i] * rhos[i]/max_ai, 0.5*(bwb[i] + bwb[i+1]), info_txt, ha='left', va='center', **text_style)
+            info_txt = 'NTG: {:.1f}.\nVp: {:.2f}\nVs: {:.2f}\nRho: {:.2f}'.format(ntg[i], _gvp.magnitude/1000., _gvs.magnitude/1000., _grho.magnitude)
+            ax.text(0.6*vps[i].magnitude * rhos[i].magnitude/max_ai, 0.5*(bwb[i].magnitude + bwb[i+1].magnitude), info_txt, ha='left', va='center', **text_style)
         i += 1
 
     ax.set_ylim(ax.get_ylim()[::-1])
@@ -248,7 +250,7 @@ def plot_1d(model, ax=None, index=0, legend=True, yticks=True):
 
 def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, color_by_gradient=False,
                  extract_avo_at=None, avo_angles=None, avo_plot_position=None,
-                 extract_amp_at=None, plot_domain=None, overburden_vel=3000.,
+                 extract_amp_at=None, plot_domain=None, overburden_vel=Q_(3000., 'm/s'),
                  extract_on='exact', scaling=None, **kwargs):
     """
 
@@ -389,7 +391,6 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             # extract avo curves
             if avo_positions is not None:
                 for _i, _t in list(avo_positions.items()):
-                    # print('XXX2', _i, _t[0], trace_i, avo_positions[_i])
                     if trace_i == _t[0]:
                         calculate_here = True
                         this_index = _i
@@ -479,7 +480,6 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
         for _i, avo in list(avo_curves.items()):
             if plot_domain == 'TWT':
                 ax.annotate('{}'.format(_i + 1), avo_positions[_i], bbox={'boxstyle': 'circle', 'color': cnames[_i]})
-                print('XXX2', avo_positions[_i])
                 # ax.annotate('{}'.format(_i + 1), (10, 2.), bbox={'boxstyle': 'circle', 'color': cnames[_i]})
             else:
                 # TODO
@@ -491,7 +491,6 @@ def plot_wiggles(model, sample_rate, wavelet, angle=0., eei=False, ax=None, colo
             if tmp_avo_angles:
                 avo_ax.plot(tmp_avo_angles, avo, c=cnames[_i], label='{}'.format(_i + 1))
             else:
-                # print('XXX1', avo_angles, avo)
                 avo_ax.plot(avo_angles, avo, c=cnames[_i], label='{}'.format(_i + 1))
         # avo_ax.legend()
         avo_ax.tick_params(direction='in', labelsize='small')
@@ -697,13 +696,13 @@ class Layer:
         else:
             layer_vp = self.vp
 
-        # # Let the domain decide how the layer is realized
-        # if self.domain == 'TWT':
-        #     n = int(layer_thickness / resolution)
-        # else:
-        #     twt_thickness = 2. * layer_thickness / layer_vp
-        #     n = int(twt_thickness / resolution)
-        n = int(layer_thickness.to(resolution.units) / resolution)
+        # Let the domain decide how the layer is realized
+        if self.domain == 'TWT':
+            n = int(layer_thickness / resolution)
+        else:
+            twt_thickness = 2. * layer_thickness / layer_vp
+            n = int(twt_thickness / resolution)
+        # n = int(layer_thickness.to(resolution.units) / resolution)
 
         if isinstance(self.vs, types.FunctionType):
             layer_vs = self.vs(index)
@@ -1119,7 +1118,6 @@ class Model:
 
         :return:
         """
-        # print('XXX', [self.layers[_i].name for _i in self.base_case_layers])
         _dict = {'Top {}'.format(self.layers[_i].name): [] for _i in self.base_case_layers}
         if resolution is not None:
             depths = self.depth_array(resolution)
@@ -1172,7 +1170,7 @@ class Model:
         if layer.layer_type == 'quasi 2D':
             self.model_type = 'quasi 2D'
 
-    def realize_model(self, resolution, voigt_reuss_hill=False, overburden_vel=3000., verbose=False):
+    def realize_model(self, resolution, voigt_reuss_hill=False, overburden_vel=Q_(3000., 'm/s'), verbose=False):
         """
         Realize the current model so that the parameters are regularly sampled in TWT, regardless if the
         model is given in TWT or Z domain
@@ -1189,11 +1187,14 @@ class Model:
 
         """
 
+        print('XXX', self.domain)
         if self.domain == 'TWT':
             twt_top = self.depth_to_top
             z_top = self.depth_to_top * overburden_vel / 2.
+            print('XXX', self.depth_to_top, overburden_vel, self.depth_to_top*overburden_vel, z_top)
         else:
             twt_top = 2. * self.depth_to_top / overburden_vel
+            twt_top = twt_top.to('millisecond')
             z_top = self.depth_to_top
 
         if self.model_type == 'quasi 2D' and self.trace_index_range is not None:
@@ -1258,19 +1259,22 @@ class Model:
         else:
             layer_index, this_vp, this_vs, this_rho = np.zeros(0), np.zeros(0), np.zeros(0), np.zeros(0)
             this_z = np.zeros(0)
-            last_z = z_top
+            # TODO: REALIZATION  What about models in TWT?
+            last_z = z_top.to('m').magnitude
             for i, layer in enumerate(self.layers):
                 _vp, _vs, _rho = layer.realize_layer(resolution, voigt_reuss_hill=voigt_reuss_hill)
                 layer_index = np.append(layer_index, np.ones(len(_vp)) * i)
                 this_vp = np.append(this_vp, _vp)
                 this_vs = np.append(this_vs, _vs)
                 this_rho = np.append(this_rho, _rho)
-                # print(i)
-                # print('this_z', type(this_z))  #, this_z)
-                # print('last_z', type(last_z))  #, last_z)
-                # print('_vp', type(_vp))  #, _vp)
-                # print('resolution', type(resolution))  #, resolution)
-                this_z = np.append(this_z, last_z + 0.5 * np.cumsum(_vp * resolution))
+                # print('XXX', i)
+                # print('this_z', type(this_z), this_z)
+                # print('last_z', type(last_z), last_z)
+                # print('_vp', type(_vp), _vp[0])
+                # print('resolution', type(resolution), resolution)
+                # TODO: REALIZATION
+                # this_z = np.append(this_z, last_z + 0.5 * np.cumsum(_vp * resolution)
+                this_z = np.append(this_z, last_z + 0.5 * np.cumsum(_vp * resolution.to('second').magnitude))
                 last_z = this_z[-1]
 
             twt = twt_top + np.arange(len(this_vp)) * resolution
@@ -1315,7 +1319,7 @@ class ModelTable:
             width = 700
         self.width = width
         if height is None:
-            height = 135
+            height = 235
         self.height = height
         self.keys = ['name', 'case', 'color', 'thickness', 'litho_fluid']
         if title is not None:
@@ -1529,21 +1533,25 @@ class ModelTable:
         from bokeh.plotting import column, row
 
         def add_row_function():
+            if len(cds.selected.indices) > 0:
+                _index = max(cds.selected.indices) + 1
+            else:
+                _index = 0
             new_data = dict(cds.data)
             n = len(new_data['name'])
             new_name = None
             for _key in list(new_data.keys()):
                 if _key == 'name':
-                    new_data[_key].append(new_name)
+                    new_data[_key].insert(_index, new_name)
                 elif _key == 'case':
-                    new_data[_key].append(global_base_case_name)
+                    new_data[_key].insert(_index, global_base_case_name)
                 elif _key == 'thickness':
-                    new_data[_key].append(30.)
+                    new_data[_key].insert(_index, 30.)
                 else:
                     if n == 0:
                         new_data[_key].append(None)
                     else:
-                        new_data[_key].append(new_data[_key][-1])
+                        new_data[_key].insert(_index, new_data[_key][-1])
             cds.data = new_data
 
         def delete_row_function():
@@ -1558,6 +1566,7 @@ class ModelTable:
             cds.data = new_data
 
         def update_table_function():
+            # TODO: Make the update detect if a new case has been added
             new_data = dict(cds.data)
             layers = []
 
@@ -1676,6 +1685,7 @@ class LaminarModel:
                  model: Model | None = None,
                  litho_fluids: LithoFluids | None = None,
                  resolution: pint.Quantity | None = None,
+                 dx: pint.Quantity | None = None,
                  wavelet: dict | None = None,
                  avo_or_eei: str | None = None,
                  **kwargs
@@ -1687,6 +1697,10 @@ class LaminarModel:
         :param resolution:
             pint Quantity
             Depth resolution (in depth, not time) of the realized model
+        :param dx:
+            pint Quantity
+            Lateral resolution, or, Distance between each 1D model
+            When set to None, the lateral direction is simply an index which parameterize the "lateral" variation
         :param wavelet:
         :param avo_or_eei:
         :param kwargs:
@@ -1721,6 +1735,7 @@ class LaminarModel:
         if resolution is None:
             resolution = Q_(0.1, 'm')
         self.resolution = resolution
+        self.dx = dx
         self.dt = kwargs.pop('dt', Q_(0.1, 'millisecond'))
         self.freq = kwargs.pop('freq', 20.)
         self.lf_width = kwargs.pop('lf_width', 300)
@@ -1766,7 +1781,8 @@ class LaminarModel:
         # Create the litho fluids table
         self.initiate_lf_table()
         cds_lf = self.lf_table.cds
-        lf_table, add_row, delete_row, update = self.draw_lf_table(cds_lf)
+        # lf_table, add_row, delete_row, update = self.draw_lf_table(cds_lf)
+        lf_table, lf_controls = self.draw_lf_table(cds_lf)
 
         # Create the models table
         self.initiate_model_table()
@@ -1800,7 +1816,6 @@ class LaminarModel:
             _line_style = '-'
             _line_color = 'blue'
             _line_width = 1.
-            print('XXX', _case)
             if _case != global_base_case_name:
                 _line_style = '--'
                 _line_color = 'red'
@@ -1865,66 +1880,22 @@ class LaminarModel:
         grid = plotter.draw_ext_toolbar()
 
         def update_m_function():
-            # Update the elastic properties based on the new model
-            _elastics_dict = self.model_table.realize(self.resolution)
-
-            # Update the ColumnDataSource of the lines and the model
-            cds_lines.data = dict(self.model_table.line_cds(_elastics_dict).data)
-            cds_m.data = dict(self.model_table.cds.data)
-
-            # Update the CDS of the synthetics for the base case
-            synth_cds_base.data = dict(calc_synth_cds(
-                _elastics_dict[global_base_case_name]['vp'],
-                _elastics_dict[global_base_case_name]['vs'],
-                _elastics_dict[global_base_case_name]['rho'],
-                _elastics_dict[global_base_case_name]['twt'],
-                dt, self.angles, self.avo_or_eei, freq_slider.value
-            ).data)
-
-            # Update the CDS of the synthetics of the other case, if it exists
-            # NOTE that we only accept one other case than the base case
-            if len(self.model.case_names) > 1:
-                cases = self.model.case_names
-                cases.remove(global_base_case_name)
-                print('Trying to update the synthetics of ', cases[0])
-                synth_cds_variation.data = dict(calc_synth_cds(
-                    _elastics_dict[cases[0]]['vp'],
-                    _elastics_dict[cases[0]]['vs'],
-                    _elastics_dict[cases[0]]['rho'],
-                    _elastics_dict[cases[0]]['twt'],
-                    dt, self.angles, self.avo_or_eei, freq_slider.value
-                ).data)
-                _p = select_column(grid, 'SYNTH_VARIATION')
-                _p.xaxis.axis_label = '{} case: {}'.format(cases[0], self.avo_or_eei)
-
-            # Update the depth range of the synthetics to match the changes in depth
-            for _column in [select_column(grid, _col_name) for _col_name in ['SYNTH_BASE', 'SYNTH_VARIATION']]:
-                image_renderers = [
-                    r for r in _column.renderers
-                    if isinstance(r, GlyphRenderer) and isinstance(r.glyph, (Image, ImageRGBA, ImageURL))
-                ]
-                image_renderers[0].glyph.y = self.model.depth_to_top.to('m').magnitude
-                image_renderers[0].glyph.dh = total_cds_thickness(cds_m)
-
-            # Detect changes in number of cases
-            case_changes = detect_change_in_cases(self.model.case_names, self.previous_cases)
-            if len(case_changes['new']) > 0:
-                # get AI, and VpVs columns
-                _p_ai = select_column(grid, 'AI')
-                _p_vpvs = select_column(grid, 'VpVs')
-                for _case in case_changes['new']:
-                    _y = 'ai_{}'.format(_case)
-                    # print('Trying to plot the new case:', _case, _y)
-                    _p_ai.line(x='ai_{}'.format(_case), y='depth', source=cds_lines,
-                               **{'line_color': 'red', 'legend_label': 'AI_{}'.format(_case)})
-                    _p_vpvs.line(x='vpvs_{}'.format(_case), y='depth', source=cds_lines,
-                                 **{'line_color': 'red', 'legend_label': 'VpVs_{}'.format(_case)})
-
-            # Only handle the situation when a new case is added, for now (TODO)
-            if len(case_changes['removed']) > 0:
-                print_info('Can not handle the situation when a case is removed', 'error', logger, 'IOError')
-
-            self.previous_cases = self.model.case_names
+            update_1d_model_function(
+                self.model,
+                self.model_table,
+                self.resolution,
+                dt,
+                self.avo_or_eei,
+                freq_slider.value,
+                self.angles,
+                cds_lines,
+                cds_m,
+                synth_cds_base,
+                synth_cds_variation,
+                grid,
+                self.previous_cases,
+                column_names = ['SYNTH_BASE', 'SYNTH_VARIATION']
+            )
 
         update_m.on_click(update_m_function)
         # update.on_click(update_m_function)  # When using this the model table returns to its previous state when "Update" is clicked
@@ -1936,12 +1907,12 @@ class LaminarModel:
             title_txt += '{}\n </div>'.format(self.model.name)
             title = Div(text=title_txt)
 
-        return (title, lf_table, add_row, delete_row, update,
+        return (title, lf_table, lf_controls,
                 _model_table, add_row_m, delete_row_m, update_m,
                 grid, freq_slider, synth_cds_base)
 
     def draw_2d(self):
-        from bokeh.models import Span, Slider, Select, Div
+        from bokeh.models import Span, Slider, Select, Div, NumericInput
         from bokeh.plotting import row
 
         from blixt_rp.plotting.log_plotter import LogPlotter, LogColumn, Line, select_column, select_line
@@ -1950,7 +1921,7 @@ class LaminarModel:
         # Create the litho fluids table
         self.initiate_lf_table()
         cds_lf = self.lf_table.cds
-        lf_table, add_row, delete_row, update = self.draw_lf_table(cds_lf)
+        lf_table, lf_controls = self.draw_lf_table(cds_lf)
 
         # Create the models table
         self.initiate_model_table()
@@ -1970,6 +1941,17 @@ class LaminarModel:
             value=self.active_2d_case,
             options=self.model.case_names)
         freq_slider = Slider(title='Wavelet central freq. [Hz]', start=10, end=40, step=5, value=self.freq)
+
+        # TODO: Just inserted this. Need work to be put in use
+        # Select lateral resolution
+        if self.dx is not None:
+            dx_selector = NumericInput(
+                value=self.dx.to('m').magnitude, low=0.5, high=50., title='Lateral resolution [m]',
+                mode='float',
+            )
+        else:
+            dx_selector = Div(text="<div></div")
+
 
         def freq_slider_change(attr, old, new):
             self.freq = new
@@ -1994,7 +1976,6 @@ class LaminarModel:
                 _line_style = '-'
                 _line_color = 'blue'
                 _line_width = 1.
-                print('XXX', _case)
                 if _case != global_base_case_name:
                     _line_style = '--'
                     _line_color = 'red'
@@ -2070,7 +2051,7 @@ class LaminarModel:
         color_amp_factor = add_color_amp(_p)
 
         def update_m_function():
-            update_model_function(
+            update_2d_model_function(
                 self.model,
                 self.model_table,
                 self.resolution,
@@ -2124,9 +2105,9 @@ class LaminarModel:
             title_txt += '{}\n </div>'.format(self.model.name)
             title = Div(text=title_txt)
 
-        return (title, lf_table, add_row, delete_row, update, _model_table,
+        return (title, lf_table, lf_controls, _model_table,
                 add_row_m, delete_row_m, update_m, grid,
-                row(trace_selector, case_selector, freq_slider, color_amp_factor), synth_2d_cds)
+                row(trace_selector, case_selector, freq_slider, color_amp_factor, dx_selector), synth_2d_cds)
 
 
 class WedgeModel(LaminarModel):
@@ -2264,7 +2245,7 @@ class WedgeModel(LaminarModel):
         global min_amp
 
         # Create the default Quasi 2D widgets
-        (title, lf_table, add_row, delete_row, update, model_table,
+        (title, lf_table, lf_controls, model_table,
          add_row_m, delete_row_m, update_m, grid,
          controls, synth_2d_cds) = self.draw_2d()
 
@@ -2369,7 +2350,6 @@ class WedgeModel(LaminarModel):
             x='Thickness', y='Apparent thickness', source=horizons_cds, legend_label='Apparent thickness',
             line_color='black', line_width=2.0, line_dash='dashed'
         )
-        print('XXX Range1d range: ', min_amp, max_amp)
         p_lines.extra_y_ranges['Amplitude'] = Range1d(min_amp, max_amp)
         p_lines.line(
             x='Thickness', y='Top amp', source=horizons_cds, legend_label='|Top ampl|', y_range_name='Amplitude',
@@ -2400,7 +2380,7 @@ class WedgeModel(LaminarModel):
 
         new_grid = gridplot([[p_scatter, p_lines]], toolbar_location='right', merge_tools=True)
 
-        return (lf_table, row(add_row, delete_row, update), model_table, row(update_m), grid,
+        return (lf_table, lf_controls, model_table, row(update_m), grid,
                 row(controls, top_picker, base_picker), new_grid, synth_2d_cds)
 
 
@@ -2432,13 +2412,17 @@ class FaultModel(LaminarModel):
         :param litho_fluids:
         :param layers:
         :param resolution:
+            resolution in depth
+
+        # TODO We are moving these two to the mother LaminarModel object
         :param dx:
             Distance between each 1D model
+        :param n_traces:
+
         :param depth_to_top:
         :param throw:
             Vertical throw
         :param dip:
-        :param n_traces:
         :param kwargs:
         """
 
@@ -2485,7 +2469,7 @@ class FaultModel(LaminarModel):
         from bokeh.models import NumericInput
 
         # Create the default Quasi 2D widgets
-        (title, lf_table, add_row, delete_row, update, model_table,
+        (title, lf_table, lf_controls, model_table,
          add_row_m, delete_row_m, update_m, grid,
          controls, synth_2d_cds) = self.draw_2d()
 
@@ -2498,7 +2482,13 @@ class FaultModel(LaminarModel):
             value=self.throw.to('m').magnitude, low=0., high=200, title='Vertical throw [m]'
         )
 
+        # Select number of 1D models
+        n_traces_selector = NumericInput(
+            value=self.n_traces, low=50., high=2000, title='Number of traces'
+        )
+
         # Select lateral resolution
+        print('XXX', self.dx)
         dx_selector = NumericInput(
             value=self.dx.to('m').magnitude, low=0.5, high=50., title='Lateral resolution [m]',
             mode='float',
@@ -2508,6 +2498,7 @@ class FaultModel(LaminarModel):
         def update_faulting():
             # We can't recreate the layers from the model_able cds, because the update_table_function() stops us
             # from updating the thickness when they are functions
+            self.n_traces = int(n_traces_selector.value)
 
             # But we can re-build the faulted model based on Fault input
             self.model = build_faulted_model(
@@ -2537,10 +2528,10 @@ class FaultModel(LaminarModel):
 
         update_m.on_click(update_faulting)
 
-        return (title, lf_table, add_row, delete_row, update, model_table,
+        return (title, lf_table, lf_controls, model_table,
                 add_row_m, delete_row_m, update_m, grid,
                 controls, synth_2d_cds,
-                dip_selector, throw_selector, dx_selector)
+                dip_selector, throw_selector, n_traces_selector, dx_selector)
 
 
 def build_layered_model(depth_to_target, overburden_thickness, target_thickness,
@@ -2684,7 +2675,6 @@ def build_saturation_wedge(depth_to_wedge, thickness, to_hc_saturation, n_traces
 
         k_f2 = (1. - s_hc(i)) * rpt_parameters['k_b'] + s_hc(i) * rpt_parameters['k_hc']
         rho_f2 = (1. - s_hc(i)) * rpt_parameters['rho_b'] + s_hc(i) * rpt_parameters['rho_hc']
-        # print('XXX1', k_f2, rho_f2, s_hc(i))
         return gassmann_vel(
             brine_target['vp'],
             brine_target['vs'],
@@ -2912,6 +2902,7 @@ def check_domain(_input):
     return domain
 
 def calc_synth_cds(_vp, _vs, _rho, _twt, _dt, _angles, avo_or_eei, freq):
+    from blixt_rp.plotting.plot_logs_new import get_wiggles_in_depth
     if avo_or_eei == 'avo':
         _avo_angles = _angles
         _chi_angles = None
@@ -3019,6 +3010,7 @@ def faulted_layer_thickness(
 def faulted_layer_thickness_indexed(
         j: int,  # index of position in x-direction
         x,  # horizontal distance in meters
+        resample: int,  # resample x with this step to return the original lateral resolution of the seismic
         layer_index,
         thicknesses,  # list of thicknesses of all layers in meters
         throw, # Vertical throw in meters
@@ -3026,7 +3018,7 @@ def faulted_layer_thickness_indexed(
         x0,  # X position of fault at the top in meters
 ):
     t = faulted_layer_thickness(x, layer_index, thicknesses, throw, dip_rad, x0)
-    return Q_(t[j], 'm')
+    return Q_(t[::resample][j], 'm')
 
 def build_faulted_model(
         layers: List[Layer],
@@ -3040,8 +3032,8 @@ def build_faulted_model(
     """
 
     :param layers:
-
     :param dx:
+            Distance between each 1D model
     :param depth_to_top:
     :param throw:
     :param dip:
@@ -3079,13 +3071,17 @@ def build_faulted_model(
     i0 = int(n_traces / 4.)
 
     # create array for the lateral dimension
-    x = np.linspace(0, n_traces * dx.to('m').magnitude, n_traces)
-
+    # x = np.linspace(0, n_traces * dx.to('m').magnitude, n_traces)
+    # Create a x-axis which densely sampled, to get a more "correct" geometry. Then resample the resulting layers
+    # to match the required seismic dx
+    model_dx = 0.1  # m
+    resample = int(dx.to('m').magnitude / model_dx)
+    x = np.linspace(0, n_traces * dx.to('m').magnitude, n_traces * resample + 1)
 
     for layer_i, _l in enumerate(base_case_layers):
         _l.thickness = lambda j, layer_i=layer_i: faulted_layer_thickness_indexed(j,
-                                  x=x, layer_index = layer_i, thicknesses=thicknesses, throw=throw.to('m').magnitude,
-                                  dip_rad=dip_rad, x0=x[i0])
+                                  x=x, resample=resample, layer_index = layer_i, thicknesses=thicknesses, throw=throw.to('m').magnitude,
+                                  dip_rad=dip_rad, x0=x[::resample][i0])
 
     model = Model(
         layers=layers,
@@ -3113,7 +3109,113 @@ def build_faulted_model(
 
     return model
 
-def update_model_function(
+def update_1d_model_function(
+        model: Model,
+        model_table: ModelTable,
+        resolution: pint.Quantity,
+        dt: pint.Quantity,
+        avo_or_eei: str,
+        freq: float,
+        avo_angles,
+        cds_lines: ColumnDataSource,  # CDS for the lines that are drawn
+        cds_m: ColumnDataSource,   # CDS of the model_table
+        cds_synth_1d: ColumnDataSource,  # CDS of the synthetic 1d data,
+        cds_synth_1d_variation: ColumnDataSource,  # CDS of the synthetic 1d data,
+        grid,  # Output from LogPlotter().draw_ext_toolbar()
+        previous_cases: List[str],   # List of previous case names
+        column_names: List[str] | None = None
+):
+    """
+
+    :param model:
+    :param model_table:
+    :param resolution:
+    :param case_name:
+    :param dt:
+    :param avo_or_eei:
+    :param freq:
+    :param avo_angles:
+        float or array like container with incidence angles, of length M [deg]
+    :param cds_lines:
+    :param cds_m:
+    :param cds_synth_1d:
+    :param cds_synth_1d_variation:
+    :param grid:
+    :param previous_cases:
+    :param column_names:
+        list of strings of the column names where the synthetic should be plotted
+        Order is important, first column is for the base case, and the second (if present) is for the
+        variation (the perturbed "other" case)
+        Typical: ['SYNTH_BASE', 'SYNTH_VARIATION']
+    :return:
+    """
+    from bokeh.models import GlyphRenderer
+    from bokeh.models.glyphs import Image, ImageRGBA, ImageURL
+
+    from blixt_rp.plotting.log_plotter import LogPlotter, LogColumn, Line, select_column, select_line
+
+    # Update the elastic properties based on the new model
+    _elastics_dict = model_table.realize(resolution)
+
+    # Update the ColumnDataSource of the lines and the model
+    cds_lines.data = dict(model_table.line_cds(_elastics_dict).data)
+    cds_m.data = dict(model_table.cds.data)
+
+    # Update the CDS of the synthetics for the base case
+    cds_synth_1d.data = dict(
+        calc_synth_cds(
+            _elastics_dict[global_base_case_name]['vp'],
+            _elastics_dict[global_base_case_name]['vs'],
+            _elastics_dict[global_base_case_name]['rho'],
+            _elastics_dict[global_base_case_name]['twt'],
+            dt, avo_angles, avo_or_eei, freq
+        ).data
+    )
+
+    # Update the CDS of the synthetics of the other case, if it exists
+    # NOTE that we only accept one other case than the base case
+    if len(model.case_names) > 1:
+        cases = model.case_names
+        cases.remove(global_base_case_name)
+        cds_synth_1d_variation.data = dict(calc_synth_cds(
+            _elastics_dict[cases[0]]['vp'],
+            _elastics_dict[cases[0]]['vs'],
+            _elastics_dict[cases[0]]['rho'],
+            _elastics_dict[cases[0]]['twt'],
+            dt, avo_angles, avo_or_eei, freq
+        ).data)
+        _p = select_column(grid, column_names[-1])
+        _p.xaxis.axis_label = '{} case: {}'.format(cases[0], avo_or_eei)
+
+    # Update the depth range of the synthetics to match the changes in depth
+    for _column in [select_column(grid, _col_name) for _col_name in column_names]:
+        image_renderers = [
+            r for r in _column.renderers
+            if isinstance(r, GlyphRenderer) and isinstance(r.glyph, (Image, ImageRGBA, ImageURL))
+        ]
+        image_renderers[0].glyph.y = model.depth_to_top.to('m').magnitude
+        image_renderers[0].glyph.dh = total_cds_thickness(cds_m)
+
+    # Detect changes in number of cases
+    case_changes = detect_change_in_cases(model.case_names, previous_cases)
+    if len(case_changes['new']) > 0:
+        # get AI, and VpVs columns
+        _p_ai = select_column(grid, 'AI')
+        _p_vpvs = select_column(grid, 'VpVs')
+        for _case in case_changes['new']:
+            _y = 'ai_{}'.format(_case)
+            _p_ai.line(x='ai_{}'.format(_case), y='depth', source=cds_lines,
+                       **{'line_color': 'red', 'legend_label': 'AI_{}'.format(_case)})
+            _p_vpvs.line(x='vpvs_{}'.format(_case), y='depth', source=cds_lines,
+                         **{'line_color': 'red', 'legend_label': 'VpVs_{}'.format(_case)})
+
+    # Only handle the situation when a new case is added, for now (TODO)
+    if len(case_changes['removed']) > 0:
+        print_info('Can not handle the situation when a case is removed', 'error', logger, 'IOError')
+
+    previous_cases = model.case_names
+
+def update_2d_model_function(
         model: Model,
         model_table: ModelTable,
         resolution: pint.Quantity,
