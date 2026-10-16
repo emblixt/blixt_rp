@@ -972,6 +972,7 @@ class Well(object):
                 vp = vp_block['median'],
                 vs = vs_block['median'],
                 rho = rho_block['median'],
+                # TODO: Seems like the litho_fluids doesn't pick up the STD when running the one_d_model() method below
                 vp_std_dev = vp_block['std'],
                 vs_std_dev = vs_block['std'],
                 rho_std_dev = rho_block['std']
@@ -1003,10 +1004,11 @@ class Well(object):
         """
         from blixt_rp.core.models import Model
         from blixt_rp.core.models import Layer
-        overlaps = wis.check_for_overlapping_intervals(self.name)
+        _tolerance = Q_(1., 'm')
+        overlaps = wis.check_for_overlapping_intervals(self.name, _tolerance)
         if len(overlaps) > 0:
-            err_txt = 'Model building failed because of overlapping intervals: {}'.format(
-                ', '.join(overlaps)
+            err_txt = 'Model building failed because of overlapping (within {}) intervals: {}'.format(
+                _tolerance, ', '.join(overlaps)
             )
             print_info(err_txt, 'error', logger, 'IOError')
             return None

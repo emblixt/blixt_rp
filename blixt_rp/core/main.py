@@ -41,12 +41,12 @@ elif test == 'test_lf_table':
 elif test == 'test_laminar_model':
     import blixt_rp.unit_tests.test_models as test_models
     test = test_models.TestCase()
-    model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls, grid, controls \
+    model_table, model_controls, lf_table, lf_controls, grid, controls \
         = test.test_laminar_model(unit_test=False)
     curdoc().add_root(
         column(grid, controls,
                row(
-                   column(model_table, row(add_row_m, delete_row_m, update_m)),
+                   column(model_table, model_controls),
                    column(lf_table, lf_controls)
                ))
     )
@@ -54,12 +54,12 @@ elif test == 'test_laminar_model':
 elif test == 'test_laminar_q2d_model':
     import blixt_rp.unit_tests.test_models as test_models
     test = test_models.TestCase()
-    model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls, grid, controls\
+    model_table, model_controls, lf_table, lf_controls, grid, controls\
         = test.test_laminar_q2d_model(unit_test=False)
     curdoc().add_root(
         column(grid, controls,
                     row(
-                        column(model_table, row(add_row_m, delete_row_m, update_m)),
+                        column(model_table, model_controls),
                         column(lf_table, lf_controls)
                     ))
     )
@@ -80,7 +80,7 @@ elif test == 'test_fault_model':
     import blixt_rp.unit_tests.test_models as test_models
     test = test_models.TestCase()
     (title, lf_table, lf_controls, model_table,
-     add_row_m, delete_row_m, update_m, grid,
+     model_controls, grid,
      controls, synth_2d_cds,
      dip_selector, throw_selector, n_traces_selector, dx_selector) = test.test_fault_model(unit_test=False)
 
@@ -90,7 +90,7 @@ elif test == 'test_fault_model':
                     column(title, grid, sizing_mode='stretch_width'),
                     controls,
                     row(
-                        column(model_table, row(add_row_m, delete_row_m, update_m)),
+                        column(model_table, model_controls),
                         column(lf_table, lf_controls)
                     )),
                 column(dip_selector, throw_selector, n_traces_selector, dx_selector)

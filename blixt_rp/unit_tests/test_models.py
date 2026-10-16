@@ -270,7 +270,7 @@ class TestCase(unittest.TestCase):
         # m.plot()
         table_model = ModelTable(m)
         cds_model = table_model.cds
-        model_table, add_row_m, delete_row_m, update_m = table_model.draw(cds_model, cds_lf)
+        model_table, model_controls = table_model.draw(cds_model, cds_lf)
 
         # wavelet = bumw.ricker(0.096, 0.001, 25)
 
@@ -281,13 +281,13 @@ class TestCase(unittest.TestCase):
         if unit_test:
             show(
                 row(
-                    column(model_table, row(add_row_m, delete_row_m, update_m)),
+                    column(model_table, model_controls),
                     column(lf_table, lf_controls)
                 )
             )
             return None
         else:
-            return model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls
+            return model_table, model_controls, lf_table, lf_controls
 
     def test_layered_model(self):
         wavelet = bumw.ricker(0.096, 0.001, 25)
@@ -358,7 +358,7 @@ class TestCase(unittest.TestCase):
         model = Model(layers=layers)
         table_model = ModelTable(model)
         cds_model = table_model.cds
-        model_table, add_row_m, delete_row_m, update_m = table_model.draw(cds_model, cds_lf)
+        model_table, model_controls = table_model.draw(cds_model, cds_lf)
 
         if only_verbatim:
             for _key in list(cds_model.data.keys()):
@@ -373,13 +373,13 @@ class TestCase(unittest.TestCase):
             if unit_test:
                 show(
                     row(
-                        column(model_table, row(add_row_m, delete_row_m, update_m)),
+                        column(model_table, model_controls),
                         column(lf_table, lf_controls)
                     )
                 )
                 return None
             else:
-                return model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls
+                return model_table, model_controls, lf_table, lf_controls
         return None
 
     def test_laminar_model(self, unit_test=True):
@@ -388,19 +388,19 @@ class TestCase(unittest.TestCase):
         # Create the laminar model
         lm = LaminarModel(resolution=Q_(0.1, 'm'), avo_or_eei='avo')
 
-        (title, lf_table, lf_controls, model_table, add_row_m, delete_row_m, update_m, grid,
+        (title, lf_table, lf_controls, model_table, model_controls, grid,
          controls, seismic_cds) = lm.draw()
 
         if unit_test:
             show(column(column(title, grid, sizing_mode='stretch_width'), controls,
                         row(
-                            column(model_table, row(add_row_m, delete_row_m, update_m)),
+                            column(model_table, model_controls),
                             column(lf_table, lf_controls)
                         ))
                  )
             return None
         else:
-            return model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls, grid, controls
+            return model_table, model_controls, lf_table, lf_controls, grid, controls
 
     def test_laminar_model_with_avo_points(self, unit_test=True):
         from bokeh.plotting import show, row, column
@@ -408,7 +408,7 @@ class TestCase(unittest.TestCase):
         # Create the laminar model
         lm = LaminarModel(resolution=Q_(0.1, 'm'), avo_or_eei='avo')
 
-        (title, lf_table, lf_controls, model_table, add_row_m, delete_row_m, update_m, grid,
+        (title, lf_table, lf_controls, model_table, model_controls, grid,
          controls, seismic_cds) = lm.draw()
 
         # Test adding some extraction points
@@ -423,7 +423,7 @@ class TestCase(unittest.TestCase):
                         column(title, grid, sizing_mode='stretch_width'),
                         controls,
                         row(
-                            column(model_table, row(add_row_m, delete_row_m, update_m)),
+                            column(model_table, model_controls),
                             column(lf_table, lf_controls)
                         )
                     ),
@@ -432,7 +432,7 @@ class TestCase(unittest.TestCase):
             )
             return None
         else:
-            return (model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls, grid, controls,
+            return (model_table, model_controls, lf_table, lf_controls, grid, controls,
                     points_table, update_avo, avo_figure, ixg_figure, eei_figure, chi_input, avo_cds)
 
     def test_laminar_q2d_model(self, unit_test=True):
@@ -469,19 +469,19 @@ class TestCase(unittest.TestCase):
         lm = LaminarModel(model=model, litho_fluids=lfs, resolution=Q_(0.1, 'm'), dx=Q_(10., 'm'), avo_or_eei='avo')
 
         # lf_table, add_row, delete_row, update, model_table, add_row_m, delete_row_m, update_m, grid, controls = lm.draw()
-        (title, lf_table, lf_controls, model_table, add_row_m, delete_row_m, update_m, grid, controls,
+        (title, lf_table, lf_controls, model_table, model_controls, grid, controls,
          synth_2d_cds) = lm.draw_2d()
 
         if unit_test:
             show(column(grid, controls,
                 row(
-                    column(model_table, row(add_row_m, delete_row_m, update_m)),
+                    column(model_table, model_controls),
                     column(lf_table, lf_controls)
                 ))
             )
             return None
         else:
-            return model_table, add_row_m, delete_row_m, update_m, lf_table, lf_controls, grid, controls
+            return model_table, model_controls, lf_table, lf_controls, grid, controls
 
     def test_wedge(self, unit_test=True):
         from bokeh.plotting import show, row, column
@@ -547,7 +547,7 @@ class TestCase(unittest.TestCase):
         )
 
         (title, lf_table, lf_controls, model_table,
-                add_row_m, delete_row_m, update_m, grid,
+                model_controls, grid,
                 controls, synth_2d_cds,
                 dip_selector, throw_selector, n_traces_selector, dx_selector) = fm.draw()
 
@@ -558,7 +558,7 @@ class TestCase(unittest.TestCase):
                         column(title, grid, sizing_mode='stretch_width'),
                         controls,
                             row(
-                                column(model_table, row(add_row_m, delete_row_m, update_m)),
+                                column(model_table, model_controls),
                                 column(lf_table, lf_controls)
                             )),
                      column(dip_selector, throw_selector, n_traces_selector, dx_selector)
@@ -566,11 +566,9 @@ class TestCase(unittest.TestCase):
             return None
         else:
             return (title, lf_table, lf_controls, model_table,
-                 add_row_m, delete_row_m, update_m, grid,
+                 model_controls, grid,
                  controls, synth_2d_cds,
                  dip_selector, throw_selector, n_traces_selector, dx_selector)
-
-
 
     def test_faulted_horizons(self):
         from blixt_rp.core.models import faulted_layer_top, faulted_layer_thickness
@@ -641,3 +639,39 @@ class TestCase(unittest.TestCase):
         axs[1].legend()
 
         plt.show()
+
+    def test_save_model(self, unit_test=True):
+        from bokeh.plotting import show, row, column
+
+        lfs = LithoFluids(
+            [LithoFluid(default='shale'), LithoFluid(default='brine_sst'), LithoFluid(default='oil_sst')]
+        )
+        table_lf = LithoFluidsTable(lfs, width=300, advanced=False)
+        cds_lf = table_lf.cds
+        lf_table, lf_controls = table_lf.draw(cds_lf)
+
+        layers = [
+            LithoFluid(default='shale').to_model_layer('Top',thickness=Q_(50., 'm')),
+            LithoFluid(default='brine_sst').to_model_layer('Reservoir',thickness=Q_(25., 'm')),
+            LithoFluid(default='oil_sst').to_model_layer('Reservoir', case='Oil',thickness=Q_(25., 'm')),
+            LithoFluid(default='shale').to_model_layer('Bottom',thickness=Q_(50., 'm')),
+            LithoFluid(default='shale').to_model_layer('Basement',thickness=Q_(50., 'm'))
+        ]
+        # layers = []
+        model = Model(layers=layers)
+        table_model = ModelTable(model)
+        cds_model = table_model.cds
+        # model_table, add_row_m, delete_row_m, update_m = table_model.draw(cds_model, cds_lf)
+        model_table, model_controls = table_model.draw(cds_model, cds_lf)
+
+        if unit_test:
+            show(
+                row(
+                    column(model_table, model_controls),
+                    column(lf_table, lf_controls)
+                )
+            )
+            return None
+        else:
+            return model_table, model_controls, lf_table, lf_controls
+

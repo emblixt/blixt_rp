@@ -2480,7 +2480,6 @@ class LithoFluidsTable:
 
         def save_function():
 
-            # TODO: Will fail if any data is a function
             file_name = save_file()
             # print(list(cds.data.keys()))
             # ['name', 'vp', 'vs', 'rho', 'vp_std_dev', 'vs_std_dev', 'rho_std_dev', 'vp_vs_cc', 'vp_rho_cc', 'vs_rho_cc']
@@ -2646,5 +2645,5 @@ def save_file(filetypes=None):
     root = Tk()
     root.attributes('-topmost', True)
     root.withdraw()
-    file_name = asksaveasfilename(filetypes=filetypes)
+    file_name = asksaveasfilename(filetypes=filetypes, confirmoverwrite=False)
     return file_name

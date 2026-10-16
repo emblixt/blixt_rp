@@ -1565,8 +1565,8 @@ class ModelTable:
             cds.selected.indices = []
             cds.data = new_data
 
+        # TODO: Make the update detect if a new case has been added
         def update_table_function():
-            # TODO: Make the update detect if a new case has been added
             new_data = dict(cds.data)
             layers = []
 
@@ -1643,6 +1643,23 @@ class ModelTable:
             )
             cds.data = new_data
 
+        def save_function():
+            file_name = save_file()
+            n_layers = len(self.model.layers)
+            with open(file_name, 'a') as file:
+                file.write("\nModel( depth_to_top=Q_({}, 'm'),\n    # Replace 'XXX' with the name of the LithoFluids object in use\n    layers = [\n".format(self.model.depth_to_top.to('m').magnitude))
+                for _i, _name in enumerate(cds.data['name']):
+                    _ending = ',\n' if _i < n_layers-1 else '\n'
+                    if cds.data['case'][_i] == global_base_case_name:
+                        file.write("        Layer(name='{}', thickness=Q_({}, 'm'), litho_fluid=XXX['{}']){}".format(
+                            _name, cds.data['thickness'][_i], cds.data['litho_fluid'][_i], _ending))
+                    else:
+                        file.write("        Layer(name='{}', case='{}', thickness=Q_({}, 'm'), litho_fluid=XXX['{}']){}".format(
+                            _name, cds.data['case'][_i], cds.data['thickness'][_i], cds.data['litho_fluid'][_i], _ending))
+                file.write("])")
+
+        # TODO: Try to see if can integrate the case selector already here!
+
         title_txt = '<div style="font-size:12px; font-weight:600; margin-bottom:0px; text-align:center">\n'
         title_txt += '{}\n'.format(self.title)
         title_txt += '</div>\n'
@@ -1670,7 +1687,10 @@ class ModelTable:
         update_table = Button(label='Update', button_type='success')
         update_table.on_click(update_table_function)
 
-        return table, add_row, delete_row, update_table
+        save = Button(label='Save', button_type='success')
+        save.on_click(save_function)
+
+        return table, row(add_row, delete_row, update_table, save)
 
 
 class LaminarModel:
@@ -1787,7 +1807,7 @@ class LaminarModel:
         # Create the models table
         self.initiate_model_table()
         cds_m = self.model_table.cds
-        _model_table, add_row_m, delete_row_m, update_m = self.draw_model_table(cds_m, cds_lf)
+        _model_table, model_controls = self.draw_model_table(cds_m, cds_lf)
 
         # Create log plot object
         plotter = LogPlotter(width=900, height=600)
@@ -1908,7 +1928,7 @@ class LaminarModel:
             title = Div(text=title_txt)
 
         return (title, lf_table, lf_controls,
-                _model_table, add_row_m, delete_row_m, update_m,
+                _model_table, model_controls,
                 grid, freq_slider, synth_cds_base)
 
     def draw_2d(self):
@@ -1926,7 +1946,7 @@ class LaminarModel:
         # Create the models table
         self.initiate_model_table()
         cds_m = self.model_table.cds
-        _model_table, add_row_m, delete_row_m, update_m = self.draw_model_table(cds_m, cds_lf)
+        _model_table, model_controls = self.draw_model_table(cds_m, cds_lf)
 
         # Create log plot object
         plotter = LogPlotter(width=1100, height=600)
@@ -2106,7 +2126,7 @@ class LaminarModel:
             title = Div(text=title_txt)
 
         return (title, lf_table, lf_controls, _model_table,
-                add_row_m, delete_row_m, update_m, grid,
+                model_controls, grid,
                 row(trace_selector, case_selector, freq_slider, color_amp_factor, dx_selector), synth_2d_cds)
 
 
@@ -2246,7 +2266,7 @@ class WedgeModel(LaminarModel):
 
         # Create the default Quasi 2D widgets
         (title, lf_table, lf_controls, model_table,
-         add_row_m, delete_row_m, update_m, grid,
+         model_controls, grid,
          controls, synth_2d_cds) = self.draw_2d()
 
         # Create the widgets for plotting the Top / Base wedge seismic picks, which we calculate the
@@ -2470,7 +2490,7 @@ class FaultModel(LaminarModel):
 
         # Create the default Quasi 2D widgets
         (title, lf_table, lf_controls, model_table,
-         add_row_m, delete_row_m, update_m, grid,
+         model_controls, grid,
          controls, synth_2d_cds) = self.draw_2d()
 
         # Select dip angle
@@ -2529,7 +2549,7 @@ class FaultModel(LaminarModel):
         update_m.on_click(update_faulting)
 
         return (title, lf_table, lf_controls, model_table,
-                add_row_m, delete_row_m, update_m, grid,
+                model_controls, grid,
                 controls, synth_2d_cds,
                 dip_selector, throw_selector, n_traces_selector, dx_selector)
 
@@ -3332,4 +3352,18 @@ def calc_synthetic_2d_cds(
     synth_cds = ColumnDataSource({'value': [np.array(synth_values, dtype=float).T]})
     print('Total size: {}'.format(synth_cds.data['value'][0].shape))
     return synth_cds, elastics_dict
+
+
+def save_file(filetypes=None):
+    from tkinter import Tk
+    from tkinter.filedialog import asksaveasfilename
+
+    if filetypes is None:
+        filetypes=(("Excel file", "*.xlsx"), ("All files", "*.*"))
+
+    root = Tk()
+    root.attributes('-topmost', True)
+    root.withdraw()
+    file_name = asksaveasfilename(filetypes=filetypes, confirmoverwrite=False)
+    return file_name
 

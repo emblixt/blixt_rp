@@ -785,6 +785,7 @@ def compare_synth_with_seismic(
             litho_fluids
         )
 
+        # TODO: See if  you can make the case selector an integral part of the ModelTable
         case_selector = Select(
             title='Case',
             value=laminar_model.active_2d_case,
@@ -801,7 +802,7 @@ def compare_synth_with_seismic(
         # Create the models table
         laminar_model.initiate_model_table()
         cds_m = laminar_model.model_table.cds
-        _model_table, add_row_m, delete_row_m, update_m = laminar_model.draw_model_table(cds_m, cds_lf)
+        _model_table, model_controls = laminar_model.draw_model_table(cds_m, cds_lf)
 
         elastics_dict = laminar_model.model_table.realize(laminar_model.resolution)
         cds_lines = laminar_model.model_table.line_cds(elastics_dict)
@@ -843,14 +844,9 @@ def compare_synth_with_seismic(
         laminar_model = None
         model_traces = None
         lf_table= Div(text='', width=1, height=1)
-        add_row= Div(text='', width=1, height=1)
-        delete_row= Div(text='', width=1, height=1)
-        update= Div(text='', width=1, height=1)
-        save = Div(text='', width=1, height=1)
+        lf_controls = Div(text='', width=1, height=1)
         _model_table= Div(text='', width=1, height=1)
-        add_row_m= Div(text='', width=1, height=1)
-        delete_row_m= Div(text='', width=1, height=1)
-        update_m= Div(text='', width=1, height=1)
+        model_controls = Div(text='', width=1, height=1)
         case_selector = Div(text='', width=1, height=1)
 
     # Calculate synthetic seismic
@@ -1020,8 +1016,6 @@ def compare_synth_with_seismic(
     #
     # Set up the callback function based on which columns we are plotting
     #
-    xx = grid.children[ai_idx][0]
-    print(xx)
     args_dict = dict(ba=backus_slider, freq=freq_slider,
                      ai_axis=grid.children[ai_idx][0].xaxis[0],
                      ai_legend=grid.children[ai_idx][0].legend[0],
@@ -1108,7 +1102,8 @@ def compare_synth_with_seismic(
                 # print(image_renderers[0].glyph.dh)
                 # print(total_cds_thickness(cds_m))
 
-        update_m.on_click(update_m_function)
+        model_controls.children[2].on_click(update_m_function)
+        # update_m.on_click(update_m_function)
         # update_m.js_on_change('value', legend_callback)
 
 
@@ -1116,8 +1111,8 @@ def compare_synth_with_seismic(
 
     return (grid, backus_slider, freq_slider, shift_slider, data_table, color_amp_factor,
             # lf_table, add_row, delete_row, update, save,
-            lf_table, add_row, delete_row, update,
-            _model_table, add_row_m, delete_row_m, update_m, case_selector)
+            lf_table, lf_controls,
+            _model_table, model_controls, case_selector)
 
 
 
