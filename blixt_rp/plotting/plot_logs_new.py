@@ -785,10 +785,9 @@ def compare_synth_with_seismic(
             litho_fluids
         )
 
-        # TODO: See if  you can make the case selector an integral part of the ModelTable
         case_selector = Select(
             title='Case',
-            value=laminar_model.active_2d_case,
+            value=global_base_case_name,
             options=laminar_model.model.case_names)
 
 

@@ -1565,7 +1565,6 @@ class ModelTable:
             cds.selected.indices = []
             cds.data = new_data
 
-        # TODO: Make the update detect if a new case has been added
         def update_table_function():
             new_data = dict(cds.data)
             layers = []
@@ -1658,8 +1657,6 @@ class ModelTable:
                             _name, cds.data['case'][_i], cds.data['thickness'][_i], cds.data['litho_fluid'][_i], _ending))
                 file.write("])")
 
-        # TODO: Try to see if can integrate the case selector already here!
-
         title_txt = '<div style="font-size:12px; font-weight:600; margin-bottom:0px; text-align:center">\n'
         title_txt += '{}\n'.format(self.title)
         title_txt += '</div>\n'
@@ -1668,6 +1665,7 @@ class ModelTable:
         table = DataTable(
             source=cds,
             columns=self.table_columns(litho_fluids_cds),
+            # autosize_mode='fit_columns',
             editable=True,
             width=self.width,
             height=self.height,
@@ -1770,7 +1768,6 @@ class LaminarModel:
             self.angles = np.arange(0., 40., 2)
         else:
             self.angles = np.arange(-90., 91., 5)
-        self.active_2d_case = global_base_case_name
 
     def initiate_lf_table(self):
         self.lf_table = LithoFluidsTable(self._litho_fluids, width=self.lf_width, advanced=False)
@@ -1917,7 +1914,8 @@ class LaminarModel:
                 column_names = ['SYNTH_BASE', 'SYNTH_VARIATION']
             )
 
-        update_m.on_click(update_m_function)
+        model_controls.children[2].on_click(update_m_function)
+        # update_m.on_click(update_m_function)
         # update.on_click(update_m_function)  # When using this the model table returns to its previous state when "Update" is clicked
 
         if self.model.name is None:
@@ -1958,7 +1956,7 @@ class LaminarModel:
             options=[str(_i) for _i in list(self.model.trace_index_range)])
         case_selector = Select(
             title='Case',
-            value=self.active_2d_case,
+            value=global_base_case_name,
             options=self.model.case_names)
         freq_slider = Slider(title='Wavelet central freq. [Hz]', start=10, end=40, step=5, value=self.freq)
 
@@ -2098,7 +2096,6 @@ class LaminarModel:
 
         def update_case_function(attr, old, new):
             print('Case: ', attr, old, new)
-            self.active_2d_case = new
 
             # Update the CDS of the synthetics
             # _synth_2d_cds, _elastics_dict = calc_synth_2d_cds(str(case_selector.value))
@@ -2113,7 +2110,8 @@ class LaminarModel:
             )
             synth_2d_cds.data = dict(_synth_2d_cds.data)
 
-        update_m.on_click(update_m_function)
+        model_controls.children[2].on_click(update_m_function)
+        # update_m.on_click(update_m_function)
 
         trace_selector.on_change("value", update_trace_function)
         case_selector.on_change("value", update_case_function)
@@ -2138,8 +2136,12 @@ class WedgeModel(LaminarModel):
     def __init__(self,
                  litho_fluids: LithoFluids | None = None,
                  top_layers: list | None = None,
+                 top_litho_fluid: str | None = None,
+                 wedge_litho_fluid: str | None = None,
+                 perturb_litho_fluid: str | None = None,
                  mid_layers: list | None = None,
                  base_layers: list | None = None,
+                 base_litho_fluid: str | None = None,
                  resolution: pint.Quantity | None = None,
                  depth_to_top: pint.Quantity | None = None,
                  min_thickness: pint.Quantity | None = None,
@@ -2148,7 +2150,22 @@ class WedgeModel(LaminarModel):
                  **kwargs
                  ):
         """
-        Returns a simple wedge model with constant elastic properties in the three layers of the model
+        Returns a simple wedge model with constant elastic properties in the (default) three layers of the model
+
+        --------------------------------------------------
+        -       top_layers
+        __________________________________________________
+            -----
+                 -----    Wedge with a variant ('Perturb')
+                      -----
+                           -----
+                                -----
+            "Reverse" wedge          -----
+                                          -----
+                                               -----
+        ---------------------------------------------------
+        -    base_layers
+        ---------------------------------------------------
 
         :param litho_fluids:
             LithoFluids
@@ -2160,15 +2177,36 @@ class WedgeModel(LaminarModel):
             list
             Optional
             List of model layers (of type Layer) that builds a more complex overburden than the default
-            "Top" layer.
+            "Top" layer which uses the first of the litho-fluids with a thickness equal to the max thickness of the
+            wedge.
+        :param top_litho_fluid:
+            str
+            Optional
+            Name of the litho-fluid to use for the overburden.
+            Defaults to the first of the litho-fluids in litho_fluids
+        :param wedge_litho_fluid:
+            str
+            Optional
+            Name of the litho-fluid to use in the wedge
+            Defaults to the second of the litho-fluids in litho_fluids
+        :param perturb_litho_fluid:
+            str
+            Optional
+            Name of the litho-fluid to use in the perturbed wedge
+            Defaults to the third of the litho-fluids in litho_fluids
         :param mid_layers:
             list
             Optional
-            List of model layers that are situated between the upper and lower wedge
+            List of model layers that are situated between the upper and lower "reverse" wedge
         :param base_layers:
             list
             Optional
             List of model layers that are situated below the lower wedge
+        :param base_litho_fluid:
+            str
+            Optional
+            Name of the litho-fluid to use for the bottom layer
+            Defaults to the first of the litho-fluids in litho_fluids
         :param resolution:
         :param depth_to_top:
         :param min_thickness:
@@ -2197,6 +2235,7 @@ class WedgeModel(LaminarModel):
 
         top_thickness = 1.0 * max_thickness
 
+        # Create the wedges
         self.wedge_thickness = np.linspace(min_thickness.to('m').magnitude, max_thickness.to('m').magnitude, n_traces)
 
         def wedge(i):
@@ -2209,34 +2248,29 @@ class WedgeModel(LaminarModel):
                 return (max_thickness - min_thickness) - (max_thickness - min_thickness) * i / (n_traces - 1)
 
         #
-        # Create the layers that define the model
+        # Create the layers that define the wedge model
         #
-        layer1 = Layer(name='Top', thickness=top_thickness, litho_fluid=litho_fluids.litho_fluids[0])
-        layer2 = Layer(name='Wedge', thickness=wedge, litho_fluid=litho_fluids.litho_fluids[1])
-        layer2_variant = Layer(name='Wedge', case='Perturb', thickness=wedge, litho_fluid=litho_fluids.litho_fluids[2])
-        layer3 = Layer(name='Bottom', thickness=reverse_wedge, litho_fluid=litho_fluids.litho_fluids[0])
-        # if top_layers is None:
-        #     if mid_layers is None:
-        #         if base_layers is None:
-        #             layers = [layer1, layer2, layer2_variant, layer3]
-        #         else:
-        #             layers = [layer1, layer2, layer2_variant, layer3] + base_layers
-        #     else:
-        #         if base_layers is None:
-        #             layers = [layer2, layer2_variant] + mid_layers +  [layer3]
-        #         else:
-        #             layers = [layer2, layer2_variant] + mid_layers +  [layer3] + base_layers
-        # else:
-        #     if mid_layers is None:
-        #         if base_layers is None:
-        #             layers = top_layers + [layer2, layer2_variant, layer3]
-        #         else:
-        #             layers = top_layers + [layer2, layer2_variant, layer3] + base_layers
-        #     else:
-        #         if base_layers is None:
-        #             layers = top_layers + [layer2, layer2_variant] + mid_layers +  [layer3]
-        #         else:
-        #             layers = top_layers + [layer2, layer2_variant] + mid_layers +  [layer3] + base_layers
+        if top_litho_fluid is None:
+            layer1 = Layer(name='Top', thickness=top_thickness, litho_fluid=litho_fluids.litho_fluids[0])
+        else:
+            layer1 = Layer(name='Top', thickness=top_thickness, litho_fluid=litho_fluids[top_litho_fluid])
+
+        if wedge_litho_fluid is None:
+            layer2 = Layer(name='Wedge', thickness=wedge, litho_fluid=litho_fluids.litho_fluids[1])
+        else:
+            layer2 = Layer(name='Wedge', thickness=wedge, litho_fluid=litho_fluids[wedge_litho_fluid])
+
+        if perturb_litho_fluid is None:
+            layer2_variant = Layer(name='Wedge', case='Perturb', thickness=wedge, litho_fluid=litho_fluids.litho_fluids[2])
+        else:
+            layer2_variant = Layer(name='Wedge', case='Perturb', thickness=wedge, litho_fluid=litho_fluids[perturb_litho_fluid])
+
+        if base_litho_fluid is None:
+            layer3 = Layer(name='Bottom', thickness=reverse_wedge, litho_fluid=litho_fluids.litho_fluids[0])
+        else:
+            layer3 = Layer(name='Bottom', thickness=reverse_wedge, litho_fluid=litho_fluids[base_litho_fluid])
+
+        # Collect all layers in the model
         if top_layers is None:
             top_layers = [layer1]
         if mid_layers is None:
@@ -2268,6 +2302,9 @@ class WedgeModel(LaminarModel):
         (title, lf_table, lf_controls, model_table,
          model_controls, grid,
          controls, synth_2d_cds) = self.draw_2d()
+
+        # We can not add or remove layers on a wedge model, so we only keep the update model button
+        update_m = model_controls.children[2]
 
         # Create the widgets for plotting the Top / Base wedge seismic picks, which we calculate the
         # apparent thickness from
