@@ -436,8 +436,8 @@ class MineralMix(object):
                             axes[well_name][wi_name][2].plot(rho[mask]*vs[mask]**2 * 1.E-6, this_depth)
                             axes[well_name][wi_name][2].plot(rho[mask] * (vp[mask]**2 - (4./3.)*vs[mask]**2) * 1.E-6,
                                                              this_depth)
-                            axes[well_name][wi_name][2].set_xlabel('$\mu$ & K [GPa]')
-                            axes[well_name][wi_name][2].legend(['$\mu$', 'K'])
+                            axes[well_name][wi_name][2].set_xlabel('mu & K [GPa]')
+                            axes[well_name][wi_name][2].legend(['mu', 'K'])
                             axes[well_name][wi_name][2].axvline(this_mu, **lstyle)
                             axes[well_name][wi_name][2].axvline(this_k, **lstyle)
                             for an, ax in enumerate(axes[well_name][wi_name]):
