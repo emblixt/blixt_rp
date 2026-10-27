@@ -12,7 +12,6 @@ from copy import deepcopy
 import sys
 import os
 
-import bruges.rockphysics.rockphysicsmodels as brr
 
 import blixt_rp.rp_utils.definitions as ud
 from blixt_rp.core.param import Param
@@ -26,6 +25,7 @@ from blixt_rp import Q_
 
 logger = logging.getLogger(__name__)
 
+# TODO: Make sure that we are certain about the usage of confining and effective pressure
 
 def test_value(val, unit):
     """
@@ -1039,8 +1039,11 @@ def constantcement(k0, g0, phi, phi_c=None, apc=None, c_n=None, k_c=None, g_c=No
     if scheme is None: scheme = 2
 
     phi_cem = phi_c - apc / 100.
-    k_eff, mu_eff = brr.constant_cement(k0, g0, phi, phi_cem=phi_cem, phi_c=phi_c, Cn=c_n, Kc=k_c, Gc=g_c, scheme=scheme)
-    return k_eff, smcf * mu_eff
+    # TODO:
+    raise NotImplementedError('Need to stop using the Bruges library because it is not maintained, copy the necessary functionality')
+    # import bruges.rockphysics.rockphysicsmodels as brr
+    # k_eff, mu_eff = brr.constant_cement(k0, g0, phi, phi_cem=phi_cem, phi_c=phi_c, Cn=c_n, Kc=k_c, Gc=g_c, scheme=scheme)
+    # return k_eff, smcf * mu_eff
 
 
 def constantcement_hidden(k0, g0, phi, phi_c=None, apc=None, c_n=None, k_c=None, g_c=None, scheme=None):

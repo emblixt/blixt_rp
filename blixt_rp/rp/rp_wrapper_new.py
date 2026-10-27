@@ -36,6 +36,7 @@ from blixt_rp.core.core import LogTable
 
 logger = logging.getLogger(__name__)
 
+# TODO: Make sure that we are certain about the usage of confining and effective pressure
 # Default rock physics template constants
 _rpt_kwargs = {
     'vsh': Q_(0.2, ''),         # Volume of shale, fraction
